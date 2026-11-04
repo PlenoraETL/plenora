@@ -9,8 +9,7 @@ import {
   prettyName, stripJoinSuffix, validateConditions, validateFormulas, validateJoinKeys,
 } from '../../src/components/transforms/panels/panelConfig';
 import {
-  applySelectColumns, joinColumnPlan, outputReferencesPatch, resultOutputColumns, selectColumnPlan,
-  usesJoinColumnPlan, withAvailableColumns,
+  applySelectColumns, joinColumnPlan, outputReferencesPatch, selectColumnPlan, usesJoinColumnPlan,
 } from '../../src/utils/columnPlans';
 import { bindingListResolution } from '../../src/utils/runtimeBindingEdges';
 import { readValueMapping } from '../../src/utils/lookupMapping';
@@ -159,7 +158,7 @@ describe('Seleziona e rinomina e Output', () => {
     const renamed = [{ name: 'b2', id: 'ib' }, { name: 'a', id: 'ia' }];
     expect(applySelectColumns(renamed, [{ name: 'b', name_column_id: 'ib', keep: false }], { skipMissing: true }).map(c => c.name))
       .toEqual(['a']);
-    expect(resultOutputColumns(renamed, { output_columns: [{ name: 'b', name_column_id: 'ib', label: 'B' }] }).map(c => c.name))
+    expect(applySelectColumns(renamed, [{ name: 'b', name_column_id: 'ib', label: 'B' }], { skipMissing: true }).map(c => c.name))
       .toEqual(['B', 'a']);
   });
 
@@ -168,20 +167,9 @@ describe('Seleziona e rinomina e Output', () => {
       .toEqual(['B', 'a', 'c']);
   });
 
-  it('what leaves the Output: selection, then GROUP BY (Carica sees that)', () => {
-    const data = {
-      output_columns: [{ name: 'a', label: 'key' }, { name: 'c', keep: false }],
-      group_by_enabled: true, group_by_columns: ['key'],
-      aggregations: [{ column: 'b', function: 'SUM' }, { column: 'b', function: 'AVG' }, { column: 'gone', function: 'max' }],
-    };
-    expect(resultOutputColumns(up, data).map(c => [c.name, c.type])).toEqual([['key', 'str'], ['b_sum', 'int'], ['b_mean', 'real']]);
-    data.aggregations = [{ column: 'b', function: 'SUM' }];
-    const nodes = [{ id: 'r', type: 'result', data }, { id: 'k', type: 'carica', data: {} }];
-    const next = withAvailableColumns(nodes, up);
-    expect(next[0].data.availableColumns.map(c => c.name)).toEqual(['a', 'b', 'c']);
-    expect(next[1].data.availableColumns.map(c => c.name)).toEqual(['key', 'b_sum']);
-    expect(withAvailableColumns(next, up)).toBe(next);
-  });
+  // "Cosa esce dall'Output (selezione, poi GROUP BY)" lo prevede ora il server
+  // (Blocco A, regola 4): i Carica leggono l'ingresso dalla fonte unica
+  // (tests/shared/columnSource.contract), non piu' resultOutputColumns.
 
   it('renaming or dropping in the grid rewrites the other Output settings', () => {
     const data = {

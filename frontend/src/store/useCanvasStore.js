@@ -22,6 +22,7 @@ import { COLUMN_STEP, findFreePosition, nodeSize, planInsertAfter, settleNodes }
 import { bindingListResolution, isParameterBindingEdge, uniqueDataEdges } from '../utils/runtimeBindingEdges';
 import { EDITOR_ACTION_NAMES } from '../components/editor/editorActions';
 import { hasUnsavedChanges } from './saveState';
+import { derivedColumnsForSave } from './useColumnStore';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
@@ -68,9 +69,6 @@ export const createCanvasStore = () => create(
             // automatiche da persistere (pendingSync).
             if (snapshot.isReadOnly || (!snapshot.isDirty && !snapshot.pendingSync) || !snapshot.projectId) continue;
 
-            const payload = serializeCanvas(snapshot.nodes, snapshot.edges, {
-              mode: snapshot.mode,
-            });
             // Stato per l'indicatore della barra (Fase 4, M7): tutti i
             // salvataggi passano da qui, quindi l'indicatore li vede tutti.
             // Lo stato si scrive solo se l'editor mostra ancora QUESTO progetto
@@ -79,6 +77,14 @@ export const createCanvasStore = () => create(
             set({ saveStatus: 'saving', saveError: null }, false, 'save:start');
             let response;
             try {
+              // Colonne derivate dalla fonte unica (Blocco A, regola 4): solo
+              // quelle calcolate dalla firma di QUESTO canvas (attese con un
+              // tetto), altrimenti nessuna (le ricalcola il backend).
+              let derivedColumns = derivedColumnsForSave(snapshot.projectId, {
+                nodes: snapshot.nodes, edges: snapshot.edges, mode: snapshot.mode,
+              });
+              if (derivedColumns && typeof derivedColumns.then === 'function') derivedColumns = await derivedColumns;
+              const payload = serializeCanvas(snapshot.nodes, snapshot.edges, { mode: snapshot.mode, derivedColumns });
               response = await updateCanvas(snapshot.projectId, payload);
             } catch (err) {
               if (sameProject()) set({ saveStatus: 'error', saveError: err?.message || 'Salvataggio non riuscito' }, false, 'save:error');

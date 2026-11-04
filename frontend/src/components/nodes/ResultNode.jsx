@@ -7,8 +7,9 @@
  * carica_arcgis downstream.)
  *
  * Owna:
- *   - subscriptions canvas (edges, upstream node, hasOnPreview/Execute)
- *   - calcolo upstreamColumns (richiede useReactFlow)
+ *   - subscriptions canvas (hasOnPreview/Execute)
+ *   - colonne in ingresso e in uscita dalla fonte unica (hooks/useColumns,
+ *     Blocco A regola 4), con gli id: nessun calcolo qui
  *   - pulsanti Valida/Esegui/Anteprima: delegano al percorso unico
  *     dell'editor (editor/PipelineRunner, Fase 4 M7)
  *
@@ -16,20 +17,23 @@
  * regola 6 del Blocco A).
  */
 import React, { useEffect, useRef, memo, useMemo } from 'react';
-import { Position, useReactFlow, useStore } from '@xyflow/react';
+import { Position } from '@xyflow/react';
+import { useShallow } from 'zustand/react/shallow';
 import { saveFailedResult } from '../../utils/backendValidationResult';
 import { saveBeforeServerRead } from '../../utils/serverActions';
 import useCanvasStore from '../../store/useCanvasStore';
 import ResultNodeStandardView from './result/ResultNodeStandardView';
 import ResultInlinePreview from './result/ResultInlinePreview';
 import useInlinePreview from '../../hooks/useInlinePreview';
-import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
+import { useColumnsOf } from '../../hooks/useColumns';
+import { estraiSourceLabel } from '../../utils/columnSource';
 import './ResultNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 
 // #5: righe caricate nell'anteprima inline auto post-run (la modale completa
 // resta a 100). Volutamente piccolo: gira su cache subito dopo l'esecuzione.
 const INLINE_PREVIEW_LIMIT = 10;
+const NO_LABELS = [];
 
 /**
  * Componente nodo risultato (output) UNIFICATO
@@ -42,7 +46,6 @@ const INLINE_PREVIEW_LIMIT = 10;
  * Tutti gli aggiornamenti avvengono tramite useCanvasStore (updateNodeData, deleteNode).
  */
 const ResultNode = memo(({ data, id }) => {
-  const { getEdges, getNodes } = useReactFlow();
 
   // Sottoscrizioni reattive per i bottoni Preview/Esegui (propagate alle view)
   const hasOnPreview = useCanvasStore(s => !!s.editorActionsRef?.current?.onPreview);
@@ -77,44 +80,21 @@ const ResultNode = memo(({ data, id }) => {
     inlineClearRef.current();
   }, [projectId]);
 
-  // Conta edge in entrata — utile per invalidare il memo di upstreamColumns
-  const incomingEdgeCount = useStore((state) => {
-    const edges = dataFlowEdges(state.edges);
-    return edges.filter(e => e.target === id).length;
-  });
-
-  // Signature delle colonne upstream — triggera re-calc quando cambia
-  const sourceColumnsSignature = useStore((state) => {
-    const edges = dataFlowEdges(state.edges);
-    const nodes = state.nodes || [];
-    const incomingEdges = edges.filter(e => e.target === id);
-
-    return incomingEdges.map(edge => {
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      const cols = sourceNode?.data?.columns || [];
-      return cols.map(c => typeof c === 'string' ? c : c.name).join(',');
-    }).join('|');
-  });
-
-  // Calcola colonne upstream (passate alla view standard e ai merge in geom)
+  // Fonte unica: ingresso dell'Output (Estrai: tabelle e layer a monte) e
+  // uscita prevista dal server (dopo "Colonne in uscita" e GROUP BY).
+  const input = useColumnsOf(id, { side: 'input' });
+  const output = useColumnsOf(id);
+  const mode = useCanvasStore(s => s.mode);
+  // Estrai: il nome di ogni tabella o layer in ingresso (selettore per nodo:
+  // solo i nomi, non le posizioni; un trascinamento non ridisegna).
+  const inputLabels = useCanvasStore(useShallow(s => (mode !== 'estrai' ? NO_LABELS
+    : input.inputs.map(i => estraiSourceLabel((s.nodes || []).find(n => n.id === i.nodeId)) || null))));
   const upstreamColumns = useMemo(() => {
-    const edges = dataFlowEdges(getEdges());
-    const nodes = getNodes();
-    const incomingEdges = edges.filter(e => e.target === id);
-
-    if (incomingEdges.length === 0) return [];
-
-    const sourceEdge = incomingEdges[0];
-    const sourceNode = nodes.find(n => n.id === sourceEdge.source);
-
-    if (!sourceNode) return [];
-
-    const cols = sourceNode.data?.columns || [];
-    return cols.map(c => ({
-      name: typeof c === 'string' ? c : (c.alias || c.name),
-      type: typeof c === 'string' ? 'str' : (c.type || 'str'),
-    }));
-  }, [id, getEdges, getNodes, incomingEdgeCount, sourceColumnsSignature]);
+    if (mode !== 'estrai') return input.columns;
+    // Estrai: ogni colonna sa da quale tabella o layer viene (tabella.colonna).
+    const labels = new Map(input.inputs.map((i, idx) => [i.nodeId, inputLabels[idx]]));
+    return input.columns.map(c => ({ ...c, source_table: labels.get(c.input_node) || null }));
+  }, [input, inputLabels, mode]);
 
   // Variante della vista (stili per editor)
   const isManipulate = data.isManipulate || false;
@@ -161,6 +141,8 @@ const ResultNode = memo(({ data, id }) => {
           data={data}
           id={id}
           upstreamColumns={upstreamColumns}
+          outputColumns={output.columns}
+          columnsResult={input}
           hasOnPreview={hasOnPreview}
           hasOnExecute={hasOnExecute}
           onValidate={handleValidate}

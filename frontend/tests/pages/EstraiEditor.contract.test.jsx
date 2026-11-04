@@ -46,6 +46,16 @@ let currentEditorData = {
   reload: vi.fn(),
 };
 
+vi.mock('../../src/hooks/useColumns', () => ({
+  // Fonte unica delle colonne (Blocco A, regola 4): la sottoscrizione la
+  // monta il guscio; qui la pagina non deve calcolare ne' propagare nulla.
+  useColumnSync: () => undefined,
+  useColumnsOf: () => ({ columns: [], state: {}, status: 'idle', error: null, known: false, inputs: [] }),
+  getColumnsOf: () => ({ columns: [], state: {}, status: 'idle', error: null, known: false, inputs: [] }),
+  columnSnapshot: () => ({ schemas: {}, states: {}, nodes: [], edges: [], mode: 'manipola' }),
+  refreshColumns: () => undefined,
+}));
+
 vi.mock('@xyflow/react', () => globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef: reactFlowStateRef }));
 
 vi.mock('react-router-dom', async () => {
@@ -180,9 +190,6 @@ vi.mock('../../src/utils/nodeFactories', () => ({
   createEdgeFromData: createEdgeFromDataMock,
 }));
 
-vi.mock('../../src/utils/columnUtils', () => ({
-  calculateOutputColumnsRecursive: vi.fn(() => []),
-}));
 
 vi.mock('../../src/components/nodes/TableNode', () => ({ default: () => null }));
 vi.mock('../../src/components/nodes/FeatureLayerNode', () => ({ default: () => null }));

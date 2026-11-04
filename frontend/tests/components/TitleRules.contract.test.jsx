@@ -110,7 +110,8 @@ describe('Blocco A, regola 7: il titolo derivato segue le azioni', () => {
     expect(connectStepData('concat', {}, 'Ramo').title).toBeUndefined();
     const clone = cloneStepData({ id: 'x', type: 'transform', data: { transform_op: 'filter', config: {}, title: 'Mio passo', columns: [{ name: 'a' }] } }, 'Altro');
     expect(clone.title).toBeUndefined();
-    expect(clone.columns).toEqual([]);
+    // Colonne derivate: mai nei dati del passo (Blocco A, regola 4).
+    expect(clone).not.toHaveProperty('columns');
     expect(derivedTitle('transform', clone)).toBe('Filtra righe · Altro');
   });
 });

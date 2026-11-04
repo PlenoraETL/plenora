@@ -695,12 +695,14 @@ Intervento/confini: unico punto di contatto col backend; auth/error handling viv
 
 ## `frontend/src/store/` <a id="frontendstore"></a>
 
-Responsabilita: stato condiviso lato UI (Zustand) per il canvas ReactFlow e il flow ETL.
+Responsabilita: stato condiviso lato UI (Zustand) per il canvas ReactFlow e il flow ETL. Due store: il canvas (`useCanvasStore`) e la mappa delle colonne calcolata dal server (`useColumnStore`).
 
 File principali:
-- `useCanvasStore.js` - store unico del canvas (Zustand). Stato: `nodes`, `edges`, `projectId`, `mode` (`'estrai' | 'manipola' | 'arricchisci'`), `lastTaskResult`, `isReadOnly`, `isDirty`, `connections`, `editorActionsRef`. Actions principali: `init`, `reset`, `setReadOnly`, `setConnections`, `setEditorActions`, `getEditorAction`, `onNodesChange`, `onEdgesChange`, `setNodes`, `setEdges`, `updateNodeData`, `setLastTaskResult`, `deleteNode`, `toggleColumn`, `toggleAllColumns`, `addCalculatedColumn`, `removeCalculatedColumn`, `updateColumnAlias`, `handleSaveQuiet`, `markClean`, `getNodeById`, `getCanvas`
+- `useCanvasStore.js` - store del canvas (Zustand). Stato: `nodes`, `edges`, `projectId`, `mode` (`'estrai' | 'manipola' | 'arricchisci'`), `lastTaskResult`, `isReadOnly`, `isDirty`, `connections`, `editorActionsRef`. Actions principali: `init`, `reset`, `setReadOnly`, `setConnections`, `setEditorActions`, `getEditorAction`, `onNodesChange`, `onEdgesChange`, `setNodes`, `setEdges`, `updateNodeData`, `setLastTaskResult`, `deleteNode`, `toggleColumn`, `toggleAllColumns`, `addCalculatedColumn`, `removeCalculatedColumn`, `updateColumnAlias`, `handleSaveQuiet`, `markClean`, `getNodeById`, `getCanvas`. Il salvataggio (`handleSaveQuiet`) allega le colonne derivate solo se la mappa ha la firma del canvas salvato (`derivedColumnsForSave`).
+- `useColumnStore.js` - fonte unica delle colonne (Blocco A, regola 4): `schemas`/`states` per nodo dal `POST /projects/{id}/schemas` sul canvas dell'editor, `status`, `error`, `key` (firma del canvas da cui e' calcolata la mappa). Unica scrittrice: `startColumnSync` (una sottoscrizione per editor, montata da `EditorShell` via `useColumnSync`); una risposta entra solo se la sua firma e' quella corrente. `derivedColumnsForSave(projectId, canvas)`: colonne derivate della stessa firma (chieste e attese fino a 10 s) o nulla.
+- Letture correlate: `utils/columnSource.js` (selettore unico `columnsOf`, ruoli dei tipi di nodo `COLUMN_ROLES`, capacita' per tipo di progetto `PROJECT_COLUMN_CAPABILITIES`, `columnSignature`, `createColumnsMemo`) e `hooks/useColumns.js` (`useColumnSync`, `useColumnsOf` per nodo e memorizzato, `useNodesInfo`, `getColumnsOf`, `refreshColumns`). Lo stato e' mostrato da `components/common/ColumnStatusNote.jsx` (in ogni lettore) e `ColumnSyncBadge` (barra dei tre editor).
 
-Keywords: `useCanvasStore`, `nodes`, `edges`, `projectId`, `mode`, `isDirty`, `setNodes`, `setEdges`, `updateNodeData`, `deleteNode`, `handleSaveQuiet`
+Keywords: `useCanvasStore`, `useColumnStore`, `columnsOf`, `useColumnsOf`, `nodes`, `edges`, `projectId`, `mode`, `isDirty`, `setNodes`, `setEdges`, `updateNodeData`, `deleteNode`, `handleSaveQuiet`
 
 Intervento/confini: nessuna logica HTTP qui - consumare `frontend/src/api/` (eccezione documentata: `handleSaveQuiet` puo' chiamare api di salvataggio progetto). Mantenere lo store coerente col canvas ReactFlow (sincronizzazione nodi/edge). Nuove actions sul canvas vanno qui, non nei componenti.
 

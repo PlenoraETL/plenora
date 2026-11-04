@@ -9,8 +9,8 @@
  *  - Nodo Carica DB
  *
  * Hooks usati: useEditorData, useCanvasCore, useEdgeHandlers,
- *              useColumnPropagation, useExecution, usePreview,
- *              useToast
+ *              useExecution, usePreview, useToast. Le colonne vengono dalla
+ *              fonte unica (utils/columnSource, montata da EditorShell).
  *
  * Route: /editor/manipola/:id
  */
@@ -38,12 +38,11 @@ const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersio
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
 import DataSourceNode from '../components/nodes/DataSourceNode';
-import { useSchemaInference, usePreview, useExecution, useCanvasCore, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
+import { usePreview, useExecution, useCanvasCore, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
 import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
 import { executionNeedsConfig } from '../utils/executionConfig';
-import { withAvailableColumns } from '../utils/columnPlans';
 import { analyzeCanvas, branchSteps, nodeRole } from '../utils/canvasGraph';
 import { connectStepData, cloneStepData } from '../utils/branchNodes';
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
@@ -58,7 +57,7 @@ import {
 import ValidationStatusBadge from '../components/editor/ValidationStatusBadge';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
-import useColumnPropagation from '../hooks/useColumnPropagation';
+import { getColumnsOf } from '../hooks/useColumns';
 import { deserializeNodes } from '../utils/nodeFactories';
 import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
@@ -114,14 +113,12 @@ const ManipolaEditorContent = () => {
 
   const {
     nodes, edges, onNodesChange, onEdgesChange,
-    loadGraph, addNodes, addEdges, editNodes, editEdges, insertNode, applyDerivedNodes,
+    loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
     insertBetween, addSubgraph,
-    nodesRef, edgesRef, updateNodeData, deleteNode,
+    nodesRef, edgesRef,
     getViewportCenter,
     isReadOnly, readOnlyProps
   } = useCanvasCore(projectId, { mode: 'manipola' });
-
-  const { propagateColumns } = useColumnPropagation(applyDerivedNodes);
 
   const {
     project, connections, loading, error: loadError,
@@ -131,8 +128,6 @@ const ManipolaEditorContent = () => {
     withSources: true,
     sourceTypes: MANIPOLA_SOURCE_TYPES,
   });
-
-  const { schemas, loading: schemasLoading, error: schemasError, refreshSchemas } = useSchemaInference(projectId);
 
   const preview   = usePreview(projectId, beforePreview);
   const { saving, handleSaveCanvas } = useCanvasSave(saveNow, {
@@ -168,140 +163,13 @@ const ManipolaEditorContent = () => {
     });
 
     const loadedEdges = [...rawEdges, ...hydrateParameterBindingEdges(loadedNodes)];
-    // loadGraph: grafo dal backend, stato pulito e cronologia azzerata.
+    // loadGraph: grafo dal backend, stato pulito e cronologia azzerata. Le
+    // colonne le ricalcola la sottoscrizione unica (hooks/useColumns).
     loadGraph(loadedNodes, loadedEdges);
-    // Cleanup dei timeout su unmount: pre-fix se l'utente navigava
-    // verso un altro editor entro 300ms, `propagateColumns` /
-    // `refreshSchemas` giravano sul canvas del progetto successivo
-    // (gia' resettato dallo store) sovrascrivendo dati appena caricati.
-    const propagateTimer = setTimeout(
-      () => { propagateColumns(loadedNodes, loadedEdges); },
-      300,
-    );
-    const schemaTimer = setTimeout(() => { refreshSchemas(); }, 100);
-    return () => {
-      clearTimeout(propagateTimer);
-      clearTimeout(schemaTimer);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // loadGraph/propagateColumns/refreshSchemas/deserializeNodes
-    // omessi: load programmatico una sola volta per project, non ad ogni
-    // re-bind degli handler.
+    // loadGraph/deserializeNodes omessi: load programmatico una sola volta
+    // per project, non ad ogni re-bind degli handler.
   }, [project, loading]);
-
-  // Propaga schemi ai nodi transform
-  useEffect(() => {
-    if (!schemas || Object.keys(schemas).length === 0) return;
-    // Dato DERIVATO dallo schema backend (non dirty). Le colonne esistenti
-    // vengono FUSE, non ricostruite: prima ogni refresh rimetteva
-    // visible:true e perdeva id/alias -> le colonne nascoste tornavano
-    // visibili e le rinomine non erano piu' tracciabili (audit R3.1).
-    applyDerivedNodes(nds => {
-      let changed = false;
-      const next = nds.map(node => {
-        const nodeSchema = schemas[node.id];
-        if (!nodeSchema || nodeSchema.length === 0) return node;
-        const existing = new Map((node.data?.columns || []).map(col => [col.name, col]));
-        const columns = nodeSchema.map(col => ({
-          visible: true,
-          ...(existing.get(col.name) || {}),
-          name: col.name,
-          type: col.type,
-          source_node: col.source_node,
-          is_calculated: col.is_calculated,
-        }));
-        if (JSON.stringify(node.data?.columns || []) === JSON.stringify(columns)) return node;
-        changed = true;
-        return { ...node, data: { ...node.data, columns } };
-      });
-      return changed ? next : nds;
-    });
-  }, [schemas, applyDerivedNodes]);
-
-  // Aggiorna availableColumns in ResultNode e CaricanNode (anche quando
-  // cambiano le "Colonne in uscita" dell'Output).
-  // Tutto cio' che decide le colonne in uscita dall'Output (selezione e
-  // GROUP BY, columnPlans.resultOutputColumns): se cambia, i Carica seguono.
-  const resultOutputColumnsKey = useCanvasStore(s => {
-    const d = (s.nodes || []).find(n => n.type === 'result')?.data || {};
-    return JSON.stringify([d.output_columns, d.group_by_enabled, d.group_by_columns, d.aggregations]);
-  });
-  useEffect(() => {
-    // NOTA: 'nodes' rimosso dalle dipendenze intenzionalmente per evitare loop React.
-    // nodes e edges vengono letti dentro l'updater (snapshot aggiornato)
-    // e da edgesRef (ref stabile). schemas è la sola vera dipendenza esterna.
-    // Dato DERIVATO: non marca dirty.
-    applyDerivedNodes(nds => {
-      const currentEdges = dataFlowEdges(edgesRef.current);
-      const resultNode = nds.find(n => n.type === 'result');
-      if (!resultNode) return nds;
-      const incomingEdge = currentEdges.find(e => e.target === resultNode.id);
-
-      if (!incomingEdge) {
-        if ((resultNode.data?.availableColumns || []).length === 0) return nds;
-        return nds.map(node => {
-          if (node.type === 'result' || node.type === 'carica' || node.type === 'carica_arcgis' || node.type === 'caricaArcgis') return { ...node, data: { ...node.data, availableColumns: [] } };
-          return node;
-        });
-      }
-
-      const sourceNodeId     = incomingEdge.source;
-      const availableColumns = [];
-      const nodeSchema       = schemas[sourceNodeId] || [];
-      if (nodeSchema.length > 0) {
-        nodeSchema.forEach(col => availableColumns.push({ name: col.name, type: col.type || 'str', source: sourceNodeId }));
-      } else {
-        const sourceNode = nds.find(n => n.id === sourceNodeId);
-        (sourceNode?.data?.columns || []).forEach(col => availableColumns.push({ name: col.name || col, type: col.type || 'str', source: sourceNodeId }));
-      }
-
-      // Carica: colonne dopo "Colonne in uscita" dell'Output (utils/columnPlans).
-      return withAvailableColumns(nds, availableColumns);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // 'nodes' volutamente assente: viene letto nell'updater
-    // (snapshot aggiornato) per evitare il loop nodes->effect->update.
-  }, [edges, schemas, applyDerivedNodes, edgesRef, resultOutputColumnsKey]);
-
-  // Fase 4, M7 (salvataggio esplicito, scelta dell'utente): niente
-  // salvataggi nascosti. Dopo una modifica che cambia gli schemi si
-  // ricalcolano sul canvas dell'editor (useSchemaInference, POST /schemas)
-  // senza salvarlo; piu' modifiche ravvicinate = una sola richiesta.
-  const schemaTimerRef = useRef(null);
-  const scheduleSchemaRefresh = useCallback(() => {
-    clearTimeout(schemaTimerRef.current);
-    schemaTimerRef.current = setTimeout(() => { refreshSchemas(); }, 150);
-  }, [refreshSchemas]);
-  useEffect(() => () => clearTimeout(schemaTimerRef.current), []);
-
-  const handleUpdateTransform = useCallback((nodeId, newData) => {
-    // TransformNode scrive gia' la config nello store (patchNodeConfig) e
-    // chiama questo handler SENZA dati solo per ripropagare le colonne:
-    // riscriverla qui con lo snapshot del render cancellava le patch
-    // ravvicinate (audit R1.5).
-    if (newData) updateNodeData(nodeId, newData);
-    //
-    // Non autosalviamo ogni micro-update del form transform: controlli come
-    // aggregation_list emettono piu' patch ravvicinate e i save concorrenti
-    // possono arrivare fuori ordine, ripristinando configurazioni vecchie
-    // dopo un save manuale. Il canvas resta dirty e viene salvato dal pulsante
-    // Salva o dal pre-flight di execute/preview.
-    setTimeout(() => {
-      // Stato corrente dello store, non nodesRef (aggiornato solo al render).
-      const { nodes: currentNodes, edges: currentEdges } = useCanvasStore.getState();
-      propagateColumns(currentNodes, currentEdges);
-    }, 50);
-  }, [updateNodeData, propagateColumns]);
-
-  const handleDataSourceSchemaUpdated = useCallback((nodeId, updates) => {
-    const updatedNodes = nodesRef.current.map(node => (
-      node.id === nodeId
-        ? { ...node, data: { ...node.data, ...updates } }
-        : node
-    ));
-    propagateColumns(updatedNodes, edgesRef.current);
-    scheduleSchemaRefresh();
-  }, [nodesRef, edgesRef, propagateColumns, scheduleSchemaRefresh]);
 
   // Registra azioni editor nello store — DEVE stare dopo tutti gli hook e useCallback
   // Azioni dell'editor: registrate una volta, chiamano sempre l'ultima
@@ -313,13 +181,6 @@ const ManipolaEditorContent = () => {
       // percorso unico di ResultNode (Fase 4, M7).
       return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
     },
-    onUpdateTransform:            handleUpdateTransform,
-    onDataSourceSchemaUpdated:    handleDataSourceSchemaUpdated,
-    // Copia di sicurezza ripristinata: stesso ricalcolo del caricamento.
-    onCanvasRestored:             () => {
-      propagateColumns(nodesRef.current, edgesRef.current);
-      scheduleSchemaRefresh();
-    },
   });
 
   // Sincronizza connections nello store
@@ -330,17 +191,6 @@ const ManipolaEditorContent = () => {
   // Outline amber sui nodi con issue di validazione (popolati dallo store
   // da ResultNode.runValidation). Hook condiviso con ArricchisciEditor.
   useValidationHighlights(applyDerivedNodes);
-
-  // Effetti di un nuovo collegamento: propagazione colonne e schemi.
-  // Condiviso da onConnect e dall'inserimento dalla palette.
-  const afterConnect = useCallback((newEdges, propagate = true) => {
-    setTimeout(() => {
-      if (propagate) {
-        propagateColumns(nodesRef.current, newEdges);
-      }
-      scheduleSchemaRefresh();
-    }, 50);
-  }, [propagateColumns, scheduleSchemaRefresh]);
 
   const onConnect = useCallback((params) => {
     // Input runtime su un parametro singolo che una lista sostituisce
@@ -357,28 +207,22 @@ const ManipolaEditorContent = () => {
       const edge = isScalarProjectInputNode(sourceNode)
         ? createParameterBindingEdge(params)
         : { ...params, ...defaultEdgeOptions };
-      const newEdges = addEdge(edge, eds);
-      afterConnect(newEdges, !isScalarProjectInputNode(sourceNode));
-      return newEdges;
+      return addEdge(edge, eds);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editEdges, afterConnect]);
+  }, [editEdges]);
 
 
   const onEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault();
     editEdges(eds => eds.filter(e => e.id !== edge.id));
-    setTimeout(() => {
-      propagateColumns(nodesRef.current, edgesRef.current);
-      scheduleSchemaRefresh();
-    }, 50);
-  }, [editEdges, propagateColumns, scheduleSchemaRefresh]);
+  }, [editEdges]);
 
   const getPos = () => getViewportCenter({ screenToFlowPosition });
 
   const handleAddMultiJoinNode = useCallback(() => {
     addNodes({ id: `multi_join_${Date.now()}`, type: 'multi_join', position: getPos(),
-      data: { config: { join_keys: [], join_type: 'inner' }, columns: [], inputColumns: [] } });
+      data: { config: { join_keys: [], join_type: 'inner' } } });
   }, [addNodes]);
 
   const handleAddStaticValuesNode = useCallback(() => {
@@ -405,7 +249,7 @@ const ManipolaEditorContent = () => {
   const handleAddResultNode = useCallback(() => {
     if (nodesRef.current.some(n => n.type === 'result')) { toast.warning(onlyOneMessage('output')); return; }
     addNodes({ id: `result_${Date.now()}`, type: 'result', position: getPos(),
-      data: { isManipulate: true, fileName: 'output', format: 'csv', availableColumns: [],
+      data: { isManipulate: true, fileName: 'output', format: 'csv',
         group_by_enabled: false, group_by_columns: [], aggregations: [],
         order_by_enabled: false, order_by_columns: [],
         having_enabled: false, having_conditions: [] } });
@@ -432,8 +276,7 @@ const ManipolaEditorContent = () => {
         column_mappings: [], match_columns: [], batch_size: 1000, transaction_mode: 'all_or_nothing',
         create_spatial_index: true, conflict_policy: 'abort',
         arcgis_connection_id: '', arcgis_service_url: '', arcgis_layer_url: '', arcgis_operation: 'add',
-        arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',
-        availableColumns: resultNode.data?.availableColumns || [] } };
+        arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0' } };
     addNodes(newNode);
     addEdges({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
       type: 'smoothstep', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 },
@@ -464,21 +307,21 @@ const ManipolaEditorContent = () => {
     let newNode;
     if (item.kind === 'multi_join') {
       newNode = { id: `multi_join_${stamp}`, type: 'multi_join', position,
-        data: { config: { join_keys: [], join_type: 'inner' }, columns: [], inputColumns: [] } };
+        data: { config: { join_keys: [], join_type: 'inner' } } };
     } else if (item.kind === 'result') {
       newNode = { id: `result_${stamp}`, type: 'result', position,
-        data: { isManipulate: true, fileName: 'output', format: 'csv', availableColumns: [],
+        data: { isManipulate: true, fileName: 'output', format: 'csv',
           group_by_enabled: false, group_by_columns: [], aggregations: [],
           order_by_enabled: false, order_by_columns: [],
           having_enabled: false, having_conditions: [] } };
     } else {
       newNode = { id: `transform_${stamp}`, type: 'transform', position,
-        data: { transform_op: item.id, config: {}, columns: [] } };
+        data: { transform_op: item.id, config: {} } };
     }
     const inHandle = item.kind === 'multi_join' || isMultiInputOp(item.id)
       ? 'input-0'
       : (item.kind === 'result' ? 'input' : null);
-    const outcome = insertNode({
+    insertNode({
       node: newNode,
       afterId,
       passThrough: item.kind !== 'result',
@@ -488,9 +331,8 @@ const ManipolaEditorContent = () => {
         id: `xy-edge__${params.source}${params.sourceHandle || ''}-${params.target}${params.targetHandle || ''}`,
       }),
     });
-    if (outcome?.added.length) afterConnect(outcome.edges);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [insertNode, afterConnect, handleAddCaricanNode, toast]);
+  }, [insertNode, handleAddCaricanNode, toast]);
 
   const palette = useMemo(() => ({
     groups: buildManipolaPaletteGroups(transformRegistry),
@@ -515,11 +357,9 @@ const ManipolaEditorContent = () => {
     const target = current.find(n => n.id === targetId);
     if (!end || !target) return;
     const op = mode === 'concat' ? 'concat' : 'join';
-    const visibleCols = (n) => (n.data?.columns || [])
-      .filter(c => c && typeof c === 'object' && c.visible !== false)
-      .map(c => ({ ...c, name: c.alias || c.name }));
-    const leftCols = visibleCols(target);
-    const rightCols = visibleCols(end);
+    // Colonne in uscita dei due rami dalla fonte unica (con gli id).
+    const leftCols = getColumnsOf(targetId).columns;
+    const rightCols = getColumnsOf(endId).columns;
     const shared = leftCols.find(c => rightCols.some(r => r.name === c.name))?.name;
     const config = op === 'join'
       ? { how: 'left', name_conflict: 'keep_left', ...joinKeysPatch(shared ? [[shared, shared]] : [], leftCols, rightCols) }
@@ -538,11 +378,10 @@ const ManipolaEditorContent = () => {
       extraEdges: [branchEdge({ source: endId, sourceHandle: null, target: newNode.id, targetHandle: 'input-1' })],
     });
     if (!done) return;
-    afterConnect(done.edges);
     if (op === 'join' && !shared) toast.warning(`Ramo collegato: scegli le chiavi del Join nel pannello (nessuna colonna con lo stesso nome).`);
     else toast.success(`Ramo "${branchName}" collegato dopo "${nodeTitle(target.type, target.data)}".`);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [insertBetween, afterConnect, branchEdge, toast]);
+  }, [insertBetween, branchEdge, toast]);
 
   // "Duplica ramo": i passi alimentati solo da questa sorgente, con gli
   // STESSI collegamenti (maniglie e input runtime compresi), attaccati a
@@ -581,10 +420,9 @@ const ManipolaEditorContent = () => {
     const last = clones[clones.length - 1].id;
     const done = addSubgraph({ nodes: clones, edges: copied, selectId: last });
     if (!done) return;
-    afterConnect(done.edges);
     toast.success(`Ramo duplicato su "${otherName}": ${clones.length} ${clones.length === 1 ? 'passo copiato' : 'passi copiati'}. Collegalo dal pannello a destra.`);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addSubgraph, afterConnect, toast]);
+  }, [addSubgraph, toast]);
 
   const branchActions = useMemo(() => ({
     connectBranch,
@@ -620,13 +458,8 @@ const ManipolaEditorContent = () => {
         data: { file_source_id: itemData.id, columns: [] } };
     }
 
-    if (newNode) {
-      addNodes(newNode);
-      setTimeout(() => {
-        scheduleSchemaRefresh();
-      }, 100);
-    }
-  }, [screenToFlowPosition, addNodes, scheduleSchemaRefresh]);
+    if (newNode) addNodes(newNode);
+  }, [screenToFlowPosition, addNodes]);
 
   const { confirmNavigation } = useUnsavedChangesGuard();
   const handleBack = () => { if (confirmNavigation()) navigate('/'); };
@@ -648,25 +481,8 @@ const ManipolaEditorContent = () => {
     executing: execution.isExecuting,
     theme,
     setTheme,
-    statusExtra: (
-      <>
-        {schemasLoading && <span className="manipola-toolbar__badge" style={{ background: '#FF9800' }}>⏳ Aggiornamento schemi…</span>}
-        {schemasError && !schemasLoading && (
-          <span
-            className="manipola-toolbar__badge"
-            style={{ background: '#D32F2F', cursor: 'pointer' }}
-            title={`Errore inferenza schema: ${schemasError}. Clicca per ritentare.`}
-            onClick={refreshSchemas}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); refreshSchemas(); } }}
-            role="button"
-            tabIndex={0}
-          >
-            ⚠️ Schemi non caricati
-          </span>
-        )}
-        <ValidationStatusBadge />
-      </>
-    ),
+    // Lo stato delle colonne e' nella barra comune (EditorToolbar, ColumnSyncBadge).
+    statusExtra: <ValidationStatusBadge />,
     // Sola lettura: nessuna azione che modifica (Versioni crea e ripristina).
     menuItems: isReadOnly ? [] : [
       // Nome, icona e descrizione di ogni voce dal glossario (regola 10).

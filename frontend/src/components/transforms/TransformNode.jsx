@@ -7,17 +7,19 @@
  * Anche durante il caricamento del registry non c'e' una vecchia
  * intestazione: il modulo mostra "Caricamento operazioni…".
  *
- * Nessun calcolo colonne, nessuna propagazione: legge data.inputColumns
- * popolato da useColumnPropagation.
+ * Nessun calcolo colonne: le colonne in ingresso (tutte e per lato, nell'ordine
+ * delle maniglie) vengono dalla fonte unica (hooks/useColumns, columnsOf).
  */
 import React, { memo, useState, useEffect, useMemo } from 'react';
-import { useReactFlow } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useColumnsOf, useNodesInfo } from '../../hooks/useColumns';
+import { columnsConfirmed } from '../../utils/columnSource';
+import ColumnStatusNote from '../common/ColumnStatusNote';
 import DynamicConfig from './DynamicConfig';
 
 import { authBus } from '../../utils/authBus';
 import RunHistoryModal from '../modals/RunHistoryModal';
-import { dataFlowEdges, isParameterBindingEdge } from '../../utils/runtimeBindingEdges';
+import { isParameterBindingEdge } from '../../utils/runtimeBindingEdges';
 import { OPERATION_PANELS, LookupSuggestion } from './panels';
 import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
 import { nodeTitle } from '../canvas/nodeDescriptors';
@@ -28,8 +30,6 @@ const fetchRegistry = fetchTransformRegistry;
 const getRegistryCache = getCachedTransformRegistry;
 
 const TransformNode = memo(({ data, id }) => {
-  const { getEdges, getNodes } = useReactFlow();
-
   const transform_op = data.transform_op || 'filter';
   const config = data.config || {};
 
@@ -65,10 +65,17 @@ const TransformNode = memo(({ data, id }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const patchNodeConfig = useCanvasStore(s => s.patchNodeConfig);
 
-  // useColumnPropagation popola data.inputColumns, noi le leggiamo e basta
-  const inputColumns = useMemo(() => {
-    return data.inputColumns || [];
-  }, [data.inputColumns]);
+  // Fonte unica (Blocco A, regola 4): ingresso intero e lati sinistro/destro
+  // con gli id, nello stesso ordine dei lati del backend.
+  const input = useColumnsOf(id, { side: 'input' });
+  const left = useColumnsOf(id, { side: 'left' });
+  const right = useColumnsOf(id, { side: 'right' });
+  // Titoli dei lati: tipo e dati dei soli nodi a monte (non le posizioni).
+  const [leftNode, rightNode] = useNodesInfo([left.inputs[0]?.nodeId || '', right.inputs[0]?.nodeId || '']);
+  const inputColumns = input.columns;
+  // Correzioni automatiche dei parametri solo su colonne confermate (regola
+  // unica columnSource.columnsConfirmed).
+  const columnsReady = columnsConfirmed(input);
 
   const geometryColumns = useMemo(() => {
     return inputColumns.filter(c =>
@@ -76,82 +83,49 @@ const TransformNode = memo(({ data, id }) => {
     );
   }, [inputColumns]);
 
-  // Per join: separa colonne sinistra (primo input) e destra (secondo input)
+  // Per join: colonne sinistra (primo input) e destra (secondo input).
   const { leftColumns, rightColumns, leftSourceName, rightSourceName } = useMemo(() => {
     const isMultiInput = transformConfig?.inputs === 'multi';
     if (!isMultiInput) {
       return { leftColumns: inputColumns, rightColumns: [], leftSourceName: '', rightSourceName: '' };
     }
-
-    const edges = dataFlowEdges(getEdges());
-    const nodes = getNodes();
-    const incomingEdges = edges.filter(e => e.target === id);
-
-    // Trova edge per handle specifico
-    const leftEdge = incomingEdges.find(e => e.targetHandle === 'input-0');
-    const rightEdge = incomingEdges.find(e => e.targetHandle === 'input-1');
-
-    const getNodeInfo = (edge) => {
-      if (!edge) return { columns: [], name: '' };
-      const node = nodes.find(n => n.id === edge.source);
-      if (!node) return { columns: [], name: '?' };
-      const cols = node.data?.columns || [];
-
-      // Nome leggibile: lo stesso titolo del resto dell'interfaccia (nodeDescriptors)
-      let name = nodeTitle(node.type, node.data) || node.id;
-      if (name.length > 20) name = name.substring(0, 17) + '...';
-
-      return {
-        columns: cols.map(c => typeof c === 'string' ? { name: c, type: 'str' } : c),
-        name
-      };
+    // Nome leggibile: lo stesso titolo del resto dell'interfaccia (nodeDescriptors)
+    const sideName = (side, node) => {
+      const nodeId = side.inputs[0]?.nodeId;
+      if (!nodeId) return '';
+      if (!node) return '?';
+      const name = nodeTitle(node.type, node.data) || node.id;
+      return name.length > 20 ? name.substring(0, 17) + '...' : name;
     };
-
-    const left = getNodeInfo(leftEdge);
-    const right = getNodeInfo(rightEdge);
-    // Colonne per lato: quelle gia' propagate (con alias e visibilita'
-    // applicati, marcate left/right) sono i nomi che il backend vede; le
-    // colonne grezze del nodo a monte solo se la propagazione non le marca.
-    const marked = inputColumns.some(c => c.source === 'left' || c.source === 'right');
-
     return {
-      leftColumns: marked ? inputColumns.filter(c => c.source === 'left') : left.columns,
-      rightColumns: marked ? inputColumns.filter(c => c.source === 'right') : right.columns,
-      leftSourceName: left.name,
-      rightSourceName: right.name
+      leftColumns: left.columns,
+      rightColumns: right.columns,
+      leftSourceName: sideName(left, leftNode),
+      rightSourceName: sideName(right, rightNode),
     };
-  }, [id, getEdges, getNodes, inputColumns, transformConfig]);
+  }, [inputColumns, left, right, leftNode, rightNode, transformConfig]);
 
   // La patch si fonde con la config CORRENTE dello store (patchNodeConfig),
   // non con quella di questo render: piu' patch nello stesso tick non si
-  // sovrascrivono piu' (audit R1.5). L'editor viene solo avvisato per
-  // ripropagare le colonne; non riscrive la config.
-  const notifyConfigChanged = () => {
-    setTimeout(() => {
-      const onUpdateTransform = useCanvasStore.getState().editorActionsRef?.current?.onUpdateTransform;
-      if (onUpdateTransform) onUpdateTransform(id);
-    }, 0);
-  };
+  // sovrascrivono piu' (audit R1.5). Le colonne a valle le ricalcola la
+  // fonte unica dal canvas cambiato: nessuna propagazione da avviare qui.
   const toPatch = (field, value) => (
     typeof field === 'object' && field !== null ? field : { [field]: value }
   );
   // Modifica dell'utente: dirty + undo.
   const updateConfig = (field, value) => {
     patchNodeConfig(id, toPatch(field, value));
-    notifyConfigChanged();
   };
   // Correzione automatica (default, id colonna, rinomine): dato derivato,
   // non rende il canvas "modificato" all'apertura (audit R1.8).
   const applyDerivedConfig = (field, value) => {
     patchNodeConfig(id, toPatch(field, value), { derived: true });
-    notifyConfigChanged();
   };
 
   // Cambio di operazione e conversione in Mappa valori: il titolo derivato
   // segue da solo (nodeDescriptors), nessun titolo da aggiornare qui.
   const onOpChange = (evt) => {
     updateNodeData(id, { transform_op: evt.target.value, config: {} });
-    notifyConfigChanged();
   };
 
   // Input runtime collegati a un parametro singolo -> resta il form
@@ -160,7 +134,6 @@ const TransformNode = memo(({ data, id }) => {
   const hasParameterBindings = useCanvasStore(s => (s.edges || []).some(e => e.target === id && isParameterBindingEdge(e)));
   const convertToLookup = (lookupConfig) => {
     updateNodeData(id, { transform_op: 'lookup', config: lookupConfig });
-    notifyConfigChanged();
   };
 
   const Panel = hasParameterBindings ? null : OPERATION_PANELS[transform_op];
@@ -182,6 +155,7 @@ const TransformNode = memo(({ data, id }) => {
           ))}
         </select>
         {Panel && transformConfig?.description && <div className="ppanel__note">{transformConfig.description}</div>}
+        <ColumnStatusNote result={input} />
       </div>
       {transform_op === 'conditional' && !hasParameterBindings && (
         <LookupSuggestion config={config} columns={inputColumns} onConvert={convertToLookup} disabled={isReadOnly} />
@@ -208,6 +182,7 @@ const TransformNode = memo(({ data, id }) => {
           leftColumns={leftColumns}
           rightColumns={rightColumns}
           geometryColumns={geometryColumns}
+          columnsConfirmed={columnsReady}
           targetNodeId={id}
         />
       ) : (

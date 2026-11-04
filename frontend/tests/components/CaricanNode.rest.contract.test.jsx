@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import CaricanNode from '../../src/components/nodes/CaricanNode';
+import useColumnStore from '../../src/store/useColumnStore';
 
 const {
   updateNodeDataMock,
@@ -39,8 +40,11 @@ vi.mock('../../src/api/carica', () => ({
 function renderNode(data = {}) {
   const state = {
     connections: [{ id: 'db-1', name: 'Main DB', type: 'postgres' }],
-    nodes: [],
-    edges: [],
+    // Le colonne in ingresso (uscita dell'Output) vengono dalla fonte unica
+    // (Blocco A, regola 4), non da data.availableColumns.
+    nodes: [{ id: 'result-1', type: 'result', data: {} }, { id: 'carica-1', type: 'carica', data: {} }],
+    edges: [{ id: 'e', source: 'result-1', target: 'carica-1' }],
+    mode: 'manipola',
     projectId: 'project-1',
     updateNodeData: updateNodeDataMock,
     deleteNode: deleteNodeMock,
@@ -48,14 +52,18 @@ function renderNode(data = {}) {
   canvasStateRef.current = state;
   useCanvasStoreMock.mockImplementation((selector) => selector(state));
   useCanvasStoreMock.getState = () => state;
+  useColumnStore.setState({
+    schemas: { 'result-1': [
+      { id: 'col_city', name: 'City', type: 'str', source_name: 'city', source_node: 'src', optional: false },
+      { id: 'col_score', name: 'score', type: 'int', source_name: 'score', source_node: 'src', optional: false },
+    ] },
+    states: {}, status: 'ok', error: null,
+  });
 
   return render(
     <CaricanNode
       id="carica-1"
-      data={{
-        availableColumns: [{ name: 'city', alias: 'City' }, { name: 'score' }],
-        ...data,
-      }}
+      data={{ ...data }}
     />,
   );
 }

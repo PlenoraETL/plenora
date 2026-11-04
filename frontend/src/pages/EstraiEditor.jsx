@@ -28,7 +28,8 @@ import AnnotationNode from '../components/nodes/AnnotationNode';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import DataSourceNode from '../components/nodes/DataSourceNode';
 import '../components/nodes/DataSourceNode.css';
-import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
+import { columnSnapshot } from '../hooks/useColumns';
+import { columnsOf, estraiSourceLabel } from '../utils/columnSource';
 import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
 import { getLayerSchema } from '../api/features';
 import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
@@ -144,32 +145,8 @@ function EstraiEditor() {
   }, [project, projectConnection, loading]);
 
 
-  useEffect(() => {
-    if (dataNodes.length === 0) return;
-    const resultNode = dataNodes.find(n => n.type === 'resultNode');
-    if (!resultNode) return;
-    const outputColumns = calculateOutputColumnsRecursive(dataNodes, edges, resultNode.id);
-    const signature = JSON.stringify(outputColumns);
-    // Dato DERIVATO (non dirty). Confronto PER NODO: prima un early-return
-    // sulle sole colonne del result lasciava vuote le availableColumns dei
-    // Carica dopo il reload (audit R3.6).
-    applyDerivedNodes(nds => {
-      let changed = false;
-      const next = nds.map(node => {
-        if (node.type === 'resultNode' && JSON.stringify(node.data.columns || []) !== signature) {
-          changed = true;
-          return { ...node, data: { ...node.data, columns: outputColumns } };
-        }
-        if ((node.type === 'carica' || node.type === 'carica_arcgis' || node.type === 'caricaArcgis')
-          && JSON.stringify(node.data.availableColumns || []) !== signature) {
-          changed = true;
-          return { ...node, data: { ...node.data, availableColumns: outputColumns } };
-        }
-        return node;
-      });
-      return changed ? next : nds;
-    });
-  }, [dataNodes, edges, applyDerivedNodes]);
+  // Colonne dell'Output e dei Carica: dalla fonte unica (Blocco A, regola 4),
+  // calcolate dal server con la stessa proiezione SQL dell'esecuzione.
   const handleAddRelatedLayer = useCallback(async (originNodeId, relation) => {
     const originNode = nodesRef.current.find(n => n.id === originNodeId);
     if (!originNode) return;
@@ -238,8 +215,7 @@ function EstraiEditor() {
       position: { x: resultNode.position.x + 400, y: resultNode.position.y },
       data: { connection_id: '', schema_name: '', table_name: '', write_mode: 'create',
         column_mappings: [], match_columns: [], batch_size: 1000,
-        transaction_mode: 'all_or_nothing', create_spatial_index: true, conflict_policy: 'abort',
-        availableColumns: resultNode.data.columns || [] }
+        transaction_mode: 'all_or_nothing', create_spatial_index: true, conflict_policy: 'abort' }
     };
     addNodes(newNode);
     addEdges({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
@@ -256,7 +232,7 @@ function EstraiEditor() {
       position: { x: resultNode.position.x + 400, y: resultNode.position.y + 200 },
       data: { arcgis_connection_id: '', arcgis_service_url: '', arcgis_layer_url: '',
         arcgis_operation: 'add', arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',
-        column_mappings: [], availableColumns: resultNode.data.columns || [] }
+        column_mappings: [] }
     };
     addNodes(newNode);
     addEdges({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
@@ -630,12 +606,15 @@ function EstraiEditor() {
           // così PreviewModal può raggruppare per vera sorgente invece di indovinare dal prefisso.
           if (!preview.data?.columns) return preview.data;
           const resultNode = nodes.find(n => n.type === 'resultNode');
-          const canvasCols = resultNode?.data?.columns || [];
-          // Mappa name → source_table dal canvas (calculateOutputColumnsRecursive)
+          // Mappa name → tabella o layer: l'ingresso dell'Output nella fonte unica.
+          const labels = new Map(nodes.map(n => [n.id, estraiSourceLabel(n)]));
           const sourceMap = {};
-          canvasCols.forEach(col => {
-            if (col.source_table) sourceMap[col.name] = col.source_table;
-          });
+          if (resultNode) {
+            columnsOf(columnSnapshot(), resultNode.id, { side: 'input' }).columns.forEach(col => {
+              const label = labels.get(col.input_node);
+              if (label && !(col.name in sourceMap)) sourceMap[col.name] = label;
+            });
+          }
           const enrichedColumns = preview.data.columns.map(col => ({
             ...col,
             source: sourceMap[col.name] || col.source || null,

@@ -115,15 +115,10 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
   });
 
 
-  /** Nodi escludendo annotazioni — per validation, query preview, column calc.
+  /** Nodi escludendo annotazioni — per validation e query preview.
    *
-   * Pre-fix (P1 frontend-hooks): `nodes.filter(...)` inline senza useMemo
-   * produceva una nuova array identity ad ogni render. EstraiEditor lo usa
-   * come dep di un useEffect (`calculateOutputColumnsRecursive`); senza
-   * memoization l'effect si rieseguiva ad ogni drag/hover/selection del
-   * canvas, rieseguendo il calcolo colonne su ogni interazione utente.
-   * Post-fix: useMemo + dep `nodes` → recompute solo quando `nodes`
-   * cambia veramente (length o item identity).
+   * useMemo + dep `nodes`: identita' stabile finche' `nodes` non cambia
+   * (chi lo usa come dipendenza non si riesegue a ogni render).
    */
   const dataNodes = useMemo(
     () => nodes.filter(n => n.type !== 'comment'),

@@ -22,9 +22,9 @@ export const EDITOR_ACTIONS = Object.freeze({
   openPalette: { registeredBy: ['EditorShell'], usedBy: ['CompactNode'] },
   // Specifiche di un editor.
   onAddRelatedLayer: { registeredBy: ['EstraiEditor'], usedBy: ['FeatureLayerNode'] },
-  onUpdateTransform: { registeredBy: ['ManipolaEditor'], usedBy: ['TransformNode'] },
-  onDataSourceSchemaUpdated: { registeredBy: ['ManipolaEditor'], usedBy: ['DataSourceNode'] },
-  onCanvasRestored: { registeredBy: ['ManipolaEditor'], usedBy: ['useLocalDraft'] },
+  // onUpdateTransform, onDataSourceSchemaUpdated e onCanvasRestored servivano
+  // solo a ripropagare le colonne: ora le ricalcola la sottoscrizione unica
+  // (hooks/useColumns, Blocco A regola 4) a ogni modifica del canvas.
 });
 
 export const EDITOR_ACTION_NAMES = new Set(Object.keys(EDITOR_ACTIONS));

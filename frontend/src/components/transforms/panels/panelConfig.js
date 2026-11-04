@@ -190,22 +190,24 @@ export function gridRows(upstream, config) {
     rows.push({
       ...item, name, keep: item.keep !== false, label: item.label ?? '',
       type: byName.get(name)?.type || '', missing: !byName.has(name),
+      optional: Boolean(byName.get(name)?.optional),
     });
   }
   for (const c of upstream) {
-    if (!seen.has(c.name)) rows.push({ name: c.name, keep: true, label: '', type: c.type || '', missing: false });
+    if (!seen.has(c.name)) rows.push({ name: c.name, keep: true, label: '', type: c.type || '', missing: false, optional: Boolean(c.optional) });
   }
   return rows;
 }
 
 /**
  * Configurazione dalle righe: ordine esplicito, label solo se diversa.
- * `withIds` (select_columns): anche l'id della colonna. L'Output lavora
- * per nome (l'esecuzione dell'Output non riceve gli id): niente id li'.
+ * Ogni voce porta l'id della colonna a monte (name_column_id), anche
+ * nell'Output (l'esecuzione risolve gli id sul proprio ingresso). `withIds`
+ * false resta per chi scrive solo nomi.
  */
 export const gridConfig = (rows, upstream = [], { withIds = true } = {}) => rows.map((r) => {
   // eslint-disable-next-line no-unused-vars
-  const { type, missing, display, label, keep, name_column_id: savedId, ...rest } = r;
+  const { type, missing, optional, display, label, keep, name_column_id: savedId, ...rest } = r;
   const out = { ...rest, keep: keep !== false };
   const id = withIds ? (columnId(upstream.find(c => c.name === r.name)) || savedId) : null;
   if (id) out.name_column_id = id;

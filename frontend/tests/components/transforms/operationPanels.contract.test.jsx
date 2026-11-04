@@ -27,6 +27,7 @@ vi.mock('../../../src/utils/transformRegistry', () => ({
 }));
 
 import TransformNode from '../../../src/components/transforms/TransformNode';
+import useColumnStore from '../../../src/store/useColumnStore';
 import FilterPanel from '../../../src/components/transforms/panels/FilterPanel';
 import FormulaPanel from '../../../src/components/transforms/panels/FormulaPanel';
 import JoinPanel from '../../../src/components/transforms/panels/JoinPanel';
@@ -119,23 +120,31 @@ describe('TransformNode in the side panel', () => {
   beforeEach(() => {
     registryValue.current = registry;
     updateNodeData.mockReset();
+    // Le colonne in ingresso arrivano dalla fonte unica (Blocco A, regola 4):
+    // lo schema del nodo a monte nella mappa del server, con gli id.
     storeState.current = {
-      nodes: [], edges: [], isReadOnly: false, projectId: 'p',
+      nodes: [{ id: 'src', type: 'file_source', data: {} }, { id: 't1', type: 'transform', data: {} }],
+      edges: [{ id: 'e', source: 'src', target: 't1', targetHandle: 'input-0' }],
+      isReadOnly: false, projectId: 'p', mode: 'manipola',
       updateNodeData, patchNodeConfig: vi.fn(), deleteNode: vi.fn(),
       editorActionsRef: { current: {} },
     };
+    useColumnStore.setState({
+      schemas: { src: cols.map(c => ({ ...c, id: `id_${c.name}`, source_name: c.name, source_node: 'src', optional: false })) },
+      states: {}, status: 'ok', error: null,
+    });
   });
 
   it('has no old card header or category tabs, and uses the dedicated panel', () => {
-    render(<TransformNode id="t1" inInspector data={{ transform_op: 'filter', config: {}, inputColumns: cols }} />);
+    render(<TransformNode id="t1" inInspector data={{ transform_op: 'filter', config: {} }} />);
     expect(screen.queryByText('Trasformazione')).toBeNull();
     expect(screen.queryByRole('button', { name: /Spaziale/ })).toBeNull();
     expect(screen.getByText(/Aggiungi condizione/)).toBeTruthy();
   });
 
   it('keeps the generic form when runtime inputs are bound to its parameters', () => {
-    storeState.current.edges = [{ id: 'b', source: 'in', target: 't1', targetHandle: 'parameter:value', data: { edge_kind: 'parameter_binding' } }];
-    render(<TransformNode id="t1" inInspector data={{ transform_op: 'filter', config: {}, inputColumns: cols }} />);
+    storeState.current.edges = [...storeState.current.edges, { id: 'b', source: 'in', target: 't1', targetHandle: 'parameter:value', data: { edge_kind: 'parameter_binding' } }];
+    render(<TransformNode id="t1" inInspector data={{ transform_op: 'filter', config: {} }} />);
     expect(screen.queryByText(/Aggiungi condizione/)).toBeNull();
     expect(screen.getByText(/input runtime collegati/)).toBeTruthy();
   });
@@ -145,7 +154,7 @@ describe('TransformNode in the side panel', () => {
       column: 'ctr_period', output_column: 'fattore', default_value: '',
       conditions: [{ operator: '==', value: 'MONTH', result: '1' }, { operator: '==', value: 'YEAR', result: '12' }],
     };
-    render(<TransformNode id="t1" inInspector data={{ transform_op: 'conditional', config, inputColumns: cols }} />);
+    render(<TransformNode id="t1" inInspector data={{ transform_op: 'conditional', config }} />);
     fireEvent.click(screen.getByRole('button', { name: /Trasforma in Mappa valori/ }));
     expect(updateNodeData).toHaveBeenCalledWith('t1', expect.objectContaining({
       transform_op: 'lookup',

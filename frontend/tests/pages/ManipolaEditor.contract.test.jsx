@@ -11,8 +11,6 @@ const {
   loadGraphMock,
   addNodesMock,
   deserializeNodesMock,
-  propagateColumnsMock,
-  refreshSchemasMock,
   updateNodeDataMock,
   deleteNodeMock,
   toastMock,
@@ -23,8 +21,6 @@ const {
   loadGraphMock: vi.fn(),
   addNodesMock: vi.fn(),
   deserializeNodesMock: vi.fn((nodes) => nodes),
-  propagateColumnsMock: vi.fn(),
-  refreshSchemasMock: vi.fn(),
   updateNodeDataMock: vi.fn(),
   deleteNodeMock: vi.fn(),
   toastMock: globalThis.__frontendTestHelpers.createToastMock(vi),
@@ -44,6 +40,16 @@ let currentEditorData = {
   availableFiles: [],
   reload: vi.fn(),
 };
+
+vi.mock('../../src/hooks/useColumns', () => ({
+  // Fonte unica delle colonne (Blocco A, regola 4): la sottoscrizione la
+  // monta il guscio; qui la pagina non deve calcolare ne' propagare nulla.
+  useColumnSync: () => undefined,
+  useColumnsOf: () => ({ columns: [], state: {}, status: 'idle', error: null, known: false, inputs: [] }),
+  getColumnsOf: () => ({ columns: [], state: {}, status: 'idle', error: null, known: false, inputs: [] }),
+  columnSnapshot: () => ({ schemas: {}, states: {}, nodes: [], edges: [], mode: 'manipola' }),
+  refreshColumns: () => undefined,
+}));
 
 vi.mock('@xyflow/react', () => globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef: reactFlowStateRef }));
 
@@ -86,11 +92,6 @@ vi.mock('../../src/hooks/useEditorData', () => ({
 }));
 
 vi.mock('../../src/hooks', () => ({
-  useSchemaInference: () => ({
-    schemas: {},
-    loading: false,
-    refreshSchemas: refreshSchemasMock,
-  }),
   usePreview: () => ({
     showModal: false,
     closeModal: vi.fn(),
@@ -150,12 +151,6 @@ vi.mock('../../src/hooks', () => ({
   }),
   useUnsavedChangesGuard: () => ({ confirmNavigation: () => true }),
   useValidationHighlights: () => undefined,
-}));
-
-vi.mock('../../src/hooks/useColumnPropagation', () => ({
-  default: () => ({
-    propagateColumns: propagateColumnsMock,
-  }),
 }));
 
 vi.mock('../../src/hooks/useToast', () => ({
@@ -286,16 +281,6 @@ describe('ManipolaEditor', () => {
         flags: { isManipulate: true },
       });
       expect(loadGraphMock).toHaveBeenCalledWith(loadedNodes, [
-        {
-          ...storedEdges[0],
-          targetHandle: 'input-2',
-        },
-      ]);
-    });
-
-    await waitFor(() => {
-      expect(refreshSchemasMock).toHaveBeenCalled();
-      expect(propagateColumnsMock).toHaveBeenCalledWith(loadedNodes, [
         {
           ...storedEdges[0],
           targetHandle: 'input-2',

@@ -36,7 +36,6 @@ export const NODE_TYPES = {
     distinct: false,
     limit: null,
     geomColumn: null,
-    columns: [],
     group_by_enabled: false,
     group_by_columns: [],
     aggregations: [],
@@ -127,7 +126,6 @@ export const NODE_TYPES = {
   transform: define('transform', [], 'transform', {
     transform_op: 'join',
     config: {},
-    columns: [],
   }),
   project_input: define('project_input', [], 'project_input', {
     input_key: '',
@@ -161,7 +159,6 @@ export const NODE_TYPES = {
     connection_type: null,
     exec_params: {},
     endpoint: null,
-    columns: [],
     batch: {},
     continue_on_error: true,
     skip_null_params: true,
@@ -197,13 +194,22 @@ export function backendAccessFlags(node) {
 // campo superfluo salvato che un dato perso.
 export const TRANSIENT_DATA_KEYS = new Set(['availableColumns', 'inputColumns', '_advOpen', '_lastUpdate']);
 
+// Colonne DERIVATE (Blocco A, regola 4): i nodi che calcolano le colonne
+// dai loro ingressi non le tengono in `data.columns`. Le colonne vengono dal
+// server (utils/columnSource) e al salvataggio si allegano dalla mappa
+// (canvasSerializer, opzione derivedColumns), perche' il backend le legge
+// ancora. Le sorgenti invece tengono `columns`: e' la loro configurazione.
+export const DERIVED_COLUMNS_TYPES = new Set(['transform', 'multi_join', 'api_enrich', 'result']);
+const isDerivedColumnsKey = (type, key) => key === 'columns' && DERIVED_COLUMNS_TYPES.has(type);
+
 // I campi del registro garantiscono default e round-trip; gli altri campi
 // presenti in node.data (non transitori) vengono conservati cosi' come sono.
 export function persistedNodeData(node) {
-  const entry = NODE_TYPES[canonicalNodeType(node.type)];
+  const type = canonicalNodeType(node.type);
+  const entry = NODE_TYPES[type];
   const data = {};
   for (const [key, value] of Object.entries(node.data || {})) {
-    if (!TRANSIENT_DATA_KEYS.has(key)) data[key] = value;
+    if (!TRANSIENT_DATA_KEYS.has(key) && !isDerivedColumnsKey(type, key)) data[key] = value;
   }
   for (const [key, field] of Object.entries(entry?.fields || {})) {
     if (field.persisted) data[key] = nd(node, key, structuredClone(field.default));

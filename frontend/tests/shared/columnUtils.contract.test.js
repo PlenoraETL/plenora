@@ -2,7 +2,7 @@
  * Contract test — columnUtils (FE-NEXT-1, opzionale).
  *
  * Pure functions: type normalization, type-to-icon/label, SRID extraction,
- * dedup, calculateOutputColumnsRecursive (BFS sul grafo).
+ * dedup. (calculateOutputColumnsRecursive e' uscito con la F2 del Blocco A.)
  *
  * Non testiamo gli emoji al carattere preciso (anti-flake): asseriamo che
  * il return sia una stringa non vuota e tracciamo solo le mapping critiche
@@ -13,7 +13,6 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeColumnType,
   mapApiTypeToStandard,
-  calculateOutputColumnsRecursive,
   getColumnTypeIcon,
   getColumnTypeLabel,
   getColumnSRID,
@@ -185,94 +184,6 @@ describe('deduplicateColumns', () => {
   });
 });
 
-
-describe('calculateOutputColumnsRecursive', () => {
-  it('1 tableNode collegato a result -> ritorna le sue colonne visibili', () => {
-    const t1 = {
-      id: 't1', type: 'tableNode',
-      data: {
-        table_name: 'Customers', alias: 'C',
-        columns: [
-          { name: 'id', type: 'int', visible: true },
-          { name: 'name', type: 'str', visible: true },
-          { name: 'hidden', type: 'str', visible: false },
-        ],
-      },
-    };
-    const r = { id: 'r1', type: 'resultNode', data: {} };
-    const cols = calculateOutputColumnsRecursive([t1, r], [{ source: 't1', target: 'r1' }], 'r1');
-
-    expect(cols).toHaveLength(2);
-    expect(cols.map(c => c.name).sort()).toEqual(['id', 'name']);
-    expect(cols[0].source_table).toBe('C');
-  });
-
-  it('nomi colonna normalizzati a lowercase', () => {
-    const t1 = {
-      id: 't1', type: 'tableNode',
-      data: { table_name: 't', columns: [{ name: 'ID', type: 'int', visible: true }] },
-    };
-    const cols = calculateOutputColumnsRecursive([t1], [{ source: 't1', target: 'r1' }], 'r1');
-    // r1 non esiste ma traverse parte da r1 -> non trova nulla; usiamo invece traversata diretta da t1
-    // FIX: cambia source/target per partire dal nodo esistente
-    const cols2 = calculateOutputColumnsRecursive(
-      [t1, { id: 'r1', type: 'resultNode', data: {} }],
-      [{ source: 't1', target: 'r1' }],
-      'r1',
-    );
-    expect(cols2[0].name).toBe('id'); // lowercase
-  });
-
-  it('multi-table merge + dedup per full_name', () => {
-    const t1 = {
-      id: 't1', type: 'tableNode',
-      data: { table_name: 'A', columns: [{ name: 'id', visible: true }] },
-    };
-    const t2 = {
-      id: 't2', type: 'tableNode',
-      data: { table_name: 'B', columns: [{ name: 'id', visible: true }] },
-    };
-    const r = { id: 'r1', type: 'resultNode', data: {} };
-    const cols = calculateOutputColumnsRecursive(
-      [t1, t2, r],
-      [{ source: 't1', target: 'r1' }, { source: 't2', target: 'r1' }],
-      'r1',
-    );
-    // 2 colonne: A.id e B.id (full_name diverso)
-    expect(cols).toHaveLength(2);
-    expect(cols.map(c => c.full_name).sort()).toEqual(['A.id', 'B.id']);
-  });
-
-  it('featureLayerNode raccoglie le sue colonne', () => {
-    const f = {
-      id: 'f1', type: 'featureLayerNode',
-      data: { layer_name: 'Roads', columns: [{ name: 'name', visible: true, type: 'str' }] },
-    };
-    const r = { id: 'r1', type: 'resultNode', data: {} };
-    const cols = calculateOutputColumnsRecursive([f, r], [{ source: 'f1', target: 'r1' }], 'r1');
-    expect(cols).toHaveLength(1);
-    expect(cols[0].source_table).toBe('Roads');
-  });
-
-  it('include calculated_columns con flag isCalculated=true', () => {
-    const t = {
-      id: 't1', type: 'tableNode',
-      data: {
-        table_name: 'T',
-        columns: [{ name: 'a', visible: true }],
-        calculated_columns: [{ name: 'CALC', output_type: 'real' }],
-      },
-    };
-    const r = { id: 'r1', type: 'resultNode', data: {} };
-    const cols = calculateOutputColumnsRecursive([t, r], [{ source: 't1', target: 'r1' }], 'r1');
-    const calc = cols.find(c => c.isCalculated);
-    expect(calc).toBeDefined();
-    expect(calc.name).toBe('calc');
-    expect(calc.type).toBe('real');
-  });
-
-  it('resultNode inesistente -> []', () => {
-    const cols = calculateOutputColumnsRecursive([], [], 'missing');
-    expect(cols).toEqual([]);
-  });
-});
+// calculateOutputColumnsRecursive (Estrai) e' uscito con la F2 del Blocco A
+// (regola 4): le colonne dell'Output di Estrai le prevede il server con la
+// stessa proiezione SQL dell'esecuzione (tests/shared/columnSource.contract).

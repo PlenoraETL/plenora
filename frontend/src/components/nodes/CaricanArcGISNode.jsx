@@ -12,6 +12,8 @@
 import React, { useState, useEffect, memo } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useColumnsOf } from '../../hooks/useColumns';
+import ColumnStatusNote from '../common/ColumnStatusNote';
 import {
   listFeatureConnections,
   browseServices,
@@ -51,7 +53,10 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   const arcgisMatchColumn = data.arcgis_match_column || '';
   const arcgisSourceSrid = data.source_srid ?? '';
   const columnMappings = data.column_mappings || [];
-  const availableColumns = data.availableColumns || [];
+  // Colonne che escono dall'Output (ingresso di questo nodo), con gli id:
+  // dalla fonte unica (Blocco A, regola 4), non salvate nel nodo.
+  const inputResult = useColumnsOf(id, { side: 'input' });
+  const availableColumns = inputResult.columns;
   const executeResult = data.executeResult || null;
 
   // Multi-layer: se a monte c'e' un api_enrich con output_kind='imdf', l'upstream
@@ -326,6 +331,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
       {/* Titolo, chiusura ed eliminazione sono del pannello (NodeInspector,
           regola 6 del Blocco A); il modulo resta sempre aperto. */}
       <div className="carica-arcgis-node__body">
+        <ColumnStatusNote result={inputResult} />
 
           {/* RB.7.C: connessione ArcGIS non accessibile al gruppo del progetto.
               Banner visibile, no rimozione automatica del nodo. */}

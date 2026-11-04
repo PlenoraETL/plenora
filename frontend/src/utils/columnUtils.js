@@ -1,4 +1,3 @@
-import { isParameterBindingEdge } from './runtimeBindingEdges';
 
 /**
  * columnUtils.js
@@ -77,105 +76,11 @@ export function mapApiTypeToStandard(apiType) {
 }
 
 /**
- * Traversa il grafo ricorsivamente per trovare tutte le colonne
- * che contribuiscono al risultato finale
- */
-/**
  * Una colonna e' nella SELECT se non e' esplicitamente nascosta: stessa
  * regola del backend (canvas_column: visible di default True). Unica fonte
  * per conteggi, anteprima della query, colonne dell'Output e griglia.
  */
 export const isColumnVisible = (col) => col?.visible !== false;
-
-export function calculateOutputColumnsRecursive(nodes, edges, resultNodeId) {
-  const visitedNodes = new Set();
-  const allColumns = [];
-
-  function traverse(nodeId) {
-    if (visitedNodes.has(nodeId)) return;
-    visitedNodes.add(nodeId);
-
-    const node = nodes.find(n => n.id === nodeId);
-    if (!node) return;
-
-    // Se è un nodo tabella, raccoglie le colonne visibili
-    if (node.type === 'tableNode') {
-      const tableName = node.data.alias || node.data.table_name;
-      
-      // Colonne normali visibili - NORMALIZZA NOMI A LOWERCASE PER CONSISTENZA
-      const visibleColumns = (node.data.columns || [])
-        .filter(isColumnVisible)
-        .map(col => {
-          const normalizedName = col.name.toLowerCase();
-          return {
-            name: normalizedName,
-            alias: col.alias,
-            type: col.type || 'str',
-            source_table: tableName,
-            full_name: `${tableName}.${col.alias || normalizedName}`
-          };
-        });
-      
-      allColumns.push(...visibleColumns);
-      
-      // Colonne calcolate - NORMALIZZA NOMI A LOWERCASE
-      const calculatedColumns = (node.data.calculated_columns || [])
-        .map(col => {
-          const normalizedName = col.name.toLowerCase();
-          return {
-            name: normalizedName,
-            alias: null,
-            type: col.output_type || 'str',
-            source_table: tableName,
-            full_name: `${tableName}.${normalizedName}`,
-            isCalculated: true
-          };
-        });
-      
-      allColumns.push(...calculatedColumns);
-    }
-
-    // Se è un nodo Feature Layer (ArcGIS), raccoglie le colonne visibili
-    if (node.type === 'featureLayerNode') {
-      const layerName = node.data.layer_name || 'feature';
-      
-      const visibleColumns = (node.data.columns || [])
-        .filter(isColumnVisible)
-        .map(col => ({
-          name: col.name,
-          alias: col.alias,
-          type: col.type || 'str',
-          source_table: layerName,
-          full_name: `${layerName}.${col.alias || col.name}`
-        }));
-      
-      allColumns.push(...visibleColumns);
-    }
-
-    // Trova tutti gli edges che arrivano a questo nodo
-    const incomingEdges = edges.filter(
-      e => e.target === nodeId && !isParameterBindingEdge(e),
-    );
-    
-    // Traversa ricorsivamente i nodi sorgente
-    for (const edge of incomingEdges) {
-      traverse(edge.source);
-    }
-  }
-
-  // Inizia la traversata dal nodo risultato
-  traverse(resultNodeId);
-
-  // Rimuovi duplicati in base a full_name
-  const uniqueColumns = allColumns.reduce((acc, col) => {
-    if (!acc.find(c => c.full_name === col.full_name)) {
-      acc.push(col);
-    }
-    return acc;
-  }, []);
-
-  return uniqueColumns;
-}
 
 /**
  * Helper: Mappa tipo colonna -> icona emoji

@@ -265,49 +265,11 @@ export const downloadProjectFile = async (projectId, filename) => {
 };
 
 /**
- * Restituisce gli schemi inferiti per tutti i nodi di un progetto.
- * @param {string} projectId
- * @returns {Promise<Object>} { [nodeId]: ColumnDef[] }
+ * Schemi (colonne con id e stato per nodo) del canvas dell'editor, anche non
+ * salvato, senza salvarlo. L'unico chiamante e' la fonte unica delle colonne
+ * (store/useColumnStore, Blocco A regola 4).
  */
-export const getProjectSchemas = async (projectId) => {
-  const response = await http.get(`/projects/${projectId}/schemas`);
-  return response.data;
-};
-
-/** Infer schemas for a serialized, unsaved canvas without persisting it. */
 export const inferProjectSchemas = async (projectId, canvas) => {
   const response = await http.post(`/projects/${projectId}/schemas`, { canvas });
-  return response.data;
-};
-
-/**
- * Restituisce lo schema inferito per un singolo nodo.
- * @param {string} projectId
- * @param {string} nodeId
- * @returns {Promise<ColumnDef[]>}
- */
-export const getNodeSchema = async (projectId, nodeId) => {
-  const response = await http.get(`/projects/${projectId}/schemas/${nodeId}`);
-  return response.data;
-};
-
-/**
- * Valida la connessione al database del progetto.
- * @param {string} projectId
- * @param {Object} payload
- * @returns {Promise<{valid: boolean, error?: string}>}
- */
-export const validateProjectConnection = async (projectId, payload) => {
-  const response = await http.post(`/projects/${projectId}/validate-connection`, payload);
-  return response.data;
-};
-
-/**
- * Valida tutte le sorgenti dati di un progetto in un'unica chiamata.
- * @param {string} projectId
- * @returns {Promise<Object>}
- */
-export const validateAllProjectSources = async (projectId) => {
-  const response = await http.get(`/projects/${projectId}/validate-all`);
   return response.data;
 };

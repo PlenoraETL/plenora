@@ -27,7 +27,8 @@ import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
 import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
 import { executionNeedsConfig } from '../utils/executionConfig';
-import { withAvailableColumns } from '../utils/columnPlans';
+import { columnSnapshot } from '../hooks/useColumns';
+import { addedColumns, columnOrigin, columnsOf } from '../utils/columnSource';
 import {
   createParameterBindingEdge,
   dataFlowEdges,
@@ -176,95 +177,9 @@ const ArricchisciEditorContent = () => {
   }, [project, loading]);
 
 
-  // Aggiorna availableColumns in ResultNode e CaricanNode
-  // Fingerprint stabile dei campi che devono triggerare il refresh di
-  // `availableColumns` sui result/carica nodes. Pre-fix (P0 frontend-pages
-  // #1): deps = [addNodes] significava firing ONLY al mount; il cambio
-  // di `output_mapping` su un nodo api_enrich (utente che configura il
-  // mapping output) NON ri-firrava l'effect → ResultNode esponeva colonne
-  // stale finche' l'utente non triggerava manualmente un re-render.
-  // Post-fix: dep su un fingerprint JSON-derivato che cambia quando
-  // cambia uno dei mapping rilevanti (sources cols + api_enrich
-  // output_mapping). Il loop nodes->effect e' evitato perche' il
-  // fingerprint NON include `availableColumns` (campo che l'effect
-  // scrive), solo gli input.
-  const availableColumnsFingerprint = useMemo(() => {
-    const relevant = nodes.map(n => {
-      if (
-        n.type === 'project_source'
-        || n.type === 'file_source'
-        || n.type === 'datasourceNode'
-        || n.type === 'datasource_node'
-      ) {
-        return { id: n.id, type: n.type, cols: n.data?.columns };
-      }
-      if (n.type === 'api_enrich') {
-        return { id: n.id, type: n.type, output_mapping: n.data?.output_mapping };
-      }
-      if (n.type === 'result') {
-        // Selezione e GROUP BY decidono le colonne dei Carica (resultOutputColumns).
-        const d = n.data || {};
-        return { id: n.id, type: n.type, out: [d.output_columns, d.group_by_enabled, d.group_by_columns, d.aggregations] };
-      }
-      return null;
-    }).filter(Boolean);
-    return JSON.stringify(relevant);
-  }, [nodes]);
-
-  useEffect(() => {
-    // NOTA: 'nodes' rimosso dalle dipendenze intenzionalmente per evitare loop React.
-    // Tutto il calcolo avviene dentro l'updater (snapshot aggiornato).
-    // Dato DERIVATO: non marca dirty.
-    // La dep `availableColumnsFingerprint` triggera il refresh quando
-    // input rilevanti cambiano (source cols / api_enrich output_mapping),
-    // senza catturare modifiche a campi scritti dall'effect stesso.
-    applyDerivedNodes(nds => {
-      const resultNode = nds.find(n => n.type === 'result');
-      if (!resultNode) return nds;
-
-      // Solo i nodi a monte dell'Output (un ramo scollegato non arriva nel
-      // file), con le colonne come escono davvero: nascoste tolte, alias
-      // applicato (backend: filter_visible_columns). Nomi senza doppioni.
-      const flow = dataFlowEdges(edgesRef.current);
-      const upstream = new Set();
-      const visit = (nodeId) => {
-        if (upstream.has(nodeId)) return;
-        upstream.add(nodeId);
-        flow.filter(e => e.target === nodeId).forEach(e => visit(e.source));
-      };
-      visit(resultNode.id);
-      const availableColumns = [];
-      const push = (col) => { if (col.name && !availableColumns.some(c => c.name === col.name)) availableColumns.push(col); };
-      for (const node of nds) {
-        if (!upstream.has(node.id)) continue;
-        const cols = node.data?.columns;
-        if (!cols) continue;
-        const source = node.data?.source_project_id || node.data?.file_source_id || node.type;
-
-        if (
-          node.type === 'project_source'
-          || node.type === 'file_source'
-          || node.type === 'datasourceNode'
-          || node.type === 'datasource_node'
-        ) {
-          cols.forEach(col => {
-            if (typeof col === 'object' && col !== null) {
-              if (col.visible === false) return;
-              push({ name: col.alias || col.name || 'unknown', type: col.type || col.dtype || 'str', source });
-            } else if (typeof col === 'string') push({ name: col, type: 'str', source });
-          });
-        } else if (node.type === 'api_enrich' && node.data?.output_mapping) {
-          node.data.output_mapping.forEach(mapping =>
-            push({ name: mapping.column || mapping.target_column || mapping.name, type: mapping.type || 'str', source: 'api_enrich' })
-          );
-        }
-      }
-
-      // Carica: colonne dopo "Colonne in uscita" dell'Output (utils/columnPlans).
-      return withAvailableColumns(nds, availableColumns);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyDerivedNodes, availableColumnsFingerprint, edges]);
+  // Colonne dell'Output, dei Carica e dell'arricchimento: dalla fonte unica
+  // (Blocco A, regola 4), calcolate dal server sul canvas dell'editor con lo
+  // stesso mapping dell'esecuzione. Nessun calcolo e nessuna scrittura qui.
 
   // NOTA: le colonne dei nodi source vengono aggiornate direttamente
   // dai nodi stessi tramite useCanvasStore.getState().updateNodeData
@@ -277,11 +192,13 @@ const ArricchisciEditorContent = () => {
     const staticValuesNodes = currentNodes.filter(n => n.type === 'staticValues');
     const staticColumns = staticValuesNodes
       .flatMap(node => (node.data?.fields || []).map(f => f.name));
-    // B-FE-68: includi le colonne prodotte da enricher upstream (fromApi:true) nelle
+    // B-FE-68: includi le colonne prodotte da enricher upstream nelle
     // staticColumns così il backend le skippa nel check missing_columns durante la validazione.
+    // Colonne prodotte = in uscita dall'arricchimento ma non nel suo ingresso (fonte unica).
+    const snapshot = columnSnapshot();
     const upstreamApiColumns = currentNodes
       .filter(n => n.type === 'api_enrich')
-      .flatMap(n => (n.data?.columns || []).filter(c => c.fromApi && c.name).map(c => c.name));
+      .flatMap(n => addedColumns(snapshot, n.id).map(c => c.name).filter(Boolean));
     const allStaticColumns = [...new Set([...staticColumns, ...upstreamApiColumns])];
     // staticParameters: mappa {param_name: value} dai nodi StaticValues.
     // Pre-fix il FE non inviava questo campo al BE → validate produceva
@@ -410,7 +327,7 @@ const ArricchisciEditorContent = () => {
       // `getViewportCenter({ screenToFlowPosition })` direttamente
       // qui dentro, e `screenToFlowPosition` e' in deps.
       position: getViewportCenter({ screenToFlowPosition }),
-      data: { api_id: connection.id, api_name: connection.name, param_mapping: {}, columns: [],
+      data: { api_id: connection.id, api_name: connection.name, param_mapping: {},
         enrich_type: category, api_type: connection.api_type, endpoint: connection.endpoint,
         auth: connection.auth, parameters: connection.parameters, output_mapping: connection.output_mapping,
         static_parameters: connection.static_parameters || {},
@@ -445,7 +362,7 @@ const ArricchisciEditorContent = () => {
     if (nodesRef.current.some(n => n.type === 'result')) { toast.warning(onlyOneMessage('output')); return; }
     addNodes({ id: `result_${Date.now()}`, type: 'result',
       position: { x: 600, y: 200 },
-      data: { isArricchisci: true, fileName: 'output', format: 'csv', availableColumns: [],
+      data: { isArricchisci: true, fileName: 'output', format: 'csv',
         order_by_enabled: false, order_by_columns: [],
         having_enabled: false, having_conditions: [] } });
   }, [addNodes]);
@@ -459,8 +376,7 @@ const ArricchisciEditorContent = () => {
       position: { x: resultNode.position.x + 400, y: resultNode.position.y },
       data: { connection_id: '', schema_name: '', table_name: '', write_mode: 'create',
         column_mappings: [], match_columns: [], batch_size: 1000,
-        transaction_mode: 'all_or_nothing', create_spatial_index: true, conflict_policy: 'abort',
-        availableColumns: resultNode.data?.availableColumns || [] } };
+        transaction_mode: 'all_or_nothing', create_spatial_index: true, conflict_policy: 'abort' } };
     addNodes(newNode);
     addEdges({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
       type: 'smoothstep', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 },
@@ -477,7 +393,7 @@ const ArricchisciEditorContent = () => {
       position: { x: resultNode.position.x + 400, y: resultNode.position.y + 200 },
       data: { arcgis_connection_id: '', arcgis_service_url: '', arcgis_layer_url: '',
         arcgis_operation: 'add', arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',
-        column_mappings: [], availableColumns: resultNode.data?.availableColumns || [] }
+        column_mappings: [] }
     };
     addNodes(newNode);
     addEdges({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
@@ -505,7 +421,7 @@ const ArricchisciEditorContent = () => {
       if (nodesRef.current.some(n => n.type === 'result')) { toast.warning(onlyOneMessage('output')); return; }
       placeAfter({ id: `result_${Date.now()}`, type: 'result',
         position: { x: 600, y: 200 },
-        data: { isArricchisci: true, fileName: 'output', format: 'csv', availableColumns: [],
+        data: { isArricchisci: true, fileName: 'output', format: 'csv',
           order_by_enabled: false, order_by_columns: [],
           having_enabled: false, having_conditions: [] } }, afterId, false);
     },
@@ -545,7 +461,7 @@ const ArricchisciEditorContent = () => {
     else if (nodeType === 'file_source') newNode = { id: newNodeId, type: 'file_source', position,
       data: { file_source_id: nodeData.file_source_id || nodeData.id, columns: [] } };
     else if (nodeType === 'api_enrich') newNode = { id: newNodeId, type: 'api_enrich', position,
-      data: { api_id: '', param_mapping: {}, columns: [] } };
+      data: { api_id: '', param_mapping: {} } };
 
     if (newNode) addNodes(newNode);
   }, [screenToFlowPosition, addNodes]);
@@ -617,17 +533,17 @@ const ArricchisciEditorContent = () => {
         data={(() => {
           if (!preview.data?.columns) return preview.data;
           const resultNode = nodes.find(n => n.type === 'result');
-          const availableCols = resultNode?.data?.availableColumns || [];
           const nodeLabelMap  = buildNodeLabelMap(nodes);
-          // Mappa name → label sorgente dalle availableColumns del resultNode.
-          // Per api_enrich la source è già 'api_enrich', per gli altri è un nodeId o un UUID.
+          // Mappa name → nodo da cui la colonna entra nel flusso (sorgente o
+          // arricchimento), risalendo per id dall'ingresso dell'Output (fonte unica).
+          const snapshot = columnSnapshot();
           const sourceMap = {};
-          availableCols.forEach(col => {
-            if (col.source) {
-              // Prova a risolvere via mappa (nodeId), altrimenti usa il valore grezzo
-              sourceMap[col.name] = nodeLabelMap[col.source] || col.source;
-            }
-          });
+          if (resultNode) {
+            columnsOf(snapshot, resultNode.id, { side: 'input' }).columns.forEach(col => {
+              const origin = columnOrigin(snapshot, col.input_node, col.id) || col.input_node;
+              if (origin) sourceMap[col.name] = nodeLabelMap[origin] || origin;
+            });
+          }
           const enrichedColumns = preview.data.columns.map(col => ({
             ...col,
             source: sourceMap[col.name] || col.source || null,

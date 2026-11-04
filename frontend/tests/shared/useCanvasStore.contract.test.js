@@ -91,12 +91,13 @@ describe('useCanvasStore save-path contract', () => {
     store.init('proj-save-2', 'manipola');
     store.addNodes([
       {
+        // Alias e visibile sono configurazione delle SORGENTI: le colonne dei
+        // nodi derivati non si salvano dal nodo (Blocco A, regola 4).
         id: 'result-1',
-        type: 'result',
+        type: 'source',
         position: { x: 0, y: 0 },
         data: {
-          fileName: 'output',
-          format: 'csv',
+          table_name: 'cities',
           columns: [
             { name: 'city', type: 'str', alias: null, visible: true },
             { name: 'country', type: 'str', alias: null, visible: true },

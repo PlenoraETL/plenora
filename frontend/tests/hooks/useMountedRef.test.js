@@ -2,8 +2,8 @@
  * Contract test per `useMountedRef`.
  *
  * Helper estratto come single-source del pattern "guard async callback
- * contro setState post-unmount" (vedi useSchemaInference,
- * useEnrichmentValidation, useProjectListData).
+ * contro setState post-unmount" (vedi useEnrichmentValidation,
+ * useProjectListData).
  */
 
 import { renderHook } from '@testing-library/react';

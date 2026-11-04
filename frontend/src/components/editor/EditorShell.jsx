@@ -75,6 +75,7 @@ import StepsView from '../canvas/StepsView';
 import EditorToolbar from './EditorToolbar';
 import PipelineRunner from './PipelineRunner';
 import useLocalDraft, { DRAFT_ORIGIN_LABEL } from '../../hooks/useLocalDraft';
+import { useColumnSync } from '../../hooks/useColumns';
 import { useOptionalConfirm } from '../../context/ConfirmContext';
 import { CanvasGraphContext } from '../canvas/CanvasGraphContext';
 import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
@@ -127,6 +128,9 @@ canvasConfig = EMPTY_OBJ,
   slots = EMPTY_OBJ,
 }) {
   const navigate = useNavigate();
+  // Fonte unica delle colonne (Blocco A, regola 4): il guscio monta l'UNICA
+  // sottoscrizione che ricalcola la mappa dell'editor sul canvas dell'editor.
+  useColumnSync(isValidProjectId(projectId) ? projectId : null);
 
   const {
     nodeTypes,

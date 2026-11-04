@@ -42,8 +42,8 @@ export function useEnrichmentValidation() {
   // P1 (2026-05-26): requestId guard. mountedRef protegge solo da
   // setState post-unmount; non protegge da chiamate concorrenti sullo
   // stesso componente montato (es. utente chiude/riapre il modal: due
-  // validate() in volo, la stale puo' vincere). Pattern stesso di
-  // useSchemaInference: incrementiamo `validateRequestRef` su ogni
+  // validate() in volo, la stale puo' vincere). Pattern consueto
+  // delle risposte superate: incrementiamo `validateRequestRef` su ogni
   // call; gli setter rispondono solo se requestId == ref corrente.
   const validateRequestRef = useRef(0);
   const estimateRequestRef = useRef(0);

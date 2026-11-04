@@ -16,9 +16,11 @@ import { uploadFile } from '../../api/files';
 import { getApiConnection } from '../../api/apiConnections';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Position, useReactFlow, useStore } from '@xyflow/react';
-import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
+import { getColumnTypeIcon, getColumnTypeLabel, mapApiTypeToStandard } from '../../utils/columnUtils';
 import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useColumnsOf } from '../../hooks/useColumns';
+import ColumnStatusNote from '../common/ColumnStatusNote';
 import './ApiEnrichNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
@@ -40,7 +42,6 @@ function ApiEnrichNode({ id, data }) {
   // Mutazioni SOLO dallo store (audit R1): il setter di React Flow in
   // modalita' controllata diventa un change `reset` che lo store non
   // considera una modifica -> i parametri non venivano mai salvati.
-  const applyDerivedNodes = useCanvasStore(s => s.applyDerivedNodes);
   const patchExecParams = useCanvasStore(s => s.updateNodeData);
 // rest_file (servizio HTTP remoto) lavora file→file, non riga-per-riga.
   // Il nodo si comporta diversamente sotto il cofano (no auto-mapping colonne,
@@ -51,23 +52,6 @@ function ApiEnrichNode({ id, data }) {
   const incomingEdgeCount = useStore(
     state => dataFlowEdges(state.edges).filter(e => e.target === id).length
   );
-  // Sottoscrivi ai cambiamenti delle colonne del nodo sorgente
-  const sourceColumnsKey = useStore(state => {
-    const edges = dataFlowEdges(state.edges);
-    const nodes = state.nodeInternals 
-      ? Array.from(state.nodeInternals.values()) 
-      : (state.nodes || []);
-    const edge = edges.find(e => e.target === id);
-    if (!edge) return '';
-    const source = nodes.find(n => n.id === edge.source);
-    // B-FE-69: include output_mapping columns per enricher upstream
-    const baseCols = (source?.data?.columns || []).map(c => c.name).join(',');
-    const mappingCols = source?.type === 'api_enrich'
-      ? (source?.data?.output_mapping || []).map(m => m.column).join(',')
-      : '';
-    return baseCols + '|' + mappingCols;
-  });
-  
   // Se i parametri non sono nel data (vecchio progetto), fetch dal backend
   const [fetchedApi, setFetchedApi] = useState(null);
   const [loadingApi, setLoadingApi] = useState(false);
@@ -169,131 +153,13 @@ const handleExecParamChange = (key, value) => {
     });
   };
 
-  /**
-   * Helper per normalizzare il tipo colonna
-   */
-  const normalizeType = (col) => {
-    return col.type || col.dtype || 'str';
-  };
-
-  /**
-   * Mappa il tipo dell'API ai nostri tipi standard
-   */
-  const mapApiTypeToStandard = (apiType) => {
-    const typeMap = {
-      'string': 'str', 'text': 'str',
-      'number': 'real', 'integer': 'int', 'float': 'real', 'double': 'real',
-      'boolean': 'bool', 'bool': 'bool',
-      'date': 'date', 'datetime': 'date',
-      'geojson': 'geometry', 'geometry': 'geometry',
-      'point': 'geometry:point', 'polygon': 'geometry:polygon',
-      'multipolygon': 'geometry:multipolygon', 'linestring': 'geometry:line',
-    };
-    return typeMap[(apiType || 'string').toLowerCase()] || 'str';
-  };
-  
-  // Calcola colonne input disponibili (dal nodo precedente)
-  const inputColumns = useMemo(() => {
-    const edges = dataFlowEdges(getEdges());
-    const nodes = getNodes();
-    
-    const incomingEdge = edges.find(e => e.target === id);
-    if (!incomingEdge) return [];
-    
-    const sourceNode = nodes.find(n => n.id === incomingEdge.source);
-    if (!sourceNode) return [];
-    
-    // Gestisci StaticValues - converte fields in columns
-    if (sourceNode.type === 'staticValues' && sourceNode.data?.fields) {
-      return sourceNode.data.fields
-        .filter(f => f.name)
-        .map(f => ({
-          name: f.name,
-          type: 'str',
-          visible: true
-        }));
-    }
-    
-    if (sourceNode.data?.columns) {
-      const baseCols = sourceNode.data.columns
-        .filter(c => c.visible !== false)
-        .map(c => ({ ...c, type: normalizeType(c) }));
-
-      // B-FE-69: se la sorgente è un enricher, aggiungi anche le colonne
-      // del suo output_mapping che potrebbero non essere ancora in data.columns
-      // (race condition al primo render del canvas)
-      if (sourceNode.type === 'api_enrich') {
-        const existingNames = new Set(baseCols.map(c => c.name));
-        const fromMapping = (sourceNode.data?.output_mapping || [])
-          .filter(m => m.column && !existingNames.has(m.column))
-          .map(m => ({ name: m.column, type: mapApiTypeToStandard(m.type || 'string'), visible: true, fromApi: true }));
-        return [...baseCols, ...fromMapping];
-      }
-
-      return baseCols;
-    }
-
-    // B-FE-69: sorgente enricher senza data.columns ancora — leggi output_mapping direttamente
-    if (sourceNode.type === 'api_enrich' && sourceNode.data?.output_mapping?.length > 0) {
-      return sourceNode.data.output_mapping
-        .filter(m => m.column)
-        .map(m => ({ name: m.column, type: mapApiTypeToStandard(m.type || 'string'), visible: true, fromApi: true }));
-    }
-
-    return [];
-  }, [id, getEdges, getNodes, data._lastUpdate, incomingEdgeCount, sourceColumnsKey]);
-  
-  // Calcola colonne output (input + colonne API) — skip per file-processor
-  const outputColumns = useMemo(() => {
-    if (isExecutable) return [];
-    
-    const cols = inputColumns.map(c => ({
-      name: c.name,
-      type: normalizeType(c),
-      visible: true,
-      fromApi: false
-    }));
-    
-    if (apiOutputMapping.length > 0) {
-      apiOutputMapping.forEach(mapping => {
-        const colName = mapping.column || mapping.field || mapping.alias;
-        if (!colName) return;
-        if (!cols.find(c => c.name === colName)) {
-          cols.push({
-            name: colName,
-            type: mapApiTypeToStandard(mapping.type),
-            visible: true,
-            fromApi: true
-          });
-        }
-      });
-    }
-    
-    return cols;
-  }, [inputColumns, apiOutputMapping]);
-  
-  // Aggiorna data.columns quando cambiano le colonne output
-  // IMPORTANTE: confronto per contenuto prima di aggiornare — evita loop infinito
-  // (outputColumns è un nuovo array ad ogni render, un update dei nodi triggera re-render → loop)
-  // Normalizza i valori prima del confronto per evitare falsi positivi da undefined vs ''
-  useEffect(() => {
-    if (outputColumns.length === 0) return;
-    const normalize = (cols) => JSON.stringify(
-      (cols || []).map(c => ({
-        name: c.name || '',
-        type: c.type || 'str',
-        visible: c.visible !== false,
-        fromApi: !!c.fromApi
-      }))
-    );
-    // Colonne di output = dato DERIVATO: non marca dirty.
-    applyDerivedNodes(nodes => {
-      const target = nodes.find(n => n.id === id);
-      // Skip se il contenuto è identico — evita loop
-      if (!target || normalize(target.data?.columns) === normalize(outputColumns)) return nodes;
-      return nodes.map(n => (n.id === id ? { ...n, data: { ...n.data, columns: outputColumns } } : n));
-    });
-  }, [outputColumns, id, applyDerivedNodes]);
+  // Colonne in ingresso dalla fonte unica (Blocco A, regola 4): quelle che
+  // escono davvero dal nodo a monte (sorgente, Valori statici o un altro
+  // arricchimento), con gli id. Le colonne in uscita le prevede il server
+  // dallo stesso mapping dell'esecuzione: nessun calcolo qui, niente
+  // data.columns scritto dal pannello.
+  const inputResult = useColumnsOf(id, { side: 'input' });
+  const inputColumns = inputResult.columns;
 
   // Auto-mapping quando arrivano colonne input (skip per file-processor)
   useEffect(() => {
@@ -404,6 +270,7 @@ const handleExecParamChange = (key, value) => {
             regola 6 del Blocco A). */}
 
         <div className="api-enrich-node__body">
+          <ColumnStatusNote result={inputResult} />
           {/* Badge tipo */}
           <div className="api-enrich-node__exec-badge">
             📦 Processore File (REST)
@@ -531,6 +398,7 @@ const handleExecParamChange = (key, value) => {
 
       {/* Body */}
       <div className="api-enrich-node__body">
+        <ColumnStatusNote result={inputResult} />
         {/* Loading (retrocompatibilità) */}
         {loadingApi && (
           <div className="api-enrich-node__loading">⏳ Caricamento API...</div>

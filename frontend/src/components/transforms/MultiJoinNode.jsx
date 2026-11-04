@@ -1,21 +1,22 @@
 /**
  * MultiJoinNode.jsx - Nodo per join multipli (N sorgenti)
  * 
- * VERSIONE SEMPLIFICATA: Nessuna propagazione.
- * Legge data.inputColumns popolato da useColumnPropagation.
+ * Nessuna propagazione: le colonne di ogni sorgente (nell'ordine delle
+ * maniglie, come l'esecuzione) e quelle in uscita vengono dalla fonte unica
+ * (hooks/useColumns, columnsOf).
  */
 import React, { memo, useState, useMemo, useCallback } from 'react';
-import { Position, useReactFlow } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useColumnsOf, useNodesInfo } from '../../hooks/useColumns';
+import ColumnStatusNote from '../common/ColumnStatusNote';
 import './MultiJoinNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { nodeTitle } from '../canvas/nodeDescriptors';
-import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import NodeHandle from '../canvas/NodeHandle';
 import { term } from '../../utils/glossary';
 
 const MultiJoinNode = memo(({ data, id }) => {
-  const { getEdges, getNodes } = useReactFlow();
   
   // Configurazione
   const config = data.config || {};
@@ -26,44 +27,21 @@ const MultiJoinNode = memo(({ data, id }) => {
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
 
-  // useColumnPropagation popola data.inputColumns con tutte le colonne da tutti i predecessori
-  const inputColumns = useMemo(() => {
-    return data.inputColumns || [];
-  }, [data.inputColumns]);
-
-  // Leggiamo info sulle sorgenti per mostrare nella UI
-  const sources = useMemo(() => {
-    const edges = dataFlowEdges(getEdges());
-    const nodes = getNodes();
-    const incomingEdges = edges.filter(e => e.target === id);
-    
-    return incomingEdges.map((edge, idx) => {
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      if (!sourceNode) return null;
-      
-      // Colonne del nodo sorgente (output del predecessore)
-      const cols = sourceNode.data?.columns || [];
-      const columnItems = cols.map(c => (
-        typeof c === 'string'
-          ? { name: c, id: null }
-          : { ...c, name: c.alias || c.name, id: c.id || c.column_id || null }
-      ));
-      
-      // Nome sorgente: lo stesso titolo del resto dell'interfaccia (nodeDescriptors)
-      let name = nodeTitle(sourceNode.type, sourceNode.data) || `Sorgente ${idx + 1}`;
-      
-      if (name.length > 25) {
-        name = name.substring(0, 22) + '...';
-      }
-      
-      return {
-        id: sourceNode.id,
-        name,
-        type: sourceNode.type,
-        columns: columnItems
-      };
-    }).filter(Boolean);
-  }, [id, getEdges, getNodes, data.inputColumns]); // Trigger anche su inputColumns change
+  // Ingressi dalla fonte unica: una voce per sorgente, nell'ordine dei lati
+  // del backend (maniglie input-0, input-1, ...), solo le colonne che
+  // escono davvero dalla sorgente (le nascoste no), con gli id.
+  const input = useColumnsOf(id, { side: 'input' });
+  const output = useColumnsOf(id);
+  // Titoli delle sorgenti: tipo e dati dei soli nodi a monte (non le posizioni).
+  const inputNodes = useNodesInfo(input.inputs.map(entry => entry.nodeId));
+  const sources = useMemo(() => input.inputs.map((entry, idx) => {
+    const sourceNode = inputNodes[idx];
+    if (!sourceNode) return null;
+    // Nome sorgente: lo stesso titolo del resto dell'interfaccia (nodeDescriptors)
+    let name = nodeTitle(sourceNode.type, sourceNode.data) || `Sorgente ${idx + 1}`;
+    if (name.length > 25) name = name.substring(0, 22) + '...';
+    return { id: sourceNode.id, name, type: sourceNode.type, columns: entry.columns };
+  }).filter(Boolean), [input, inputNodes]);
 
   const commonColumns = useMemo(() => {
     if (sources.length < 2) return [];
@@ -96,41 +74,8 @@ const MultiJoinNode = memo(({ data, id }) => {
     updateConfig({ join_keys: newKeys, join_key_ids: newIds });
   }, [joinKeys, joinKeyIds, updateConfig]);
 
-  // Mostra preview delle colonne che usciranno (per info utente)
-  const outputPreview = useMemo(() => {
-    const validPairs = joinPairs.filter(p => p && p.left && p.right);
-    const pairMode = sources.length === 2 && validPairs.length > 0;
-    const leftKeys = pairMode ? validPairs.map(p => p.left) : joinKeys;
-    const rightKeys = pairMode ? validPairs.map(p => p.right) : joinKeys;
-    if (sources.length === 0 || leftKeys.length === 0) return [];
-    
-    const seen = new Set();
-    const result = [];
-    
-    // Prima le chiavi di join
-    leftKeys.forEach(key => {
-      if (!seen.has(key)) {
-        seen.add(key);
-        result.push(key);
-      }
-    });
-    
-    // Poi le altre colonne da ogni sorgente
-    sources.forEach((src, sourceIdx) => {
-      const keysForSource = pairMode && sourceIdx === 1 ? rightKeys : leftKeys;
-      src.columns.forEach(col => {
-        if (keysForSource.includes(col.name)) {
-          return;
-        }
-        if (!seen.has(col.name)) {
-          seen.add(col.name);
-          result.push(col.name);
-        }
-      });
-    });
-    
-    return result;
-  }, [sources, joinKeys, joinPairs]);
+  // Colonne in uscita: quelle previste dal server (stessa regola dell'esecuzione).
+  const outputPreview = useMemo(() => output.columns.map(c => c.name), [output]);
 
   // Handle multipli (10 fissi)
   const MAX_HANDLES = 10;
@@ -162,6 +107,7 @@ const MultiJoinNode = memo(({ data, id }) => {
         {/* Sorgenti collegate */}
         <div className="multi-join-node__section">
           <label className="multi-join-node__label">Sorgenti collegate:</label>
+          <ColumnStatusNote result={output.known ? output : input} />
           {sources.length === 0 ? (
             <div className="multi-join-node__empty">
               Collega almeno 2 sorgenti

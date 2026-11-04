@@ -1,5 +1,5 @@
 import { nd, nodeTopLevelData } from './nodeHelpers';
-import { NODE_TYPES, canonicalNodeType, persistedNodeData } from './nodeTypeRegistry';
+import { NODE_TYPES, TRANSIENT_DATA_KEYS, canonicalNodeType, persistedNodeData } from './nodeTypeRegistry';
 
 export function createEdgeFromData(edge, loadedNodes) {
   const targetNode = loadedNodes.find(n => n.id === edge.target);
@@ -76,11 +76,6 @@ export function deserializeNodes(rawNodes, options = {}) {
         data.isManipulate = flags.isManipulate || false;
         data.isArricchisci = flags.isArricchisci || false;
         if (data.isManipulate || data.isArricchisci) result.type = type;
-        data.availableColumns = [];
-        break;
-      case 'carica':
-      case 'carica_arcgis':
-        data.availableColumns = [];
         break;
       case 'comment':
         result.zIndex = -1;
@@ -99,13 +94,15 @@ export function deserializeNodes(rawNodes, options = {}) {
           right_keys: data.right_keys, join_type: data.multi_join_type,
           ...node.data?.config,
         };
-        data.columns = node.data?.columns || node.columns || [];
-        data.inputColumns = [];
         break;
       case 'api_enrich':
         // Preserve the public factory's forward-compatible UI extras, but only
         // registered fields may cross the persistence boundary.
         result.data = { ...nodeTopLevelData(node), ...node.data, ...data };
+        // Colonne derivate: dalla fonte unica, mai nel nodo (regola 4); i
+        // campi transitori (inputColumns, availableColumns...) nemmeno.
+        delete result.data.columns;
+        for (const key of TRANSIENT_DATA_KEYS) delete result.data[key];
         break;
       default:
         break;

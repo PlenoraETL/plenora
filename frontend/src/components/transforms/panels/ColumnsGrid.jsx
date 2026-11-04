@@ -21,7 +21,7 @@ import './panels.css';
 const sourceName = (r) => (r.display ? r.display.split('.').pop() : r.name);
 // Confronto delle righe senza i campi solo di presentazione.
 // eslint-disable-next-line no-unused-vars
-const comparable = (rows) => rows.map(({ type, ...r }) => r);
+const comparable = (rows) => rows.map(({ type, optional, ...r }) => r);
 
 export default function ColumnsGrid({
   rows: savedRows, onChange, allowReorder = true, identifier = false, disabled = false, note, savedError = null,
@@ -106,8 +106,9 @@ export default function ColumnsGrid({
                 onChange={e => setRow(r.name, { keep: e.target.checked })}
                 aria-label={`Tieni ${r.display || r.name}`}
               />
-              <span className="pgrid__src" title={`${r.display || r.name}${r.type ? ` · ${r.type}` : ''}${r.missing ? ' · non più a monte' : ''}${r.fixed ? ' · colonna calcolata: si modifica nella tabella' : ''}`}>
+              <span className="pgrid__src" title={`${r.display || r.name}${r.type ? ` · ${r.type}` : ''}${r.optional ? ' · facoltativa: può mancare in esecuzione' : ''}${r.missing ? ' · non più a monte' : ''}${r.fixed ? ' · colonna calcolata: si modifica nella tabella' : ''}`}>
                 {r.display || r.name}
+                {r.optional && <span className="ppanel__tag" title="Può mancare in esecuzione (dipende dalla risposta)"> facoltativa</span>}
               </span>
               <input
                 className="ppanel__input pgrid__label"

@@ -71,11 +71,14 @@ describe('Sessione 10 cluster CD', () => {
   });
 
   it('ManipolaEditor non salva da solo (Fase 4, M7): niente PUT concorrenti da sincronizzare', () => {
-    // Il mutex dell'autosave non serve piu': l'editor non salva, aggiorna solo
-    // gli schemi (una richiesta per piu' modifiche ravvicinate).
+    // Il mutex dell'autosave non serve piu': l'editor non salva. Gli schemi li
+    // aggiorna la sottoscrizione unica della fonte delle colonne (una
+    // richiesta per piu' modifiche ravvicinate, Blocco A regola 4), non
+    // l'editor.
     const src = readSrc('pages/ManipolaEditor.jsx');
     expect(src).not.toContain('handleSaveQuiet');
     expect(src).not.toContain('triggerAutosave');
-    expect(src).toContain('scheduleSchemaRefresh');
+    expect(src).not.toContain('refreshSchemas');
+    expect(readSrc('store/useColumnStore.js')).toContain('COLUMN_SYNC_DELAY_MS');
   });
 });

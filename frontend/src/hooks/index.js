@@ -10,8 +10,7 @@
  *   useCanvasSave         → salvataggio draft uniforme tra editor
  *   useCanvasKeyboard     → shortcut tastiera (Delete, Ctrl+S, ...)
  *   useEdgeHandlers       → creazione ed eliminazione degli archi di Estrai (join nel pannello)
- *   useColumnPropagation  → calcolo colonne lungo il grafo
- *   useSchemaInference    → inferenza schema colonne via backend
+ *   useColumnsOf          → colonne di un nodo dalla fonte unica (useColumns)
  *   useEnrichmentValidation → validazione/stima prima di arricchire
  *   useMultiModal         → gestione multiple modali con un unico stato
  *   useConfirmModal       → dialog di conferma promise-based
@@ -24,8 +23,7 @@ export { useCanvasCore }                            from './useCanvasCore';
 export { useCanvasSave }                            from './useCanvasSave';
 export { useCanvasKeyboard }                        from './useCanvasKeyboard';
 export { useEdgeHandlers }                          from './useEdgeHandlers';
-export { default as useColumnPropagation }          from './useColumnPropagation';
-export { useSchemaInference }                       from './useSchemaInference';
+export { useColumnsOf, useColumnSync }             from './useColumns';
 export { useEnrichmentValidation }                  from './useEnrichmentValidation';
 export { useMultiModal }                            from './useMultiModal';
 export { useConfirmModal }                          from './useConfirmModal';

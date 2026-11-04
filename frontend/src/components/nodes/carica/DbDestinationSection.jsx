@@ -6,6 +6,7 @@ import ColumnMappingPanel from './ColumnMappingPanel';
 import DbAdvancedOptions from './DbAdvancedOptions';
 import ConflictModal from './ConflictModal';
 import { dataFlowEdges } from '../../../utils/runtimeBindingEdges';
+import useCanvasStore from '../../../store/useCanvasStore';
 
 // Labels e descrizioni sono UX, restano locali. I `value` arrivano da
 // `canvasTypes.WRITE_MODES` (single source of truth allineata col BE);
@@ -35,8 +36,6 @@ function DbDestinationSection({
   uniqueKeyColumn,
   availableColumns,
   connections,
-  canvasNodes,
-  canvasEdges,
   nodeId,
   projectId,
   showMapping,
@@ -93,6 +92,8 @@ function DbDestinationSection({
 
   // Trova il nodo ESTRAI (o altro nodo DB) connesso a questo nodo CARICA
   const getSourceNodeData = () => {
+    // Letto al clic dallo store (nessuna sottoscrizione al grafo intero).
+    const { nodes: canvasNodes = [], edges: canvasEdges = [] } = useCanvasStore.getState();
     const incomingEdge = dataFlowEdges(canvasEdges).find(e => e.target === nodeId);
     if (!incomingEdge) return null;
     const sourceNode = canvasNodes.find(n => n.id === incomingEdge.source);

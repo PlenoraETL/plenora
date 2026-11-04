@@ -13,6 +13,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { hasUnsavedChanges } from '../../store/saveState';
 import PlenoraLogo from '../common/PlenoraLogo';
+import { ColumnSyncBadge } from '../common/ColumnStatusNote';
 import { term } from '../../utils/glossary';
 import './EditorToolbar.css';
 
@@ -149,6 +150,8 @@ export default function EditorToolbar({
             {term('add_step').icon} {term('add_step').name}
           </button>
         )}
+        {/* Stato della fonte unica delle colonne: uguale nei tre editor. */}
+        <ColumnSyncBadge />
         {statusExtra}
         <button
           type="button"

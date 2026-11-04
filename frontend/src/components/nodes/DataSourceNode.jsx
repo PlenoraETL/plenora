@@ -165,14 +165,9 @@ const fetchSchema = useCallback(async (filePath, opts = {}) => {
       }
       // Schema letto dalla sorgente: dato DERIVATO (pendingSync), non una
       // modifica dell'utente; arriva al server col prossimo Salva/Esegui
-      // (Fase 4, M7: niente salvataggi automatici). L'editor puo' reagire
-      // (Manipola ricalcola gli schemi a valle).
+      // (Fase 4, M7: niente salvataggi automatici). Le colonne a valle le
+      // ricalcola la fonte unica (hooks/useColumns) dal canvas cambiato.
       updateNodeData(id, updates, { derived: true });
-      setTimeout(() => {
-        const onSchemaUpdated = useCanvasStore.getState()
-          .getEditorAction('onDataSourceSchemaUpdated');
-        if (onSchemaUpdated) Promise.resolve(onSchemaUpdated(id, updates)).catch(() => {});
-      }, 100);
     } catch {
       setSchemaError(true);
     } finally {

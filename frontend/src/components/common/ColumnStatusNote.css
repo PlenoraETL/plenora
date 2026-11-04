@@ -1,0 +1,28 @@
+/* Stato delle colonne (Blocco A, regola 4): avviso sobrio nei pannelli e
+   indicatore nella barra dei tre editor. Solo token del tema (variables.css),
+   quindi chiaro e scuro seguono da soli. */
+.colstatus { align-items: center; margin: 2px 0 4px; }
+.colstatus__tag { display: inline-flex; align-items: center; gap: 5px; line-height: 1.5; }
+.colstatus__tag--pending { color: var(--plen-blue, #2563eb); background: var(--plen-blue-bg, #eef3ff); }
+.colstatus__tag--error { color: var(--plen-err, #b91c1c); background: var(--plen-err-bg, #fdecec); }
+.colstatus__retry { padding: 0 4px; font-size: 10.5px; line-height: 1.4; color: inherit; text-decoration: underline; }
+.colstatus__dot {
+  width: 6px; height: 6px; border-radius: 50%; flex: none;
+  background: currentColor; opacity: 0.75;
+  animation: colstatus-pulse 1.2s ease-in-out infinite;
+}
+@keyframes colstatus-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.9; } }
+@media (prefers-reduced-motion: reduce) { .colstatus__dot { animation: none; } }
+
+.etb-colsync {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 12px; white-space: nowrap;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid transparent;
+}
+.etb-colsync--loading { color: var(--plen-blue, #2563eb); background: var(--plen-blue-bg, #eef3ff); }
+.etb-colsync--error {
+  color: var(--plen-err, #b91c1c); background: var(--plen-err-bg, #fdecec);
+  border-color: currentColor; cursor: pointer;
+}
+.etb-colsync--error:hover { filter: brightness(0.97); }
+.etb-colsync--error:focus-visible { outline: 2px solid var(--plen-blue, #2563eb); outline-offset: 2px; }

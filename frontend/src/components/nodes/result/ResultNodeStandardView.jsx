@@ -26,12 +26,16 @@
  *     `hasExecutionOptions`, `isArricchisci` + le 3 callback;
  *   - ValidationModal: stato del parent, triggerata sia da qui sia da IMDF view;
  *   - logica runValidation/onExecute/onPreview: ricevute come callback;
- *   - upstreamColumns: computata dal parent (serve useReactFlow).
+ *   - le colonne: arrivano dal parent, che le legge dalla fonte unica
+ *     (hooks/useColumns, Blocco A regola 4). Qui nessun dato derivato
+ *     viene letto da `data` (data.columns / availableColumns non esistono piu').
  *
- * Props (8):
- *   data                         — bag dati del nodo (fileName, format, columns, ...)
+ * Props:
+ *   data                         — bag dati del nodo (fileName, format, output_columns, ...)
  *   id                           — node id (per updateNodeData + RunHistoryModal)
- *   upstreamColumns              — colonne dai nodi collegati (calcolate nel parent)
+ *   upstreamColumns              — colonne in ingresso, con gli id (Estrai: anche source_table)
+ *   outputColumns                — colonne in uscita previste dal server
+ *   columnsResult                — esito di columnsOf per l'ingresso (stato, errore, known)
  *   hasOnPreview, hasOnExecute   — sottoscrizioni reattive dal parent (gating bottoni)
  *   onValidate()                 — handler Valida (parent apre ValidationModal)
  *   onExecute(options?)          — handler Esegui; options={force_recalculate: bool}
@@ -48,11 +52,17 @@ import GroupOrderHavingPanel from './standard/GroupOrderHavingPanel';
 import ExecuteActionsPanel from './standard/ExecuteActionsPanel';
 import { EstraiOutputColumns, PipelineOutputColumns } from './standard/OutputColumnsSection';
 import { applySelectColumns } from '../../../utils/columnPlans';
+import ColumnStatusNote from '../../common/ColumnStatusNote';
+import { columnsConfirmed, outputColumnsAsRead } from '../../../utils/columnSource';
+
+const NONE = [];
 
 const ResultNodeStandardView = memo(({
   data,
   id,
-  upstreamColumns,
+  upstreamColumns = NONE,
+  outputColumns = NONE,
+  columnsResult = null,
   hasOnPreview,
   hasOnExecute,
   onValidate,
@@ -66,6 +76,11 @@ const ResultNodeStandardView = memo(({
   const isArricchisci = data.isArricchisci || false;
   const isEstrai = !isManipulate && !isArricchisci;
   const hasExecutionOptions = isManipulate || isArricchisci;
+  // Variante = tipo di progetto (stili, e come il backend legge output_columns).
+  const nodeVariant = isArricchisci ? 'arricchisci' : (isManipulate ? 'manipola' : 'estrai');
+  // "Colonne in uscita" come le legge il backend di questo tipo di progetto:
+  // per id solo dove risolve per id (columnSource.PROJECT_COLUMN_CAPABILITIES).
+  const outputConfig = outputColumnsAsRead(data.output_columns, nodeVariant);
 
   // `format` resta nel parent perche' serve a derivare `isGeoFormat`
   // sia per il useEffect di auto-reset (CSV se non ci sono piu' colonne
@@ -79,26 +94,12 @@ const ResultNodeStandardView = memo(({
   // Formato geospaziale?
   const isGeoFormat = ['geojson', 'gpkg', 'shp'].includes(format);
 
-  // Colonne geometriche candidate (MANIPOLA/ARRICCHISCI: upstream; ESTRAI: merge columns+upstream)
-  // Per Manipola/Arricchisci si fa fallback a `data.columns` (autoritativo
-  // dal canvas persistito post schema-inference) quando `upstreamColumns`
-  // e' ancora vuoto al primo render — altrimenti l'auto-reset format -> csv
-  // (sotto) scattava su un transient e azzerava la scelta utente di geojson.
-  const geomSourceColumns = (() => {
-    if (isManipulate || isArricchisci) {
-      // Dopo "Colonne in uscita": la geometria esce col nome nuovo, o non esce.
-      const base = upstreamColumns.length > 0 ? upstreamColumns
-        : ((data.columns || []).length > 0 ? data.columns : (data.availableColumns || []));
-      return applySelectColumns(base, data.output_columns, { skipMissing: true });
-    }
-    const cols = data.columns || [];
-    if (upstreamColumns.length > 0) {
-      const existingNames = new Set(cols.map(c => c.name || c.alias));
-      const extraCols = upstreamColumns.filter(c => !existingNames.has(c.name));
-      return [...cols, ...extraCols];
-    }
-    return cols;
-  })();
+  // Colonne geometriche candidate. Manipola/Arricchisci: l'ingresso dopo
+  // "Colonne in uscita" (la geometria esce col nome nuovo, o non esce);
+  // Estrai: le colonne delle tabelle e dei layer a monte (tabella.colonna).
+  const geomSourceColumns = (isManipulate || isArricchisci)
+    ? applySelectColumns(upstreamColumns, outputConfig, { skipMissing: true })
+    : upstreamColumns;
 
   const availableGeomColumns = geomSourceColumns
     .filter(col => isGeometryType(col.type))
@@ -109,41 +110,36 @@ const ResultNodeStandardView = memo(({
 
   const hasGeometryColumns = availableGeomColumns.length > 0;
 
-  // Auto-reset: se formato e' geo ma non ci sono piu' colonne geometry → CSV
+  // Auto-reset: se formato e' geo ma non ci sono piu' colonne geometry → CSV.
+  // Solo su colonne confermate dal server: prima della risposta (o con un
+  // errore di rete) le colonne mancano solo per ora, e la scelta resta.
+  const confirmed = columnsConfirmed(columnsResult);
   useEffect(() => {
-    if (!hasGeometryColumns && isGeoFormat) {
+    if (confirmed && !hasGeometryColumns && isGeoFormat) {
       // Correzione automatica, non una scelta dell'utente: non dirty (R1.8).
       updateNodeData(id, { format: 'csv' }, { derived: true });
     }
-  }, [hasGeometryColumns, isGeoFormat, id]);
+  }, [confirmed, hasGeometryColumns, isGeoFormat, id]);
 
-  // Colonne disponibili per GROUP BY / output (SQL) — deduplicate per nome
-  const availableColumnsRaw = (data.columns || []).map(col => ({
-    name: col.alias || col.name,
+  // Colonne disponibili per GROUP BY / ORDER BY (Estrai, SQL): le colonne
+  // delle tabelle a monte, nomi senza doppioni.
+  const availableColumnsRaw = isEstrai ? upstreamColumns.map(col => ({
+    name: col.name,
     type: col.type || 'str',
-    fullName: col.full_name || `${col.source_table}.${col.alias || col.name}`,
-  }));
+    fullName: col.source_table ? `${col.source_table}.${col.name}` : col.name,
+  })) : NONE;
   const availableColumns = [...new Map(availableColumnsRaw.map(col => [col.name, col])).values()];
 
-  // Colonne disponibili MANIPOLA (upstream o fallback availableColumns) — deduplicate
-  const manipolaSourceCols = upstreamColumns.length > 0 ? upstreamColumns : (data.availableColumns || []);
-  const manipolaColumnsRaw = manipolaSourceCols.map(col => ({
-    name: col.name || col,
-    type: col.type || 'str',
-    fullName: col.name || col,
-  }));
-  const manipolaUpstream = [...new Map(manipolaColumnsRaw.map(col => [col.name, col])).values()];
+  // Colonne a monte di Manipola (con gli id), senza doppioni per nome.
+  const manipolaUpstream = [...new Map(upstreamColumns.map(col => [col.name, col])).values()];
   // GROUP BY / ORDER BY lavorano sulle colonne DOPO "Colonne in uscita"
   // (il backend applica output_columns prima del GROUP BY).
-  const manipolaColumns = applySelectColumns(manipolaUpstream, data.output_columns, { skipMissing: true })
+  const manipolaColumns = applySelectColumns(manipolaUpstream, outputConfig, { skipMissing: true })
     .map(col => ({ ...col, fullName: col.name }));
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
 
   // `groupByAvailableColumns` ora derivato dentro `GroupOrderHavingPanel`
   // dai props `availableColumns` / `manipolaColumns` / `isManipulate`.
-
-  // Variante derivata localmente (solo stili: le etichette sono quelle della barra)
-  const nodeVariant = isArricchisci ? 'arricchisci' : (isManipulate ? 'manipola' : 'estrai');
 
   return (
     <>
@@ -160,9 +156,10 @@ const ResultNodeStandardView = memo(({
         {/* Colonne in uscita (Fase 4, M5): griglia "Seleziona e rinomina".
             Estrai: sulle colonne delle tabelle (senza GROUP BY attivo);
             Manipola/Arricchisci: output_columns, applicate prima del GROUP BY. */}
+        <ColumnStatusNote result={columnsResult} />
         {isEstrai && !groupByEnabled && <EstraiOutputColumns id={id} disabled={isReadOnly} />}
         {!isEstrai && (
-          <PipelineOutputColumns id={id} data={data} upstreamColumns={manipolaUpstream} disabled={isReadOnly} />
+          <PipelineOutputColumns id={id} data={data} mode={nodeVariant} upstreamColumns={manipolaUpstream} disabled={isReadOnly} />
         )}
       </OutputSettingsPanel>
 
@@ -174,6 +171,7 @@ const ResultNodeStandardView = memo(({
         isManipulate={isManipulate}
         availableColumns={availableColumns}
         manipolaColumns={manipolaColumns}
+        outputColumns={outputColumns}
       />
 
       <ExecuteActionsPanel

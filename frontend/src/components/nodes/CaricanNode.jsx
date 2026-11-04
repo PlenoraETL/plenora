@@ -13,6 +13,8 @@
 import React, { useState, memo } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useColumnsOf } from '../../hooks/useColumns';
+import ColumnStatusNote from '../common/ColumnStatusNote';
 import RestDestinationSection, { REST_METHODS } from './carica/RestDestinationSection';
 import DbDestinationSection, { WRITE_MODES } from './carica/DbDestinationSection';
 import AutoRunNote from './carica/autoRunNote';
@@ -45,12 +47,13 @@ const CaricanNode = memo(({ data, id }) => {
   const restBodyMapping = data.rest_body_mapping || [];
 
   const connections = useCanvasStore(s => s.connections);
-  const canvasNodes = useCanvasStore(s => s.nodes) || [];
-  const canvasEdges = useCanvasStore(s => s.edges) || [];
   const projectId = useCanvasStore(s => s.projectId) || '';
   const _updateNodeData = useCanvasStore(s => s.updateNodeData);
 
-  const availableColumns = data.availableColumns || [];
+  // Colonne che escono dall'Output (ingresso di questo nodo), con gli id:
+  // dalla fonte unica (Blocco A, regola 4), non salvate nel nodo.
+  const inputResult = useColumnsOf(id, { side: 'input' });
+  const availableColumns = inputResult.columns;
 
   const handleUpdate = (field, value) => {
     _updateNodeData(id, { [field]: value });
@@ -96,6 +99,7 @@ const CaricanNode = memo(({ data, id }) => {
       {/* Titolo, chiusura ed eliminazione sono del pannello (NodeInspector,
           regola 6 del Blocco A); il modulo resta sempre aperto. */}
       <div className="carica-node__body">
+        <ColumnStatusNote result={inputResult} />
 
           <div className="carica-node__dest-selector" role="group" aria-label="Tipo destinazione Carica">
             <button
@@ -130,8 +134,6 @@ const CaricanNode = memo(({ data, id }) => {
               uniqueKeyColumn={uniqueKeyColumn}
               availableColumns={availableColumns}
               connections={connections}
-              canvasNodes={canvasNodes}
-              canvasEdges={canvasEdges}
               nodeId={id}
               projectId={projectId}
               showMapping={showMapping}

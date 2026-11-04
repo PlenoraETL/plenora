@@ -1,15 +1,27 @@
-import { canonicalNodeType, persistedNodeData, persistenceValue } from './nodeTypeRegistry';
+import { DERIVED_COLUMNS_TYPES, canonicalNodeType, persistedNodeData, persistenceValue } from './nodeTypeRegistry';
 import {
-  dataFlowEdges,
   isParameterBindingEdge,
   serializedBindingsForInput,
 } from './runtimeBindingEdges';
 
+// Campi delle colonne previste allegati al salvataggio (forma di columnSource).
+const SAVED_COLUMN_KEYS = ['id', 'name', 'type', 'source_name', 'source_node', 'is_calculated', 'optional'];
+const savedColumn = (c) => Object.fromEntries(SAVED_COLUMN_KEYS
+  .filter(key => c[key] !== null && c[key] !== undefined).map(key => [key, c[key]]));
 
-function serializeNode(node, edges, allNodes) {
+function serializeNode(node, edges, derivedColumns) {
   const type = canonicalNodeType(node.type);
   const data = persistedNodeData(node);
-  if (type === 'result') data.columns = _computeResultColumns(node, allNodes, edges);
+  // Colonne DERIVATE (Blocco A, regola 4): non sono nel nodo. Al salvataggio
+  // si allegano dalla mappa del server (store/useColumnStore), perche' il
+  // backend le legge ancora: mappa dei tipi al salvataggio dei file
+  // (canvas_schema_runtime.build_canvas_type_map, estrai _build_canvas_type_map)
+  // e controllo della geometria (canvas_validation). Le colonne dell'Output le
+  // ricalcola comunque il server al PUT (canvas_columns.compute_result_columns).
+  // Senza mappa (inferenza, impronta del contenuto) non si inviano.
+  if (DERIVED_COLUMNS_TYPES.has(type) && derivedColumns?.[node.id]) {
+    data.columns = derivedColumns[node.id].map(savedColumn);
+  }
   if (type === 'project_input') {
     data.bindings = serializedBindingsForInput({ ...node, data }, edges);
   }
@@ -51,38 +63,13 @@ export function serializeEdge(edge) {
   };
 }
 
-export function serializeCanvas(nodes, edges, _options = {}) {
+/**
+ * `options.derivedColumns` (solo per il salvataggio): mappa nodo -> colonne
+ * previste dal server, allegate ai nodi con colonne derivate.
+ */
+export function serializeCanvas(nodes, edges, options = {}) {
   return {
-    nodes: nodes.map(node => serializeNode(node, edges, nodes)),
+    nodes: nodes.map(node => serializeNode(node, edges, options.derivedColumns)),
     edges: edges.map(serializeEdge).filter(Boolean),
   };
-}
-
-function _computeResultColumns(resultNode, allNodes, edges) {
-  // Fonte di verità: colonne del nodo upstream collegato al result.
-  // Il vecchio comportamento privilegiava `resultNode.data.columns` anche quando stale,
-  // persistendo colonne obsolete dopo modifiche al grafo (UI mostrava N colonne propagate
-  // live via useMemo ma lo state del nodo restava fermo a uno stato precedente).
-  //
-  // C9 (backend): il server ricomputa autorevolmente result_node.columns
-  // al PUT /canvas via SchemaInferenceService (vedi
-  // backend/app/shared/canvas_columns.py). Quindi il valore calcolato qui
-  // è best-effort per la UX live pre-save; quello che arriva al backend
-  // può essere anche vuoto o stale — viene comunque sovrascritto lato
-  // server con la BFS backward che copre tutti i node type
-  // (source/transform/api_enrich/merge/join). Al reload la UI legge il
-  // valore corretto dal canvas persistito.
-  const saved = resultNode.data?.columns || [];
-  const incomingEdge = dataFlowEdges(edges).find(e => e.target === resultNode.id);
-  if (!incomingEdge) return saved;
-  const sourceNode = allNodes.find(n => n.id === incomingEdge.source);
-  const upstream = sourceNode?.data?.columns || [];
-  if (upstream.length === 0) return saved;
-  // Merge: sincronizza nomi/tipi con l'upstream (rimuove colonne stale, aggiunge nuove)
-  // ma preserva customizzazioni utente (alias, visible) del data.columns salvato.
-  const savedByName = new Map(saved.map(c => [c.name, c]));
-  return upstream.map(col => {
-    const s = savedByName.get(col.name);
-    return s ? { ...col, alias: s.alias ?? null, visible: s.visible ?? true } : col;
-  });
 }

@@ -109,11 +109,7 @@ export {
 } from './templates';
 
 export {
-  getProjectSchemas,
   inferProjectSchemas,
-  getNodeSchema,
-  validateProjectConnection,
-  validateAllProjectSources,
 } from './projects';
 
 export { downloadTaskOutput, cleanupTaskCompletely } from './tasks';

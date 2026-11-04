@@ -96,14 +96,17 @@ describe('canvasSerializer contract', () => {
         type: 'result',
         fileName: 'export',
         format: 'csv',
-        columns: [{ name: 'seed', type: 'str', alias: 'Seed Label', visible: false }],
       }),
     ]);
     expect(payload.nodes[0].data).toBeUndefined();
     expect(payload.nodes[1].data).toBeUndefined();
+    // Colonne DERIVATE (Blocco A, regola 4): mai dal nodo. Senza la mappa
+    // del server (inferenza, impronta) non si inviano affatto.
+    expect(payload.nodes[0].columns).toBeUndefined();
+    expect(payload.nodes[1].columns).toBeUndefined();
   });
 
-  it('recomputes result columns from the upstream node while preserving alias and visible overrides', () => {
+  it('al salvataggio allega le colonne derivate dalla mappa del server, non quelle del nodo; le sorgenti tengono la loro configurazione', () => {
     const nodes = [
       {
         id: 'src-1',
@@ -113,31 +116,45 @@ describe('canvasSerializer contract', () => {
           source_project_id: 'proj-1',
           columns: [
             { name: 'id', type: 'int' },
-            { name: 'city', type: 'str' },
+            { name: 'city', type: 'str', alias: 'citta', visible: false },
           ],
         },
+      },
+      {
+        id: 't-1',
+        type: 'transform',
+        position: { x: 100, y: 0 },
+        data: { transform_op: 'filter', config: {}, columns: [{ name: 'vecchia', type: 'str' }], inputColumns: [{ name: 'x' }] },
       },
       {
         id: 'result-1',
         type: 'result',
         position: { x: 200, y: 0 },
-        data: {
-          columns: [
-            { name: 'city', type: 'str', alias: 'City Label', visible: false },
-            { name: 'obsolete', type: 'str', alias: 'Old', visible: true },
-          ],
-        },
+        data: { columns: [{ name: 'obsolete', type: 'str', alias: 'Old', visible: true }], availableColumns: [{ name: 'x' }] },
       },
     ];
-    const edges = [{ id: 'e-1', source: 'src-1', target: 'result-1' }];
+    const edges = [{ id: 'e-1', source: 'src-1', target: 't-1' }, { id: 'e-2', source: 't-1', target: 'result-1' }];
+    const derivedColumns = {
+      'src-1': [{ id: 'col_a', name: 'id', type: 'int', source_name: 'id', source_node: 'src-1' }],
+      't-1': [{ id: 'col_a', name: 'id', type: 'int', source_name: 'id', source_node: 'src-1', is_calculated: false, optional: false }],
+      'result-1': [{ id: 'col_a', name: 'id', type: 'int', source_name: 'id', source_node: 'src-1', is_calculated: false, optional: true }],
+    };
 
-    const payload = serializeCanvas(nodes, edges);
-    const resultNode = payload.nodes.find((node) => node.id === 'result-1');
+    const payload = serializeCanvas(nodes, edges, { derivedColumns });
+    const byId = Object.fromEntries(payload.nodes.map(n => [n.id, n]));
 
-    expect(resultNode.columns).toEqual([
-      { name: 'id', type: 'int' },
-      { name: 'city', type: 'str', alias: 'City Label', visible: false },
+    // Sorgente: la sua configurazione (anche la colonna nascosta), non lo schema.
+    expect(byId['src-1'].columns).toEqual(nodes[0].data.columns);
+    expect(byId['t-1'].columns).toEqual([
+      { id: 'col_a', name: 'id', type: 'int', source_name: 'id', source_node: 'src-1', is_calculated: false, optional: false },
     ]);
+    expect(byId['result-1'].columns).toEqual([
+      { id: 'col_a', name: 'id', type: 'int', source_name: 'id', source_node: 'src-1', is_calculated: false, optional: true },
+    ]);
+    for (const node of payload.nodes) {
+      expect(node).not.toHaveProperty('inputColumns');
+      expect(node).not.toHaveProperty('availableColumns');
+    }
   });
 
   it('serializes join metadata for configured edges and leaves plain edges untouched', () => {

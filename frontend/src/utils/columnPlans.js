@@ -2,18 +2,19 @@
  * columnPlans — come escono le colonne da "Seleziona e rinomina" e dal Join.
  *
  * Copia fedele di backend/app/shared/execution/column_selection.py
- * (select_column_plan, join_column_plan): la usano i pannelli del nodo
- * (anteprima "Risultato: N colonne") e la previsione delle colonne a valle
- * (useColumnPropagation). Una sola implementazione lato frontend, cosi'
- * pannello e propagazione non possono divergere tra loro.
+ * (select_column_plan, join_column_plan). Dopo la F2 del Blocco A (regola 4)
+ * il frontend NON prevede piu' le colonne a valle: quelle vengono dal server
+ * (utils/columnSource). Qui restano solo le regole che i pannelli applicano
+ * alla configurazione che l'utente sta scrivendo, prima di salvarla:
+ * l'errore della griglia "Seleziona e rinomina" e dell'Output, l'anteprima
+ * "Risultato: N colonne" del Join, le colonne del GROUP BY dopo "Colonne in
+ * uscita". I casi generati dal Python le verificano
+ * (tests/shared/columnPlansParity).
  *
  * Differenza voluta: qui non si lancia un'eccezione, si restituisce
- * `error` (il pannello lo mostra, la propagazione lascia le colonne a monte).
- * Regola unica per le colonne sparite a monte: select_columns e Output le
- * saltano (skipMissing), nel backend come qui.
+ * `error` (il pannello lo mostra). Regola unica per le colonne sparite a
+ * monte: select_columns e Output le saltano (skipMissing), nel backend come qui.
  */
-import AGGREGATION_TYPES from './aggregationTypes.json';
-import TYPE_FAMILIES from './typeFamilies.json';
 
 const SUFFIX = { left: '_L', right: '_R' };
 
@@ -94,122 +95,6 @@ export function joinColumnPlan(left, right, leftKeys, rightKeys, leftColumns, ri
   return { left: maps[0], right: maps[1], outputs, error: null };
 }
 
-// ── Preparazione dei nomi del Join: copia di
-// backend/app/shared/execution/join_preparation.py (la STESSA usata da
-// esecuzione e inferenza, Blocco A A1). Le colonne in uscita sono triple
-// [lato 0/1, posizione nella sorgente, nome finale].
-
-function deduplicateJoinNames(names, keys) {
-  const seen = new Map();
-  const keySeen = new Map();
-  return names.map((name) => {
-    if (keys.includes(name)) {
-      const n = (keySeen.get(name) || 0) + 1;
-      keySeen.set(name, n);
-      return n === 1 ? name : `${name}_dup${n}`;
-    }
-    const n = (seen.has(name) ? seen.get(name) : -1) + 1;
-    seen.set(name, n);
-    return n === 0 ? name : `${name}_${n}`;
-  });
-}
-
-function suffixJoinNames(names, keys, suffix) {
-  const done = new Map();
-  return names.map((name) => {
-    if (keys.includes(name)) {
-      const n = (done.get(name) || 0) + 1;
-      done.set(name, n);
-      return n === 1 ? name : `${name}_${suffix}_dup${n}`;
-    }
-    return `${name}_${suffix}`;
-  });
-}
-
-/**
- * prepared_join_plan del backend. `maps` (percorso nuovo) e' la coppia di
- * Map nome sorgente -> nome in uscita di joinColumnPlan; senza `maps` e' il
- * percorso di prima (_L/_R).
- * @returns {Array<[number, number, string]>}
- */
-export function preparedJoinPlan(left, right, leftKeys, rightKeys, maps = null) {
-  const sides = [[left, leftKeys, 'L'], [right, rightKeys, 'R']].map(([names, keys, suffix], side) => {
-    const indices = maps == null
-      ? names.map((_, i) => i)
-      : [...maps[side].keys()].flatMap(selected => names.flatMap((n, i) => (n === selected ? [i] : [])));
-    const deduped = deduplicateJoinNames(indices.map(i => names[i]), keys);
-    const renamed = maps == null
-      ? suffixJoinNames(deduped, keys, suffix)
-      : deduped.map(n => (maps[side].has(n) ? maps[side].get(n) : n));
-    const unique = new Map();
-    indices.forEach((index, k) => { if (!unique.has(renamed[k])) unique.set(renamed[k], index); });
-    return unique;
-  });
-  const common = new Set([...sides[0].keys()].filter(n => sides[1].has(n)));
-  const pairs = leftKeys.map((lk, i) => [lk, rightKeys[i]]).filter(([, rk]) => rk !== undefined);
-  const sharedKeys = new Set(pairs.filter(([lk, rk]) => lk === rk).map(([lk]) => lk));
-  const dropRight = new Set(pairs.filter(([lk, rk]) => lk !== rk && !leftKeys.includes(rk)).map(([, rk]) => rk));
-  const result = [...sides[0].entries()].map(([name, index]) => [0, index, name]);
-  for (const [name, index] of sides[1].entries()) {
-    if (sharedKeys.has(name)) continue;
-    const output = common.has(name) ? `${name}_dup` : name;
-    if (maps == null && dropRight.has(output)) continue;
-    result.push([1, index, output]);
-  }
-  return result;
-}
-
-// Come in Python: liste obbligatorie; i NOMI delle colonne diventano chiavi
-// di dizionario, quindi niente liste o oggetti (le chiavi del join si
-// confrontano soltanto).
-const invalidLists = ([left, right, leftKeys, rightKeys]) => [left, right, leftKeys, rightKeys].some(l => !Array.isArray(l))
-  || [left, right].some(l => l.some(v => v !== null && typeof v === 'object'));
-
-/**
- * Colonne in uscita dal Join, nel percorso nuovo (scelta delle colonne e
- * gestione dei nomi uguali).
- * @returns {{ columns: Array<[number,number,string]>, error: string|null }}
- */
-export function joinOutputPlan(left, right, leftKeys, rightKeys, leftColumns, rightColumns, nameConflict) {
-  const plan = joinColumnPlan(left, right, leftKeys, rightKeys, leftColumns, rightColumns, nameConflict);
-  if (plan.error) return { columns: [], error: plan.error };
-  return { columns: preparedJoinPlan(left, right, leftKeys, rightKeys, [plan.left, plan.right]), error: null };
-}
-
-/** Join nel percorso di prima (_L/_R). */
-export function legacyJoinPlan(left, right, leftKeys, rightKeys) {
-  if (invalidLists([left, right, leftKeys, rightKeys])) {
-    return { columns: [], error: 'Join: colonne o chiavi non valide' };
-  }
-  return { columns: preparedJoinPlan(left, right, leftKeys, rightKeys), error: null };
-}
-
-/** Famiglia di un tipo (copia di schema_column_plans.type_family, stessa tabella typeFamilies.json). */
-export function typeFamily(sourceType) {
-  const value = String(sourceType ?? '').trim().toLowerCase();
-  const prefix = TYPE_FAMILIES.geometry_prefix;
-  if (value.startsWith(prefix)) return prefix;
-  return TYPE_FAMILIES.aliases[value] ?? value;
-}
-
-/**
- * Tipo di una colonna aggregata: la tabella e' GENERATA dal backend eseguendo
- * op_aggregate (backend/app/shared/execution/aggregation_types.json, Blocco A
- * A1); questa e' una copia identica, verificata da un test. Se la famiglia non
- * cambia resta il tipo d'ingresso (sottotipo della geometria compreso).
- * null = la coppia funzione/tipo non e' eseguibile.
- */
-export function aggregationOutputType(func, sourceType) {
-  const family = typeFamily(sourceType);
-  const fn = String(func).toLowerCase();
-  const table = AGGREGATION_TYPES[fn];
-  // Famiglia sconosciuta alla tabella (json, uuid, ...): regola di prima.
-  if (table && !(family in table)) return ['count', 'size', 'nunique'].includes(fn) ? 'int' : sourceType;
-  const outcome = table?.[family] ?? 'error';
-  if (outcome === 'error') return null;
-  return outcome === family ? sourceType : outcome;
-}
-
 /** Il join usa il nuovo percorso (stessa regola del backend). */
 export const usesJoinColumnPlan = (config = {}) =>
   config.left_columns != null || config.right_columns != null || config.name_conflict != null;
@@ -239,91 +124,6 @@ export function applySelectColumns(columns, config, opts = {}) {
   return plan.map(([name, label]) => (label === name
     ? byName.get(name)
     : { ...byName.get(name), name: label, display_name: label }));
-}
-
-const LOAD_TYPES = ['carica', 'carica_arcgis', 'caricaArcgis'];
-
-// Semantica Python usata dalle regole del backend copiate qui.
-const pyTruthy = (v) => !(v === null || v === undefined || v === false || v === 0 || v === ''
-  || (Array.isArray(v) && v.length === 0) || (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0));
-const pyStr = (v) => (v === null || v === undefined ? 'None' : v === true ? 'True' : v === false ? 'False' : String(v));
-const pyIter = (v) => (typeof v === 'string' ? [...v] : Array.isArray(v) ? v
-  : (v && typeof v === 'object' ? Object.keys(v) : (() => { throw new Error('not iterable'); })()));
-// node_field: valore piatto non nullo, poi data[key], poi default.
-const nodeField = (node, key, def) => {
-  if (node?.[key] !== null && node?.[key] !== undefined) return node[key];
-  if (node?.data && typeof node.data === 'object' && key in node.data) return node.data[key];
-  return def;
-};
-const AGG_FUNCTIONS = ['sum', 'mean', 'min', 'max', 'std'];
-
-/**
- * Piano del GROUP BY dell'Output: copia di backend
- * shared/execution/result_grouping.py (result_group_plan), verificata sugli
- * stessi casi generati dal Python (tests/shared/columnPlansParity).
- * @returns {{ groups: string[], aggregations: Array<[any, string, any]>, error: string|null }}
- */
-export function resultGroupPlan(node, names) {
-  try {
-    if (!pyTruthy(nodeField(node, 'group_by_enabled', false))) return { groups: [], aggregations: [], error: null };
-    const groupsRaw = nodeField(node, 'group_by_columns', []);
-    let groups = pyIter(pyTruthy(groupsRaw) ? groupsRaw : []);
-    let aggregations = [];
-    const aggsRaw = nodeField(node, 'aggregations', []);
-    for (const agg of pyIter(pyTruthy(aggsRaw) ? aggsRaw : [])) {
-      if (!agg || typeof agg !== 'object' || Array.isArray(agg)) throw new Error('aggregazione non valida');
-      const col = agg.column ?? null;
-      let func = pyStr('function' in agg ? agg.function : 'count').toLowerCase();
-      if (func === 'avg') func = 'mean';
-      aggregations.push([col, func, pyTruthy(agg.alias) ? agg.alias : `${pyStr(col)}_${func}`]);
-    }
-    if (groups.length === 0 && aggregations.length === 0) return { groups: [], aggregations: [], error: null };
-    groups = groups.filter(n => names.includes(n));
-    if (groups.length === 0) return { groups: [], aggregations: [], error: 'GROUP BY: nessuna delle colonne configurate esiste' };
-    aggregations = aggregations.filter(([col, func]) => func === 'count' || (names.includes(col) && AGG_FUNCTIONS.includes(func)));
-    if (aggregations.length === 0) return { groups: [], aggregations: [], error: 'GROUP BY: nessuna aggregazione valida' };
-    return { groups, aggregations, error: null };
-  } catch (e) {
-    return { groups: [], aggregations: [], error: String(e.message || e) };
-  }
-}
-
-/**
- * Colonne che escono davvero dall'Output (Manipola/Arricchisci): prima
- * "Colonne in uscita", poi GROUP BY se attivo (stessi nomi del backend:
- * colonne di raggruppamento, poi alias o `${colonna}_${funzione}`).
- */
-export function resultOutputColumns(available, data = {}) {
-  const selected = applySelectColumns(available, data.output_columns, { skipMissing: true });
-  const plan = resultGroupPlan(data, selected.map(c => c.name));
-  // Senza raggruppamento valido: le colonne selezionate (con un GROUP BY
-  // sbagliato l'esecuzione si ferma con l'errore, che Valida mostra).
-  if (plan.error || plan.groups.length === 0) return selected;
-  const out = plan.groups.map(n => selected.find(c => c.name === n));
-  for (const [col, fn, alias] of plan.aggregations) {
-    const source = selected.find(c => c.name === col);
-    // Coppia non eseguibile: Valida la segnala; qui solo un tipo da mostrare.
-    out.push({ name: String(alias), type: aggregationOutputType(fn, source?.type || 'real') || 'str' });
-  }
-  return out;
-}
-
-/**
- * Scrive availableColumns sull'Output (colonne a monte) e sui nodi Carica
- * (colonne che escono davvero dall'Output, resultOutputColumns). Restituisce
- * `nodes` invariato se non cambia nulla (aggiornamento derivato).
- */
-export function withAvailableColumns(nodes, available) {
-  const result = nodes.find(n => n.type === 'result');
-  const loaded = resultOutputColumns(available, result?.data || {});
-  let changed = false;
-  const next = nodes.map((n) => {
-    const cols = n.type === 'result' ? available : LOAD_TYPES.includes(n.type) ? loaded : null;
-    if (!cols || JSON.stringify(n.data?.availableColumns || []) === JSON.stringify(cols)) return n;
-    changed = true;
-    return { ...n, data: { ...n.data, availableColumns: cols } };
-  });
-  return changed ? next : nodes;
 }
 
 /**

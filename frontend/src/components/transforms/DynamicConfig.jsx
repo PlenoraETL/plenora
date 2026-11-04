@@ -11,6 +11,7 @@ import React, { useMemo, useEffect } from 'react';
 import ParameterInput from './ParameterInput';
 import useCanvasStore from '../../store/useCanvasStore';
 import { LIST_SUPERSEDES, isParameterBindingEdge } from '../../utils/runtimeBindingEdges';
+import { collectExpressionRefs, rewriteExpressionRefs } from '../../utils/expressionRefs';
 import './DynamicConfig.css';
 
 const DynamicConfig = ({
@@ -23,6 +24,7 @@ const DynamicConfig = ({
   leftColumns = [],
   rightColumns = [],
   geometryColumns = [],
+  columnsConfirmed = false,
   targetNodeId = null,
 }) => {
   // Il wrapper decide se c'e' una configurazione; tutti gli hook stanno nel
@@ -51,6 +53,7 @@ const DynamicConfig = ({
       leftColumns={leftColumns}
       rightColumns={rightColumns}
       geometryColumns={geometryColumns}
+      columnsConfirmed={columnsConfirmed}
       targetNodeId={targetNodeId}
     />
   );
@@ -67,6 +70,7 @@ const DynamicConfigBody = ({
   leftColumns = [],
   rightColumns = [],
   geometryColumns = [],
+  columnsConfirmed = false,
   targetNodeId = null,
 }) => {
   const { parameters = [], description } = transformConfig;
@@ -167,43 +171,8 @@ const DynamicConfigBody = ({
 
   const columnKey = (col) => col?.id || col?.column_id || null;
 
-  const expressionHasToken = (expression, token) => {
-    if (!expression || !token || typeof expression !== 'string') return false;
-    if (expression.includes(`\`${token}\``)) return true;
-    if (expression.includes(`['${token}']`)) return true;
-    if (expression.includes(`["${token}"]`)) return true;
-    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) {
-      return new RegExp(`\\b${escapeRegExp(token)}\\b`).test(expression);
-    }
-    return expression.includes(token);
-  };
+  const collectRefs = (expression) => collectExpressionRefs(expression, inputColumns);
 
-  const rewriteExpressionToken = (expression, oldName, newName) => {
-    if (!expression || !oldName || !newName || oldName === newName) return expression;
-    let rewritten = expression
-      .replaceAll(`\`${oldName}\``, `\`${newName}\``)
-      .replaceAll(`['${oldName}']`, `['${newName}']`)
-      .replaceAll(`["${oldName}"]`, `["${newName}"]`);
-    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(oldName)) {
-      rewritten = rewritten.replace(
-        new RegExp(`\\b${escapeRegExp(oldName)}\\b`, 'g'),
-        newName
-      );
-    }
-    return rewritten;
-  };
-
-  const collectExpressionRefs = (expression) => {
-    if (!expression || typeof expression !== 'string') return [];
-    return inputColumns
-      .filter(col => {
-        if (!columnKey(col)) return false;
-        const names = [col.name, col.source_name, col.display_name].filter(Boolean);
-        return names.some(name => expressionHasToken(expression, String(name)));
-      })
-      .map(col => ({ id: columnKey(col), name: col.name }));
-  };
-  
   // Handler per aggiornamento parametro
   const handleParamChange = (param, value, meta = null) => {
     if (updateConfig) {
@@ -215,7 +184,7 @@ const DynamicConfigBody = ({
           ? meta.map(columnKey).filter(Boolean)
           : [];
       } else if (param.type === 'expression') {
-        patch[`${param.id}_column_refs`] = collectExpressionRefs(value);
+        patch[`${param.id}_column_refs`] = collectRefs(value);
       }
       updateConfig(patch);
     }
@@ -227,7 +196,7 @@ const DynamicConfigBody = ({
   // backend che logga "UTM zone guard CRITICAL" e calcola buffer su
   // un CRS sbagliato.
   useEffect(() => {
-    if (!updateConfig) return;
+    if (!updateConfig || !columnsConfirmed) return;
     for (const param of visibleParams) {
       if (param.type !== 'geometry_column') continue;
       const current = config[param.id];
@@ -241,10 +210,10 @@ const DynamicConfigBody = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleParams, geometryColumns, inputColumns, leftColumns, rightColumns, config]);
+  }, [visibleParams, geometryColumns, inputColumns, leftColumns, rightColumns, config, columnsConfirmed]);
 
   useEffect(() => {
-    if (!updateConfig) return;
+    if (!updateConfig || !columnsConfirmed) return;
     const patch = {};
     for (const param of visibleParams) {
       const columnsForParam = getColumnsForParam(param);
@@ -260,7 +229,7 @@ const DynamicConfigBody = ({
         if (ids.length) patch[`${param.id}_column_ids`] = ids;
       }
       if (param.type === 'expression' && config[param.id] && !config[`${param.id}_column_refs`]) {
-        const refs = collectExpressionRefs(config[param.id]);
+        const refs = collectRefs(config[param.id]);
         if (refs.length) patch[`${param.id}_column_refs`] = refs;
       }
     }
@@ -268,10 +237,10 @@ const DynamicConfigBody = ({
       derivedConfig(patch);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleParams, inputColumns, leftColumns, rightColumns, geometryColumns]);
+  }, [visibleParams, inputColumns, leftColumns, rightColumns, geometryColumns, columnsConfirmed]);
 
   useEffect(() => {
-    if (!updateConfig) return;
+    if (!updateConfig || !columnsConfirmed) return;
 
     const patch = {};
     for (const param of visibleParams) {
@@ -279,55 +248,14 @@ const DynamicConfigBody = ({
       const expression = config[param.id];
       if (!expression || typeof expression !== 'string') continue;
 
-      let nextExpression = expression;
       const refsKey = `${param.id}_column_refs`;
       const refs = Array.isArray(config[refsKey]) ? config[refsKey] : [];
-      const columnsForParam = getColumnsForParam(param);
-      const byId = new Map(
-        columnsForParam
-          .map(col => [columnKey(col), col])
-          .filter(([key]) => Boolean(key))
-      );
+      // Regola unica (utils/expressionRefs): si riscrive solo cio' che si
+      // risolve in modo univoco, per id; mai `name` -> `name_R` a valle di
+      // un Join con nomi doppi.
+      const nextExpression = rewriteExpressionRefs(expression, refs, getColumnsForParam(param));
 
-      const nextRefs = [];
-      for (const ref of refs) {
-        if (!ref || !ref.id) continue;
-        const current = byId.get(ref.id);
-        if (!current?.name) continue;
-        nextExpression = rewriteExpressionToken(
-          nextExpression,
-          ref.name,
-          current.name
-        );
-        nextRefs.push({ id: ref.id, name: current.name });
-      }
-
-      if (nextRefs.length === 0) {
-        const legacyToCurrent = new Map();
-        columnsForParam.forEach(col => {
-          if (!col?.name) return;
-          [col.source_name, col.display_name].forEach(oldName => {
-            if (!oldName || oldName === col.name) return;
-            const key = String(oldName);
-            const currentValue = legacyToCurrent.get(key);
-            if (currentValue && currentValue !== col.name) {
-              legacyToCurrent.set(key, null);
-            } else if (!legacyToCurrent.has(key)) {
-              legacyToCurrent.set(key, String(col.name));
-            }
-          });
-        });
-        legacyToCurrent.forEach((currentName, legacyName) => {
-          if (!currentName) return;
-          nextExpression = rewriteExpressionToken(
-            nextExpression,
-            legacyName,
-            currentName
-          );
-        });
-      }
-
-      const refreshedRefs = collectExpressionRefs(nextExpression);
+      const refreshedRefs = collectRefs(nextExpression);
       if (nextExpression !== expression) {
         patch[param.id] = nextExpression;
       }
@@ -340,7 +268,7 @@ const DynamicConfigBody = ({
       derivedConfig(patch);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleParams, inputColumns, leftColumns, rightColumns, geometryColumns, config]);
+  }, [visibleParams, inputColumns, leftColumns, rightColumns, geometryColumns, config, columnsConfirmed]);
   
   return (
     <div className="dynamic-config">
@@ -385,9 +313,5 @@ const DynamicConfigBody = ({
     </div>
   );
 };
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 export default DynamicConfig;

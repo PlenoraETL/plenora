@@ -189,8 +189,8 @@ export default function useLocalDraft(projectId, notReady, {
     // Copia di una scheda chiusa (o di questa, prima di ricaricare): adottata,
     // resta finche' non si salva o si scarta. Di una scheda aperta: mai toccata.
     adoptedRef.current = copy.origin === 'open' ? null : { id: copy.id, savedAt: copy.savedAt };
+    // Le colonne si ricalcolano da sole dal canvas ripristinato (hooks/useColumns).
     st.loadUnsavedGraph(copy.nodes, copy.edges || []);
-    st.getEditorAction?.('onCanvasRestored')?.();
     return true;
   }, [store]);
 

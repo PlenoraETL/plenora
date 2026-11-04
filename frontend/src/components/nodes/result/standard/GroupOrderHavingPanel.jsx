@@ -16,7 +16,9 @@
  * condizioni HAVING).
  *
  * `groupByAvailableColumns` derivata internamente da `isManipulate`
- * + (`manipolaColumns` | `availableColumns`).
+ * + (`manipolaColumns` | `availableColumns`). L'"Output previsto" usa
+ * `outputColumns`, le colonne in uscita dell'Output previste dal server
+ * (fonte unica, Blocco A regola 4): nessuna regola dei nomi copiata qui.
  *
  * Gating top-level: il rendering del wrapper esterno avviene solo
  * se almeno un blocco e' visibile, mantenendo il comportamento
@@ -29,7 +31,22 @@
  */
 import React, { useState } from 'react';
 import { getColumnTypeIcon } from '../../../../utils/columnUtils';
-import { resultGroupPlan } from '../../../../utils/columnPlans';
+
+/**
+ * Voci dell'"Output previsto" del GROUP BY: [tipo ('group'|'agg'), nome].
+ *  - Nessuna aggregazione: non e' un raggruppamento eseguibile, e il server
+ *    restituisce tutte le colonne (non aggregate): non si mostrano come
+ *    aggregazioni. Manipola: lista vuota; gli altri: le colonne di GROUP BY
+ *    configurate (come prima della F2).
+ *  - Con aggregazioni: i nomi veri del file previsti dal server (x_mean, non
+ *    avg(x)); prima della risposta, la configurazione.
+ */
+export function groupPreviewItems({ isManipulate, groupByColumns = [], aggregations = [], outputColumns = [] }) {
+  if (aggregations.length === 0) return isManipulate ? [] : groupByColumns.map(g => ['group', g]);
+  if (outputColumns.length > 0) return outputColumns.map(c => [groupByColumns.includes(c.name) ? 'group' : 'agg', c.name]);
+  return [...groupByColumns.map(g => ['group', g]),
+    ...aggregations.map(agg => ['agg', agg.alias || `${agg.function}(${agg.column})`])];
+}
 
 const AGGREGATE_FUNCTIONS = [
   { value: 'COUNT', label: 'COUNT', desc: 'Conta' },
@@ -47,6 +64,7 @@ export default function GroupOrderHavingPanel({
   isManipulate,
   availableColumns,
   manipolaColumns,
+  outputColumns = [],
 }) {
   const [showGroupBySection, setShowGroupBySection] = useState(false);
   const [showOrderBySection, setShowOrderBySection] = useState(false);
@@ -298,16 +316,9 @@ export default function GroupOrderHavingPanel({
                     <div className="result-node__groupby-preview">
                       <div className="result-node__label">📋 Output previsto:</div>
                       <div className="result-node__groupby-preview-list">
-                        {/* Manipola: i nomi veri del file (stessa regola del
-                            backend, resultGroupPlan: x_mean, non avg(x)). */}
-                        {(isManipulate
-                          ? (() => {
-                            const plan = resultGroupPlan({ ...data, group_by_enabled: true }, manipolaColumns.map(c => c.name));
-                            return [...plan.groups.map(g => ['group', g]), ...plan.aggregations.map(([, , alias]) => ['agg', String(alias)])];
-                          })()
-                          : [...groupByColumns.map(g => ['group', g]),
-                            ...aggregations.map(agg => ['agg', agg.alias || `${agg.function}(${agg.column})`])]
-                        ).map(([kind, label], idx) => (
+                        {/* groupPreviewItems: nomi previsti dal server (x_mean, non
+                            avg(x)), solo con aggregazioni. */}
+                        {groupPreviewItems({ isManipulate, groupByColumns, aggregations, outputColumns }).map(([kind, label], idx) => (
                           <span key={`${kind}-${idx}`} className={`result-node__preview-col result-node__preview-col--${kind === 'group' ? 'group' : 'agg'}`}>
                             {label}
                           </span>
