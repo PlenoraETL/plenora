@@ -21,7 +21,7 @@ import EseguibileVersionsModal from '../components/eseguibili/EseguibileVersions
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import { useToast } from '../hooks/useToast';
-import { role } from '../utils/permissions';
+import { can } from '../utils/permissions';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import useDialogFocus from '../hooks/useDialogFocus';
@@ -49,8 +49,7 @@ function EseguibiliList() {
   const [projectSearch, setProjectSearch] = useState('');
   const [selectedSourceProject, setSelectedSourceProject] = useState(null);
 
-  const isAdmin      = role.isAdminOrAbove(user);
-  const isSuperadmin = role.isSuperadmin(user);
+  const canCreate    = can.createEseguibile(user);
 
   // Focus management per i 2 dialog inline (a11y closure batch).
   const selectorDialogRef = useRef(null);
@@ -155,7 +154,7 @@ function EseguibiliList() {
             Progetti Estrai, Manipola e Arricchisci eseguibili on-demand
           </p>
         </div>
-        {isAdmin && (
+        {canCreate && (
           <button type="button" className="esl__btn esl__btn--primary esl__btn--new" onClick={openSelector}>
             ➕ Nuovo Eseguibile
           </button>
@@ -169,7 +168,7 @@ function EseguibiliList() {
           <div className="esl__empty-icon">📭</div>
           <h3>Nessun eseguibile disponibile</h3>
           <p>
-            {isAdmin
+            {canCreate
               ? 'Seleziona un progetto Estrai, Manipola o Arricchisci e pubblicalo come eseguibile.'
               : 'Chiedi a un amministratore del gruppo di pubblicare una catena come eseguibile.'}
           </p>
@@ -177,7 +176,8 @@ function EseguibiliList() {
       ) : (
         <div className="esl__grid">
           {items.map(item => {
-            const canEdit = item.can_edit !== false;
+            const canEdit = can.manageEseguibile(user, item);
+            const canShare = can.shareResources(user) && item.can_edit !== false;
             return (
               <div key={item.id} className="esl__card">
                 <div className="esl__card-header">
@@ -207,7 +207,7 @@ function EseguibiliList() {
                   ) : (
                     <h3 className="esl__card-title">
                       {item.name}
-                      {!canEdit && (
+                      {item.can_edit === false && (
                         <span
                           title="Solo un superadmin può modificare questa risorsa"
                           className="esl__lock-icon"
@@ -226,23 +226,23 @@ function EseguibiliList() {
                   <span>{item.project_type?.toUpperCase()} - v{item.active_version} - {item.inputs_count} input</span>
                 </div>
                 <div className="esl__card-actions">
-                  {isSuperadmin && canEdit && (
+                  {canShare && (
                     <button type="button" className="esl__btn esl__btn--ghost"
                       onClick={() => setSharingEseguibile(item)}
                       title="Gestisci condivisione cross-gruppo (solo superadmin)"
                     >🔗 Condividi</button>
                   )}
-                  {isAdmin && canEdit && (
+                  {canEdit && (
                     <button type="button" className="esl__btn esl__btn--ghost"
                       onClick={() => startRename(item)}
                     >✎ Rinomina</button>
                   )}
-                  {isAdmin && canEdit && (
+                  {canEdit && (
                     <button type="button" className="esl__btn esl__btn--ghost"
                       onClick={() => setVersioningEseguibile(item)}
                     >Versioni</button>
                   )}
-                  {isAdmin && canEdit && (
+                  {canEdit && (
                     <button type="button" className="esl__btn esl__btn--ghost"
                       onClick={() => handleDelete(item.id, item.name)}
                     >🗑 Elimina</button>

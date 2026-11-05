@@ -314,6 +314,9 @@ class Node(BaseModel):
     rest_url: Optional[str] = None
     rest_method: Optional[RestMethodLiteral] = None
     rest_headers: Optional[List[dict]] = []
+    # Credenziali REST per riferimento a un connettore API (audit frontend
+    # R10.8): il canvas non porta segreti, il server li risolve in scrittura.
+    rest_auth_api_id: Optional[str] = None
     rest_body_mapping: Optional[List[dict]] = []
     rest_batch_mode: Optional[RestBatchModeLiteral] = None
     rest_batch_size: Optional[int] = None

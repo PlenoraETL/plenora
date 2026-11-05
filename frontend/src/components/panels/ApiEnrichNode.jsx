@@ -683,6 +683,9 @@ const handleExecParamChange = (key, value) => {
 // ExtraFileSlot — slot di upload inline per file_fields source='extra_input'
 // ════════════════════════════════════════════════
 function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
+  // Caricare o togliere il file e' una modifica del canvas: in sola lettura
+  // (isReadOnly = !can.editCanvas, useCanvasCore) l'azione non si mostra.
+  const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState('');
   const inputRef = React.useRef(null);
@@ -727,7 +730,7 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
           {label}
           {field.required && <span className="api-enrich-node__file-field-required">*</span>}
         </span>
-        {current && (
+        {current && !isReadOnly && (
           <button
             type="button"
             onClick={onRemoved}
@@ -742,6 +745,8 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
           ✓ {current.original_filename}
           {current.size ? ` (${Math.round(current.size / 1024)} KB)` : ''}
         </div>
+      ) : isReadOnly ? (
+        <div className="api-enrich-node__file-field-format-hint">Nessun file (sola lettura)</div>
       ) : (
         <label className={`api-enrich-node__file-field-box${uploading ? ' api-enrich-node__file-field-box--uploading' : ''}`}>
           <input

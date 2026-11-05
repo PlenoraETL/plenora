@@ -9,7 +9,8 @@ import EseguibileCard from './EseguibileCard';
  */
 function EseguibiliSection({
   items = [],
-  isAdmin,
+  canCreate = false,
+  canDelete = () => false,
   onNew,
   onExecute,
   onDelete,
@@ -21,7 +22,7 @@ function EseguibiliSection({
           <span className="pl__chip pl__chip--eseg">🚀 Eseguibili</span>
           <span className="pl__section-sub">Catene on-demand — l'utente carica un file e ottiene il risultato</span>
         </div>
-        {isAdmin && (
+        {canCreate && (
           <button
             type="button"
             className="pl__btn pl__btn--ghost pl__btn--sm"
@@ -37,7 +38,7 @@ function EseguibiliSection({
           <div className="pl__empty-icon">🚀</div>
           <div className="pl__empty-title">Nessun eseguibile pubblicato</div>
           <div className="pl__empty-text">
-            {isAdmin
+            {canCreate
               ? 'Pubblica un progetto Arricchisci come eseguibile usando il pulsante 📢 sulla sua card o "+ Nuovo" qui sopra.'
               : 'Chiedi a un amministratore di pubblicare una catena come eseguibile.'}
           </div>
@@ -48,9 +49,8 @@ function EseguibiliSection({
             <EseguibileCard
               key={item.id}
               item={item}
-              isAdmin={isAdmin}
               onExecute={() => onExecute(item)}
-              onDelete={() => onDelete(item)}
+              onDelete={canDelete(item) ? () => onDelete(item) : null}
             />
           ))}
         </div>

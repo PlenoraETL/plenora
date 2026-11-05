@@ -14,6 +14,7 @@
 import React, { useState } from 'react';
 import { changeMyPassword } from '../api/users';
 import ModalWrapper, { ModalButton } from './common/ModalWrapper';
+import { PASSWORD_MIN_LENGTH, passwordProblem } from '../utils/passwordRule';
 import './ChangePasswordModal.css';
 import { requestErrorMessage } from '../utils/errorMessages';
 
@@ -30,8 +31,9 @@ export default function ChangePasswordModal({ onClose }) {
     setError('');
 
     if (!oldPwd) return setError('Inserisci la password attuale');
-    if (!newPwd) return setError('Inserisci la nuova password');
-    if (newPwd.length < 6) return setError('La nuova password deve essere di almeno 6 caratteri');
+    // Regola unica della password (utils/passwordRule, uguale al backend).
+    const problem = newPwd ? passwordProblem(newPwd) : 'Inserisci la nuova password';
+    if (problem) return setError(problem);
     if (newPwd !== confirmPwd) return setError('Le due password non coincidono');
     if (newPwd === oldPwd) return setError('La nuova password deve essere diversa dall\'attuale');
 
@@ -101,7 +103,7 @@ export default function ChangePasswordModal({ onClose }) {
           onChange={(e) => setNewPwd(e.target.value)}
           onKeyDown={handleKeyDown}
           autoComplete="new-password"
-          placeholder="Almeno 6 caratteri"
+          placeholder={`Almeno ${PASSWORD_MIN_LENGTH} caratteri`}
           disabled={loading || success}
         />
       </div>

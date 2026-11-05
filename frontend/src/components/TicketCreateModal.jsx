@@ -15,11 +15,13 @@ import { createTicket } from '../api/tickets';
 import { useToast } from '../hooks/useToast';
 import useDialogFocus from '../hooks/useDialogFocus';
 import { toastApiError } from '../utils/toastApiError';
+import { can } from '../utils/permissions';
 
 
-export default function TicketCreateModal({ meta, userRole, onClose, onCreated }) {
+export default function TicketCreateModal({ meta, user, onClose, onCreated }) {
   const toast = useToast();
-  const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+  // Il tipo 'debito tecnico' e' degli admin (stessa regola della gestione).
+  const isAdmin = can.manageTickets(user);
   const dialogRef = useRef(null);
   // Il componente e' montato solo quando aperto (controlled dal caller),
   // quindi useDialogFocus(true, ...) per tutto il lifecycle.

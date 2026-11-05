@@ -44,6 +44,7 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "connection_in_use",
     "connection_duplicate_name",
     "api_connection_in_use",
+    "carica_rest_auth_unavailable",
     "project_has_dependencies",
     "project_cleanup_partial",
     "project_has_active_tasks",
@@ -210,7 +211,7 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_seventy_two():
+def test_catalog_count_domain_seventy_three():
     """72 codici domain (catalogo storico + task availability).
 
     Composizione storica: 5 pre-existing + 6 batch 006 + 10 batch 009
@@ -222,7 +223,8 @@ def test_catalog_count_domain_seventy_two():
     1 compatibility domain conflict code + 1 task terminal conflict +
     5 dispatch carica #18/#20 write/visibility family +
     1 task store availability code + 9 CARICA uncertainty/error codes."""
-    assert len(EXPECTED_DOMAIN_CODES) == 72
+    # 73: +carica_rest_auth_unavailable (Fase 5 T1, R10.8).
+    assert len(EXPECTED_DOMAIN_CODES) == 73
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 

@@ -14,6 +14,8 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from '../hooks/useToast';
+import { useAuth } from '../context/AuthContext';
+import { can } from '../utils/permissions';
 import {
   listBackups, getBackupStatus, getBackupSchedule, triggerBackup,
 } from '../api/adminBackups';
@@ -141,6 +143,8 @@ function ScheduleCard({ schedule }) {
 }
 export default function AdminBackupsPage() {
   const toast = useToast();
+  const { user } = useAuth();
+  const canTrigger = can.manageBackups(user);
   const confirmModal = useConfirmModal();
 
   const [data, setData] = useState(null);
@@ -244,6 +248,7 @@ export default function AdminBackupsPage() {
   }, [data?.next_cursor, loadingMore, toast]);
 
   const handleTrigger = async () => {
+    if (!canTrigger) return;
     const ok = await confirmModal.confirm({
       title: 'Backup manuale',
       message: (
@@ -333,13 +338,13 @@ export default function AdminBackupsPage() {
             >
               {loading ? 'Aggiornamento...' : '↻ Aggiorna'}
             </button>
-            <button
+            {canTrigger && <button
               className="ab__btn ab__btn--primary"
               onClick={handleTrigger}
               disabled={triggering || loading || Boolean(backupUnavailable) || Boolean(awsCredentialsError)}
             >
               {triggering ? 'Avvio...' : '⚡ Esegui backup ora'}
-            </button>
+            </button>}
           </div>
         </header>
 

@@ -153,10 +153,12 @@ function ProjectCard({
                 title="Clona progetto"
               >⧉</button>
             )}
-            <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
-              onClick={e => { e.stopPropagation(); onDelete(); }}
-              title="Elimina progetto"
-            >🗑</button>
+            {onDelete && (
+              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
+                onClick={e => { e.stopPropagation(); onDelete(); }}
+                title="Elimina progetto"
+              >🗑</button>
+            )}
             <button type="button" className="pl__btn pl__btn--primary pl__btn--sm"
               onClick={e => { e.stopPropagation(); onOpen(); }}
             >Apri →</button>

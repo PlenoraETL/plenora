@@ -6348,6 +6348,17 @@
             ],
             "title": "Response"
           },
+          "rest_auth_api_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rest Auth Api Id"
+          },
           "rest_batch_mode": {
             "anyOf": [
               {
@@ -6864,6 +6875,24 @@
           "column"
         ],
         "title": "OrderByConfig",
+        "type": "object"
+      },
+      "OrphanCleanupScope": {
+        "description": "Perimetro confermato dall'operatore: solo questi project_id orfani.",
+        "properties": {
+          "project_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "title": "Project Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_ids"
+        ],
+        "title": "OrphanCleanupScope",
         "type": "object"
       },
       "PinRequest": {
@@ -8470,6 +8499,17 @@
             "title": "Group Ids",
             "type": "array"
           },
+          "owner_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Group Id"
+          },
           "resource_id": {
             "title": "Resource Id",
             "type": "string"
@@ -8620,6 +8660,11 @@
           "group_id": {
             "title": "Group Id",
             "type": "string"
+          },
+          "orphan": {
+            "default": false,
+            "title": "Orphan",
+            "type": "boolean"
           },
           "project_id": {
             "title": "Project Id",
@@ -15672,7 +15717,7 @@
     },
     "/api/projects/admin/cleanup-orphans": {
       "post": {
-        "description": "Cleanup degli orfani cross-DB (results / intermediate storage).\n\nTrova e cancella record result/intermediate che fanno\nriferimento a `project_id` non più esistenti in `config.projects`. Sono\ncreati quando un progetto viene cancellato senza passare per\n`delete_project` (cancellazione DB diretta, restore parziale, crash, ecc.).\n\nSolo superadmin. Per default è dry-run (audit) — passare `?dry_run=false`\nper eseguire effettivamente il cleanup.\n\nReturns: report dettagliato con conteggi e lista project_id rimossi.",
+        "description": "Cleanup degli orfani cross-DB (results / intermediate storage).\n\nTrova e cancella record result/intermediate che fanno\nriferimento a `project_id` non più esistenti in `config.projects`. Sono\ncreati quando un progetto viene cancellato senza passare per\n`delete_project` (cancellazione DB diretta, restore parziale, crash, ecc.).\n\nSolo superadmin. Per default è dry-run (audit) — passare `?dry_run=false`\nper eseguire effettivamente il cleanup.\n\nCon un corpo `{\"project_ids\": [...]}` la bonifica tocca SOLO quei\nprogetti, e solo se sono davvero orfani: il perimetro della richiesta e'\nquello che l'operatore ha visto e confermato (audit frontend R10.4).\n\nReturns: report dettagliato con conteggi e lista project_id rimossi.",
         "operationId": "admin_cleanup_orphans_api_projects_admin_cleanup_orphans_post",
         "parameters": [
           {
@@ -15686,6 +15731,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OrphanCleanupScope"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Scope"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

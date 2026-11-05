@@ -45,7 +45,9 @@ function getGeomLabel(geomType) {
   return geomType.replace('geometry:', '').replace('geometry', 'geometria');
 }
 
-function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedConnection = null }) {
+// canCreateConnection = can.createConnection(user) dalla pagina (EstraiEditor):
+// la '+' di una nuova connessione ArcGIS si mostra solo a chi puo' crearla.
+function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedConnection = null, canCreateConnection = false }) {
   // State navigazione: connections → services → layers
   const [view, setView] = useState(lockedConnection ? 'services' : 'connections'); // connections | services | layers
   
@@ -279,7 +281,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
-        {view === 'connections' && (
+        {view === 'connections' && canCreateConnection && (
           <button type="button" 
             className="fs-panel__add-btn"
             onClick={() => setShowNewConn(true)}
@@ -304,12 +306,16 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
           ) : connections.length === 0 ? (
             <div className="fs-panel__empty">
               <p>Nessuna connessione ArcGIS configurata</p>
-              <button type="button" 
-                className="fs-panel__empty-btn"
-                onClick={() => setShowNewConn(true)}
-              >
-                + Crea connessione
-              </button>
+              {canCreateConnection ? (
+                <button type="button"
+                  className="fs-panel__empty-btn"
+                  onClick={() => setShowNewConn(true)}
+                >
+                  + Crea connessione
+                </button>
+              ) : (
+                <p>Chiedi a un amministratore di configurarne una.</p>
+              )}
             </div>
           ) : (
             filterItems(connections).map(conn => (

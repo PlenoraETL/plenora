@@ -24,7 +24,7 @@ import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import ModalWrapper from '../components/common/ModalWrapper';
-import { can, role } from '../utils/permissions';
+import { can } from '../utils/permissions';
 import { humanizeErrorMessage } from '../utils/errorMessages';
 import '../styles/FileManager.css';
 import {
@@ -472,9 +472,8 @@ const resetUploadModal = () => {
                   key={file.id}
                   file={file}
                   onPreview={() => handlePreview(file)}
-                  onDelete={() => handleDelete(file.id, file.name)}
-                  onShare={() => setSharingFile(file)}
-                  isSuperadmin={role.isSuperadmin(user)}
+                  onDelete={can.editFile(user, file) ? () => handleDelete(file.id, file.name) : null}
+                  onShare={can.shareResources(user) ? () => setSharingFile(file) : null}
                 />
               ))}
             </div>

@@ -15,7 +15,8 @@ export const FRONTEND_ENV = Object.freeze({
   // Un URL assoluto resta disponibile solo per deployment multi-host espliciti.
   apiBaseUrl: (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, ''),
   mode: import.meta.env.MODE,
-  // Build di sviluppo: le pagine di errore mostrano anche il testo tecnico.
+  // Build di sviluppo: pagine di errore con il testo tecnico e devtools
+  // degli store (R10.8) solo qui.
   isDev: Boolean(import.meta.env.DEV),
   sentryDsn: import.meta.env.VITE_SENTRY_DSN || '',
   sentryTracesSampleRate: sampleRate(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE),

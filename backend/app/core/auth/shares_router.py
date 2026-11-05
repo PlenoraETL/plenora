@@ -4,7 +4,7 @@ PLENORA-ETL — Router per gestione allowed_groups (cross-group sharing).
 Espone endpoint REST per leggere/modificare le righe di sharing delle
 """
 
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
@@ -57,13 +57,18 @@ def _load_resource_owner_group(
     return row
 
 
-def _check_owner_access(resource_type: str, resource_id: str, current_user: CurrentUser) -> None:
+def _check_owner_access(
+    resource_type: str,
+    resource_id: str,
+    current_user: CurrentUser,
+) -> ShareableResourceOwner:
     """
-    Verifica che la risorsa esista. La dependency `require_superadmin`
-    sull'endpoint garantisce già che solo i superadmin arrivino qui.
+    Verifica che la risorsa esista e restituisce il suo proprietario. La
+    dependency `require_superadmin` sull'endpoint garantisce già che solo i
+    superadmin arrivino qui.
     """
     _validate_resource_type(resource_type)
-    _load_resource_owner_group(resource_type, resource_id)  # 404 se non esiste
+    return _load_resource_owner_group(resource_type, resource_id)  # 404 se non esiste
 
 
 # MODELS
@@ -72,6 +77,9 @@ class SharesResponse(BaseModel):
     resource_type: str
     resource_id: str
     group_ids: List[str]
+    # Gruppo proprietario della risorsa, dal server: il selettore delle
+    # condivisioni lo esclude (audit frontend R10.7, caso superadmin).
+    owner_group_id: Optional[str] = None
 
 
 class SetSharesRequest(BaseModel):
@@ -90,12 +98,13 @@ def get_shares(
     Lista i group_id con cui la risorsa è condivisa.
     Solo superadmin.
     """
-    _check_owner_access(resource_type, resource_id, current_user)
+    owner = _check_owner_access(resource_type, resource_id, current_user)
     shares = list_resource_shares(resource_type, resource_id)
     return SharesResponse(
         resource_type=resource_type,
         resource_id=resource_id,
         group_ids=shares,
+        owner_group_id=owner.get("group_id"),
     )
 
 
@@ -112,12 +121,13 @@ def set_shares(
     Pass `["*"]` per condivisione globale, `[]` per rimuovere tutte.
     Solo superadmin.
     """
-    _check_owner_access(resource_type, resource_id, current_user)
+    owner = _check_owner_access(resource_type, resource_id, current_user)
     set_resource_shares(resource_type, resource_id, data.group_ids)
     return SharesResponse(
         resource_type=resource_type,
         resource_id=resource_id,
         group_ids=list_resource_shares(resource_type, resource_id),
+        owner_group_id=owner.get("group_id"),
     )
 
 
@@ -133,12 +143,13 @@ def add_share(
     Aggiunge un singolo gruppo alla lista shares della risorsa.
     Idempotente. Pass `*` come group_id per share globale.
     """
-    _check_owner_access(resource_type, resource_id, current_user)
+    owner = _check_owner_access(resource_type, resource_id, current_user)
     add_resource_share(resource_type, resource_id, group_id)
     return SharesResponse(
         resource_type=resource_type,
         resource_id=resource_id,
         group_ids=list_resource_shares(resource_type, resource_id),
+        owner_group_id=owner.get("group_id"),
     )
 
 
@@ -151,10 +162,11 @@ def remove_share(
     current_user: CurrentUser = Depends(require_superadmin),
 ):
     """Rimuove una singola riga di sharing."""
-    _check_owner_access(resource_type, resource_id, current_user)
+    owner = _check_owner_access(resource_type, resource_id, current_user)
     remove_resource_share(resource_type, resource_id, group_id)
     return SharesResponse(
         resource_type=resource_type,
         resource_id=resource_id,
         group_ids=list_resource_shares(resource_type, resource_id),
+        owner_group_id=owner.get("group_id"),
     )

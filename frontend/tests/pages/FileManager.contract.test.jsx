@@ -69,14 +69,21 @@ vi.mock('../../src/components/common/ConfirmDialog', () => ({
   default: () => null,
 }));
 
-vi.mock('../../src/utils/permissions', () => ({
-  can: {
-    uploadFile: () => true,
-  },
-  role: {
-    isSuperadmin: () => true,
-  },
-}));
+// Tabella reale dei permessi, con le sole capability del test forzate.
+vi.mock('../../src/utils/permissions', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    can: {
+      ...actual.can,
+      uploadFile: () => true,
+    },
+    role: {
+      ...actual.role,
+      isSuperadmin: () => true,
+    },
+  };
+});
 
 describe('FileManager', () => {
   beforeEach(() => {

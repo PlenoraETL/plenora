@@ -40,15 +40,15 @@ describe('Sessione 8 P0 residui', () => {
   });
 
   // P0 #1: UserManager handleDeleteGroup optional chaining
-  it('UserManager handleDeleteGroup usa optional chaining su report fields', () => {
+  it('UserManager handleDeleteGroup tollera un report incompleto', () => {
+    // Fase 5 T1 (R10.3): il report arriva davvero (api/users.deleteGroup) e lo
+    // riassume groupReportText, che salta le chiavi assenti e i report non oggetto.
     const src = readSrc('pages/UserManager.jsx');
     const idx = src.indexOf('const handleDeleteGroup =');
     expect(idx).toBeGreaterThan(-1);
-    const window = src.slice(idx, idx + 700);
-    // r?.projects / r?.users / r?.connections con fallback ?? '?'
-    expect(window).toMatch(/r\?\.projects/);
-    expect(window).toMatch(/r\?\.users/);
-    expect(window).toMatch(/r\?\.connections/);
+    expect(src.slice(idx, idx + 400)).toContain('groupReportText(res?.report)');
+    expect(src).toContain("if (!report || typeof report !== 'object') return ''");
+    expect(src).toContain('.filter(({ key }) => key in report)');
   });
 
   // P0 #2: logs.js JSDoc allineato

@@ -17,7 +17,6 @@ import { columnsConfirmed } from '../../utils/columnSource';
 import ColumnStatusNote from '../common/ColumnStatusNote';
 import DynamicConfig from './DynamicConfig';
 
-import { authBus } from '../../utils/authBus';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { isParameterBindingEdge } from '../../utils/runtimeBindingEdges';
 import { OPERATION_PANELS, LookupSuggestion } from './panels';
@@ -37,14 +36,6 @@ const TransformNode = memo(({ data, id }) => {
   const [registry, setRegistry] = useState(getRegistryCache());
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
-
-  // Invalida la cache al logout: evita che User B veda il registry di User A
-  useEffect(() => {
-    // La cache condivisa si svuota da sola (utils/transformRegistry).
-    return authBus.addLogoutListener(() => {
-      setRegistry(null);
-    });
-  }, []);
 
   useEffect(() => {
     if (!registry) {

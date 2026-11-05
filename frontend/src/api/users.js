@@ -22,7 +22,13 @@ export const resetPassword   = (id, data)      => http.post(`/auth/users/${id}/r
 
 export const listGroups      = ()              => fetchAllOffsetPages('/auth/groups');
 export const createGroup     = (data)          => http.post('/auth/groups', data).then(r => r.data);
+// DELETE /auth/groups/{id} risponde 200 con { deleted, group_id, report }:
+// il report (cosa e' stato eliminato) arriva al chiamante (audit R10.3).
+// Su un corpo vuoto resta la forma canonica { success: true, id }.
 export const deleteGroup     = (id)            =>
-  // Stessa famiglia: DELETE → 204 No Content. Coerente con deleteUser.
-  http.delete(`/auth/groups/${id}`).then(() => ({ success: true, id }));
+  http.delete(`/auth/groups/${id}`).then(r => ({
+    ...(r?.data && typeof r.data === 'object' ? r.data : {}),
+    success: true,
+    id,
+  }));
 export const getGroupSummary = (id)            => http.get(`/auth/groups/${id}/summary`).then(r => r.data);

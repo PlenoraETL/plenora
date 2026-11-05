@@ -48,6 +48,7 @@ import '../components/nodes/AnnotationNode.css';
 import '../components/nodes/FeatureLayerNode.css';
 import '../components/panels/FeatureServicePanel.css';
 import { useAuth } from '../context/AuthContext';
+import { can } from '../utils/permissions';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term } from '../utils/glossary';
@@ -545,6 +546,7 @@ function EstraiEditor() {
               <FeatureServicePanel
                 layersInCanvas={featureLayersInCanvas}
                 lockedConnection={projectConnection}
+                canCreateConnection={can.createConnection(user)}
               />
             )}
           </div>

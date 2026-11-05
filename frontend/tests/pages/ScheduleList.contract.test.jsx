@@ -25,8 +25,9 @@ vi.mock('../../src/api/schedules', () => schedulesMock);
 vi.mock('../../src/hooks/useToast', () => ({
   useToast: () => toastMock,
 }));
+const authOverride = vi.hoisted(() => ({ user: null }));
 vi.mock('../../src/context/AuthContext', () => ({
-  useAuth: () => globalThis.__frontendTestHelpers.createAuthContextValue(vi),
+  useAuth: () => globalThis.__frontendTestHelpers.createAuthContextValue(vi, authOverride.user ? { user: authOverride.user } : {}),
 }));
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -49,6 +50,7 @@ vi.mock('../../src/components/modals/ScheduleWizard', () => ({
 describe('ScheduleList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authOverride.user = null;
   });
 
   it('wires run-now and log expansion to the schedule API layer', async () => {
@@ -167,5 +169,27 @@ describe('ScheduleList', () => {
     expect(screen.getByText(/1 schedule in esecuzione/i)).toBeInTheDocument();
     expect(screen.getByText('Queued Job')).toBeInTheDocument();
     expect(screen.getByText('dest_table (replace)')).toBeInTheDocument();
+  });
+
+  it('a viewer sees no run, toggle, edit or delete actions (R10.1)', async () => {
+    authOverride.user = { role: 'viewer', user_id: 'v1', username: 'viewer', group_id: 'grp-1' };
+    schedulesMock.listSchedules.mockResolvedValueOnce({
+      schedules: [{
+        id: 'sch-1',
+        pipeline: { project_name: 'Nightly Import', project_type: 'estrai' },
+        schedule: { enabled: true, description: 'Daily sync', cron_expression: '0 3 * * *' },
+        runtime: { status: 'completed', total_runs: 1, failure_count: 0 },
+        destination: null,
+      }],
+    });
+    schedulesMock.getBeatHealthcheck.mockResolvedValueOnce({ status: 'ok' });
+
+    render(<ScheduleList />);
+    await screen.findByText('Nightly Import');
+    expect(screen.queryByRole('button', { name: /esegui ora/i })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /abilita schedule|disabilita schedule/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Modifica schedule' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Elimina schedule' })).toBeNull();
+    expect(screen.getByRole('button', { name: /log/i })).toBeInTheDocument();
   });
 });

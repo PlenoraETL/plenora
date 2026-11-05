@@ -11,6 +11,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authBus } from '../utils/authBus';
+import { resetSession } from '../utils/session';
 import { login as apiLogin, logout as apiLogout } from '../api/auth';
 import { getMe } from '../api/users';
 
@@ -62,8 +63,9 @@ export function AuthProvider({ children }) {
     setUser(null);
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(USER_KEY);
-    // Notifica i moduli con cache in-memory (es. TransformNode.registryCache)
-    authBus.emitLogout();
+    // Svuota TUTTI gli store e le cache dell'utente (registro unico,
+    // utils/session): canvas, colonne, registry delle trasformazioni, ...
+    resetSession();
   }, []);
 
   // Registra handler 401 — client.js chiama authBus.onUnauthorized()
@@ -112,8 +114,9 @@ export function AuthProvider({ children }) {
           if (!me || sessionStorage.getItem(TOKEN_KEY) !== sent) return;
           setUser((prev) => {
             if (!prev) return prev;
-            const next = { ...prev, username: me.username ?? prev.username, group_id: me.group_id ?? prev.group_id, role: me.role ?? prev.role };
-            if (next.username === prev.username && next.group_id === prev.group_id && next.role === prev.role) return prev;
+            const fields = ['username', 'group_id', 'role'];
+            const next = { ...prev, ...Object.fromEntries(fields.map((k) => [k, me[k] ?? prev[k]])) };
+            if (fields.every((k) => next[k] === prev[k])) return prev;
             sessionStorage.setItem(USER_KEY, JSON.stringify(next));
             return next;
           });

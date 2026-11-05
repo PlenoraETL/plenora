@@ -32,6 +32,8 @@ def http_status_code(status_code: int) -> str:
 # Domain-specific definitions still owned by the shared envelope/catalog layer.
 
 API_CONNECTION_IN_USE = "api_connection_in_use"
+# CARICA REST: connettore API di autenticazione non visibile/utilizzabile (R10.8).
+CARICA_REST_AUTH_UNAVAILABLE = "carica_rest_auth_unavailable"
 """409: tentativo di delete di un'api_connection referenziata."""
 
 PROJECT_HAS_DEPENDENCIES = "project_has_dependencies"
@@ -318,6 +320,7 @@ TICKET_NOT_FOUND = "ticket_not_found"
 # non modificabile a runtime
 KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     API_CONNECTION_IN_USE,
+    CARICA_REST_AUTH_UNAVAILABLE,
     PROJECT_HAS_DEPENDENCIES,
     PROJECT_CLEANUP_PARTIAL,
     PROJECT_HAS_ACTIVE_TASKS,

@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import AppSidebar from '../components/AppSidebar';
+import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
+import { useAuth } from '../context/AuthContext';
+import { can } from '../utils/permissions';
 import { getTaskRuntime, resolveUncertainCaricaRun } from '../api/adminTaskRuntime';
 import { humanizeErrorMessage } from '../utils/errorMessages';
 import '../styles/AdminTaskRuntimePage.css';
@@ -14,6 +17,65 @@ function duration(seconds) {
   return `${Math.floor(value / 3600)}h ${Math.floor((value % 3600) / 60)}m`;
 }
 
+// Le due risoluzioni di una scrittura CARICA incerta, con le conseguenze
+// spiegate prima di confermare (audit R10.5: niente window.prompt).
+const RESOLUTIONS = {
+  confirm_completed: {
+    title: 'Conferma scrittura completata',
+    consequence: 'La run viene segnata come completata e non verrà ripetuta. '
+      + 'Confermala solo dopo aver verificato nella destinazione che i dati sono stati scritti.',
+    label: 'Cosa hai verificato sulla destinazione',
+    confirmText: 'Conferma completata',
+  },
+  allow_retry: {
+    title: 'Autorizza la retry',
+    consequence: 'La scrittura potrà essere ripetuta. Se in realtà era già avvenuta, '
+      + 'i dati verranno scritti una seconda volta (righe duplicate o sovrascritte). '
+      + 'Autorizzala solo se hai verificato che la destinazione non contiene i dati.',
+    label: 'Perché la retry è sicura',
+    confirmText: 'Autorizza retry',
+  },
+};
+const NOTE_MIN_LENGTH = 3;
+
+function ResolveRunDialog({ request, busy, onCancel, onConfirm }) {
+  const [note, setNote] = useState('');
+  const cfg = RESOLUTIONS[request.resolution];
+  const valid = note.trim().length >= NOTE_MIN_LENGTH;
+  return (
+    <ModalWrapper
+      isOpen={true}
+      onClose={onCancel}
+      title={cfg.title}
+      icon="⚠️"
+      size="sm"
+      closeOnOverlay={!busy}
+      closeOnEsc={!busy}
+      footer={(
+        <>
+          <ModalButton variant="secondary" onClick={onCancel} disabled={busy}>Annulla</ModalButton>
+          <ModalButton variant="danger" onClick={() => onConfirm(note.trim())} disabled={!valid || busy} loading={busy}>
+            {cfg.confirmText}
+          </ModalButton>
+        </>
+      )}
+    >
+      <p className="task-runtime__dialog-run">Run <code>{request.run.run_id}</code> · progetto <code>{request.run.project_id}</code></p>
+      <p className="task-runtime__dialog-consequence">{cfg.consequence}</p>
+      <label className="task-runtime__dialog-label">
+        {cfg.label} (obbligatoria, almeno {NOTE_MIN_LENGTH} caratteri)
+        <textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          rows={3}
+          autoFocus
+          disabled={busy}
+        />
+      </label>
+    </ModalWrapper>
+  );
+}
+
 function StatusPill({ value }) {
   return <span className={`task-runtime__pill task-runtime__pill--${value}`}>{value}</span>;
 }
@@ -23,6 +85,9 @@ export default function AdminTaskRuntimePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resolvingRunId, setResolvingRunId] = useState('');
+  const [resolveRequest, setResolveRequest] = useState(null); // { run, resolution }
+  const { user } = useAuth();
+  const canResolve = can.manageTaskRuntime(user);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,27 +101,20 @@ export default function AdminTaskRuntimePage() {
     }
   }, []);
 
-  const resolveRun = useCallback(async (runId, resolution) => {
-    const note = window.prompt(
-      resolution === 'confirm_completed'
-        ? 'Conferma verifica della destinazione (nota obbligatoria):'
-        : 'Motivo per cui la retry è sicura (nota obbligatoria):',
-    );
-    if (note == null) return;
-    if (note.trim().length < 3) {
-      setError('La nota deve contenere almeno 3 caratteri.');
-      return;
-    }
-    setResolvingRunId(runId);
+  const resolveRun = useCallback(async (note) => {
+    if (!resolveRequest) return;
+    const { run, resolution } = resolveRequest;
+    setResolvingRunId(run.run_id);
     try {
-      await resolveUncertainCaricaRun(runId, resolution, note.trim());
+      await resolveUncertainCaricaRun(run.run_id, resolution, note);
+      setResolveRequest(null);
       await load();
     } catch (err) {
       setError(humanizeErrorMessage(err));
     } finally {
       setResolvingRunId('');
     }
-  }, [load]);
+  }, [load, resolveRequest]);
 
   useEffect(() => {
     let stopped = false;
@@ -134,8 +192,8 @@ export default function AdminTaskRuntimePage() {
                       <td>{new Date(run.timestamp).toLocaleString()}</td>
                       <td className="task-runtime__message" title={run.error_message || ''}>{run.error_message || '—'}</td>
                       <td className="task-runtime__actions">
-                        <button type="button" disabled={resolvingRunId === run.run_id} onClick={() => resolveRun(run.run_id, 'confirm_completed')}>Conferma completata</button>
-                        <button type="button" disabled={resolvingRunId === run.run_id} onClick={() => resolveRun(run.run_id, 'allow_retry')}>Autorizza retry</button>
+                        {canResolve && <button type="button" disabled={resolvingRunId === run.run_id} onClick={() => setResolveRequest({ run, resolution: 'confirm_completed' })}>Conferma completata</button>}
+                        {canResolve && <button type="button" disabled={resolvingRunId === run.run_id} onClick={() => setResolveRequest({ run, resolution: 'allow_retry' })}>Autorizza retry</button>}
                       </td>
                     </tr>
                   ))}
@@ -227,6 +285,14 @@ export default function AdminTaskRuntimePage() {
           </div>
         </section>
       </main>
+      {resolveRequest && (
+        <ResolveRunDialog
+          request={resolveRequest}
+          busy={resolvingRunId === resolveRequest.run.run_id}
+          onCancel={() => setResolveRequest(null)}
+          onConfirm={resolveRun}
+        />
+      )}
     </div>
   );
 }

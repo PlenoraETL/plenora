@@ -44,6 +44,7 @@ const CaricanNode = memo(({ data, id }) => {
   const restBatchSize = data.rest_batch_size || data.batch_size || 1000;
   const restTimeoutSeconds = data.rest_timeout_seconds || 30;
   const restHeaders = data.rest_headers || [];
+  const restAuthApiId = data.rest_auth_api_id || '';
   const restBodyMapping = data.rest_body_mapping || [];
 
   const connections = useCanvasStore(s => s.connections);
@@ -153,6 +154,7 @@ const CaricanNode = memo(({ data, id }) => {
               restBatchSize={restBatchSize}
               restTimeoutSeconds={restTimeoutSeconds}
               restHeaders={restHeaders}
+              restAuthApiId={restAuthApiId}
               restBodyMapping={restBodyMapping}
               availableColumns={availableColumns}
               showMapping={showMapping}

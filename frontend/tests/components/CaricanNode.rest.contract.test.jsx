@@ -29,6 +29,10 @@ vi.mock('../../src/store/useCanvasStore', () => ({
   default: useCanvasStoreMock,
 }));
 
+vi.mock('../../src/api/apiConnections', () => ({
+  listApiConnections: vi.fn(async () => [{ id: 'api-1', name: 'Gestionale' }]),
+}));
+
 vi.mock('../../src/api/carica', () => ({
   getCaricaSchemas: getCaricaSchemasMock,
   getCaricaTables: getCaricaTablesMock,
@@ -76,7 +80,7 @@ describe('CaricanNode REST destination controls', () => {
     getCaricaColumnsMock.mockResolvedValue({ columns: [] });
   });
 
-  it('renders REST controls and keeps DB fields hidden for REST destinations', () => {
+  it('renders REST controls and keeps DB fields hidden for REST destinations', async () => {
     renderNode({
       dest_type: 'rest',
       rest_url: 'https://api.example.com/items',
@@ -101,9 +105,11 @@ describe('CaricanNode REST destination controls', () => {
     expect(screen.getByDisplayValue('25')).toBeInTheDocument();
     expect(screen.getByDisplayValue('45')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Authorization')).toBeInTheDocument();
+    // L'elenco dei connettori arriva in modo asincrono.
+    await screen.findByText('Connettore API: Gestionale');
   });
 
-  it('updates REST destination fields through the canvas store', () => {
+  it('updates REST destination fields through the canvas store', async () => {
     renderNode({ dest_type: 'rest' });
 
     fireEvent.change(screen.getByPlaceholderText('https://api.example.com/items'), {
@@ -119,6 +125,8 @@ describe('CaricanNode REST destination controls', () => {
     expect(updateNodeDataMock).toHaveBeenCalledWith('carica-1', {
       rest_method: 'PUT',
     });
+    // L'elenco dei connettori arriva in modo asincrono.
+    await screen.findByText('Connettore API: Gestionale');
   });
 
   it('switches an existing DB node to REST without keeping DB destination fields active', () => {
@@ -138,5 +146,24 @@ describe('CaricanNode REST destination controls', () => {
       match_columns: [],
       column_mappings: [],
     }));
+  });
+
+  it('credentials go by API connector reference; a secret header is never editable nor saved (R10.8)', async () => {
+    renderNode({
+      dest_type: 'rest',
+      rest_url: 'https://api.example.com/items',
+      rest_headers: [{ name: 'Authorization', value: 'Bearer secret', secret: true }, { name: 'X-Client', value: 'plenora' }],
+    });
+
+    fireEvent.click(screen.getByText(/Intestazioni HTTP e lotti/i));
+    expect(screen.queryByDisplayValue('Bearer secret')).toBeNull();
+    expect(screen.getByDisplayValue('plenora')).toBeInTheDocument();
+    expect(screen.getByRole('alert').textContent).toMatch(/non viene salvata nel canvas/);
+    expect(screen.queryByText('Segreto')).toBeNull();
+
+    const auth = screen.getByLabelText('Autenticazione');
+    await screen.findByText('Connettore API: Gestionale');
+    fireEvent.change(auth, { target: { value: 'api-1' } });
+    expect(updateNodeDataMock).toHaveBeenCalledWith('carica-1', { rest_auth_api_id: 'api-1' });
   });
 });

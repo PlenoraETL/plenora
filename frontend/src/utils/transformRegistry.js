@@ -7,7 +7,7 @@
  * (nome leggibile dell'operazione), quindi sta qui: una sola richiesta.
  */
 import { getTransformRegistry } from '../api/transforms';
-import { authBus } from './authBus';
+import { registerSessionReset } from './session';
 import { displayIcon } from './displayIcon';
 import { applyTransformTerms } from './glossary';
 
@@ -50,7 +50,7 @@ export const resetTransformRegistry = () => {
   registryCache = null;
   registryCachePromise = null;
 };
-authBus.addLogoutListener(resetTransformRegistry);
+registerSessionReset('transformRegistry', resetTransformRegistry);
 
 /** Registry gia' caricato (o null): lettura sincrona per i riassunti. */
 export const getCachedTransformRegistry = () => registryCache;

@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useCanvasStore from '../store/useCanvasStore';
 import { hasUnsavedChanges } from '../store/saveState';
 import { authBus } from '../utils/authBus';
+import { persistableRestHeaders } from '../utils/restSecrets';
 import {
   announceSaved, currentDraftUser, currentTabId, draftOrigin, isProjectDeleted, listDrafts,
   parseDraftEvent, removeDraft, removeDraftIf, retireOwnDraft, serverMovedOn, touchTab, writeDraft,
@@ -28,10 +29,14 @@ import {
 
 export const DRAFT_DELAY_MS = 1500;
 
-// Solo il contenuto: selezione e misure non contano.
+// Solo il contenuto: selezione e misure non contano. Come il salvataggio,
+// la copia locale non porta i segreti REST (utils/restSecrets, R10.8).
+const withoutSecrets = (n) => (Array.isArray(n.data?.rest_headers)
+  ? { ...n, data: { ...n.data, rest_headers: persistableRestHeaders(n.data.rest_headers) } }
+  : n);
 const clean = (nodes, edges) => ({
   // eslint-disable-next-line no-unused-vars
-  nodes: (nodes || []).map(({ selected, dragging, measured, ...n }) => n),
+  nodes: (nodes || []).map(({ selected, dragging, measured, ...n }) => withoutSecrets(n)),
   // eslint-disable-next-line no-unused-vars
   edges: (edges || []).map(({ selected, ...e }) => e),
 });

@@ -46,4 +46,15 @@ describe('deleteUser / deleteGroup shape 204 (sessione 6 P1)', () => {
 
     expect(result).toEqual({ success: true, id: 'group-1' });
   });
+
+  it('deleteGroup conserva il report del server (audit R10.3)', async () => {
+    const report = { projects: 2, users: 3, connections: 1 };
+    httpMock.delete.mockResolvedValueOnce({ status: 200, data: { deleted: true, group_id: 'group-1', report } });
+
+    const { deleteGroup } = await import('../../src/api/users');
+    const result = await deleteGroup('group-1');
+
+    expect(result.report).toEqual(report);
+    expect(result.success).toBe(true);
+  });
 });

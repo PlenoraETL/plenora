@@ -72,6 +72,7 @@ La mappa completa degli shim di compatibilita' (Fase 6) e' in
 | Edge | Natura | Percorso di rimozione |
 |---|---|---|
 | ~~`auth -> arricchisci`~~ | ~~cleanup registry importa i cleanup di 7 domini~~ | **FATTO (Epic E, 2026-06-12)**: registry neutro in `core/lifecycle/group_cleanup.py`, composizione in `app/runtime/group_cleanup_wiring.py`, wrapper compat in auth. Rimossi anche `auth -> connections` e `auth -> datasources`. Nuovo edge dichiarato: `auth -> lifecycle` (one-way, lifecycle ha out-degree 0: nessun ciclo). |
+| `carica -> arricchisci` | `carica/rest_auth.py`: le credenziali CARICA REST si leggono per riferimento al connettore API (cifrato) di `arricchisci/api_connector` (audit frontend R10.8, Fase 5 T1, 05/11/2026) | spostare il servizio dei connettori API in `connections` |
 | `scheduler -> carica` | import diretto executor in `execution_manager.py` | G4 (PR 5): port dal composition root |
 | `orchestrator -> carica` | lazy, dispatch pipeline | Epic G: `PipelineDispatchPort` |
 | `orchestrator -> estrai` | dispatch nodo estrazione | Epic G |

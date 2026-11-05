@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Iterable, Literal, Optional
 from typing_extensions import TypedDict
 
 from app.core.intermediate.cleanup import (
@@ -42,6 +42,14 @@ def _get_existing_project_ids() -> set[str]:
     return list_existing_project_ids()
 
 
+def _within(ids: list[str], scope: Optional[Iterable[str]]) -> list[str]:
+    """Restringe gli orfani trovati al perimetro confermato (se dato)."""
+    if scope is None:
+        return ids
+    allowed = set(scope)
+    return [item for item in ids if item in allowed]
+
+
 def find_orphan_result_project_ids() -> list[str]:
     """Lista project_id presenti in `results.results` ma non in `config.projects`.
 
@@ -70,11 +78,17 @@ def find_orphan_run_canvas_ids() -> list[str]:
     ]
 
 
-def cleanup_orphans(dry_run: bool = False) -> OrphanCleanupReport:
+def cleanup_orphans(
+    dry_run: bool = False,
+    project_ids: Optional[Iterable[str]] = None,
+) -> OrphanCleanupReport:
     """Cleanup completo degli orfani in results/intermediate tables.
 
     Args:
         dry_run: Se True, solo audit (non cancella nulla). Default False.
+        project_ids: se dato, il perimetro e' limitato a questi progetti
+            (intersecati con gli orfani reali): un id non orfano non viene
+            mai toccato. None = tutti gli orfani.
 
     Returns:
         dict con il report:
@@ -109,7 +123,7 @@ def cleanup_orphans(dry_run: bool = False) -> OrphanCleanupReport:
 
     # 1. Orphan results in results tables
     try:
-        orphan_result_ids = find_orphan_result_project_ids()
+        orphan_result_ids = _within(find_orphan_result_project_ids(), project_ids)
         report["orphan_results"]["project_ids"] = orphan_result_ids
         if not dry_run:
             for pid in orphan_result_ids:
@@ -127,7 +141,7 @@ def cleanup_orphans(dry_run: bool = False) -> OrphanCleanupReport:
 
     # 2. Orphan runs in intermediate tables
     try:
-        orphan_canvas_ids = find_orphan_run_canvas_ids()
+        orphan_canvas_ids = _within(find_orphan_run_canvas_ids(), project_ids)
         report["orphan_runs"]["canvas_ids"] = orphan_canvas_ids
         if not dry_run:
             for cid in orphan_canvas_ids:

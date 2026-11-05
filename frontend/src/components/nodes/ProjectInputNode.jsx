@@ -2,8 +2,7 @@ import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { acceptsInputKind } from '../../utils/runtimeInputKinds';
-import { getTransformRegistry } from '../../api/transforms';
-import { normalizeRegistry } from '../../utils/transformRegistry';
+import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
 import { listConnectionSets } from '../../api';
 import {
   getNodeBindableTargets,
@@ -23,33 +22,15 @@ const normalizeKey = value => String(value || '')
   .replace(/^_+|_+$/g, '')
   .replace(/^[^a-z]+/, '');
 
-let registryCache = null;
-let registryPromise = null;
-let connectionSetsCache = null;
-let connectionSetsPromise = null;
-
-const loadRegistry = () => {
-  if (registryCache) return Promise.resolve(registryCache);
-  if (!registryPromise) {
-    registryPromise = getTransformRegistry().then(value => {
-      // Stessa normalizzazione della cache condivisa (nomi del glossario).
-      registryCache = normalizeRegistry(value);
-      return registryCache;
-    }).finally(() => { registryPromise = null; });
-  }
-  return registryPromise;
-};
-
-const loadConnectionSets = () => {
-  if (connectionSetsCache) return Promise.resolve(connectionSetsCache);
-  if (!connectionSetsPromise) {
-    connectionSetsPromise = listConnectionSets().then(value => {
-      connectionSetsCache = value.connection_sets || [];
-      return connectionSetsCache;
-    }).finally(() => { connectionSetsPromise = null; });
-  }
-  return connectionSetsPromise;
-};
+// Nessuna cache di modulo (audit R5.4, R1-N4, R5-N3): il registry e' quello
+// condiviso (utils/transformRegistry, svuotato da resetSession) e i set di
+// connessioni si chiedono a ogni apertura, cosi' un set appena creato compare
+// e un altro utente non vede quelli del precedente.
+const loadRegistry = () => fetchTransformRegistry().then((value) => {
+  if (!value) throw new Error('elenco delle operazioni non disponibile');
+  return value;
+});
+const loadConnectionSets = () => listConnectionSets().then((value) => value?.connection_sets || []);
 
 function ProjectInputNode({ id, data }) {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
@@ -59,11 +40,11 @@ function ProjectInputNode({ id, data }) {
   const updateEdge = useCanvasStore(s => s.updateEdge);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const mode = useCanvasStore(s => s.mode);
-  const [registry, setRegistry] = useState(registryCache);
+  const [registry, setRegistry] = useState(getCachedTransformRegistry);
   const [registryStatus, setRegistryStatus] = useState(
-    registryCache ? 'ready' : 'idle',
+    getCachedTransformRegistry() ? 'ready' : 'idle',
   );
-  const [connectionSets, setConnectionSets] = useState(connectionSetsCache || []);
+  const [connectionSets, setConnectionSets] = useState([]);
   const kind = data.input_kind || 'file';
   const bindingEdges = useMemo(
     () => edges.filter(edge => isParameterBindingEdge(edge) && edge.source === id),

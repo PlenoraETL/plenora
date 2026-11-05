@@ -73,14 +73,21 @@ vi.mock('../../src/components/AppSidebar', () => ({
   default: () => <div data-testid="app-sidebar" />,
 }));
 
-vi.mock('../../src/utils/permissions', () => ({
-  can: {
-    createConnection: () => true,
-  },
-  role: {
-    isSuperadmin: () => true,
-  },
-}));
+// Tabella reale dei permessi, con le sole capability del test forzate.
+vi.mock('../../src/utils/permissions', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    can: {
+      ...actual.can,
+      createConnection: () => true,
+    },
+    role: {
+      ...actual.role,
+      isSuperadmin: () => true,
+    },
+  };
+});
 
 describe('ConnectionManager', () => {
   beforeEach(() => {

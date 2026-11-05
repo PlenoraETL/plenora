@@ -426,6 +426,7 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
                 <ScheduleCard
                   key={s.id}
                   schedule={s}
+                  canManage={can.manageSchedule(user, s)}
                   isRunning={s.runtime?.status === 'running' || s.runtime?.status === 'queued' || !!runningManual[s.id]}
                   runStartTime={runStartTimes[s.id]}
                   logs={expandedLogs[s.id]}
@@ -462,7 +463,9 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
     </div>
   );
 }
-function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningManual, onToggle, onDelete, onRunNow, onToggleLogs, onToggleRuns, onEdit, onDownload, onDownloadRun, formatDate, formatCron, getElapsed }) {
+// `canManage` (can.manageSchedule): esegui, attiva, modifica ed elimina si
+// mostrano solo a chi puo' farli (audit R10.1); log e download restano.
+function ScheduleCard({ schedule, canManage, isRunning, runStartTime, logs, runs, runningManual, onToggle, onDelete, onRunNow, onToggleLogs, onToggleRuns, onEdit, onDownload, onDownloadRun, formatDate, formatCron, getElapsed }) {
   const isEnabled = schedule.schedule?.enabled;
   const isOrphan  = schedule.runtime?.status === 'orphan';
   const status    = schedule.runtime?.status || 'idle';
@@ -488,16 +491,18 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
           </div>
           <div className="sl__card-header-right">
             <span className={`sl__badge ${statusCfg.cls}`}>{statusCfg.label}</span>
-            <label className="sl__toggle" title={isEnabled ? 'Disabilita' : 'Abilita'}>
-              <input
-                type="checkbox"
-                checked={!!isEnabled}
-                onChange={onToggle}
-                disabled={isOrphan}
-                aria-label={isEnabled ? 'Disabilita schedule' : 'Abilita schedule'}
-              />
-              <span className="sl__toggle-slider" />
-            </label>
+            {canManage && (
+              <label className="sl__toggle" title={isEnabled ? 'Disabilita' : 'Abilita'}>
+                <input
+                  type="checkbox"
+                  checked={!!isEnabled}
+                  onChange={onToggle}
+                  disabled={isOrphan}
+                  aria-label={isEnabled ? 'Disabilita schedule' : 'Abilita schedule'}
+                />
+                <span className="sl__toggle-slider" />
+              </label>
+            )}
           </div>
         </div>
 
@@ -526,10 +531,12 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
         {/* Actions */}
         <div className="sl__card-actions">
           <div className="sl__card-actions-left">
-            <button type="button" className={`sl__btn sl__btn--sm ${isRunning || runningManual ? 'sl__btn--running' : 'sl__btn--ghost'}`}
-              onClick={onRunNow} disabled={isOrphan || isRunning || runningManual}>
-              {isRunning || runningManual ? '⏳ In corso...' : '▶ Esegui Ora'}
-            </button>
+            {canManage && (
+              <button type="button" className={`sl__btn sl__btn--sm ${isRunning || runningManual ? 'sl__btn--running' : 'sl__btn--ghost'}`}
+                onClick={onRunNow} disabled={isOrphan || isRunning || runningManual}>
+                {isRunning || runningManual ? '⏳ In corso...' : '▶ Esegui Ora'}
+              </button>
+            )}
             <button type="button" className={`sl__btn sl__btn--sm sl__btn--ghost${logs ? ' sl__btn--active' : ''}`} onClick={onToggleLogs}>
               📋 {logs ? 'Chiudi Log' : 'Log'}
             </button>
@@ -539,10 +546,12 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
               </button>
             )}
           </div>
-          <div className="sl__card-actions-right">
-            <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={onEdit} aria-label="Modifica schedule">✏️</button>
-            <button type="button" className="sl__btn sl__btn--sm sl__btn--danger" onClick={onDelete} aria-label="Elimina schedule">🗑</button>
-          </div>
+          {canManage && (
+            <div className="sl__card-actions-right">
+              <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={onEdit} aria-label="Modifica schedule">✏️</button>
+              <button type="button" className="sl__btn sl__btn--sm sl__btn--danger" onClick={onDelete} aria-label="Elimina schedule">🗑</button>
+            </div>
+          )}
         </div>
 
         {/* Logs panel */}

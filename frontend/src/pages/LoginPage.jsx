@@ -137,6 +137,9 @@ export default function LoginPage() {
       if (err?.response?.status === 403 && (err.code === 'auth_mfa_required' || err.message === 'mfa_required')) {
         setNeedsMfa(true);
         setError("Inserisci il codice MFA per completare l'accesso.");
+      } else if (err?.response?.status === 401) {
+        // Il 401 del login non passa dal percorso di uscita (api/http).
+        setError('Credenziali errate: username o password non corretti.');
       } else {
         setError(humanizeError(err).message);
       }

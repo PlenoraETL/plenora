@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 import UserManager from '../../src/pages/UserManager';
+import * as usersApi from '../../src/api/users';
 
 const {
   navigateMock,
@@ -71,15 +72,22 @@ vi.mock('../../src/components/AppSidebar', () => ({
   default: () => <div data-testid="app-sidebar" />,
 }));
 
-vi.mock('../../src/utils/permissions', () => ({
-  can: {
-    manageUsers: () => true,
-  },
-  role: {
-    isSuperadmin: (user) => user?.role === 'superadmin',
-    isAdminOrAbove: (user) => ['admin', 'superadmin'].includes(user?.role),
-  },
-}));
+// Tabella reale dei permessi, con le sole capability del test forzate.
+vi.mock('../../src/utils/permissions', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    can: {
+      ...actual.can,
+      manageUsers: () => true,
+    },
+    role: {
+      ...actual.role,
+      isSuperadmin: (user) => user?.role === 'superadmin',
+      isAdminOrAbove: (user) => ['admin', 'superadmin'].includes(user?.role),
+    },
+  };
+});
 
 describe('UserManager', () => {
   beforeEach(() => {
@@ -100,7 +108,7 @@ describe('UserManager', () => {
     expect(await screen.findByText('mario')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /\+ nuovo utente/i }));
     await userEvent.type(screen.getByPlaceholderText(/mario\.rossi/i), 'laura');
-    await userEvent.type(screen.getByPlaceholderText(/password sicura/i), 'StrongPwd1');
+    await userEvent.type(screen.getByPlaceholderText(/almeno 12 caratteri/i), 'StrongPwd1234');
     await userEvent.selectOptions(screen.getAllByRole('combobox')[0], 'admin');
     await userEvent.selectOptions(screen.getAllByRole('combobox')[1], 'grp-2');
     await userEvent.click(screen.getByRole('button', { name: /crea utente/i }));
@@ -108,11 +116,66 @@ describe('UserManager', () => {
     await waitFor(() => {
       expect(createUserMock).toHaveBeenCalledWith({
         username: 'laura',
-        password: 'StrongPwd1',
+        password: 'StrongPwd1234',
         role: 'admin',
         group_id: 'grp-2',
         is_active: true,
       });
     });
+  });
+
+  it('rejects a too short password before calling the backend (regola unica, 12)', async () => {
+    render(<UserManager />);
+    expect(await screen.findByText('mario')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /\+ nuovo utente/i }));
+    await userEvent.type(screen.getByPlaceholderText(/mario\.rossi/i), 'laura');
+    await userEvent.type(screen.getByPlaceholderText(/almeno 12 caratteri/i), 'Corta123');
+    await userEvent.click(screen.getByRole('button', { name: /crea utente/i }));
+    expect(await screen.findByText(/almeno 12 caratteri/)).toBeInTheDocument();
+    expect(createUserMock).not.toHaveBeenCalled();
+  });
+
+  it('deletes a group only after the impact report is loaded and its NAME is typed (R10.3)', async () => {
+    let resolveSummary;
+    usersApi.getGroupSummary.mockImplementation(() => new Promise((resolve) => { resolveSummary = resolve; }));
+    usersApi.deleteGroup.mockResolvedValue({ success: true, id: 'grp-2', report: { projects: 4, users: 2 } });
+    render(<UserManager />);
+    expect(await screen.findByText('mario')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /gruppi/i }));
+    const deleteButtons = await screen.findAllByRole('button', { name: /elimina$/i });
+    await userEvent.click(deleteButtons[deleteButtons.length - 1]);
+
+    const confirm = screen.getByRole('button', { name: /elimina definitivamente/i });
+    const nameInput = screen.getByLabelText('Nome del gruppo da eliminare');
+    // Riepilogo in caricamento: niente conferma, campo spento.
+    expect(nameInput).toBeDisabled();
+    expect(confirm).toBeDisabled();
+
+    resolveSummary({ projects: 4, users: 2, connections: 0, file_sources: 0, datasources: 0, api_connections: 0, schedules: 0 });
+    await waitFor(() => expect(nameInput).not.toBeDisabled());
+    expect(screen.getByText('Verrà eliminato')).toBeInTheDocument();
+
+    // L'id non basta: serve il nome.
+    await userEvent.type(nameInput, 'grp-2');
+    expect(confirm).toBeDisabled();
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, 'Group Two');
+    expect(confirm).not.toBeDisabled();
+    await userEvent.click(confirm);
+
+    await waitFor(() => expect(usersApi.deleteGroup).toHaveBeenCalledWith('grp-2'));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith(expect.stringMatching(/4 progetti, 2 utenti/)));
+  });
+
+  it('cannot confirm a group deletion when the impact report fails', async () => {
+    usersApi.getGroupSummary.mockRejectedValue(new Error('boom'));
+    render(<UserManager />);
+    expect(await screen.findByText('mario')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /gruppi/i }));
+    const deleteButtons = await screen.findAllByRole('button', { name: /elimina$/i });
+    await userEvent.click(deleteButtons[deleteButtons.length - 1]);
+    expect(await screen.findByText(/senza sapere cosa verrà eliminato/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Nome del gruppo da eliminare')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /elimina definitivamente/i })).toBeDisabled();
   });
 });

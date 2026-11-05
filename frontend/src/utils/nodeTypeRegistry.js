@@ -1,4 +1,5 @@
 import { nd } from './nodeHelpers';
+import { REST_AUTH_FIELD, persistableRestHeaders } from './restSecrets';
 
 // Backend names are canonical; reactFlowType preserves the editors' render keys.
 // Only these data fields are persisted. Runtime data is deliberately absent.
@@ -59,6 +60,8 @@ export const NODE_TYPES = {
     rest_url: '',
     rest_method: 'POST',
     rest_headers: [],
+    // Credenziali REST: riferimento al connettore API, mai il segreto (R10.8).
+    [REST_AUTH_FIELD]: '',
     rest_body_mapping: [],
     rest_batch_mode: 'batch',
     rest_batch_size: 1000,
@@ -214,6 +217,8 @@ export function persistedNodeData(node) {
   for (const [key, field] of Object.entries(entry?.fields || {})) {
     if (field.persisted) data[key] = nd(node, key, structuredClone(field.default));
   }
+  // Segreti mai nel canvas (utils/restSecrets, audit R10.8).
+  if (Array.isArray(data.rest_headers)) data.rest_headers = persistableRestHeaders(data.rest_headers);
   return { ...data, ...backendAccessFlags(node) };
 }
 

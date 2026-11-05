@@ -45,7 +45,6 @@ function AllowedGroupsSelectorPanel({
   embedded = false,
   onClose = null,
 }) {
-  const { user } = useAuth();
   const toast = useToast();
 
   const [loading, setLoading] = useState(false);
@@ -62,7 +61,10 @@ function AllowedGroupsSelectorPanel({
   // esistenti (audit R10.6). Finche' false, il pannello e' in sola lettura.
   const [sharesLoaded, setSharesLoaded]       = useState(false);
 
-  const ownerGroupId = user?.group_id;
+  // Gruppo proprietario della RISORSA, dal server (risposta delle
+  // condivisioni): non il gruppo dell'utente, che per un superadmin e' un
+  // altro (audit R10.7). Finche' non e' noto il pannello e' bloccato.
+  const [ownerGroupId, setOwnerGroupId]       = useState(null);
 
   const selectableGroups = useMemo(
     () => (allGroups || []).filter(g => g.group_id !== ownerGroupId && g.group_id !== MAGIC_ALL),
@@ -109,6 +111,7 @@ function AllowedGroupsSelectorPanel({
         setAllChecked(hasAll);
         setSelected(ids.filter(id => id !== MAGIC_ALL));
         setInitialSelected(ids);
+        setOwnerGroupId(sharesRes.value?.owner_group_id ?? null);
         setSharesLoaded(true);
       } else if (sharesRes.reason?.response?.status === 404) {
         // Nessuna share registrata: stato pulito. Lo status HTTP e' l'unico

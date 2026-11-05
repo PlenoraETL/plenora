@@ -66,7 +66,9 @@ export { getApiStatus, getApiIcon, formatTimeAgo };
 
 export default function ApiConnectionCard({
   connection,
-  isSuperadmin,
+  // can.editApiConnection / can.shareResources calcolati dalla pagina.
+  canEdit = false,
+  canShare = false,
   onEdit,
   onDelete,
   onQuickTest,
@@ -75,7 +77,6 @@ export default function ApiConnectionCard({
   const api = connection;
   const { status, statusLabel, quotaPercent } = getApiStatus(api);
   const sc = STATUS_CFG[status];
-  const canEdit = api.can_edit !== false;
 
   return (
     <div className={`acm__card ${sc.cls}`}>
@@ -86,7 +87,7 @@ export default function ApiConnectionCard({
           <div className="acm__card-header-info">
             <div className="acm__card-name">
               {api.name}
-              {!canEdit && (
+              {api.can_edit === false && (
                 <span
                   title="Solo un superadmin può modificare questa risorsa"
                   className="acm__lock-hint"
@@ -126,7 +127,7 @@ export default function ApiConnectionCard({
             {canEdit && (
               <button type="button" className="acm__icon-btn" title="Modifica" aria-label="Modifica connettore" onClick={()=>onEdit?.(api)}>⚙️</button>
             )}
-            {isSuperadmin && (
+            {canShare && (
               <button type="button" className="acm__icon-btn" title="Gestisci condivisione cross-gruppo" aria-label="Gestisci condivisione cross-gruppo" onClick={()=>onShare?.(api)}>🔗</button>
             )}
             {canEdit && (

@@ -18,23 +18,14 @@
  *   // client.js
  *   if (status === 401) authBus.onUnauthorized?.();
  */
-/**
- * onLogout: chiamato da AuthContext.logout() per permettere ai moduli
- * con cache in-memory (es. TransformNode.registryCache) di invalidarsi.
- */
-const logoutListeners = new Set();
+// Le cache e gli store da svuotare all'uscita NON passano da qui: si
+// registrano in utils/session (resetSession, chiamato da AuthContext.logout).
 // Prima di togliere l'utente (uscita o 401): chi ha lavoro in sospeso lo
 // mette al sicuro finche' l'utente e' ancora noto (copia di sicurezza).
 const beforeLogoutListeners = new Set();
 
 export const authBus = {
   onUnauthorized: null,
-
-  /** Registra un listener logout. Ritorna la funzione di unsubscribe. */
-  addLogoutListener(fn) {
-    logoutListeners.add(fn);
-    return () => logoutListeners.delete(fn);
-  },
 
   /** Registra un listener chiamato PRIMA di togliere l'utente. */
   addBeforeLogoutListener(fn) {
@@ -47,8 +38,4 @@ export const authBus = {
     beforeLogoutListeners.forEach(fn => { try { fn(); } catch { /* non blocca l'uscita */ } });
   },
 
-  /** Chiamato da AuthContext.logout() — notifica tutti i listener registrati. */
-  emitLogout() {
-    logoutListeners.forEach(fn => fn());
-  },
 };

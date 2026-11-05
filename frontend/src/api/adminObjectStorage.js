@@ -15,8 +15,11 @@ export async function deleteAllStoragePreviews(params = {}) {
   return response.data;
 }
 
-export async function cleanupOrphanStorage() {
-  const response = await http.post('/projects/admin/cleanup-orphans', null, {
+// Il perimetro della bonifica e' la lista di project_id mostrata e confermata
+// (audit R10.4): il server tocca solo quelli, e solo se sono orfani.
+export async function cleanupOrphanStorage(projectIds) {
+  if (!Array.isArray(projectIds)) throw new Error('cleanupOrphanStorage: perimetro (project_ids) obbligatorio');
+  const response = await http.post('/projects/admin/cleanup-orphans', { project_ids: projectIds }, {
     params: { dry_run: false },
   });
   return response.data;

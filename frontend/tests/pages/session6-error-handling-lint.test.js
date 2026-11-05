@@ -65,12 +65,11 @@ describe('sessione 6 frontend error handling lint', () => {
     expect(window).toContain('toast.warning');
   });
 
-  it('UserManager password validation usa < 12 char', () => {
+  it('UserManager password validation usa la regola unica (12 caratteri)', () => {
+    // Fase 5 T1: la soglia vive in utils/passwordRule (uguale al backend,
+    // tests/shared/passwordRule.contract.test.js); qui solo che la usi.
     const src = readSrc('pages/UserManager.jsx');
-    // Pattern: deve esserci `newPassword.length < 12`, NON `< 6`
-    expect(src).toContain('newPassword.length < 12');
-    expect(src).toContain('Minimo 12 caratteri');
-    // Anti-regression: no piu' < 6 hardcoded
-    expect(src).not.toMatch(/newPassword\.length\s*<\s*6\b/);
+    expect(src).toContain('passwordProblem(newPassword)');
+    expect(src).not.toMatch(/newPassword.lengths*<s*d/);
   });
 });

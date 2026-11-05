@@ -71,11 +71,11 @@ describe('admin object storage api contract', () => {
       '../../src/api/adminObjectStorage'
     );
 
-    await cleanupOrphanStorage();
+    await cleanupOrphanStorage(['p-1']);
 
     expect(httpMock.post).toHaveBeenCalledWith(
       '/projects/admin/cleanup-orphans',
-      null,
+      { project_ids: ['p-1'] },
       { params: { dry_run: false } },
     );
   });

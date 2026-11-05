@@ -25,6 +25,8 @@ import { EDITOR_ACTION_NAMES } from '../components/editor/editorActions';
 import { hasUnsavedChanges } from './saveState';
 import { derivedColumnsForSave } from './useColumnStore';
 import { requestErrorMessage } from '../utils/errorMessages';
+import { registerSessionReset } from '../utils/session';
+import { FRONTEND_ENV } from '../config/runtimeEnv';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
@@ -1016,11 +1018,20 @@ export const createCanvasStore = () => create(
 
     };
     },
-    { name: 'UrbyETL-Canvas' }
+    // Devtools solo in sviluppo: in produzione lo stato (grafo, connessioni)
+    // non si espone all'estensione del browser (audit R10.8).
+    { name: 'UrbyETL-Canvas', enabled: FRONTEND_ENV.isDev }
   )
 );
 
 const useCanvasStore = createCanvasStore();
+
+// All'uscita il grafo dell'utente non resta in memoria (audit R5.5); la sola
+// lettura torna attiva finche' il prossimo editor non la reimposta dal ruolo.
+registerSessionReset('canvasStore', () => {
+  useCanvasStore.getState().reset();
+  useCanvasStore.setState({ isReadOnly: true }, false, 'sessionReset');
+});
 
 export { hasUnsavedChanges } from './saveState';
 

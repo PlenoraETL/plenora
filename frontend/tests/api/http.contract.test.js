@@ -177,6 +177,23 @@ describe('api/http error interceptor contract', () => {
     expect(sessionStorage.getItem('urby_user')).toBeNull();
     expect(authBus.onUnauthorized).toHaveBeenCalledTimes(1);
   });
+
+  it('a 401 on /auth/login is wrong credentials, not a logout (R5-N9)', async () => {
+    const onRejected = await loadRejectedInterceptor();
+    const { authBus } = await import('../../src/utils/authBus');
+    authBus.onUnauthorized = vi.fn();
+    sessionStorage.setItem('urby_token', 'current-token');
+    const error = {
+      message: 'Axios fallback',
+      config: { url: '/auth/login', method: 'post' },
+      response: { status: 401, data: { error: 'auth_invalid_credentials', message: 'Credenziali non valide' } },
+    };
+
+    await expect(onRejected(error)).rejects.toBe(error);
+
+    expect(authBus.onUnauthorized).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('urby_token')).toBe('current-token');
+  });
 });
 
 // T3 / R5.2 + N9: il 401 chiude la sessione una volta sola, e solo la

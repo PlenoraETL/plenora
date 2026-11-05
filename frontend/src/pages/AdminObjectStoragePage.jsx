@@ -11,6 +11,8 @@ import {
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { humanizeErrorMessage } from '../utils/errorMessages';
+import { useAuth } from '../context/AuthContext';
+import { can } from '../utils/permissions';
 import '../styles/AdminObjectStoragePage.css';
 
 const DOMAINS = [
@@ -46,10 +48,14 @@ export default function AdminObjectStoragePage() {
   const [purgingPreviews, setPurgingPreviews] = useState(false);
   const [cleaningOrphans, setCleaningOrphans] = useState(false);
   const confirmModal = useConfirmModal();
+  const { user } = useAuth();
+  const canManage = can.manageObjectStorage(user);
   const groupedResults = scope === 'canonical' && domain === 'results';
-  const orphanProjects = (projectCatalog?.projects || []).filter(
-    (project) => project.project_name === 'Progetto eliminato',
-  );
+  // Orfano = il server dice che il progetto non esiste piu' (per id, non per
+  // il nome mostrato). Il catalogo e' gia' quello del filtro di gruppo.
+  const orphanProjects = (projectCatalog?.projects || []).filter((project) => project.orphan === true);
+  // Gruppo del catalogo caricato: e' il perimetro mostrato e chiesto.
+  const [catalogGroup, setCatalogGroup] = useState('');
 
   const load = useCallback(async (requestedCursor = null) => {
     setLoading(true);
@@ -69,6 +75,7 @@ export default function AdminObjectStoragePage() {
         ]);
         setPage(data);
         setProjectCatalog(catalog);
+        setCatalogGroup(groupId.trim());
       } else {
         setPage(await objectRequest);
         setProjectCatalog(null);
@@ -167,15 +174,20 @@ export default function AdminObjectStoragePage() {
   };
 
   const cleanupOrphans = async () => {
+    // Perimetro = quello mostrato: gli orfani del catalogo caricato (filtro di
+    // gruppo compreso). La richiesta porta esattamente questi project_id.
+    const scopeIds = orphanProjects.map((project) => project.project_id);
+    if (!scopeIds.length) return;
     const orphanResults = orphanProjects.reduce(
       (count, project) => count + project.results.length, 0,
     );
+    const perimeter = catalogGroup ? `del gruppo ${catalogGroup}` : 'di tutti i gruppi';
     const confirmed = await confirmModal.confirm({
       title: 'Bonificare i risultati orfani?',
       message: (
-        `Saranno rimossi ${orphanResults} risultati appartenenti a `
-        + `${orphanProjects.length} progetti non piu esistenti, inclusi i relativi file. `
-        + 'I progetti attivi non verranno modificati.'
+        `Saranno rimossi ${orphanResults} risultati ${perimeter} appartenenti a `
+        + `${orphanProjects.length} progetti non più esistenti, inclusi i relativi file e i dati intermedi. `
+        + 'Nessun altro progetto viene toccato.'
       ),
       confirmText: 'Bonifica orfani',
       cancelText: 'Annulla',
@@ -186,7 +198,7 @@ export default function AdminObjectStoragePage() {
     setError('');
     setNotice('');
     try {
-      const report = await cleanupOrphanStorage();
+      const report = await cleanupOrphanStorage(scopeIds);
       const deleted = report?.orphan_results?.rows_deleted || 0;
       const errors = report?.errors?.length || 0;
       setNotice(
@@ -213,9 +225,11 @@ export default function AdminObjectStoragePage() {
         <header className="storage-admin__header">
           <div><h1>Object Storage</h1><p>Explorer del bucket runtime, riservato ai superadmin.</p></div>
           <div className="storage-admin__header-actions">
-            <button type="button" className="storage-admin__purge" onClick={purgePreviews} disabled={loading || purgingPreviews}>
-              {purgingPreviews ? 'Eliminazione preview...' : 'Elimina tutte le preview'}
-            </button>
+            {canManage && (
+              <button type="button" className="storage-admin__purge" onClick={purgePreviews} disabled={loading || purgingPreviews}>
+                {purgingPreviews ? 'Eliminazione preview...' : 'Elimina tutte le preview'}
+              </button>
+            )}
             <button type="button" onClick={() => load(cursor)} disabled={loading}>
               {loading ? 'Caricamento…' : 'Aggiorna'}
             </button>
@@ -239,9 +253,11 @@ export default function AdminObjectStoragePage() {
                 {orphanProjects.length} progetti eliminati conservano ancora risultati nello storage.
               </span>
             </div>
-            <button type="button" onClick={cleanupOrphans} disabled={loading || cleaningOrphans}>
-              {cleaningOrphans ? 'Bonifica in corso...' : 'Bonifica orfani'}
-            </button>
+            {canManage && (
+              <button type="button" onClick={cleanupOrphans} disabled={loading || cleaningOrphans}>
+                {cleaningOrphans ? 'Bonifica in corso...' : 'Bonifica orfani'}
+              </button>
+            )}
           </div>
         )}
 
@@ -287,7 +303,7 @@ export default function AdminObjectStoragePage() {
                     <td className="storage-admin__key" title={item.key}>{item.key}</td><td>{formatBytes(item.size_bytes)}</td><td>{new Date(item.last_modified).toLocaleString('it-IT')}</td>
                     <td className="storage-admin__actions">
                       <button type="button" className="storage-admin__download" onClick={() => download(item.key)} disabled={downloading === item.key || deleting === item.key}>{downloading === item.key ? '…' : 'Scarica'}</button>
-                      <button type="button" className="storage-admin__delete" onClick={() => remove(item)} disabled={deleting === item.key || downloading === item.key}>{deleting === item.key ? 'Eliminazione…' : 'Elimina'}</button>
+                      {canManage && <button type="button" className="storage-admin__delete" onClick={() => remove(item)} disabled={deleting === item.key || downloading === item.key}>{deleting === item.key ? 'Eliminazione…' : 'Elimina'}</button>}
                     </td>
                   </tr>
                 ))}

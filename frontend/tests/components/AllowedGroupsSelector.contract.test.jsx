@@ -86,4 +86,13 @@ describe('AllowedGroupsSelector contract', () => {
     rerender(<AllowedGroupsSelector resourceType="connection" resourceId="c-1" />);
     expect(await screen.findByText('Comune A')).toBeTruthy();
   });
+
+  it('excludes the owner group of the RESOURCE (from the server), not the user group (R10.7)', async () => {
+    // Superadmin del gruppo grp-owner condivide una risorsa del gruppo grp-a.
+    sharesMock.getShares.mockResolvedValue({ group_ids: [], owner_group_id: 'grp-a' });
+    render(<AllowedGroupsSelector resourceType="connection" resourceId="c-1" />);
+
+    expect(await screen.findByText('Owner')).toBeTruthy();
+    expect(screen.queryByText('Comune A')).toBeNull();
+  });
 });

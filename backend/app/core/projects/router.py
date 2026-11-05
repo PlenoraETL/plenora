@@ -11,8 +11,8 @@ from app.core.projects.canvas_validation import _StaticCanvasService
 from app.core.projects.canvas_validation import validate_project_chain
 from app.shared.execution.lookup_mapping import lookup_value_text
 
-from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, field_validator
+from fastapi import APIRouter, Body, HTTPException, Depends, Query
+from pydantic import BaseModel, Field, field_validator
 from typing import Annotated, Any, List, Optional
 
 from app.utils.logger import get_logger
@@ -1129,10 +1129,16 @@ def validate_project_canvas(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
+class OrphanCleanupScope(BaseModel):
+    """Perimetro confermato dall'operatore: solo questi project_id orfani."""
+    project_ids: List[str] = Field(..., max_length=5000)
+
+
 @router.post("/admin/cleanup-orphans")
 @audit_action(action="admin.cleanup_orphans")
 def admin_cleanup_orphans(
     dry_run: bool = True,
+    scope: Optional[OrphanCleanupScope] = Body(None),
     current_user: CurrentUser = Depends(require_superadmin),
 ) -> JsonObject:
     """Cleanup degli orfani cross-DB (results / intermediate storage).
@@ -1145,6 +1151,10 @@ def admin_cleanup_orphans(
     Solo superadmin. Per default è dry-run (audit) — passare `?dry_run=false`
     per eseguire effettivamente il cleanup.
 
+    Con un corpo `{"project_ids": [...]}` la bonifica tocca SOLO quei
+    progetti, e solo se sono davvero orfani: il perimetro della richiesta e'
+    quello che l'operatore ha visto e confermato (audit frontend R10.4).
+
     Returns: report dettagliato con conteggi e lista project_id rimossi.
     """
     logger.info(
@@ -1152,4 +1162,7 @@ def admin_cleanup_orphans(
         f"(dry_run={dry_run})",
         op="admin_cleanup_orphans"
     )
-    return orphan_cleanup_module.cleanup_orphans(dry_run=dry_run)
+    return orphan_cleanup_module.cleanup_orphans(
+        dry_run=dry_run,
+        project_ids=scope.project_ids if scope is not None else None,
+    )

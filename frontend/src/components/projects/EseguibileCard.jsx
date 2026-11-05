@@ -6,7 +6,8 @@ import React from 'react';
  * only). Visual style derivato dal modular system di ProjectCard
  * ma piu' compatto (no schedule, no last-run status).
  */
-function EseguibileCard({ item, isAdmin, onExecute, onDelete }) {
+// onDelete arriva solo se l'utente puo' eliminare (can.manageEseguibile).
+function EseguibileCard({ item, onExecute, onDelete }) {
   const fmt = (item.default_output_format || 'xlsx').toUpperCase();
   return (
     <div className="pl__card" onClick={onExecute}>
@@ -30,7 +31,7 @@ function EseguibileCard({ item, isAdmin, onExecute, onDelete }) {
         <div className="pl__card-footer">
           <span className="pl__status">On-demand</span>
           <div className="pl__card-actions">
-            {isAdmin && (
+            {onDelete && (
               <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
                 onClick={e => { e.stopPropagation(); onDelete(); }}
                 title="Elimina eseguibile"

@@ -258,7 +258,8 @@ function ConnectionManager() {
                   onEdit={handleOpenModal}
                   onDelete={handleDelete}
                   onShare={setSharingConnection}
-                  isSuperadmin={isSuperadmin}
+                  canEditOf={(c) => can.editConnection(user, c)}
+                  canShare={can.shareResources(user)}
                   arcgis={false}
                 />
               )}
@@ -273,7 +274,8 @@ function ConnectionManager() {
                   onEdit={handleOpenModal}
                   onDelete={handleDelete}
                   onShare={setSharingConnection}
-                  isSuperadmin={isSuperadmin}
+                  canEditOf={(c) => can.editConnection(user, c)}
+                  canShare={can.shareResources(user)}
                   arcgis={true}
                 />
               )}
@@ -283,6 +285,7 @@ function ConnectionManager() {
                     !isSuperadmin || connection.group_id === user?.group_id
                   ))}
                   canEdit={canCreateConnection}
+                  canEditItem={(item) => can.editConnection(user, item)}
                   toast={toast}
                   confirm={confirmModal.confirm}
                 />
@@ -486,7 +489,7 @@ function EmptyState({ onNew, canCreate = true }) {
     </div>
   );
 }
-function ConnTable({ title, subtitle, connections, testResults, testingId, onTest, onEdit, onDelete, onShare, isSuperadmin, arcgis }) {
+function ConnTable({ title, subtitle, connections, testResults, testingId, onTest, onEdit, onDelete, onShare, canEditOf, canShare, arcgis }) {
   return (
     <div className="cm__section">
       <div className="cm__section-header">
@@ -510,13 +513,13 @@ function ConnTable({ title, subtitle, connections, testResults, testingId, onTes
               const info       = conn._typeInfo;
               const testResult = testResults[conn.id];
               const isTesting  = testingId === conn.id;
-              const canEdit    = conn.can_edit !== false;
+              const canEdit    = canEditOf(conn);
               return (
                 <tr key={conn.id} className="cm__tr">
                   <td>
                     <div className="cm__conn-name">
                       {conn.name}
-                      {!canEdit && (
+                      {conn.can_edit === false && (
                         <span
                           title="Solo un superadmin può modificare questa risorsa"
                           className="cm__field-help-icon"
@@ -564,7 +567,7 @@ function ConnTable({ title, subtitle, connections, testResults, testingId, onTes
                       {canEdit && (
                         <button type="button" className="cm__btn cm__btn--ghost cm__btn--sm" onClick={() => onEdit(conn)}>✏️ Modifica</button>
                       )}
-                      {isSuperadmin && (
+                      {canShare && (
                         <button
                           type="button"
                           className="cm__btn cm__btn--ghost cm__btn--sm"

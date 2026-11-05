@@ -238,7 +238,8 @@ describe('canvasSerializer contract', () => {
           dest_type: 'rest',
           rest_url: 'https://api.example.com/items',
           rest_method: 'PATCH',
-          rest_headers: [{ name: 'Authorization', value: 'Bearer token', secret: true }],
+          rest_headers: [{ name: 'Authorization', value: 'Bearer token', secret: true }, { name: 'X-Client', value: 'plenora' }],
+          rest_auth_api_id: 'api-1',
           rest_body_mapping: [{ source: 'city', target: 'payload.city', required: true }],
           rest_batch_mode: 'per_record',
           rest_batch_size: 25,
@@ -256,7 +257,10 @@ describe('canvasSerializer contract', () => {
       dest_type: 'rest',
       rest_url: 'https://api.example.com/items',
       rest_method: 'PATCH',
-      rest_headers: [{ name: 'Authorization', value: 'Bearer token', secret: true }],
+      // Segreti mai nel canvas (R10.8): la credenziale e' il riferimento al
+      // connettore; l'intestazione segreta di un canvas vecchio non rientra.
+      rest_headers: [{ name: 'X-Client', value: 'plenora' }],
+      rest_auth_api_id: 'api-1',
       rest_body_mapping: [{ source: 'city', target: 'payload.city', required: true }],
       rest_batch_mode: 'per_record',
       rest_batch_size: 25,
@@ -271,7 +275,10 @@ describe('canvasSerializer contract', () => {
       rest_body_mapping: [{ source: 'city', target: 'payload.city', required: true }],
       rest_batch_mode: 'per_record',
       rest_batch_size: 25,
+      rest_auth_api_id: 'api-1',
+      rest_headers: [{ name: 'X-Client', value: 'plenora' }],
     }));
+    expect(JSON.stringify(serialized)).not.toContain('Bearer token');
   });
 
   it('roundtrips a complex join edge without losing join conditions or spatial metadata', () => {

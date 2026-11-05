@@ -30,6 +30,11 @@ from app.core.auth.visibility import is_resource_visible
 from app.core.carica import arcgis_write_boundary as arcgis_write_boundary_module
 from app.core.carica.multilayer_artifact_registry import resolve_multilayer_artifact
 from app.core.carica.executor import CaricaExecutor
+from app.core.carica.rest_auth import (
+    RestAuthUnavailable,
+    resolve_rest_auth_headers,
+    with_auth_headers,
+)
 from app.core.carica.rest_config_parser import parse_carica_rest_config
 from app.core.carica.rest_write_boundary import execute_carica_rest_write
 from app.core.connections.rest_sink import RestSinkHttpResponse
@@ -344,16 +349,35 @@ def execute_rest_write(
     *,
     progress: ProgressFn,
     committed_progress: Optional[ProgressFn] = None,
+    expected_group_id: Optional[str] = None,
 ) -> CaricaTaskResultPayload:
     """Coordinate REST write progress while the domain owns REST payload writes."""
     progress(15, "Preparazione scrittura REST...")
 
     try:
         parsed_config = parse_carica_rest_config(carica_node_data)
+        # Credenziali per riferimento al connettore API (mai nel canvas).
+        group_id = str(expected_group_id or "").strip()
+        if not group_id and carica_node_data.get("rest_auth_api_id"):
+            metadata = _get_project_service().get_project_metadata(project_id)
+            group_id = str(getattr(metadata, "group_id", None) if metadata else "").strip()
+        try:
+            auth_headers = resolve_rest_auth_headers(carica_node_data, group_id)
+        except RestAuthUnavailable as exc:
+            return {
+                "status": "connection_error",
+                "success": False,
+                "error": "carica_rest_auth_unavailable",
+                "message": str(exc),
+                "error_message": str(exc),
+                "rows_written": 0,
+                "total_rows": len(df),
+            }
+        sink_config = with_auth_headers(parsed_config.sink_config, auth_headers)
         progress(25, "Scrittura REST...")
         outcome = execute_carica_rest_write(
             df=df,
-            config=parsed_config.sink_config,
+            config=sink_config,
             http_client=create_default_rest_http_client(),
         )
         result = cast(CaricaTaskResultPayload, outcome.to_task_result())

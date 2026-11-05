@@ -26,7 +26,7 @@ import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteW
 import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import { useTheme } from '../hooks/useTheme';
-import { can, role } from '../utils/permissions';
+import { can } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
 import { humanizeErrorMessage } from '../utils/errorMessages';
 import '../styles/ProjectList.css';
@@ -171,7 +171,6 @@ function ProjectList() {
     }
   };
 
-  const isAdmin       = role.isAdminOrAbove(user);
   const canCreateProj = can.createProject(user);
 
   const handleDeleteEseguibile = async (id, name) => {
@@ -424,10 +423,10 @@ function ProjectList() {
                   ]}
                   scheduleCount={getScheduleCount(project.id)}
                   onOpen={() => handleOpenProject(project)}
-                  onDelete={() => handleDeleteProject(project.id, project.name)}
+                  onDelete={can.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
                   onClone={canCreateProj ? () => handleCloneProject(project) : null}
-                  onRename={canCreateProj ? (newName) => handleRenameProject(project, newName) : null}
-                  onSetTags={canCreateProj ? (tags) => handleSetTags(project, tags) : null}
+                  onRename={can.editProject(user, project) ? (newName) => handleRenameProject(project, newName) : null}
+                  onSetTags={can.editProject(user, project) ? (tags) => handleSetTags(project, tags) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -463,10 +462,10 @@ function ProjectList() {
                   ]}
                   scheduleCount={getScheduleCount(project.id)}
                   onOpen={() => handleOpenProject(project)}
-                  onDelete={() => handleDeleteProject(project.id, project.name)}
+                  onDelete={can.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
                   onClone={canCreateProj ? () => handleCloneProject(project) : null}
-                  onRename={canCreateProj ? (newName) => handleRenameProject(project, newName) : null}
-                  onSetTags={canCreateProj ? (tags) => handleSetTags(project, tags) : null}
+                  onRename={can.editProject(user, project) ? (newName) => handleRenameProject(project, newName) : null}
+                  onSetTags={can.editProject(user, project) ? (tags) => handleSetTags(project, tags) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -497,17 +496,18 @@ function ProjectList() {
                 ]}
                 scheduleCount={getScheduleCount(project.id)}
                 onOpen={() => handleOpenProject(project)}
-                onDelete={() => handleDeleteProject(project.id, project.name)}
+                onDelete={can.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
                 onClone={canCreateProj ? () => handleCloneProject(project) : null}
-                onRename={canCreateProj ? (newName) => handleRenameProject(project, newName) : null}
-                onSetTags={canCreateProj ? (tags) => handleSetTags(project, tags) : null}
+                onRename={can.editProject(user, project) ? (newName) => handleRenameProject(project, newName) : null}
+                onSetTags={can.editProject(user, project) ? (tags) => handleSetTags(project, tags) : null}
                 onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
               />
             ))}
           </ProjectSection>
 <EseguibiliSection
             items={filterBySearch(eseguibili)}
-            isAdmin={isAdmin}
+            canCreate={can.createEseguibile(user)}
+            canDelete={(item) => can.manageEseguibile(user, item)}
             onNew={openEsegSelector}
             onExecute={(item) => setExecuteEseguibileId(item.id)}
             onDelete={(item) => handleDeleteEseguibile(item.id, item.name)}

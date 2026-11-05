@@ -27,6 +27,7 @@ import { inferProjectSchemas } from '../api';
 import { serializeCanvas } from '../utils/canvasSerializer';
 import { columnSignature, normalizeSchemasResponse } from '../utils/columnSource';
 import { humanizeError } from '../utils/errorMessages';
+import { registerSessionReset } from '../utils/session';
 
 const NO_ENSURE = null;
 const INITIAL = { projectId: null, schemas: {}, states: {}, status: 'idle', error: null, key: null };
@@ -34,6 +35,11 @@ const INITIAL = { projectId: null, schemas: {}, states: {}, status: 'idle', erro
 export const createColumnStore = () => create(() => ({ ...INITIAL, refresh: () => {}, ensure: NO_ENSURE }));
 
 const useColumnStore = createColumnStore();
+
+// All'uscita le colonne dell'editor dell'utente non restano in memoria (R5.5).
+registerSessionReset('columnStore', () => {
+  useColumnStore.setState({ ...INITIAL, refresh: () => {}, ensure: NO_ENSURE });
+});
 
 // Ritardo dopo l'ultima modifica: piu' modifiche ravvicinate, una richiesta.
 export const COLUMN_SYNC_DELAY_MS = 250;

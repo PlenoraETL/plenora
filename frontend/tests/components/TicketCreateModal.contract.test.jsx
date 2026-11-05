@@ -52,7 +52,7 @@ describe('TicketCreateModal', () => {
   it('utente non-admin NON vede il dropdown Tipo', () => {
     render(
       <TicketCreateModal
-        meta={META} userRole="user"
+        meta={META} user={{ role: 'user' }}
         onClose={() => {}} onCreated={() => {}}
       />,
     );
@@ -66,7 +66,7 @@ describe('TicketCreateModal', () => {
   it('admin vede il dropdown Tipo con entrambi i kind', () => {
     render(
       <TicketCreateModal
-        meta={META} userRole="admin"
+        meta={META} user={{ role: 'admin' }}
         onClose={() => {}} onCreated={() => {}}
       />,
     );
@@ -78,7 +78,7 @@ describe('TicketCreateModal', () => {
   it('superadmin vede il dropdown Tipo', () => {
     render(
       <TicketCreateModal
-        meta={META} userRole="superadmin"
+        meta={META} user={{ role: 'superadmin' }}
         onClose={() => {}} onCreated={() => {}}
       />,
     );
@@ -91,7 +91,7 @@ describe('TicketCreateModal', () => {
     const user = userEvent.setup();
     render(
       <TicketCreateModal
-        meta={META} userRole="user"
+        meta={META} user={{ role: 'user' }}
         onClose={() => {}} onCreated={() => {}}
       />,
     );
@@ -115,7 +115,7 @@ describe('TicketCreateModal', () => {
     const user = userEvent.setup();
     render(
       <TicketCreateModal
-        meta={META} userRole="user"
+        meta={META} user={{ role: 'user' }}
         onClose={() => {}} onCreated={() => {}}
       />,
     );
@@ -138,7 +138,7 @@ describe('TicketCreateModal', () => {
     const onCreated = vi.fn();
     render(
       <TicketCreateModal
-        meta={META} userRole="user"
+        meta={META} user={{ role: 'user' }}
         onClose={() => {}} onCreated={onCreated}
       />,
     );
@@ -171,7 +171,7 @@ describe('TicketCreateModal', () => {
     const user = userEvent.setup();
     render(
       <TicketCreateModal
-        meta={META} userRole="admin"
+        meta={META} user={{ role: 'admin' }}
         onClose={() => {}} onCreated={() => {}}
       />,
     );
@@ -202,7 +202,7 @@ describe('TicketCreateModal', () => {
     const user = userEvent.setup();
     render(
       <TicketCreateModal
-        meta={META} userRole="user"
+        meta={META} user={{ role: 'user' }}
         onClose={() => {}} onCreated={onCreated}
       />,
     );
@@ -227,7 +227,7 @@ describe('TicketCreateModal', () => {
     const user = userEvent.setup();
     render(
       <TicketCreateModal
-        meta={META} userRole="user"
+        meta={META} user={{ role: 'user' }}
         onClose={onClose} onCreated={() => {}}
       />,
     );
@@ -242,7 +242,7 @@ describe('TicketCreateModal', () => {
     const user = userEvent.setup();
     render(
       <TicketCreateModal
-        meta={META} userRole="user"
+        meta={META} user={{ role: 'user' }}
         onClose={onClose} onCreated={() => {}}
       />,
     );
@@ -256,7 +256,7 @@ describe('TicketCreateModal', () => {
   it('le severity e categorie nel dropdown vengono da meta', () => {
     render(
       <TicketCreateModal
-        meta={META} userRole="user"
+        meta={META} user={{ role: 'user' }}
         onClose={() => {}} onCreated={() => {}}
       />,
     );
@@ -272,7 +272,7 @@ describe('TicketCreateModal', () => {
   it('senza meta usa fallback severity + categoria=Altro', () => {
     render(
       <TicketCreateModal
-        meta={null} userRole="user"
+        meta={null} user={{ role: 'user' }}
         onClose={() => {}} onCreated={() => {}}
       />,
     );

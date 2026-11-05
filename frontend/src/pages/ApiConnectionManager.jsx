@@ -36,7 +36,7 @@ import {
   testApiConnection,
 } from '../api/apiConnections';
 import { createDataSource } from '../api/datasources';
-import { can, role } from '../utils/permissions';
+import { can } from '../utils/permissions';
 import '../styles/ApiConnectionManager.css';
 import '../components/panels/ResponseConfigBuilder.css';
 import { requestErrorMessage } from '../utils/errorMessages';
@@ -116,7 +116,6 @@ function ApiConnectionManager() {
 
   // Sharing (solo superadmin)
   const [sharingApi, setSharingApi] = useState(null);
-  const isSuperadmin    = role.isSuperadmin(user);
   const canCreateApi    = can.createApiConnection(user);
 
   // Focus management per i 3 dialog inline residui in page (a11y).
@@ -332,7 +331,8 @@ const openWizardForNew = () => {
                   <ApiConnectionCard
                     key={api.id}
                     connection={api}
-                    isSuperadmin={isSuperadmin}
+                    canEdit={can.editApiConnection(user, api)}
+                    canShare={can.shareResources(user)}
                     onEdit={openWizardForEdit}
                     onDelete={(a) => handleDelete(a.id, a.name)}
                     onQuickTest={handleQuickTest}
@@ -348,7 +348,7 @@ const openWizardForNew = () => {
                     <button type="button" className="acm__add-btn" onClick={()=>setShowTemplateLibrary(true)}>📦 Template</button>
                     <button type="button" className="acm__add-btn" onClick={()=>setShowOpenAPIImport(true)}>📋 OpenAPI</button>
                     <button type="button" className="acm__add-btn" onClick={openWizardForNew}>✏️ Manuale</button>
-                    <button type="button" className="acm__add-btn" onClick={()=>setShowDataSourceConfig(true)}>📁 DataSource</button>
+                    {can.createDataSource(user) && <button type="button" className="acm__add-btn" onClick={()=>setShowDataSourceConfig(true)}>📁 DataSource</button>}
                   </div>
                 </div>
                 )}

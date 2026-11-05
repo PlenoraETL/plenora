@@ -3,13 +3,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { navigateMock, httpMock, emitLogoutMock } = vi.hoisted(() => ({
+const { navigateMock, httpMock, resetSessionMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   httpMock: {
     post: vi.fn(),
     get: vi.fn(() => Promise.reject(new Error('non usato'))),
   },
-  emitLogoutMock: vi.fn(),
+  resetSessionMock: vi.fn(),
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -27,11 +27,12 @@ vi.mock('../../src/api/http', () => ({
 vi.mock('../../src/utils/authBus', () => ({
   authBus: {
     onUnauthorized: null,
-    emitLogout: emitLogoutMock,
     emitBeforeLogout: vi.fn(),
-    addLogoutListener: vi.fn(() => () => {}),
   },
 }));
+
+// Il logout svuota store e cache con UNA chiamata (utils/session).
+vi.mock('../../src/utils/session', () => ({ resetSession: resetSessionMock }));
 
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../../src/context/AuthContext';
@@ -114,7 +115,7 @@ describe('AuthContext contract', () => {
     await waitFor(() => {
       expect(screen.getByTestId('token')).toHaveTextContent('');
       expect(screen.getByTestId('username')).toHaveTextContent('');
-      expect(emitLogoutMock).toHaveBeenCalledTimes(1);
+      expect(resetSessionMock).toHaveBeenCalledTimes(1);
       expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
     });
 
@@ -170,7 +171,7 @@ describe('AuthContext contract', () => {
     expect(sessionStorage.getItem('urby_token')).toBeNull();
     expect(sessionStorage.getItem('urby_user')).toBeNull();
     expect(screen.getByTestId('token')).toHaveTextContent('');
-    expect(emitLogoutMock).toHaveBeenCalledTimes(1);
+    expect(resetSessionMock).toHaveBeenCalledTimes(1);
   });
 
   it('still clears session locally when backend /auth/logout rejects', async () => {
@@ -212,7 +213,7 @@ describe('AuthContext contract', () => {
     await waitFor(() => {
       expect(sessionStorage.getItem('urby_token')).toBeNull();
       expect(screen.getByTestId('token')).toHaveTextContent('');
-      expect(emitLogoutMock).toHaveBeenCalledTimes(1);
+      expect(resetSessionMock).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -231,8 +232,8 @@ describe('AuthContext contract', () => {
 
     // Nessuna richiesta al backend: non c'e' nulla da revocare.
     expect(httpMock.post).not.toHaveBeenCalled();
-    // Il clear locale e' no-op ma emitLogout parte lo stesso (cache in-memory).
-    expect(emitLogoutMock).toHaveBeenCalledTimes(1);
+    // Il clear locale e' no-op ma resetSession parte lo stesso (cache in-memory).
+    expect(resetSessionMock).toHaveBeenCalledTimes(1);
   });
 });
 

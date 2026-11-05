@@ -483,4 +483,19 @@ describe('TicketDetail', () => {
       expect(navigateMock).toHaveBeenCalledWith('/tickets');
     });
   });
+
+  it('Rimuovi allegato: solo admin o chi lo ha caricato (R10.9)', async () => {
+    getTicketMock.mockResolvedValue({
+      ...BASE_DETAIL,
+      attachments: [
+        { id: 'att-mio', original_filename: 'mio.png', size_bytes: 1, uploaded_at: '2026-04-18T13:00:00Z', uploaded_by: 'u-other', uploaded_by_username: 'other' },
+        { id: 'att-altrui', original_filename: 'altrui.png', size_bytes: 1, uploaded_at: '2026-04-18T13:00:00Z', uploaded_by: 'u-creator', uploaded_by_username: 'creator' },
+      ],
+    });
+    authState.user = { user_id: 'u-other', username: 'other', role: 'user' };
+    renderDetail();
+    await waitFor(() => screen.getByText('mio.png'));
+    expect(screen.getAllByRole('button', { name: 'Rimuovi' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Elimina ticket' })).toBeNull();
+  });
 });

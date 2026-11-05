@@ -1,32 +1,21 @@
 /**
- * permissions.js — Policy table dei ruoli URBY-ETL
+ * permissions.js — la tabella unica di "chi puo' fare cosa" (audit R10).
  *
- * Centralizza in un unico file tutta la logica "chi può fare cosa".
- * I componenti importano `can.*` (capability) o `role.*` (predicati di ruolo)
- * invece di scrivere direttamente `user?.role === 'viewer'`.
+ * Regole (vietano il ritorno del difetto: tests/shared/permissions.contract):
+ *  1. Nessun confronto sul ruolo (`role ===`, `.role !==`, ...) fuori da
+ *     questo file: i componenti usano `can.*` (azione) o `role.*` (categoria).
+ *  2. Ogni azione distruttiva o amministrativa delle pagine passa da una
+ *     capability `can.*`; il test lega ogni funzione API che modifica dati
+ *     alla sua capability e verifica che chi la importa la usi.
+ *  3. Un'azione non permessa NON si mostra (niente bottoni che portano a un
+ *     403): il bottone esiste solo se la capability e' vera.
+ *  4. Dove il server calcola il permesso sulla risorsa (`can_edit` nelle
+ *     liste), quello e' la fonte: la capability lo legge invece di dedurlo.
  *
- * Vantaggi:
- *  - Le regole sono leggibili come una tabella di verità in un solo posto
- *  - Cambiare i permessi di un ruolo = modifica una funzione, non grep+sed
- *  - Test super semplici (puro JS, niente mock di /me)
- *  - Autocomplete dell'IDE sui nomi delle capability
- *
- * NOTA SICUREZZA: questo file è SOLO UX (mostra/nascondi pulsanti). Il vero
- * enforcement sta nel backend (Depends(require_*), assert_group_access, ecc.).
- * Anche se uno bypassa i check JS via DevTools, il backend rifiuta.
- *
- * Convenzione:
- *  - `can.X(user)`  → usare quando esiste una capability semantica precisa
- *                     ("createSchedule", "shareResources"). Preferito.
- *  - `role.X(user)` → usare per check di "categoria di ruolo" generici
- *                     ("isAdminOrAbove" per mostrare una sezione admin).
- *
- * Se aggiungi un nuovo ruolo o una nuova capability, aggiornare SOLO questo
- * file e poi importare la nuova funzione dove serve.
+ * NOTA SICUREZZA: questo file e' solo UX. Il vero controllo sta nel backend
+ * (Depends(require_*), _check_ownership, compute_can_edit, ...).
  */
 
-// `ROLES` e' interno al modulo + esposto via default export `{ can, role,
-// ROLES }`; l'enum resta semantico nel default export.
 const ROLES = {
   ESECUTORE:  'esecutore',  // ruolo "kiosk": vede SOLO eseguibili, niente altro
   VIEWER:     'viewer',
@@ -57,35 +46,75 @@ export const role = {
   isUserOrAbove,            // user, admin, superadmin (esclude viewer ed esecutore)
   isViewerOrAbove,          // tutti i ruoli "normali" (esclude esecutore)
 };
-// Mappare ogni "azione" a un predicato. Questa è la tabella di policy.
-//
-// Se domani decidi che "editCanvas" deve essere permesso anche ai viewer,
-// editi UN punto qui sotto, non 15 file sparsi.
-//
-// NOTA: per la maggior parte delle capability `esecutore` ritorna FALSE
-// perché vive in una UI separata (kiosk) che non ha quei pulsanti. Le
-// uniche capability vere dell'esecutore sono `runEseguibile` e
-// `changeOwnPassword` (di fatto sempre vere quando è loggato).
+
+// Permesso calcolato dal server sulla risorsa (`can_edit` delle liste):
+// assente = il server non lo dice, decide il ruolo minimo dell'azione.
+const serverAllows = (resource) => resource?.can_edit !== false;
+
+// Stessa regola di backend `_check_ownership` (progetti, schedule, file):
+// admin e superadmin sempre, gli altri solo sulle risorse che hanno creato.
+// Se la risorsa non porta `created_by` decide il backend (403 motivato).
+const ownsOrAdmin = (u, resource) => isAdminOrAbove(u)
+  || (isUserOrAbove(u) && (!resource?.created_by || resource.created_by === u?.user_id));
+
+const TICKET_CLOSED = ['resolved', 'closed'];
+
+// La tabella di policy: un'azione = un predicato.
 export const can = {
-editCanvas:        isUserOrAbove,   // viewer/esecutore sono read-only
+  // ── Canvas e progetti ────────────────────────────────────────────────
+  editCanvas:        isUserOrAbove,   // viewer/esecutore sono read-only
   createProject:     isUserOrAbove,
-  deleteOwnProject:  isUserOrAbove,
-uploadFile:        isUserOrAbove,
-  deleteFile:        isUserOrAbove,
-createConnection:    isAdminOrAbove,
+  editProject:       (u, project) => ownsOrAdmin(u, project),
+  deleteProject:     (u, project) => ownsOrAdmin(u, project),
+
+  // ── File ─────────────────────────────────────────────────────────────
+  uploadFile:        isUserOrAbove,
+  editFile:          (u, file) => isUserOrAbove(u) && serverAllows(file),
+
+  // ── Connessioni e sorgenti (admin del gruppo, flag del server) ───────
+  createConnection:    isAdminOrAbove,
+  editConnection:      (u, connection) => isAdminOrAbove(u) && serverAllows(connection),
   createDataSource:    isAdminOrAbove,
+  editDataSource:      (u, ds) => isAdminOrAbove(u) && serverAllows(ds),
   createApiConnection: isAdminOrAbove,
+  editApiConnection:   (u, api) => isAdminOrAbove(u) && serverAllows(api),
+
+  // ── Schedule: crea admin; esegui/attiva/modifica/elimina come il
+  //    backend (require_schedule_owner: proprietario o admin; gli schedule
+  //    li crea solo un admin, quindi admin e superadmin).
   createSchedule:      isAdminOrAbove,
+  manageSchedule:      (u, schedule) => isAdminOrAbove(u) || (isUserOrAbove(u)
+    && !!schedule?.created_by && schedule.created_by === u?.user_id),
+
+  // ── Eseguibili ───────────────────────────────────────────────────────
   createEseguibile:    isAdminOrAbove,
-shareResources:    isSuperadmin,
-manageUsers:       isAdminOrAbove,  // admin gestisce solo il proprio gruppo
-  manageGroups:      isSuperadmin,    // solo superadmin tocca i gruppi
-  assignAdminRole:   isSuperadmin,    // solo superadmin può creare admin/superadmin
-  createEsecutore:   isAdminOrAbove,  // sia superadmin che admin di gruppo
-seeTechnicalLogs:  isAdminOrAbove,  // tab "Log Tecnici" del LogViewer
-// Tutti i ruoli loggati possono eseguire gli eseguibili visibili al
+  manageEseguibile:    (u, item) => isAdminOrAbove(u) && serverAllows(item),
+  // Tutti i ruoli loggati possono eseguire gli eseguibili visibili al
   // proprio gruppo (incluso esecutore, che è proprio il suo unico scopo).
   runEseguibile:     (u) => !!u?.role && Object.values(ROLES).includes(u.role),
+
+  // ── Condivisioni tra gruppi ──────────────────────────────────────────
+  shareResources:    isSuperadmin,
+
+  // ── Ticket (backend tickets/router + service) ────────────────────────
+  manageTickets:     isAdminOrAbove,  // stato, gravita', categoria, elimina, tipo
+  reopenTicket:      (u, ticket) => !isAdminOrAbove(u) && !!ticket
+    && ticket.created_by === u?.user_id && TICKET_CLOSED.includes(ticket.status),
+  removeTicketAttachment: (u, attachment) => isAdminOrAbove(u)
+    || (isViewerOrAbove(u) && !!attachment?.uploaded_by && attachment.uploaded_by === u?.user_id),
+
+  // ── Utenti e gruppi ──────────────────────────────────────────────────
+  manageUsers:       isAdminOrAbove,  // admin gestisce solo il proprio gruppo
+  manageGroups:      isSuperadmin,    // solo superadmin tocca i gruppi
+  deleteGroup:       (u, group) => isSuperadmin(u) && !!group?.group_id && group.group_id !== 'default',
+  assignAdminRole:   isSuperadmin,    // solo superadmin può creare admin/superadmin
+  createEsecutore:   isAdminOrAbove,  // sia superadmin che admin di gruppo
+
+  // ── Pagine di sistema (solo superadmin) ──────────────────────────────
+  manageObjectStorage: isSuperadmin,  // bonifica orfani, preview, oggetti
+  manageTaskRuntime:   isSuperadmin,  // CARICA incerte: conferma / retry
+  manageBackups:       isSuperadmin,
+  seeTechnicalLogs:  isAdminOrAbove,  // tab "Log Tecnici" del LogViewer
 };
 
 export default { can, role, ROLES };

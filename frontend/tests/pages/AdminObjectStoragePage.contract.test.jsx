@@ -30,6 +30,7 @@ vi.mock('../../src/api/adminObjectStorage', () => ({
   listObjectStorageProjects: listObjectStorageProjectsMock,
 }));
 vi.mock('../../src/components/AppSidebar', () => ({ default: () => null }));
+vi.mock('../../src/context/AuthContext', () => ({ useAuth: () => ({ user: { role: 'superadmin', user_id: 's' } }) }));
 
 const objectPage = {
   bucket: 'runtime-test',
@@ -121,6 +122,7 @@ describe('AdminObjectStoragePage delete contract', () => {
       projects: [{
         project_id: 'gone',
         project_name: 'Progetto eliminato',
+        orphan: true,
         project_type: null,
         group_id: 'g1',
         results: [{
@@ -146,8 +148,25 @@ describe('AdminObjectStoragePage delete contract', () => {
     await user.click(buttons.at(-1));
 
     await waitFor(() => expect(cleanupOrphanStorageMock).toHaveBeenCalledOnce());
+    // Il perimetro richiesto e' quello mostrato (audit R10.4).
+    expect(cleanupOrphanStorageMock).toHaveBeenCalledWith(['gone']);
     expect(await screen.findByText(
       'Bonifica completata: 1 risultati orfani eliminati',
     )).toBeInTheDocument();
+  });
+
+  it('a project merely named "Progetto eliminato" is not an orphan (the server decides by id)', async () => {
+    listObjectStorageProjectsMock.mockResolvedValue({
+      projects: [{
+        project_id: 'alive', project_name: 'Progetto eliminato', project_type: 'estrai', group_id: 'g1',
+        results: [{ id: 'r', key: 'tenants/g1/results/alive/r.bin', filename: 'r.xlsx', format: 'xlsx', size_bytes: 1, rows_count: 1, created_at: '2026-07-14T12:00:00Z' }],
+      }],
+      results_count: 1,
+      size_bytes: 1,
+    });
+    render(<AdminObjectStoragePage />);
+    await screen.findAllByText('Progetto eliminato');
+    expect(screen.queryByText('Rilevati risultati orfani')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Bonifica orfani' })).toBeNull();
   });
 });

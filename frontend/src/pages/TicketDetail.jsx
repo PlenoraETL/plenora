@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useToast } from '../hooks/useToast';
 import { toastApiError } from '../utils/toastApiError';
+import { can } from '../utils/permissions';
 import {
   addComment, deleteAttachment, deleteTicket, getTicket, getTicketsMeta,
   openAttachment, updateTicket, uploadAttachment,
@@ -61,11 +62,9 @@ export default function TicketDetail() {
   const [saving, setSaving] = useState(false);
 
   const ticket = data?.ticket;
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  const isCreator = ticket && ticket.created_by === user?.user_id;
-  // L'utente puo' riaprire un proprio ticket chiuso/risolto
-  const canReopen =
-    isCreator && !isAdmin && (ticket?.status === 'resolved' || ticket?.status === 'closed');
+  // Permessi dalla tabella unica (utils/permissions, audit R10.1/R10.9).
+  const canManage = can.manageTickets(user);
+  const canReopen = can.reopenTicket(user, ticket);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -222,7 +221,7 @@ export default function TicketDetail() {
               {' · aggiornato '}{fmtDateTime(ticket.updated_at)}
             </div>
           </div>
-          {isAdmin && (
+          {canManage && (
             <button
               type="button"
               className="tk-page__btn tk-page__btn--danger"
@@ -239,7 +238,7 @@ export default function TicketDetail() {
           <div className="tk-detail__meta">
             <div className="tk-detail__field">
               <span className="tk-detail__label">Status</span>
-              {isAdmin ? (
+              {canManage ? (
                 <select
                   value={ticket.status}
                   onChange={(e) => handleStatusChange(e.target.value)}
@@ -270,7 +269,7 @@ export default function TicketDetail() {
 
             <div className="tk-detail__field">
               <span className="tk-detail__label">Severity</span>
-              {isAdmin ? (
+              {canManage ? (
                 <select
                   value={ticket.severity}
                   onChange={(e) => handleFieldChange('severity', e.target.value)}
@@ -289,7 +288,7 @@ export default function TicketDetail() {
 
             <div className="tk-detail__field">
               <span className="tk-detail__label">Categoria</span>
-              {isAdmin ? (
+              {canManage ? (
                 <select
                   value={ticket.category}
                   onChange={(e) => handleFieldChange('category', e.target.value)}
@@ -352,13 +351,15 @@ export default function TicketDetail() {
                   <span className="tk-detail__att-meta">
                     {fmtBytes(a.size_bytes)} · {fmtDateTime(a.uploaded_at)} · {a.uploaded_by_username || 'unknown'}
                   </span>
-                  <button
-                    type="button"
-                    className="tk-detail__btn tk-detail__btn--danger"
-                    onClick={() => handleDeleteAttachment(a.id)}
-                  >
-                    Rimuovi
-                  </button>
+                  {can.removeTicketAttachment(user, a) && (
+                    <button
+                      type="button"
+                      className="tk-detail__btn tk-detail__btn--danger"
+                      onClick={() => handleDeleteAttachment(a.id)}
+                    >
+                      Rimuovi
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

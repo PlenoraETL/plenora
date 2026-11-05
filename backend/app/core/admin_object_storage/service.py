@@ -54,6 +54,9 @@ class StorageProjectGroup(BaseModel):
     project_type: Optional[str] = None
     group_id: str
     results: list[StorageProjectResult]
+    # True se il progetto non esiste piu': lo decide il server per id, non il
+    # nome mostrato (audit frontend R10.4).
+    orphan: bool = False
 
 
 class StorageProjectCatalog(BaseModel):
@@ -178,6 +181,7 @@ def list_project_results(group_id: str | None = None) -> StorageProjectCatalog:
                 project_type=(project.project_type if project else None),
                 group_id=owner_group,
                 results=results,
+                orphan=project is None,
             )
         )
     catalog.sort(

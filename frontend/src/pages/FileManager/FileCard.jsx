@@ -5,10 +5,10 @@
 import React from 'react';
 import { getFormatConfig, formatFileSize, SPATIAL_FORMATS } from './helpers';
 
-function FileCard({ file, onPreview, onDelete, onShare, isSuperadmin }) {
+// onDelete / onShare arrivano solo se permessi (can.editFile, can.shareResources).
+function FileCard({ file, onPreview, onDelete, onShare }) {
   const cfg = getFormatConfig(file.format);
   const label = file.layer ? `${cfg.label} · ${file.layer}` : file.sheet ? `${cfg.label} · ${file.sheet}` : cfg.label;
-  const canEdit = file.can_edit !== false;
   return (
     <div className="fm__card">
       <div className="fm__card-accent" style={{ background: cfg.color }} />
@@ -48,7 +48,7 @@ function FileCard({ file, onPreview, onDelete, onShare, isSuperadmin }) {
           <span className="fm__card-filename">{file.original_filename}</span>
           <div className="fm__card-actions">
             <button type="button" className="fm__btn fm__btn--ghost fm__btn--sm" onClick={onPreview}>👁 Preview</button>
-            {isSuperadmin && (
+            {onShare && (
               <button
                 type="button"
                 className="fm__btn fm__btn--ghost fm__btn--sm"
@@ -56,7 +56,7 @@ function FileCard({ file, onPreview, onDelete, onShare, isSuperadmin }) {
                 onClick={onShare}
               >🔗</button>
             )}
-            {canEdit && (
+            {onDelete && (
               <button type="button" className="fm__btn fm__btn--danger fm__btn--sm" onClick={onDelete} aria-label="Elimina file">🗑</button>
             )}
           </div>

@@ -19,6 +19,7 @@ import TicketCreateModal from '../components/TicketCreateModal';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { toastApiError } from '../utils/toastApiError';
+import { can } from '../utils/permissions';
 import { getTicketsMeta, listTickets } from '../api/tickets';
 import '../styles/TicketsList.css';
 
@@ -80,7 +81,7 @@ export default function TicketsList() {
   const [severityFilter, setSeverityFilter] = useState([]);
   const [mineOnly, setMineOnly] = useState(false);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const isAdmin = can.manageTickets(user);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -220,7 +221,7 @@ export default function TicketsList() {
         {showCreate && (
           <TicketCreateModal
             meta={meta}
-            userRole={user?.role}
+            user={user}
             onClose={() => setShowCreate(false)}
             onCreated={handleCreated}
           />

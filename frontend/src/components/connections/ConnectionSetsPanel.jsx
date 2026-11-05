@@ -23,7 +23,9 @@ const normalizeKey = value => String(value || '')
   .replace(/[^a-z0-9_.-]+/g, '_')
   .replace(/^[_\-.]+|[_\-.]+$/g, '');
 
-function ConnectionSetsPanel({ connections, canEdit, toast, confirm }) {
+// canEdit = can.createConnection, canEditItem = can.editConnection sulla
+// riga (ConnectionManager): le azioni non permesse non si mostrano.
+function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, toast, confirm }) {
   const [sets, setSets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -173,7 +175,7 @@ function ConnectionSetsPanel({ connections, canEdit, toast, confirm }) {
               <span className="cset__count">
                 {(item.members || []).filter(member => member.active).length} connessioni
               </span>
-              {canEdit && item.can_edit !== false && (
+              {canEditItem(item) && (
                 <div className="cset__actions">
                   <button type="button" onClick={() => open(item)}>Modifica</button>
                   <button type="button" className="cset__danger" onClick={() => remove(item)}>Elimina</button>

@@ -19,6 +19,7 @@ import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
 import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
+import { PASSWORD_MIN_LENGTH, passwordProblem } from '../utils/passwordRule';
 import '../styles/UserManager.css';
 function RoleBadge({ role }) {
   const labels = {
@@ -60,7 +61,9 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
 
   const handleSubmit = async () => {
     if (!form.username.trim()) return setError('Username obbligatorio');
-    if (!isEdit && !form.password.trim()) return setError('Password obbligatoria');
+    // Regola unica della password (utils/passwordRule, uguale al backend).
+    const pwdProblem = isEdit ? null : passwordProblem(form.password);
+    if (pwdProblem) return setError(pwdProblem);
     setLoading(true); setError('');
     try {
       const payload = { ...form };
@@ -107,7 +110,7 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
           {!isEdit && (
             <div className="um__field">
               <label>Password</label>
-              <input type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Password sicura..." />
+              <input type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder={`Almeno ${PASSWORD_MIN_LENGTH} caratteri`} />
             </div>
           )}
           {isEdit && (
@@ -127,14 +130,14 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
               {isSuperadmin && <option value="admin">🔑 Admin</option>}
               {isSuperadmin && <option value="superadmin">👑 Superadmin</option>}
             </select>
-            {form.role === 'esecutore' && (
+            {role.isEsecutore(form) && (
               <span className="um__field-hint">
                 L'esecutore vede SOLO la lista degli eseguibili del proprio gruppo (e quelli condivisi)
                 e può lanciarli. Non ha accesso al resto della UI. I file caricati per l'esecuzione
                 vengono cancellati subito dopo il download del risultato (privacy/GDPR).
               </span>
             )}
-            {form.role === 'viewer' && (
+            {role.isViewer(form) && (
               <span className="um__field-hint">
                 I viewer possono leggere e lanciare esecuzioni, ma non creare/modificare/eliminare risorse.
               </span>
@@ -172,12 +175,9 @@ function ResetPasswordModal({ user, onClose, onSave }) {
   const [error, setError]             = useState('');
 
   const handleSubmit = async () => {
-    if (!newPassword.trim()) return setError('Password obbligatoria');
-    // Allineato al BE che richiede min 12 char (vedi
-    // backend/app/core/auth/users_router.py). Pre-fix (P1 contracts-flows):
-    // FE accettava 6 char → ogni reset con 6-11 char produceva un
-    // roundtrip inutile + errore BE poco user-friendly.
-    if (newPassword.length < 12) return setError('Minimo 12 caratteri');
+    // Regola unica della password (utils/passwordRule, uguale al backend).
+    const problem = passwordProblem(newPassword);
+    if (problem) return setError(problem);
     setLoading(true); setError('');
     try { await onSave(newPassword); onClose(); }
     catch (e) { setError(humanizeError(e).message); }
@@ -203,7 +203,7 @@ function ResetPasswordModal({ user, onClose, onSave }) {
       {error && <div className="um__error">{error}</div>}
       <div className="um__field">
         <label>Nuova password</label>
-        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Minimo 6 caratteri..." autoFocus />
+        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder={`Almeno ${PASSWORD_MIN_LENGTH} caratteri`} autoFocus />
         <span className="um__field-hint">L'utente dovrà usare questa password al prossimo accesso.</span>
       </div>
     </ModalWrapper>
@@ -301,36 +301,64 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
     </ModalWrapper>
   );
 }
-// MODAL — Conferma eliminazione gruppo (cascade)
+// MODAL — Conferma eliminazione gruppo (cascade, audit R10.3)
+//
+// Regole: (1) si conferma scrivendo il NOME del gruppo, come dice il testo;
+// (2) prima si vede il report d'impatto del server (getGroupSummary) e
+// finche' non e' caricato non si puo' confermare; se non arriva, si
+// riprova ma non si elimina "al buio".
+const GROUP_IMPACT = [
+  ['projects', '📁', 'Progetti'],
+  ['users', '👥', 'Utenti'],
+  ['connections', '🔌', 'Connessioni DB'],
+  ['file_sources', '📄', 'File sorgente'],
+  ['datasources', '🗄️', 'DataSources'],
+  ['api_connections', '🔗', 'Connettori API'],
+  ['schedules', '⏱️', 'Schedule'],
+];
+
+const groupImpactItems = (summary) => GROUP_IMPACT
+  .map(([key, icon, label]) => ({ key, icon, label, value: Number(summary?.[key] || 0) }));
+
+// Riassunto del report restituito dal server dopo l'eliminazione.
+const groupReportText = (report) => {
+  if (!report || typeof report !== 'object') return '';
+  const parts = groupImpactItems(report)
+    .filter(({ key }) => key in report)
+    .map(({ label, value }) => `${value} ${label.toLowerCase()}`);
+  return parts.length ? ` (${parts.join(', ')})` : '';
+};
+
 function ConfirmDeleteGroupModal({ group, onClose, onConfirm }) {
   const [summary, setSummary]   = useState(null);
-  const [loading, setLoading]   = useState(true);
+  const [status, setStatus]     = useState('loading'); // loading | ready | error
+  const [attempt, setAttempt]   = useState(0);
   const [deleting, setDeleting] = useState(false);
   const [error, setError]       = useState('');
+  const [typed, setTyped]       = useState('');
 
   useEffect(() => {
+    let active = true;
+    setStatus('loading');
     getGroupSummary(group.group_id)
-      .then(setSummary)
-      .catch((e) => setError(`Impossibile caricare il riepilogo del gruppo: ${requestErrorMessage(e)}`))
-      .finally(() => setLoading(false));
-  }, [group.group_id]);
+      .then((data) => { if (active) { setSummary(data); setStatus('ready'); } })
+      .catch((e) => { if (active) { setStatus('error'); setError(`Impossibile caricare il riepilogo del gruppo: ${requestErrorMessage(e)}`); } });
+    return () => { active = false; };
+  }, [group.group_id, attempt]);
+
+  const expectedName = String(group.name || '').trim();
+  const nameMatches = expectedName !== '' && typed.trim() === expectedName;
+  const canConfirm = status === 'ready' && nameMatches && !deleting;
 
   const handleConfirm = async () => {
+    if (!canConfirm) return;
     setDeleting(true); setError('');
     try { await onConfirm(); onClose(); }
     catch (e) { setError(humanizeError(e).message); setDeleting(false); }
   };
 
-  const summaryItems = summary ? [
-    { icon: '📁', label: 'Progetti',       value: summary.projects },
-    { icon: '👥', label: 'Utenti',         value: summary.users },
-    { icon: '🔌', label: 'Connessioni DB', value: summary.connections },
-    { icon: '📄', label: 'File sorgente',  value: summary.file_sources },
-    { icon: '🗄️', label: 'DataSources',    value: summary.datasources },
-    { icon: '🔗', label: 'Connettori API', value: summary.api_connections },
-    { icon: '⏱️', label: 'Schedule',       value: summary.schedules },
-  ] : [];
-  const totalItems = summary ? Object.values(summary).reduce((a, b) => a + b, 0) : 0;
+  const items = groupImpactItems(summary);
+  const total = items.reduce((sum, item) => sum + item.value, 0);
 
   return (
     <ModalWrapper
@@ -349,44 +377,46 @@ function ConfirmDeleteGroupModal({ group, onClose, onConfirm }) {
       <div className="um__cdg-warn">
         ⚠️ Questa operazione è <strong>irreversibile</strong>. Tutti i dati del gruppo saranno eliminati permanentemente.
       </div>
-      {loading ? (
-        <div className="um__cdg-loading">Caricamento riepilogo...</div>
-      ) : summary && (
+      {status === 'loading' && <div className="um__cdg-loading">Caricamento del riepilogo...</div>}
+      {status === 'error' && (
+        <div className="um__error">
+          Impossibile caricare il riepilogo del gruppo: senza sapere cosa verrà eliminato non si può confermare.{' '}
+          <button type="button" className="um__btn um__btn--sm" onClick={() => setAttempt(n => n + 1)}>Riprova</button>
+        </div>
+      )}
+      {status === 'ready' && (
         <>
           <div className="um__cdg-section-label">Verrà eliminato</div>
           <div className="um__cdg-list">
-            {summaryItems.map(({ icon, label, value }) => (
-              <div key={label} className="um__cdg-item">
+            {items.map(({ key, icon, label, value }) => (
+              <div key={key} className="um__cdg-item">
                 <span className="um__cdg-item-label">{icon} {label}</span>
                 <span style={{ fontFamily: 'var(--plen-font-mono)', fontSize: 12, fontWeight: 700, color: value > 0 ? 'var(--plen-err)' : 'var(--plen-text-dim)', background: value > 0 ? 'rgba(248,113,113,0.1)' : 'var(--plen-surface-3)', border: `1px solid ${value > 0 ? 'rgba(248,113,113,0.25)' : 'var(--plen-border)'}`, borderRadius: 4, padding: '1px 8px' }}>{value}</span>
               </div>
             ))}
           </div>
-          {totalItems === 0 && <div className="um__cdg-empty-note">Il gruppo è vuoto.</div>}
+          {total === 0 && <div className="um__cdg-empty-note">Il gruppo è vuoto.</div>}
           <div className="um__cdg-extra-note">+ log di esecuzione, dati intermedi e risultati delle pipeline</div>
         </>
       )}
       <div className="um__cdg-confirm-line">
-        Stai eliminando il gruppo <strong className="um__cdg-confirm-strong">{group.group_id}</strong>. Scrivi il nome del gruppo per confermare.
+        Stai eliminando il gruppo <strong className="um__cdg-confirm-strong">{group.name}</strong> ({group.group_id}). Scrivi il nome del gruppo per confermare.
       </div>
-      <ConfirmGroupNameInput groupId={group.group_id} onValid={handleConfirm} deleting={deleting} />
+      <div className="um__cdg-input-wrap">
+        <input
+          value={typed}
+          onChange={e => setTyped(e.target.value)}
+          placeholder={group.name}
+          aria-label="Nome del gruppo da eliminare"
+          disabled={status !== 'ready' || deleting}
+          autoFocus
+          style={{ background: 'var(--um-surface-2)', border: `1px solid ${nameMatches ? 'var(--um-err)' : 'var(--um-border)'}`, borderRadius: 7, padding: '8px 11px', color: 'var(--um-text)', fontSize: 13, fontFamily: 'var(--um-font-m)', outline: 'none', width: '100%' }}
+        />
+        <button type="button" className="um__btn um__btn--danger" onClick={handleConfirm} disabled={!canConfirm} style={{ opacity: canConfirm ? 1 : 0.4, cursor: canConfirm ? 'pointer' : 'not-allowed' }}>
+          {deleting ? '⏳ Eliminazione in corso...' : '🗑️ Elimina definitivamente'}
+        </button>
+      </div>
     </ModalWrapper>
-  );
-}
-
-function ConfirmGroupNameInput({ groupId, onValid, deleting }) {
-  const [value, setValue] = useState('');
-  const matches = value.trim() === groupId;
-  return (
-    <div className="um__cdg-input-wrap">
-      <input
-        value={value} onChange={e => setValue(e.target.value)} placeholder={groupId} autoFocus
-        style={{ background: 'var(--um-surface-2)', border: `1px solid ${matches ? 'var(--um-err)' : 'var(--um-border)'}`, borderRadius: 7, padding: '8px 11px', color: 'var(--um-text)', fontSize: 13, fontFamily: 'var(--um-font-m)', outline: 'none', width: '100%' }}
-      />
-      <button className="um__btn um__btn--danger" onClick={onValid} disabled={!matches || deleting} style={{ opacity: matches ? 1 : 0.4, cursor: matches ? 'pointer' : 'not-allowed' }}>
-        {deleting ? '⏳ Eliminazione in corso...' : '🗑️ Elimina definitivamente'}
-      </button>
-    </div>
   );
 }
 export default function UserManager() {
@@ -442,16 +472,9 @@ export default function UserManager() {
   const handleResetPassword = async (userId, newPassword) => { await resetPassword(userId, { new_password: newPassword }); toast.success('Password reimpostata'); };
   const handleCreateGroup = async (data) => { await createGroup(data); toast.success(`Gruppo "${data.name}" creato`); loadData(); };
   const handleDeleteGroup = async (group) => {
+    // deleteGroup restituisce il report del server (cosa e' stato eliminato).
     const res = await deleteGroup(group.group_id);
-    const r = res?.report;
-    // Pre-fix (P0 contracts-flows): `${r.users}` / `${r.connections}`
-    // sollevavano TypeError se `r` era definito ma senza una delle
-    // chiavi (BE shape inattesa). Optional chaining + fallback "?"
-    // garantisce no crash anche su payload BE divergente.
-    const detail = r
-      ? ` (${r?.projects ?? '?'} progetti, ${r?.users ?? '?'} utenti, ${r?.connections ?? '?'} connessioni)`
-      : '';
-    toast.success(`Gruppo "${group.name}" eliminato${detail}`);
+    toast.success(`Gruppo "${group.name}" eliminato${groupReportText(res?.report)}`);
     loadData();
   };
 
@@ -478,7 +501,7 @@ export default function UserManager() {
             >
               👥 Utenti
             </button>
-            {isSuperadmin && (
+            {can.manageGroups(currentUser) && (
               <button
                 type="button"
                 className={`um__tab${tab === 'groups' ? ' um__tab--active' : ''}`}
@@ -500,7 +523,7 @@ export default function UserManager() {
           {tab === 'users' && (
             <button className="um__btn um__btn--primary" onClick={() => setModalUser('new')}>+ Nuovo utente</button>
           )}
-          {tab === 'groups' && isSuperadmin && (
+          {tab === 'groups' && can.manageGroups(currentUser) && (
             <button className="um__btn um__btn--primary" onClick={() => setModalGroup(true)}>+ Nuovo gruppo</button>
           )}
         </div>
@@ -568,7 +591,7 @@ export default function UserManager() {
                       <span className="um__group-stat">🔑 {groupUsers.filter(role.isAdminOrAbove).length} admin</span>
                     </div>
                     <div className="um__group-actions">
-                      {g.group_id !== 'default' && (
+                      {can.deleteGroup(currentUser, g) && (
                         <button className="um__btn um__btn--danger um__btn--sm" onClick={() => setDeleteTarget({ type: 'group', item: g })}>🗑️ Elimina</button>
                       )}
                       {g.group_id === 'default' && <span className="um__group-default-hint">Gruppo di default — non eliminabile</span>}

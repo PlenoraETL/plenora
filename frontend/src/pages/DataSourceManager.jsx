@@ -19,7 +19,7 @@ import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { toastApiError } from '../utils/toastApiError';
 import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 import useDialogFocus from '../hooks/useDialogFocus';
-import { can, role } from '../utils/permissions';
+import { can } from '../utils/permissions';
 import '../styles/DataSourceManager.css';
 const DS_TYPES = [
   { value:'local',      label:'Cartella locale',   icon:'📂', color:'#94A3B8', rgb:'148,163,184', desc:'Disco locale o percorso UNC' },
@@ -90,7 +90,7 @@ export default function DataSourceManager() {
   useDialogFocus(!!confirmDelete,    () => setConfirmDelete(null),    confirmDialogRef);
   useDialogFocus(!!sharingDatasource, () => setSharingDatasource(null), shareDialogRef);
 
-  const isSuperadmin   = role.isSuperadmin(user);
+  const canShare       = can.shareResources(user);
   const canCreateDs    = can.createDataSource(user);
 
   const load = useCallback(async () => {
@@ -208,7 +208,7 @@ export default function DataSourceManager() {
                 const ti = TYPE_INFO[ds.type] || {};
                 const testResult = testResults[ds.id];
                 const isTesting  = testingId === ds.id;
-                const canEdit    = ds.can_edit !== false;
+                const canEdit    = can.editDataSource(user, ds);
                 return (
                   <div key={ds.id} className="dsm__card">
                     <div className="dsm__card-bar" style={{ background: ti.color }} />
@@ -222,13 +222,13 @@ export default function DataSourceManager() {
                           {canEdit && (
                             <button type="button" className="dsm__action-btn" onClick={() => openEdit(ds)} title="Modifica" aria-label="Modifica data source">✏️</button>
                           )}
-                          {isSuperadmin && (
+                          {canShare && (
                             <button type="button" className="dsm__action-btn" onClick={() => setSharingDatasource(ds)} title="Gestisci condivisione cross-gruppo" aria-label="Gestisci condivisione cross-gruppo">🔗</button>
                           )}
                           {canEdit && (
                             <button type="button" className="dsm__action-btn dsm__action-btn--danger" onClick={() => setConfirmDelete(ds)} title="Elimina" aria-label="Elimina data source">🗑</button>
                           )}
-                          {!canEdit && (
+                          {ds.can_edit === false && (
                             <span
                               className="dsm__lock-badge dsm__field-help-icon"
                               title="Solo un superadmin può modificare questa risorsa"
