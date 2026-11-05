@@ -144,9 +144,10 @@ function UploadModal({
     { label: 'Conferma', content: null },
   ];
 
-  const footer = (
+  // Annulla come × ed Esc: con un file scelto chiede (regola del Wizard).
+  const footer = ({ requestClose }) => (
     <>
-      <button type="button" className="fm__modal-btn fm__modal-btn--cancel" onClick={onClose} disabled={uploading}>Annulla</button>
+      <button type="button" className="fm__modal-btn fm__modal-btn--cancel" onClick={requestClose} disabled={uploading}>Annulla</button>
       {step === 1 && (
         <button type="button" className="fm__modal-btn fm__modal-btn--submit" onClick={onNext} disabled={loadingColumns}>
           {loadingColumns ? 'Lettura...' : 'Avanti →'}

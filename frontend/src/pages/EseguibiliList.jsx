@@ -278,7 +278,7 @@ function EseguibiliList() {
               {loadingProjects ? (
                 <div className="esl__selector-loading">Caricamento progetti...</div>
               ) : projectsResource.status === 'error' ? (
-                <ResourceError title="Progetti non caricati" message={projectsResource.error} onRetry={projectsResource.reload} />
+                <ResourceError resource={projectsResource} title="Progetti non caricati" />
               ) : projects.length === 0 ? (
                 <div className="esl__selector-empty">
                   <p>Nessun progetto pubblicabile disponibile.</p>

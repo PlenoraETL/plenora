@@ -302,13 +302,13 @@ const openWizardForNew = () => {
             </div>
           </div>
 
+          {/* Errore sempre visibile: anche sopra i dati gia' caricati. */}
+          <ResourceError resource={resource} title="Connettori non caricati" />
           {/* Grid */}
           <div className="acm__grid acm__layer-1">
             {loading ? (
               <div className="acm__loading">⬡ Caricamento connettori…</div>
-            ) : resource.status === 'error' && !resource.hasData ? (
-              <ResourceError title="Connettori non caricati" message={resource.error} onRetry={resource.reload} />
-            ) : filteredApis.length === 0 ? (
+            ) : resource.status === 'error' && !resource.hasData ? null : filteredApis.length === 0 ? (
               <div className="acm__empty">
                 <div className="acm__empty-icon">🔗</div>
                 <div className="acm__empty-title">{apiConnections.length===0?'Nessun connettore configurato':'Nessun risultato'}</div>
@@ -359,8 +359,10 @@ const openWizardForNew = () => {
         <DataSourceConfigModal
           onClose={()=>setShowDataSourceConfig(false)}
           onSave={async(dsConfig)=>{
-            try { await createDataSource(toDataSourcePayload(dsConfig)); setShowDataSourceConfig(false); }
-            catch(e){console.error(e);}
+            // Il motivo del backend si dice (prima finiva solo in console e
+            // il wizard restava aperto senza spiegazione).
+            try { await createDataSource(toDataSourcePayload(dsConfig)); toast.success('Data Source salvato'); setShowDataSourceConfig(false); }
+            catch(e){ toastApiError(toast, e, 'Data Source non salvato'); }
           }}
         />
       )}

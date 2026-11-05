@@ -103,15 +103,17 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
-  // Disabilitati per i viewer: non devono poter cancellare nulla.
+  // Cancellazione: decide la regola unica (utils/canvasDeletion, sola
+  // lettura = nessuna conferma e nessuna cancellazione). Undo/redo: lo store
+  // in sola lettura non fa nulla.
   useCanvasKeyboard({
     nodes,
     edges,
-    onDeleteNode: isReadOnly ? () => {} : deleteNode,
-    onDeleteEdges: isReadOnly ? () => {} : removeEdges,
-    onUndo: isReadOnly ? () => {} : undo,
-    onRedo: isReadOnly ? () => {} : redo,
-    onBeforeDelete: isReadOnly ? () => {} : takeSnapshot,
+    onDeleteNode: deleteNode,
+    onDeleteEdges: removeEdges,
+    onUndo: undo,
+    onRedo: redo,
+    onBeforeDelete: takeSnapshot,
   });
 
 

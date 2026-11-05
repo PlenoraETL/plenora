@@ -185,12 +185,17 @@ const selectedDs = datasources.find(d => d.id === dsId);
       <label className="dsn__label">Connettore</label>
       {loadingDs ? (
         <div className="dsn__loading-inline">⏳ Caricamento...</div>
-      ) : dsResource.status === 'error' && !dsResource.hasData ? (
-        <div className="dsn__loading-inline" role="alert">
-          ⚠️ Connettori non caricati: {dsResource.error}{' '}
-          <button type="button" className="nodrag list-state__retry" onClick={() => dsResource.reload()}>Riprova</button>
-        </div>
       ) : (
+        <>
+        {/* Errore sempre visibile: senza dati al posto della scelta, con
+            dati come avviso sopra (hooks/useResource). */}
+        {dsResource.status === 'error' && (
+          <div className="dsn__loading-inline" role="alert">
+            ⚠️ {dsResource.stale ? 'Connettori non aggiornati' : 'Connettori non caricati'}: {dsResource.error}{' '}
+            <button type="button" className="nodrag list-state__retry" onClick={() => dsResource.reload()}>Riprova</button>
+          </div>
+        )}
+        {dsResource.hasData && (
         <select
           className="dsn__select"
           value={dsId}
@@ -204,6 +209,8 @@ const selectedDs = datasources.find(d => d.id === dsId);
             <option key={ds.id} value={ds.id}>{ds.name} ({ds.type})</option>
           ))}
         </select>
+        )}
+        </>
       )}
     </div>
   );

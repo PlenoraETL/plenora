@@ -8,6 +8,8 @@
 import { memo, useState, useCallback } from 'react';
 import { NodeResizer } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useConfirmOrDeny } from '../../context/ConfirmContext';
+import { requestCanvasDeletion, useCanvasDeletion } from '../../utils/canvasDeletion';
 import './AnnotationNode.css';
 
 const COLORS = [
@@ -36,6 +38,10 @@ function AnnotationNode({ id, data, selected }) {
 
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const deleteNode     = useCanvasStore(s => s.deleteNode);
+  // Regola unica delle cancellazioni (utils/canvasDeletion): conferma, mai
+  // in sola lettura.
+  const { canDelete } = useCanvasDeletion();
+  const confirm = useConfirmOrDeny();
 
   const [editingTitle, setEditingTitle] = useState(!title);
   const [editingNote,  setEditingNote]  = useState(false);
@@ -107,13 +113,28 @@ function AnnotationNode({ id, data, selected }) {
               </svg>
             </button>
             {/* Delete */}
-            <button
-              type="button"
-              className="ann-group__btn ann-group__btn--del"
-              onClick={e => { e.stopPropagation(); deleteNode(id); }}
-              onMouseDown={e => e.stopPropagation()}
-              title="Elimina gruppo"
-            >✕</button>
+            {canDelete && (
+              <button
+                type="button"
+                className="ann-group__btn ann-group__btn--del"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  requestCanvasDeletion({
+                    confirm,
+                    nodes: [{ id, type: 'comment', data }],
+                    dialog: {
+                      title: 'Elimina gruppo',
+                      message: `Eliminare il gruppo${title ? ` «${title}»` : ''}? I passi restano nel canvas. Puoi annullare con Ctrl+Z.`,
+                      confirmText: 'Elimina',
+                      variant: 'danger',
+                    },
+                    perform: () => deleteNode(id),
+                  });
+                }}
+                onMouseDown={e => e.stopPropagation()}
+                title="Elimina gruppo"
+              >✕</button>
+            )}
           </div>
         </div>
 {showColors && (

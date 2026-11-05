@@ -165,7 +165,7 @@ function ProjectInputNode({ id, data }) {
             </select>
           </label>
           {setsResource.status === 'error' && (
-            <ResourceError compact title="Set di connessioni non caricati" message={setsResource.error} onRetry={setsResource.reload} />
+            <ResourceError compact resource={setsResource} title="Set di connessioni non caricati" />
           )}
           <p className="pin__binding-hint">
             Questo input seleziona la connessione dell’intero progetto Estrai.

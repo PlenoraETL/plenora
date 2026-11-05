@@ -12,6 +12,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { useNavigate } from 'react-router-dom';
 import { authBus } from '../utils/authBus';
 import { resetSession } from '../utils/session';
+import { loginRedirectState } from '../utils/navigation';
 import { login as apiLogin, logout as apiLogout } from '../api/auth';
 import { getMe } from '../api/users';
 
@@ -41,6 +42,9 @@ export function AuthProvider({ children }) {
   // `{ expired: true }` = uscita per 401: il token e' gia' scaduto, niente revoca.
   const logout = useCallback((options) => {
     const expired = options?.expired === true;
+    // Il motivo dell'uscita decide se il rimando a /login ricorda la pagina
+    // (utils/navigation.loginRedirectState): mai dopo il logout volontario.
+    authBus.markExit(expired ? 'expired' : 'logout');
     // Prima di tutto (anche sul 401): la copia di sicurezza in sospeso si
     // scrive mentre l'utente e' ancora in sessione. La copia resta.
     authBus.emitBeforeLogout();
@@ -77,9 +81,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     authBus.onUnauthorized = () => {
       logout({ expired: true });
-      // R7.5: dopo il nuovo login si torna qui.
-      const { pathname, search, hash } = window.location;
-      navigate('/login', { replace: true, state: { from: { pathname, search, hash } } });
+      // R7.5: dopo il nuovo login si torna qui (sessione scaduta).
+      navigate('/login', { replace: true, state: loginRedirectState(window.location) });
     };
     return () => { authBus.onUnauthorized = null; };
   }, [logout, navigate]);
@@ -96,6 +99,7 @@ export function AuthProvider({ children }) {
       role:     data.role,
     };
 
+    authBus.clearExit();
     setToken(data.access_token);
     setUser(userData);
     sessionStorage.setItem(TOKEN_KEY, data.access_token);

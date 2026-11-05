@@ -36,6 +36,7 @@ import { serverVersionOf } from '../utils/canvasVersion';
 import { executionModalProps, executionToolbarProps } from '../hooks/useExecution';
 import { ResourceError } from '../components/common/ListState';
 import { usePreview, useExecution, useValidationHighlights, useEdgeHandlers, useCanvasCore, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
+import { useSignOut } from '../hooks/useSignOut';
 import { useEditorData } from '../hooks/useEditorData';
 import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
@@ -71,7 +72,7 @@ const edgeInspector = { ...estraiJoinEdges, Panel: JoinEdgePanel };
 function EstraiEditor() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const hexCanvasRef = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const canvasLoadedForRef = useRef(null);
@@ -355,8 +356,9 @@ function EstraiEditor() {
     event.dataTransfer.dropEffect = 'move';
   }, []);
   // Uscite: chiede il guard unico (NavigationGuard + useBlocker); il logout
-  // (che svuota la sessione prima di navigare) chiede con lo stesso dialog.
-  const { confirmNavigation } = useUnsavedChangesGuard();
+  // passa dall'unica uscita volontaria (hooks/useSignOut, una sola domanda).
+  useUnsavedChangesGuard();
+  const signOut = useSignOut();
   const handleBack              = () => navigate('/');
   const filteredTables          = Object.keys(catalog).filter(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
   const sourceNodes             = nodes.filter(n => n.type === 'tableNode' || n.type === 'source');
@@ -578,7 +580,7 @@ function EstraiEditor() {
             <button
               type="button"
               className="estrai-sidebar__logout"
-              onClick={async () => { if (await confirmNavigation()) { logout(); navigate('/login'); } }}
+              onClick={signOut}
               title="Esci"
             >
               ⏻

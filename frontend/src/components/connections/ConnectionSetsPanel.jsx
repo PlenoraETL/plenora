@@ -156,11 +156,12 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
         )}
       </div>
 
+      {/* Errore sempre visibile: anche sopra i dati gia' caricati. */}
+      <ResourceError resource={resource} title="Connection Set non caricati" />
+
       {loading ? (
         <div className="cset__empty">Caricamento set…</div>
-      ) : resource.status === 'error' && !resource.hasData ? (
-        <ResourceError title="Connection Set non caricati" message={resource.error} onRetry={resource.reload} />
-      ) : sets.length === 0 ? (
+      ) : resource.status === 'error' && !resource.hasData ? null : sets.length === 0 ? (
         <div className="cset__empty">Nessun Connection Set configurato.</div>
       ) : (
         <div className="cset__grid">

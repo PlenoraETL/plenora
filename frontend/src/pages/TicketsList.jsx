@@ -22,7 +22,7 @@ import TicketCreateModal from '../components/TicketCreateModal';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { useResource } from '../hooks/useResource';
-import ListState from '../components/common/ListState';
+import ListState, { ResourceError } from '../components/common/ListState';
 import { can } from '../utils/permissions';
 import { getTicketsMeta, listTickets } from '../api/tickets';
 import '../styles/TicketsList.css';
@@ -174,6 +174,8 @@ export default function TicketsList() {
           </label>
         </section>
 
+        {/* Stati e categorie dei filtri: senza, i filtri sono incompleti. */}
+        <ResourceError compact resource={metaResource} title="Opzioni dei ticket non caricate" />
         <section className="tk-list">
           <ListState
             resource={resource}

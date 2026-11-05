@@ -82,7 +82,7 @@ import { CanvasGraphContext } from '../canvas/CanvasGraphContext';
 import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
 import { withFlowEdgeLabels } from '../../utils/glossary';
 import { isShortcutBlocked, isTypingTarget } from '../../utils/dialogStack';
-import { confirmCanvasDeletion } from '../../utils/canvasDeletion';
+import { requestCanvasDeletion } from '../../utils/canvasDeletion';
 
 const EMPTY_OBJ = {};
 
@@ -237,8 +237,8 @@ canvasConfig = EMPTY_OBJ,
   // dal canvas (utils/canvasDeletion, R1.7); poi resta annullabile.
   const handleEdgeContextMenu = useCallback(async (event, edge) => {
     event.preventDefault();
-    if (!onEdgeContextMenu || useCanvasStore.getState().isReadOnly) return;
-    if (await confirmCanvasDeletion(confirm, { edges: [edge] })) onEdgeContextMenu(event, edge);
+    if (!onEdgeContextMenu) return;
+    await requestCanvasDeletion({ confirm, edges: [edge], perform: () => onEdgeContextMenu(event, edge) });
   }, [onEdgeContextMenu, confirm]);
   // Copia di sicurezza delle modifiche non salvate (Fase 4, M7; Blocco A
   // regola 8: per utente, progetto e scheda).

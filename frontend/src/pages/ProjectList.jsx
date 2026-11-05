@@ -370,7 +370,7 @@ function ProjectList() {
           <canvas ref={canvasRef} className="pl__hex-bg" />
 
           {resource.status === 'error' && (
-            <ResourceError title="Progetti non caricati" message={resource.error} onRetry={resource.reload} />
+            <ResourceError resource={resource} title="Progetti non caricati" />
           )}
           {failures.length > 0 && (
             <ResourceError compact title="Alcuni dati non caricati" message={failures.join(', ')} onRetry={resource.reload} />

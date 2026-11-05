@@ -163,6 +163,7 @@ function LogViewer() {
           {/* Tab Log Tecnici — solo admin/superadmin */}
           {mainTab === 'logs' && canSeeTechnicalLog && <>
 
+          <ResourceError resource={statsResource} title="Statistiche non caricate" />
           {stats && (
             <div className="lv__stats">
               <div className="lv__stat lv__stat--total">
@@ -221,6 +222,9 @@ function LogViewer() {
             </div>
           </div>
 
+          {/* Errore SEMPRE visibile (filtro, pagina, Live, Aggiorna): senza
+              dati al posto della tabella, con dati come avviso sopra. */}
+          <ResourceError resource={logsResource} title="Log non caricati" />
           <div className="lv__table-wrap">
             <table className="lv__table">
               <thead>
@@ -236,9 +240,7 @@ function LogViewer() {
               <tbody>
                 {logsResource.initialLoading ? (
                   <tr><td colSpan="6" className="lv__empty">Caricamento...</td></tr>
-                ) : logsResource.status === 'error' && !logsResource.hasData ? (
-                  <tr><td colSpan="6"><ResourceError title="Log non caricati" message={logsResource.error} onRetry={logsResource.reload} /></td></tr>
-                ) : logs.length === 0 ? (
+                ) : logsResource.status === 'error' && !logsResource.hasData ? null : logs.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="lv__empty">
                       <div className="lv__empty-icon">📋</div>

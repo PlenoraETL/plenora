@@ -33,7 +33,9 @@ export default function RunDetail({ runId, live = false }) {
   if (!detail) {
     return (
       <div className="lv__run-detail-loading">
-        <ResourceError compact title="Dettaglio non caricato" message={resource.error || 'Dati non disponibili'} onRetry={resource.reload} />
+        {resource.status === 'error'
+          ? <ResourceError compact resource={resource} title="Dettaglio non caricato" />
+          : <ResourceError compact title="Dettaglio non caricato" message="Dati non disponibili" onRetry={resource.reload} />}
       </div>
     );
   }
@@ -43,6 +45,8 @@ export default function RunDetail({ runId, live = false }) {
 
   return (
     <div className="lv__run-detail">
+      {/* Live: un aggiornamento non riuscito si dice sopra i dati di prima. */}
+      <ResourceError compact resource={resource} title="Dettaglio non caricato" />
       <div className="lv__run-detail-tabs">
         <button
           className={`lv__run-dtab${tab === 'steps' ? ' lv__run-dtab--on' : ''}`}

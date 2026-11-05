@@ -28,6 +28,10 @@ vi.mock('../../src/utils/authBus', () => ({
   authBus: {
     onUnauthorized: null,
     emitBeforeLogout: vi.fn(),
+    // Motivo dell'uscita (utils/navigation.loginRedirectState).
+    markExit: vi.fn(),
+    clearExit: vi.fn(),
+    exitReason: vi.fn(() => null),
   },
 }));
 

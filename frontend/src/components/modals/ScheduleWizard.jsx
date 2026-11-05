@@ -8,7 +8,7 @@ import { useToast } from '../../hooks/useToast';
 import { humanizeError } from '../../utils/errorMessages';
 import { listProjects, listConnections } from '../../api';
 import { createSchedule, updateSchedule, getSchedule } from '../../api/schedules';
-import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import ModalWrapper from '../common/ModalWrapper';
 import Wizard from '../common/Wizard';
 import { toastApiError } from '../../utils/toastApiError';
 import './ScheduleWizard.css';
@@ -155,15 +155,12 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     return Object.keys(errs).length === 0;
   };
 
-  const goNext = () => { if (validateStep(step)) setStep(Math.min(step + 1, 6)); };
-  const goBack = () => setStep(Math.max(step - 1, 1));
-  const goToStep = (t) => {
-    if (t < step) setStep(t);
-    else if (t === step + 1 && validateStep(step)) setStep(t);
-  };
+  // Regola unica del Wizard (R6.2-R6.4): ogni step dichiara la sua
+  // validazione; Avanti, barra degli step e Salva passano tutti di li', un
+  // solo invio alla volta, Annulla/×/Esc con dati inseriti chiedono.
+  const stepValidation = (s) => () => (validateStep(s) ? null : 'Completa i campi evidenziati.');
 
   const handleSubmit = async () => {
-    if (!validateStep(6)) return;
     try {
       setSaving(true);
       const payload = {
@@ -201,25 +198,10 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     <ModalWrapper isOpen={true} onClose={onClose} title="Schedule" size="lg" loading loadingText="Caricamento dati..." />
   );
 
-  const navFooter = (
-    <>
-      {step > 1 && (
-        <ModalButton variant="secondary" onClick={goBack}>← Indietro</ModalButton>
-      )}
-      <ModalButton variant="secondary" onClick={onClose}>Annulla</ModalButton>
-      {step < 6 ? (
-        <ModalButton variant="primary" onClick={goNext}>Avanti →</ModalButton>
-      ) : (
-        <ModalButton variant="primary" onClick={handleSubmit} loading={saving}>
-          {editId ? '💾 Salva Modifiche' : '✅ Crea Schedule'}
-        </ModalButton>
-      )}
-    </>
-  );
-
   const steps = [
     {
       label: STEPS[0].label,
+      validate: stepValidation(1),
       content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
@@ -259,6 +241,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     },
     {
       label: STEPS[1].label,
+      validate: stepValidation(2),
       content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
@@ -312,6 +295,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     },
     {
       label: STEPS[2].label,
+      validate: stepValidation(3),
       content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
@@ -348,6 +332,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     },
     {
       label: STEPS[3].label,
+      validate: stepValidation(4),
       content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
@@ -431,6 +416,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     },
     {
       label: STEPS[4].label,
+      validate: stepValidation(5),
       content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
@@ -472,6 +458,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     },
     {
       label: STEPS[5].label,
+      validate: stepValidation(6),
       content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
@@ -528,9 +515,10 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
       title={editId ? 'Modifica Schedule' : 'Nuovo Schedule'}
       icon={editId ? '✏️' : '⏰'}
       step={step - 1}
-      onStepChange={(i) => goToStep(i + 1)}
+      onStepChange={(i) => setStep(i + 1)}
       steps={steps}
-      footer={navFooter}
+      onComplete={handleSubmit}
+      completeLabel={editId ? '💾 Salva Modifiche' : '✅ Crea Schedule'}
       busy={saving}
     />
   );

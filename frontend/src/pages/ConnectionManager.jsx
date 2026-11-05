@@ -221,7 +221,7 @@ function ConnectionManager() {
           </div>
 
           {resource.status === 'error' && (
-            <ResourceError title="Connessioni non caricate" message={resource.error} onRetry={resource.reload} />
+            <ResourceError resource={resource} title="Connessioni non caricate" />
           )}
           {loadFailures.map(message => (
             <ResourceError key={message} compact title="Elenco incompleto" message={message} onRetry={resource.reload} />

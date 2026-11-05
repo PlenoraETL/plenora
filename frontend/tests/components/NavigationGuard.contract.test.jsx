@@ -4,40 +4,50 @@
  * (hasUnsavedChanges), OGNI cambio di pagina chiede con il dialog del
  * progetto: link, navigate(), tasto Indietro del browser, Ctrl+K.
  * Il dialog ricorda la copia di sicurezza locale. Senza modifiche, o senza
- * editor montato, non chiede.
+ * editor montato, non chiede. Il logout vero (hooks/useSignOut) chiede UNA
+ * volta e «Esci» arriva a /login senza seconda domanda.
  */
 import React from 'react';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+
+vi.mock('../../src/api/auth', () => ({ login: vi.fn(), logout: vi.fn(() => Promise.resolve()) }));
+vi.mock('../../src/api/users', () => ({ getMe: vi.fn(() => new Promise(() => {})) }));
 import { createMemoryRouter, RouterProvider, Link, Outlet, useNavigate } from 'react-router-dom';
 
 import NavigationGuard from '../../src/components/common/NavigationGuard';
 import CommandPalette from '../../src/components/common/CommandPalette';
 import { ConfirmProvider } from '../../src/context/ConfirmContext';
 import { useUnsavedChangesGuard, LEAVE_DIALOG, isLeaveGuardActive } from '../../src/hooks/useUnsavedChangesGuard';
+import { useSignOut } from '../../src/hooks/useSignOut';
+import { AuthProvider } from '../../src/context/AuthContext';
 import useCanvasStore from '../../src/store/useCanvasStore';
 import { answerConfirm } from '../helpers/confirmDialog';
 
 function Editor() {
-  const { confirmNavigation } = useUnsavedChangesGuard();
+  useUnsavedChangesGuard();
+  // L'uscita vera (hooks/useSignOut), come i pulsanti «Esci» dell'app.
+  const signOut = useSignOut();
   const navigate = useNavigate();
   return (
     <div>
       <h1>editor</h1>
       <Link to="/files">file</Link>
       <button type="button" onClick={() => navigate('/')}>indietro-app</button>
-      <button type="button" onClick={async () => { if (await confirmNavigation()) navigate('/login'); }}>esci</button>
+      <button type="button" onClick={signOut}>esci</button>
     </div>
   );
 }
 
 function Layout() {
   return (
-    <ConfirmProvider>
-      <NavigationGuard />
-      <CommandPalette />
-      <Outlet />
-    </ConfirmProvider>
+    <AuthProvider>
+      <ConfirmProvider>
+        <NavigationGuard />
+        <CommandPalette />
+        <Outlet />
+      </ConfirmProvider>
+    </AuthProvider>
   );
 }
 
@@ -63,8 +73,10 @@ beforeEach(() => {
   s.reset();
   s.init('p1', 'manipola');
   s.loadGraph([{ id: 'n1', type: 'transform', position: { x: 0, y: 0 }, data: { label: 'a' } }], []);
+  sessionStorage.setItem('urby_token', 't');
+  sessionStorage.setItem('urby_user', JSON.stringify({ user_id: 1, username: 'u', role: 'admin' }));
 });
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); sessionStorage.clear(); });
 
 describe('NavigationGuard', () => {
   it('senza modifiche non chiede', async () => {
@@ -128,13 +140,37 @@ describe('NavigationGuard', () => {
     await answerConfirm(false);
   });
 
-  it('logout: chiede con lo stesso dialog prima di uscire', async () => {
-    mount();
+  it('logout con modifiche: UNA sola domanda; Resta resta nell\'editor con la sessione',async () => {
+    const router = mount();
     makeDirty();
     await act(async () => { fireEvent.click(screen.getByText('esci')); });
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
     expect(screen.getByRole('dialog').textContent).toContain(LEAVE_DIALOG.title);
     await answerConfirm(false);
-    expect(screen.getByRole('heading', { name: 'editor' })).toBeInTheDocument();
+    expect(screen.queryAllByRole('dialog')).toHaveLength(0);
+    expect(router.state.location.pathname).toBe('/project/p1');
+    expect(sessionStorage.getItem('urby_token')).toBe('t');
+  });
+
+  it('logout con modifiche: «Esci» porta al login senza una seconda domanda (niente blocker su /login)', async () => {
+    const router = mount();
+    makeDirty();
+    await act(async () => { fireEvent.click(screen.getByText('esci')); });
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    await answerConfirm(true, { confirmText: LEAVE_DIALOG.confirmText });
+    await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+    expect(screen.queryAllByRole('dialog')).toHaveLength(0);
+    expect(router.state.location.pathname).toBe('/login');
+    expect(router.state.location.state?.from).toBeUndefined();
+    expect(screen.getByRole('heading', { name: 'login' })).toBeInTheDocument();
+    expect(sessionStorage.getItem('urby_token')).toBeNull();
+  });
+
+  it('logout senza modifiche: nessuna domanda, subito al login', async () => {
+    const router = mount();
+    await act(async () => { fireEvent.click(screen.getByText('esci')); });
+    expect(screen.queryAllByRole('dialog')).toHaveLength(0);
+    expect(router.state.location.pathname).toBe('/login');
   });
 
   it('fuori dall\'editor il guard non agisce', async () => {

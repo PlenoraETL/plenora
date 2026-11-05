@@ -1,6 +1,21 @@
 /**
  * navigation — piccole regole di navigazione condivise (Fase 5, T4, R7.5).
  */
+import { authBus } from './authBus';
+
+/**
+ * Lo `state` del rimando a /login (regola unica, punto 2 della correzione
+ * dopo la conferma di T2+T4): la pagina richiesta (`from`) si ricorda SOLO
+ * dopo un 401 (sessione scaduta) o per una pagina chiesta senza sessione;
+ * MAI dopo un'uscita volontaria (il prossimo utente non torna sulla pagina
+ * di chi e' uscito).
+ */
+export function loginRedirectState(location) {
+  if (authBus.exitReason() === 'logout') return undefined;
+  if (!location?.pathname || location.pathname.startsWith('/login')) return undefined;
+  const { pathname, search = '', hash = '' } = location;
+  return { from: { pathname, search, hash } };
+}
 
 /**
  * "Indietro" dentro l'app: torna alla pagina precedente SOLO se c'e' una

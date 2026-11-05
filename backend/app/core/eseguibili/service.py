@@ -790,30 +790,32 @@ def execute_versioned(
         values=raw_inputs,
         group_id=eseguibile.group_id,
     )
-    runtime_connection_id = resolve_runtime_connection_id(
-        manifest,
-        raw_inputs=raw_inputs,
-        group_id=eseguibile.group_id,
-    )
-
-    final_format = normalize_export_format(
-        output_format or eseguibile.default_output_format or "xlsx"
-    )
-    raw_name = (
-        (output_name or "").strip()
-        or (eseguibile.default_output_name or "").strip()
-        or eseguibile.name
-    )
-    base_name = _sanitize_output_base_name(raw_name)
-    _configure_runtime_output(
-        canvas,
-        output_format=final_format,
-        output_name=base_name,
-    )
-
-    reserved_task_id = task_id or task_service.reserve_task_id()
+    # Regola unica dei file temporanei (punto 5): da qui ogni uscita con
+    # errore li elimina (except sotto); con successo li possiede il task.
     run_id: str | None = None
     try:
+        runtime_connection_id = resolve_runtime_connection_id(
+            manifest,
+            raw_inputs=raw_inputs,
+            group_id=eseguibile.group_id,
+        )
+
+        final_format = normalize_export_format(
+            output_format or eseguibile.default_output_format or "xlsx"
+        )
+        raw_name = (
+            (output_name or "").strip()
+            or (eseguibile.default_output_name or "").strip()
+            or eseguibile.name
+        )
+        base_name = _sanitize_output_base_name(raw_name)
+        _configure_runtime_output(
+            canvas,
+            output_format=final_format,
+            output_name=base_name,
+        )
+
+        reserved_task_id = task_id or task_service.reserve_task_id()
         run_id = eseguibili_db.create_eseguibile_run(
             eseguibile_id=eseguibile.id,
             version_id=version.id,

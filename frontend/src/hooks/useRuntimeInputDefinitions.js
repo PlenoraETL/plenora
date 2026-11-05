@@ -19,13 +19,16 @@ export const runtimeInputKind = (node) => String(node?.data?.input_kind || 'file
  * percorso progetto si usa il file gia' nel canvas; il caricamento di un
  * file vale solo negli Eseguibili).
  */
-export function buildRuntimeInputDefinitions(nodes, connectionSets = []) {
+export function buildRuntimeInputDefinitions(nodes, connectionSets = [], connectionSetsError = null) {
   return (nodes || [])
     .filter(node => node.type === 'project_input' && runtimeInputKind(node) !== 'file')
     .map((node) => {
       const definition = { ...node.data, input_kind: runtimeInputKind(node) };
       if (definition.input_kind === 'connection') {
         const set = connectionSets.find(item => item.id === definition.connection_set_id);
+        // Set non caricati: l'errore arriva alla finestra (mai una scelta
+        // vuota senza motivo; regola di hooks/useResource).
+        if (connectionSetsError) definition.connection_options_error = connectionSetsError;
         definition.connection_options = (set?.members || [])
           .filter(member => member.active)
           .map(member => ({ key: member.selector_key, label: member.label }));
@@ -46,9 +49,10 @@ export default function useRuntimeInputDefinitions(nodes) {
   // si riprova al prossimo cambio degli input (la chiave cambia).
   const sets = useResource(loadSharedConnectionSets, { key: ['connection-sets', inputsKey], enabled: needsSets, keepPreviousData: true });
   const connectionSets = sets.data || EMPTY;
+  const setsError = sets.status === 'error' ? sets.error : null;
 
   return useMemo(
-    () => buildRuntimeInputDefinitions(JSON.parse(inputsKey).map(([id, data]) => ({ id, type: 'project_input', data })), connectionSets),
-    [inputsKey, connectionSets],
+    () => buildRuntimeInputDefinitions(JSON.parse(inputsKey).map(([id, data]) => ({ id, type: 'project_input', data })), connectionSets, setsError),
+    [inputsKey, connectionSets, setsError],
   );
 }

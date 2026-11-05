@@ -24,6 +24,13 @@
 // mette al sicuro finche' l'utente e' ancora noto (copia di sicurezza).
 const beforeLogoutListeners = new Set();
 
+// Motivo dell'ultima uscita (Fase 5, correzione dopo la conferma di T2+T4,
+// punto 2): 'logout' (volontaria), 'expired' (401) o null (nessuna uscita in
+// questa pagina: si e' arrivati senza sessione). Lo scrive SOLO
+// AuthContext.logout, lo azzera il login; lo legge utils/navigation
+// (loginRedirectState) per decidere se il rimando a /login ricorda la pagina.
+let lastExitReason = null;
+
 export const authBus = {
   onUnauthorized: null,
 
@@ -37,5 +44,14 @@ export const authBus = {
   emitBeforeLogout() {
     beforeLogoutListeners.forEach(fn => { try { fn(); } catch { /* non blocca l'uscita */ } });
   },
+
+  /** AuthContext.logout: registra perche' si esce ('logout' | 'expired'). */
+  markExit(reason) { lastExitReason = reason === 'expired' ? 'expired' : 'logout'; },
+
+  /** AuthContext.login: una sessione nuova non ha un'uscita alle spalle. */
+  clearExit() { lastExitReason = null; },
+
+  /** 'logout' | 'expired' | null */
+  exitReason() { return lastExitReason; },
 
 };

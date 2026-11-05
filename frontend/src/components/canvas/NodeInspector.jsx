@@ -27,6 +27,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useConfirmOrDeny } from '../../context/ConfirmContext';
+import { requestCanvasDeletion, useCanvasDeletion } from '../../utils/canvasDeletion';
 import { derivedTitle, nodeDescriptor, nodeIcon, nodeTitle, titlePatch, userTitle } from './nodeDescriptors';
 import BranchSection from './BranchSection';
 import './NodeInspector.css';
@@ -107,21 +108,25 @@ function EdgeInspector({ edgeId, edgeInspector, prefix }) {
   const nodes = useCanvasStore(s => s.nodes);
   const onEdgesChange = useCanvasStore(s => s.onEdgesChange);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
+  const { canDelete } = useCanvasDeletion();
   const confirm = useConfirmOrDeny();
   const byId = new Map(nodes.map(n => [n.id, n]));
   if (!edge || !edgeInspector.matches(edge, byId)) return null;
   const entry = edgeInspector.entry(edge, byId);
   const { Panel } = edgeInspector;
   const what = edgeInspector.kind;
-  const deleteEdge = async () => {
-    const ok = await confirm({
+  // Regola unica delle cancellazioni (utils/canvasDeletion).
+  const deleteEdge = () => requestCanvasDeletion({
+    confirm,
+    edges: [edge],
+    dialog: {
       title: `Elimina ${what}`,
       message: `Eliminare «${entry.title}»? Le tabelle restano nel canvas.`,
       confirmText: 'Elimina',
       variant: 'danger',
-    });
-    if (ok) useCanvasStore.getState().removeEdges(edge.id);
-  };
+    },
+    perform: () => useCanvasStore.getState().removeEdges(edge.id),
+  });
   return (
     <InspectorFrame
       prefix={prefix}
@@ -133,7 +138,7 @@ function EdgeInspector({ edgeId, edgeInspector, prefix }) {
       onClose={() => onEdgesChange([{ id: edge.id, type: 'select', selected: false }])}
       body={<Panel key={edge.id} edge={edge} sourceNode={byId.get(edge.source)} targetNode={byId.get(edge.target)} disabled={isReadOnly} />}
       deleteLabel={`Elimina ${what}`}
-      onDelete={isReadOnly ? null : deleteEdge}
+      onDelete={canDelete ? deleteEdge : null}
     />
   );
 }
@@ -183,6 +188,7 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const canvasView = useCanvasStore(s => s.canvasView);
   const setCanvasView = useCanvasStore(s => s.setCanvasView);
+  const { canDelete } = useCanvasDeletion();
   const confirm = useConfirmOrDeny();
 
   if (!node) {
@@ -194,15 +200,17 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
   const close = () => onNodesChange([{ id: node.id, type: 'select', selected: false }]);
 
   // L'unica eliminazione del pannello, per ogni tipo (Output compreso).
-  const deleteStep = async () => {
-    const ok = await confirm({
+  const deleteStep = () => requestCanvasDeletion({
+    confirm,
+    nodes: [node],
+    dialog: {
       title: term('delete_step').name,
       message: `Eliminare «${nodeTitle(node.type, node.data)}»? I collegamenti del passo vengono rimossi.`,
       confirmText: 'Elimina',
       variant: 'danger',
-    });
-    if (ok) useCanvasStore.getState().deleteNode(node.id);
-  };
+    },
+    perform: () => useCanvasStore.getState().deleteNode(node.id),
+  });
 
   return (
     <InspectorFrame
@@ -236,7 +244,7 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
         </>
       )}
       deleteLabel={term('delete_step').name}
-      onDelete={isReadOnly ? null : deleteStep}
+      onDelete={canDelete ? deleteStep : null}
     />
   );
 }

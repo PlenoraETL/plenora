@@ -6,6 +6,7 @@ import { can } from '../utils/permissions';
 import { getTaskRuntime, resolveUncertainCaricaRun } from '../api/adminTaskRuntime';
 import { humanizeErrorMessage } from '../utils/errorMessages';
 import { useResource } from '../hooks/useResource';
+import { ResourceError } from '../components/common/ListState';
 import { useBusy } from '../hooks/useBusy';
 import '../styles/AdminTaskRuntimePage.css';
 
@@ -131,7 +132,7 @@ export default function AdminTaskRuntimePage() {
           </button>
         </header>
 
-        {resource.error && <div className="task-runtime__error" role="alert">Caricamento non riuscito: {resource.error}</div>}
+        <ResourceError resource={resource} title="Stato dei task non caricato" />
         {actionError && <div className="task-runtime__error" role="alert">{actionError}</div>}
         {(data?.warnings || []).map((warning) => (
           <div className="task-runtime__warning" key={warning}>{warning}</div>

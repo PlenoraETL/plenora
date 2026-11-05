@@ -269,33 +269,21 @@ def _cleanup_runtime_files(file_ids: list[str]) -> None:
             pass
 
 
-def resolve_runtime_inputs(
+def _resolve_into(
     *,
     eseguibile_id: str,
-    canvas: Mapping[str, Any],
     manifest: ExecutableManifest,
     values: Mapping[str, Any],
     group_id: str,
-) -> tuple[JsonObject, list[str], JsonObject]:
-    """Valida gli input e restituisce canvas risolto, cleanup ids e audit."""
+    nodes: list[Any],
+    nodes_by_id: dict[str, Any],
+    bindings_by_key: dict[str, list[Any]],
+    cleanup_ids: list[str],
+) -> JsonObject:
+    """Applica gli input al canvas (in place). Ogni file materializzato entra
+    in ``cleanup_ids`` appena creato: chi chiama lo elimina se qui si esce con
+    un errore."""
 
-    expected_keys = {item.key for item in manifest.inputs}
-    unknown = sorted(set(values) - expected_keys)
-    if unknown:
-        raise ValueError("Input non dichiarati: " + ", ".join(unknown))
-
-    resolved_canvas = copy.deepcopy(dict(canvas))
-    nodes = resolved_canvas.get("nodes") or []
-    nodes_by_id = {
-        str(node.get("id")): node
-        for node in nodes
-        if isinstance(node, dict) and node.get("id")
-    }
-    bindings_by_key: dict[str, list[Any]] = {}
-    for binding in manifest.bindings:
-        bindings_by_key.setdefault(binding.input_key, []).append(binding)
-
-    cleanup_ids: list[str] = []
     summary: dict[str, Any] = {}
     coerced_scalars = {
         definition.key: _coerce_scalar(
@@ -324,30 +312,22 @@ def resolve_runtime_inputs(
                     )
             elif not isinstance(raw_value, Mapping):
                 raise ValueError(f"Payload file non valido per '{definition.label}'")
-            try:
-                temp_id = _materialize_file_input(
-                    eseguibile_id=eseguibile_id,
-                    definition=definition,
-                    payload=raw_value,
-                    group_id=group_id,
-                )
-            except Exception:
-                _cleanup_runtime_files(cleanup_ids)
-                raise
+            temp_id = _materialize_file_input(
+                eseguibile_id=eseguibile_id,
+                definition=definition,
+                payload=raw_value,
+                group_id=group_id,
+            )
             cleanup_ids.append(temp_id)
-            try:
-                for binding in bindings:
-                    if binding.mode != "data_source":
-                        continue
-                    node = nodes_by_id.get(binding.target_node_id)
-                    if node is None:
-                        raise ValueError(f"Nodo input non trovato: {binding.target_node_id}")
-                    node["type"] = "file_source"
-                    node["file_source_id"] = temp_id
-                    node.setdefault("data", {})["file_source_id"] = temp_id
-            except Exception:
-                _cleanup_runtime_files(cleanup_ids)
-                raise
+            for binding in bindings:
+                if binding.mode != "data_source":
+                    continue
+                node = nodes_by_id.get(binding.target_node_id)
+                if node is None:
+                    raise ValueError(f"Nodo input non trovato: {binding.target_node_id}")
+                node["type"] = "file_source"
+                node["file_source_id"] = temp_id
+                node.setdefault("data", {})["file_source_id"] = temp_id
             summary[definition.key] = {
                 "kind": "file",
                 "file_source_id": temp_id,
@@ -356,41 +336,87 @@ def resolve_runtime_inputs(
             continue
 
         scalar = coerced_scalars[definition.key]
-        try:
-            for binding in bindings:
-                if binding.mode != "node_field" or not binding.target_field:
-                    continue
-                node = nodes_by_id.get(binding.target_node_id)
-                if node is None:
-                    raise ValueError(f"Nodo binding non trovato: {binding.target_node_id}")
-                _apply_scalar_binding(node, binding.target_field, scalar)
-        except Exception:
-            _cleanup_runtime_files(cleanup_ids)
-            raise
+        for binding in bindings:
+            if binding.mode != "node_field" or not binding.target_field:
+                continue
+            node = nodes_by_id.get(binding.target_node_id)
+            if node is None:
+                raise ValueError(f"Nodo binding non trovato: {binding.target_node_id}")
+            _apply_scalar_binding(node, binding.target_field, scalar)
         summary[definition.key] = {"kind": definition.kind, "provided": scalar is not None}
 
-    # I project_input scalari e i loro archi sono configurazione di authoring,
-    # non nodi del data-flow. Dopo l'applicazione dei binding non devono
-    # raggiungere gli executor dei tre motori.
-    scalar_node_ids = {
-        str(node.get("id"))
-        for node in nodes
-        if isinstance(node, dict)
-        and node.get("type") == "project_input"
-        and str((node.get("data") or {}).get("input_kind") or node.get("input_kind") or "file")
-        != "file"
-    }
-    resolved_canvas["nodes"] = [
-        node for node in nodes if str(node.get("id")) not in scalar_node_ids
-    ]
-    resolved_canvas["edges"] = [
-        edge
-        for edge in (resolved_canvas.get("edges") or [])
-        if str(edge.get("source")) not in scalar_node_ids
-        and str(edge.get("target")) not in scalar_node_ids
-    ]
+    return summary
 
-    return resolved_canvas, cleanup_ids, summary
+
+def resolve_runtime_inputs(
+    *,
+    eseguibile_id: str,
+    canvas: Mapping[str, Any],
+    manifest: ExecutableManifest,
+    values: Mapping[str, Any],
+    group_id: str,
+) -> tuple[JsonObject, list[str], JsonObject]:
+    """Valida gli input e restituisce canvas risolto, cleanup ids e audit."""
+
+    expected_keys = {item.key for item in manifest.inputs}
+    unknown = sorted(set(values) - expected_keys)
+    if unknown:
+        raise ValueError("Input non dichiarati: " + ", ".join(unknown))
+
+    resolved_canvas = copy.deepcopy(dict(canvas))
+    nodes = resolved_canvas.get("nodes") or []
+    nodes_by_id = {
+        str(node.get("id")): node
+        for node in nodes
+        if isinstance(node, dict) and node.get("id")
+    }
+    bindings_by_key: dict[str, list[Any]] = {}
+    for binding in manifest.bindings:
+        bindings_by_key.setdefault(binding.input_key, []).append(binding)
+
+    cleanup_ids: list[str] = []
+    # Regola unica (Fase 5, correzione dopo la conferma di T2+T4, punto 5):
+    # ogni file temporaneo materializzato qui si elimina su QUALUNQUE uscita
+    # con errore (input mancante, lista vuota, payload non valido, binding,
+    # coercizione): un solo try per tutta la preparazione. Con successo gli
+    # id passano al chiamante, che li elimina (stima) o li affida al task.
+    try:
+        summary = _resolve_into(
+            eseguibile_id=eseguibile_id,
+            manifest=manifest,
+            values=values,
+            group_id=group_id,
+            nodes=nodes,
+            nodes_by_id=nodes_by_id,
+            bindings_by_key=bindings_by_key,
+            cleanup_ids=cleanup_ids,
+        )
+
+        # I project_input scalari e i loro archi sono configurazione di authoring,
+        # non nodi del data-flow. Dopo l'applicazione dei binding non devono
+        # raggiungere gli executor dei tre motori.
+        scalar_node_ids = {
+            str(node.get("id"))
+            for node in nodes
+            if isinstance(node, dict)
+            and node.get("type") == "project_input"
+            and str((node.get("data") or {}).get("input_kind") or node.get("input_kind") or "file")
+            != "file"
+        }
+        resolved_canvas["nodes"] = [
+            node for node in nodes if str(node.get("id")) not in scalar_node_ids
+        ]
+        resolved_canvas["edges"] = [
+            edge
+            for edge in (resolved_canvas.get("edges") or [])
+            if str(edge.get("source")) not in scalar_node_ids
+            and str(edge.get("target")) not in scalar_node_ids
+        ]
+
+        return resolved_canvas, cleanup_ids, summary
+    except BaseException:
+        _cleanup_runtime_files(cleanup_ids)
+        raise
 
 
 __all__ = ["resolve_runtime_inputs"]

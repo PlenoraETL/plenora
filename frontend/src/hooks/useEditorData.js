@@ -103,6 +103,14 @@ export function useEditorData(projectId, options = {}) {
     if (connectionsError) toast.warning(`Connessioni non caricate: ${connectionsError}`);
   }, [connectionsError, bootData, toast]);
 
+  // Ricarica non riuscita con il progetto gia' aperto: l'errore si dice
+  // (regola di hooks/useResource: con status 'error' l'errore e' sempre
+  // visibile); senza progetto e' la pagina d'errore dell'editor (`error`).
+  const bootStaleError = boot.stale ? boot.error : null;
+  useEffect(() => {
+    if (bootStaleError) toast.warning(`Progetto non ricaricato, resta la versione aperta: ${bootStaleError}`);
+  }, [bootStaleError, toast]);
+
   const dbConnection = withCatalog && projectConnection && bootData?.sourceType === 'database' ? projectConnection : null;
   const catalogResource = useResource(async () => {
     const d = await getConnectionTables(dbConnection.id);

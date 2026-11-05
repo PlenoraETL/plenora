@@ -91,7 +91,13 @@ describe('Indietro, login e 404 (R7.5)', () => {
 
   it('i rimandi a /login ricordano la pagina; il catch-all mostra una 404', () => {
     expect(app).not.toMatch(/<Navigate to="\/login" replace \/>/);
-    expect(app).toMatch(/state=\{\{ from: location \}\}/);
+    expect(app).toMatch(/state=\{loginRedirectState\(location\)\}/);
     expect(app).toMatch(/<Route path="\*" element=\{<ProtectedRoute><NotFoundPage \/><\/ProtectedRoute>\} \/>/);
+  });
+
+  it('R4.6: ogni rotta con :projectId rimonta la pagina per progetto (PerProject)', () => {
+    const withParam = [...app.matchAll(/<Route\s+path="([^"]*:projectId[^"]*)"\s+element=\{(.*)\}\s*\/>/g)];
+    expect(withParam.length).toBeGreaterThanOrEqual(4);
+    for (const [, route, element] of withParam) expect(element, route).toMatch(/<PerProject>/);
   });
 });

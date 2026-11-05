@@ -98,10 +98,10 @@ function StorageBadge({ cls }) {
 // Fase 5 T2 (R4.15): ogni scheda mostra il SUO stato (caricamento, errore
 // con «Riprova», dati): mai "Caricamento..." per sempre.
 function CardState({ resource, className, title }) {
-  if (resource.status === 'error' && !resource.hasData) {
+  if (resource.status === 'error') {
     return (
       <div className={`ab__card ${className}`}>
-        <ResourceError compact title={title} message={resource.error} onRetry={resource.reload} />
+        <ResourceError compact resource={resource} title={title} />
       </div>
     );
   }
@@ -127,6 +127,8 @@ function StatusCard({ status, resource }) {
 
   return (
     <div className={`ab__card ${cls}`}>
+      {/* Ricarica non riuscita: lo stato mostrato e' quello di prima. */}
+      <ResourceError resource={resource} title="Stato non caricato" />
       <div className="ab__card-title">{resultLabels[status.result] || status.result}</div>
       <div className="ab__card-body">
         <div><strong>Terminato:</strong> {status.finished_at || '—'}</div>
@@ -146,6 +148,7 @@ function ScheduleCard({ schedule, resource }) {
 
   return (
     <div className={`ab__card ${schedule.timer_active ? 'ab__card--ok' : 'ab__card--err'}`}>
+      <ResourceError resource={resource} title="Pianificazione non caricata" />
       <div className="ab__card-title">
         {schedule.timer_active ? '⏰ Timer attivo' : '⚠ Timer disattivato'}
       </div>
@@ -358,17 +361,21 @@ export default function AdminBackupsPage() {
           {following && (
             <p className="ab__subtitle" role="status">Backup avviato: lo stato si aggiorna fino alla fine.</p>
           )}
+          {(following || running) && <ResourceError resource={followStatus} title="Stato del backup non aggiornato" />}
+          {/* Errore SEMPRE visibile (Aggiorna, nuova versione della lista):
+              senza dati al posto della lista, con dati come avviso sopra. I
+              casi con un pannello proprio (storage disattivato, credenziali
+              AWS scadute) non lo ripetono. */}
+          {!backupUnavailable && !awsCredentialsError && (
+            <ResourceError resource={listResource} title="Lista dei backup non caricata" />
+          )}
           {listResource.initialLoading ? (
             <div className="ab__loading">Caricamento...</div>
           ) : backupUnavailable ? (
             <div className="ab__empty ab__empty--disabled">
               Lista backup non disponibile in questo deployment.
             </div>
-          ) : listResource.status === 'error' && !data ? (
-            awsCredentialsError ? null : (
-              <ResourceError title="Lista dei backup non caricata" message={listResource.error} onRetry={listResource.reload} />
-            )
-          ) : data?.items?.length > 0 ? (
+          ) : listResource.status === 'error' && !data ? null : data?.items?.length > 0 ? (
             <>
             <table className="ab__table">
               <thead>

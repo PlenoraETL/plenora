@@ -8,7 +8,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useOptionalConfirm } from '../context/ConfirmContext';
 import { isShortcutBlocked, isTypingTarget } from '../utils/dialogStack';
-import { confirmCanvasDeletion } from '../utils/canvasDeletion';
+import { canDeleteFromCanvas, requestCanvasDeletion } from '../utils/canvasDeletion';
 
 /**
  * Hook per gestire gli eventi tastiera sul canvas React Flow
@@ -91,14 +91,19 @@ export function useCanvasKeyboard(options) {
     const onCanvas = target === document.body || target === document.documentElement
       || Boolean(target.closest?.('.react-flow'));
     if ((event.key === 'Delete' || event.key === 'Backspace') && onCanvas) {
+      // Regola unica (utils/canvasDeletion): in sola lettura niente conferma
+      // e niente cancellazione.
+      if (!canDeleteFromCanvas()) return;
       const selectedNodes = nodesRef.current.filter(n => n.selected);
       const selectedEdges = edgesRef.current.filter(e => e.selected);
       if ((selectedNodes.length === 0 && selectedEdges.length === 0) || deletingRef.current) return;
       event.preventDefault();
       deletingRef.current = true;
-      confirmCanvasDeletion(confirmRef.current, { nodes: selectedNodes, edges: selectedEdges })
-        .then((ok) => {
-          if (!ok) return;
+      requestCanvasDeletion({
+        confirm: confirmRef.current,
+        nodes: selectedNodes,
+        edges: selectedEdges,
+        perform: () => {
           // Snapshot PRE-delete una sola volta, così la cancellazione (nodo o
           // edge) è annullabile con Ctrl+Z.
           onBeforeDelete?.();
@@ -107,8 +112,8 @@ export function useCanvasKeyboard(options) {
           const alive = new Set(edgesRef.current.map(e => e.id));
           const ids = selectedEdges.map(e => e.id).filter(id => alive.has(id));
           if (ids.length && onDeleteEdges) onDeleteEdges(ids);
-        })
-        .finally(() => { deletingRef.current = false; });
+        },
+      }).finally(() => { deletingRef.current = false; });
     }
   }, [onDeleteNode, onDeleteEdges, onUndo, onRedo, onBeforeDelete]);
 

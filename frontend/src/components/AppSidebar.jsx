@@ -30,6 +30,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSignOut } from '../hooks/useSignOut';
 import { can, role } from '../utils/permissions';
 import { getTicketsCounts } from '../api/tickets';
 import { useResource } from '../hooks/useResource';
@@ -72,7 +73,7 @@ const SYSTEM_ITEMS = [
 export default function AppSidebar({ counts = {} }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [showPwdModal, setShowPwdModal] = useState(false);
 
   // Badge ticket: count attivi visibili all'utente (self/group/global
@@ -106,10 +107,8 @@ export default function AppSidebar({ counts = {} }) {
   };
   const isSystemActive = (item) => location.pathname === item.path;
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  // Uscita volontaria: una sola via (hooks/useSignOut).
+  const handleLogout = useSignOut();
 
   return (
     <nav className="app-sidebar">

@@ -308,7 +308,7 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
           <canvas ref={canvasRef} className="sl__hex-bg" />
 
           {resource.status === 'error' && (
-            <ResourceError title="Schedule non caricati" message={resource.error} onRetry={resource.reload} />
+            <ResourceError resource={resource} title="Schedule non caricati" />
           )}
 
           {/* Beat health banner */}

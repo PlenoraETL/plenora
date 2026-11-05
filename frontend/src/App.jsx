@@ -14,10 +14,11 @@
  * unico (NavigationGuard: useBlocker su link, Indietro del browser e Ctrl+K);
  * un ConfirmProvider per tutta l'app (dialog del progetto, mai
  * window.confirm); il rimando a /login ricorda la pagina richiesta
- * (`state.from`); pagina 404 invece del ritorno muto alla home.
+ * (`state.from`, solo dopo un 401 o senza sessione: mai dopo il logout
+ * volontario); pagina 404 invece del ritorno muto alla home.
  */
 import React, { useState } from 'react';
-import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppErrorBoundary, RouteErrorBoundary } from './components/common/ErrorBoundary';
 import { ToastProvider } from './context/ToastContext';
@@ -26,6 +27,7 @@ import CommandPalette from './components/common/CommandPalette';
 import KeyboardShortcutsHelp from './components/common/KeyboardShortcutsHelp';
 import NavigationGuard from './components/common/NavigationGuard';
 import { role, can } from './utils/permissions';
+import { loginRedirectState } from './utils/navigation';
 
 // Lazy loading: ogni pagina viene caricata solo quando la route viene visitata.
 // Riduce il bundle iniziale da ~1 chunk a chunk separati per pagina.
@@ -55,10 +57,13 @@ const TicketDetail         = React.lazy(() => import('./pages/TicketDetail'));
 const OpenProjectPage      = React.lazy(() => import('./pages/OpenProjectPage'));
 const NotFoundPage         = React.lazy(() => import('./pages/NotFoundPage'));
 
-/** Rimando a /login che ricorda dove si voleva andare (R7.5). */
+/**
+ * Rimando a /login che ricorda dove si voleva andare (R7.5), ma mai dopo
+ * un'uscita volontaria (regola unica: utils/navigation.loginRedirectState).
+ */
 function ToLogin() {
   const location = useLocation();
-  return <Navigate to="/login" replace state={{ from: location }} />;
+  return <Navigate to="/login" replace state={loginRedirectState(location)} />;
 }
 
 /**
@@ -122,6 +127,16 @@ function SuperadminRoute({ children }) {
   return children;
 }
 
+/**
+ * Un progetto = un montaggio dell'editor (R4.6): cambiando `:projectId` nella
+ * stessa rotta lo stato locale dell'editor (ricerche, finestre, richieste in
+ * corso) non passa al progetto nuovo.
+ */
+function PerProject({ children }) {
+  const { projectId } = useParams();
+  return <React.Fragment key={projectId}>{children}</React.Fragment>;
+}
+
 function AppRoutes() {
   return (
     // R5.7: un boundary per pagina, dentro il Router (si azzera cambiando rotta).
@@ -135,15 +150,15 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route path="/" element={<ProtectedRoute><ProjectList /></ProtectedRoute>} />
-      <Route path="/project/:projectId" element={<ProtectedRoute><EstraiEditor /></ProtectedRoute>} />
-      <Route path="/open/:projectId" element={<ProtectedRoute><OpenProjectPage /></ProtectedRoute>} />
+      <Route path="/project/:projectId" element={<ProtectedRoute><PerProject><EstraiEditor /></PerProject></ProtectedRoute>} />
+      <Route path="/open/:projectId" element={<ProtectedRoute><PerProject><OpenProjectPage /></PerProject></ProtectedRoute>} />
       <Route path="/connections" element={<ProtectedRoute><ConnectionManager /></ProtectedRoute>} />
       {/* Param `:projectId` (coerente con /project/:projectId e
           /arricchisci/:projectId). Pre-fix era `:id`, costringendo
           ManipolaEditor a fare `{ id: projectId } = useParams()`. */}
-      <Route path="/editor/manipola/:projectId" element={<ProtectedRoute><ManipolaEditor /></ProtectedRoute>} />
+      <Route path="/editor/manipola/:projectId" element={<ProtectedRoute><PerProject><ManipolaEditor /></PerProject></ProtectedRoute>} />
       <Route path="/external-connectors" element={<ProtectedRoute><ApiConnectionManager /></ProtectedRoute>} />
-      <Route path="/arricchisci/:projectId" element={<ProtectedRoute><ArricchisciEditor /></ProtectedRoute>} />
+      <Route path="/arricchisci/:projectId" element={<ProtectedRoute><PerProject><ArricchisciEditor /></PerProject></ProtectedRoute>} />
       <Route path="/files" element={<ProtectedRoute><FileManager /></ProtectedRoute>} />
       <Route path="/schedules" element={<ProtectedRoute><ScheduleList /></ProtectedRoute>} />
       <Route path="/logs" element={<ProtectedRoute><LogViewer /></ProtectedRoute>} />

@@ -478,7 +478,7 @@ export default function UserManager() {
 <AppSidebar />
 <main className="um__main">
         {resource.status === 'error' && (
-          <ResourceError title="Utenti e gruppi non caricati" message={resource.error} onRetry={resource.reload} />
+          <ResourceError resource={resource} title="Utenti e gruppi non caricati" />
         )}
         <div className="um__topbar">
           {/* Tab switcher Utenti / Gruppi (sostituisce le voci nella sidebar) */}

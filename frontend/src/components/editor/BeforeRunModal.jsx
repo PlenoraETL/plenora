@@ -89,6 +89,11 @@ function InputField({ definition, value, onChange }) {
         {definition.label || definition.input_key}{definition.required !== false ? ' *' : ''}
       </label>
       {control}
+      {definition.connection_options_error && (
+        <span className="before-run__hint before-run__notice--error" role="alert">
+          Set di connessioni non caricato: {definition.connection_options_error}. Chiudi e riapri la finestra per riprovare.
+        </span>
+      )}
       {definition.description && <span className="before-run__hint">{definition.description}</span>}
     </div>
   );

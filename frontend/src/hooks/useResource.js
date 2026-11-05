@@ -13,8 +13,12 @@
  *  - `key` cambiata = nuova richiesta e i dati della chiave di prima non si
  *    mostrano piu' (mai il ticket A sotto l'indirizzo del ticket B);
  *  - errore = stato `error` con il testo unico di utils/errorMessages, mai
- *    una lista vuota; i dati gia' caricati restano (`stale`) e si mostrano
- *    sotto l'errore; Riprova = reload();
+ *    una lista vuota, e SEMPRE visibile: i dati gia' caricati PER QUESTA
+ *    chiave restano (`stale`: avviso "dati non aggiornati" + Riprova sopra i
+ *    dati, components/common/ListState o <ResourceError resource>); i dati
+ *    di un'altra chiave (keepPreviousData) non sopravvivono a un errore:
+ *    il risultato del filtro di prima non si mostra mai come risultato del
+ *    filtro nuovo. Riprova = reload();
  *  - `initialLoading` solo al primo caricamento di una chiave: un reload dopo
  *    un'azione non sostituisce la pagina con lo spinner (`refreshing`);
  *  - `refreshInterval`: aggiornamento periodico, un poll alla volta, fermo
@@ -62,7 +66,9 @@ export function useResource(loader, {
   const k = keyOf(key);
   const [state, setState] = useState(() => {
     const data = typeof initialData === 'function' ? initialData() : initialData;
-    return { key: k, data, error: null, rawError: null, loading: enabled && data === undefined };
+    // dataKey: la chiave a cui appartengono i dati (con keepPreviousData puo'
+    // restare quella di prima mentre la nuova richiesta e' in corso).
+    return { key: k, dataKey: data === undefined ? null : k, data, error: null, rawError: null, loading: enabled && data === undefined };
   });
   const skipFirstRef = useRef(state.data !== undefined);
   const reqRef = useRef(0);
@@ -88,7 +94,7 @@ export function useResource(loader, {
     const loader = loaderRef.current;
     setState(s => (s.key === forKey || keepRef.current
       ? { ...s, key: forKey, loading: true, ...(background ? {} : { error: null, rawError: null }) }
-      : { key: forKey, data: undefined, error: null, rawError: null, loading: true }));
+      : { key: forKey, dataKey: null, data: undefined, error: null, rawError: null, loading: true }));
     // La richiesta parte subito (nello stesso giro), un errore sincrono del
     // caricatore e' un errore della richiesta.
     let pending;
@@ -101,16 +107,18 @@ export function useResource(loader, {
       .then(
         (data) => {
           if (!mountedRef.current || id !== reqRef.current) return undefined;
-          setState({ key: forKey, data, error: null, rawError: null, loading: false });
+          setState({ key: forKey, dataKey: forKey, data, error: null, rawError: null, loading: false });
           return data;
         },
         (err) => {
           if (!mountedRef.current || id !== reqRef.current) return undefined;
           if (err?.name === 'CanceledError' || err?.name === 'AbortError') return undefined;
           console.warn('[useResource] Caricamento non riuscito:', err);
+          // Solo i dati di QUESTA chiave restano sotto l'errore (stale).
           setState(s => ({
             key: forKey,
-            data: s.key === forKey ? s.data : undefined,
+            dataKey: s.dataKey === forKey ? forKey : null,
+            data: s.dataKey === forKey ? s.data : undefined,
             error: errorMessageRef.current(err),
             rawError: err,
             loading: false,
@@ -135,7 +143,7 @@ export function useResource(loader, {
   useEffect(() => {
     if (!enabled) {
       reqRef.current += 1;
-      setState({ key: k, data: undefined, error: null, rawError: null, loading: false });
+      setState({ key: k, dataKey: null, data: undefined, error: null, rawError: null, loading: false });
       return;
     }
     if (skipFirstRef.current) { skipFirstRef.current = false; return; }
@@ -162,7 +170,7 @@ export function useResource(loader, {
   // Dati scritti da chi li conosce (azione riuscita, altra copia caricata):
   // sono i dati di questa chiave e l'errore precedente non vale piu'.
   const setData = useCallback((updater) => {
-    setState(s => ({ ...s, key: keyRef.current, data: typeof updater === 'function' ? updater(s.key === keyRef.current ? s.data : undefined) : updater, error: null, rawError: null }));
+    setState(s => ({ ...s, key: keyRef.current, dataKey: keyRef.current, data: typeof updater === 'function' ? updater(s.key === keyRef.current ? s.data : undefined) : updater, error: null, rawError: null }));
   }, []);
 
   // keepPreviousData: la stessa risorsa con parametri diversi (non un'altra

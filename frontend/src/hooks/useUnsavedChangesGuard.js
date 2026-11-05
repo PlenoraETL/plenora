@@ -8,8 +8,9 @@
  *     e ogni `navigate()`: `useBlocker` di react-router nel NavigationGuard
  *     montato una volta nell'app (components/common/NavigationGuard), con il
  *     dialog del progetto. Gli editor navigano e basta: chiede il guard;
- *   - logout (che svuota la sessione PRIMA di navigare): `confirmNavigation()`
- *     con lo stesso dialog, poi logout;
+ *   - logout (che svuota la sessione PRIMA di navigare): l'unica uscita
+ *     volontaria, hooks/useSignOut, chiede con lo stesso dialog UNA volta e
+ *     poi va a /login (che il blocker non ferma mai);
  *   - ricarica e chiusura della scheda: `beforeunload`, il prompt del browser
  *     (unica eccezione: i browser non permettono un dialog proprio).
  * Il guard e' attivo solo mentre un editor e' montato (questo hook lo
@@ -52,6 +53,9 @@ export const hasSomethingToLose = () => (
 export function shouldBlockNavigation({ currentLocation, nextLocation }) {
   if (!currentLocation || !nextLocation) return false;
   if (currentLocation.pathname === nextLocation.pathname) return false;
+  // Verso /login si va solo a sessione chiusa (uscita volontaria gia'
+  // confermata da hooks/useSignOut, o 401): nessuna seconda domanda.
+  if (nextLocation.pathname === '/login') return false;
   return hasSomethingToLose();
 }
 

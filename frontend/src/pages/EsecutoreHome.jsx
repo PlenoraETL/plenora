@@ -18,9 +18,9 @@
  * Top bar: logo + saluto + cambia password + logout. Niente altro.
  */
 import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { listEseguibili, cleanupTaskCompletely } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { useSignOut } from '../hooks/useSignOut';
 import { useToast } from '../hooks/useToast';
 import { useHexCanvas } from '../utils/hexCanvas';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
@@ -68,9 +68,8 @@ function EseguibileCard({ item, onRun }) {
   );
 }
 function EsecutoreHome() {
-  const navigate = useNavigate();
   const toast = useToast();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   // Fase 5 T2 (R4.8): un errore di caricamento e' un errore con «Riprova»,
   // mai "Nessuna azione disponibile".
@@ -95,10 +94,8 @@ function EsecutoreHome() {
     );
   }, [items, searchQuery]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  // Uscita volontaria: una sola via (hooks/useSignOut).
+  const handleLogout = useSignOut();
 
   // Chiamato dalla finestra a fine esecuzione (scaricato o no, R9.3).
   // Per l'esecutore: cleanup completo del task (privacy GDPR).

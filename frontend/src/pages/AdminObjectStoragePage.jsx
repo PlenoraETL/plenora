@@ -14,6 +14,7 @@ import { humanizeErrorMessage } from '../utils/errorMessages';
 import { useAuth } from '../context/AuthContext';
 import { can } from '../utils/permissions';
 import { useResource } from '../hooks/useResource';
+import { ResourceError } from '../components/common/ListState';
 import { useBusy } from '../hooks/useBusy';
 import { useDownload } from '../hooks/useDownload';
 import '../styles/AdminObjectStoragePage.css';
@@ -82,7 +83,9 @@ export default function AdminObjectStoragePage() {
   const catalogGroup = resource.data?.catalogGroup || '';
   const loading = resource.loading;
   const load = () => resource.reload();
-  const error = resource.error || actionError;
+  // Errore di caricamento (con «Riprova», anche sopra i dati: ResourceError)
+  // distinto da quello di un'azione.
+  const error = actionError;
   // Orfano = il server dice che il progetto non esiste piu' (per id, non per
   // il nome mostrato). Il catalogo e' gia' quello del filtro di gruppo.
   const orphanProjects = (projectCatalog?.projects || []).filter((project) => project.orphan === true);
@@ -239,6 +242,7 @@ export default function AdminObjectStoragePage() {
           <label>Tipo<select value={domain} onChange={(event) => setDomain(event.target.value)}><option value="">Tutti</option>{DOMAINS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </section>
 
+        <ResourceError resource={resource} title="Oggetti non caricati" />
         {error && <div className="storage-admin__error" role="alert">{error}</div>}
         {notice && <div className="storage-admin__notice">{notice}</div>}
 

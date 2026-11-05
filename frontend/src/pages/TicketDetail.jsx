@@ -204,11 +204,14 @@ export default function TicketDetail() {
         <AppSidebar />
         <main className="tk-page__main">
           <button type="button" className="tk-detail__back" onClick={() => navigate('/tickets')}>← Ticket</button>
-          <ResourceError
-            title={resource.rawError?.response?.status === 404 ? 'Ticket non trovato' : 'Ticket non caricato'}
-            message={resource.error || 'Il ticket non è disponibile.'}
-            onRetry={resource.reload}
-          />
+          {resource.status === 'error' ? (
+            <ResourceError
+              resource={resource}
+              title={resource.rawError?.response?.status === 404 ? 'Ticket non trovato' : 'Ticket non caricato'}
+            />
+          ) : (
+            <ResourceError title="Ticket non caricato" message="Il ticket non è disponibile." onRetry={resource.reload} />
+          )}
         </main>
       </div>
     );
@@ -244,6 +247,9 @@ export default function TicketDetail() {
             </button>
           )}
         </header>
+        {/* Ricarica non riuscita (dopo un'azione): il ticket mostrato e' quello di prima. */}
+        <ResourceError resource={resource} title="Ticket non aggiornato" />
+        <ResourceError compact resource={metaResource} title="Opzioni dei ticket non caricate" />
 
         <section className="tk-detail">
           {/* Metadata */}

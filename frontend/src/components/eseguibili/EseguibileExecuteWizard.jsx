@@ -200,7 +200,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
         {loading ? (
           <div className="esw-loading">Caricamento eseguibile...</div>
         ) : resource.status === 'error' ? (
-          <ResourceError title="Eseguibile non caricato" message={resource.error} onRetry={resource.reload} />
+          <ResourceError resource={resource} title="Eseguibile non caricato" />
         ) : (
           <div className="esw-body">
             {step === 1 && eseguibile && (

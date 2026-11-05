@@ -615,9 +615,20 @@ def _trusted_run_inputs(
     trusted_inputs = dict(raw_inputs)
     consumed_uploads: list[str] = []
     for definition in manifest.inputs:
-        if definition.kind != "file" or definition.key not in trusted_inputs:
+        if definition.kind != "file":
             continue
-        raw = trusted_inputs[definition.key]
+        raw = trusted_inputs.get(definition.key)
+        # Un input file obbligatorio senza file (assente, null o lista vuota)
+        # si rifiuta qui, prima di materializzare qualunque file temporaneo
+        # (punto 5 della correzione dopo la conferma di T2+T4).
+        if raw is None or (isinstance(raw, list) and not raw):
+            if definition.required:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Input obbligatorio mancante: {definition.label}",
+                )
+            if definition.key not in trusted_inputs or raw is None:
+                continue
         raw_files = raw if isinstance(raw, list) else [raw]
         if definition.multiple and not isinstance(raw, list):
             raise HTTPException(

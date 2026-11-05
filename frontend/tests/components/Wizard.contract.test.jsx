@@ -6,6 +6,8 @@
  *  - chiudere con dati inseriti chiede conferma; senza dati chiude subito;
  *  - tornando indietro lo stato (del chiamante) resta.
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import React, { useState } from 'react';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -121,5 +123,53 @@ describe('Wizard', () => {
     fireEvent.mouseDown(screen.getByText('tipo'));
     fireEvent.click(overlay);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('footer proprio: Annulla passa da requestClose (stessa conferma di × ed Esc)', async () => {
+    const onClose = vi.fn();
+    render(
+      <Wizard
+        isOpen onClose={onClose} title="W" step={0} onStepChange={() => {}}
+        steps={[{ label: 'File', content: <input aria-label="file" onChange={() => {}} /> }]}
+        footer={({ requestClose }) => <button type="button" onClick={requestClose}>Annulla</button>}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('file'), { target: { value: 'x' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Annulla' })); });
+    expect(onClose).not.toHaveBeenCalled();
+    await answerConfirm(true, { confirmText: 'Chiudi senza salvare' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ogni wizard dell\'app usa le regole del Wizard (enumerazione)', () => {
+  const SRC = path.resolve(import.meta.dirname, '../../src');
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const full = path.join(dir, e.name);
+    return e.isDirectory() ? walk(full) : (/\.jsx$/.test(e.name) ? [full] : []);
+  });
+  const users = walk(SRC)
+    .filter(f => !f.endsWith(`common${path.sep}Wizard.jsx`))
+    .map(f => ({ file: path.relative(SRC, f).split(path.sep).join('/'), code: fs.readFileSync(f, 'utf-8') }))
+    .filter(({ code }) => /<Wizard\s/.test(code));
+
+  it('trova i wizard (connettori API, Data Source, schedule, upload)', () => {
+    expect(users.map(u => u.file).sort()).toEqual([
+      'components/api-conn/ApiConnectionWizard.jsx',
+      'components/arricchisci/DataSourceConfigModal.jsx',
+      'components/modals/ScheduleWizard.jsx',
+      'pages/FileManager/UploadModal.jsx',
+    ]);
+  });
+
+  it('niente navigazione o invio fuori dal Wizard: onComplete o footer come funzione con requestClose', () => {
+    const offenders = [];
+    for (const { file, code } of users) {
+      const usesComplete = /onComplete=\{/.test(code);
+      const fnFooter = /const footer = \(\{ requestClose \}\) =>/.test(code) && /onClick=\{requestClose\}/.test(code);
+      if (!usesComplete && !fnFooter) offenders.push(`${file}: ne' onComplete ne' footer con requestClose`);
+      if (/footer=\{(?!footer\})/.test(code)) offenders.push(`${file}: footer non dichiarato come funzione`);
+    }
+    expect(offenders).toEqual([]);
   });
 });

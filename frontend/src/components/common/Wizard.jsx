@@ -89,6 +89,8 @@ export default function Wizard({
   // wizard "bespoke" con navigazione side-effectful o azioni non standard
   // (es. UploadModal): riusano chrome + step-bar + a11y, footer proprio.
   // footer={null} -> nessuna barra footer (bottoni nel body).
+  // footer={({ requestClose, busy }) => ...}: Annulla del footer proprio passa
+  // da requestClose (stessa conferma di ×/Esc con dati inseriti, R6.4).
   footer,
   closeOnEsc = true,
   closeOnOverlay = true,
@@ -210,7 +212,7 @@ export default function Wizard({
 
           {footer !== null && (
           <div className="wizard__footer">
-            {footer !== undefined ? footer : (
+            {footer !== undefined ? (typeof footer === 'function' ? footer({ requestClose: () => dialog.requestClose('button'), busy: isBusy }) : footer) : (
               <>
                 <button type="button" className="wizard__btn wizard__btn--ghost" onClick={goBack} disabled={isBusy}>
                   {step === 0 ? cancelLabel : '← Indietro'}

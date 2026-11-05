@@ -144,11 +144,12 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
         </div>
         )}
 
+        {/* Errore sempre visibile: anche sopra i dati gia' caricati. */}
+        <ResourceError resource={resource} title="Versioni non caricate" />
+
         {loading ? (
           <div className="cv-versions__empty">Caricamento…</div>
-        ) : resource.status === 'error' && !resource.hasData ? (
-          <ResourceError title="Versioni non caricate" message={resource.error} onRetry={resource.reload} />
-        ) : versions.length === 0 ? (
+        ) : resource.status === 'error' && !resource.hasData ? null : versions.length === 0 ? (
           <div className="cv-versions__empty">
             Nessuna versione salvata. Salva una copia del canvas corrente per
             poterci tornare in seguito.

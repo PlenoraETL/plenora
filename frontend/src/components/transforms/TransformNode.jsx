@@ -139,7 +139,7 @@ const TransformNode = memo(({ data, id }) => {
           ))}
         </select>
         {registryResource.status === 'error' && (
-          <ResourceError compact title="Operazioni non caricate" message={registryResource.error} onRetry={registryResource.reload} />
+          <ResourceError compact resource={registryResource} title="Operazioni non caricate" />
         )}
         {Panel && transformConfig?.description && <div className="ppanel__note">{transformConfig.description}</div>}
         <ColumnStatusNote result={input} />

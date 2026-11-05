@@ -14,6 +14,7 @@ import AppSidebar from '../components/AppSidebar';
 import { getSystemStatus } from '../api/adminSystemStatus';
 import '../styles/AdminSystemStatusPage.css';
 import { useResource } from '../hooks/useResource';
+import { ResourceError } from '../components/common/ListState';
 const STATUS_LABELS = { ok: 'OK', warn: 'WARN', error: 'ERRORE', unknown: 'N/D' };
 const STATUS_ICONS = { ok: '✓', warn: '⚠', error: '✗', unknown: '?' };
 
@@ -334,7 +335,6 @@ export default function AdminSystemStatusPage() {
   const status = resource.data?.status || null;
   const refreshedAt = resource.data?.at || null;
   const loading = resource.loading;
-  const lastError = resource.error;
   const load = resource.reload;
 
   const overall = useMemo(() => {
@@ -374,11 +374,8 @@ export default function AdminSystemStatusPage() {
           </div>
         </header>
 
-        {lastError && (
-          <div className="sys__error-box">
-            Errore caricamento: {lastError}
-          </div>
-        )}
+        {/* Con le schede gia' caricate: «Dati non aggiornati» + Riprova. */}
+        <ResourceError resource={resource} title="Stato del sistema non caricato" />
 
         <section className="sys__cards">
           <BackupCard

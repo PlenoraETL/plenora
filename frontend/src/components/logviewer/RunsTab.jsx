@@ -120,7 +120,7 @@ export default function RunsTab({ live = false }) {
       </div>
 
       {resource.status === 'error' && (
-        <ResourceError title="Esecuzioni non caricate" message={resource.error} onRetry={resource.reload} />
+        <ResourceError resource={resource} title="Esecuzioni non caricate" />
       )}
 
       {/* Tabella */}

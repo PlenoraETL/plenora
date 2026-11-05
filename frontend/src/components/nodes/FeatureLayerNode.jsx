@@ -224,12 +224,14 @@ const FeatureLayerNode = memo(({ data, id }) => {
             )}
 
             {/* Lista campi */}
-            {displayColumns.length === 0 && schemaResource.status === 'error' ? (
+            {/* Errore sempre visibile, anche sopra i campi gia' noti. */}
+            {schemaResource.status === 'error' && (
               <div className="fl-node__empty" role="alert">
-                Campi del layer non caricati: {schemaResource.error}{' '}
+                {displayColumns.length > 0 ? 'Campi del layer non aggiornati' : 'Campi del layer non caricati'}: {schemaResource.error}{' '}
                 <button type="button" className="nodrag list-state__retry" onClick={() => schemaResource.reload()}>Riprova</button>
               </div>
-            ) : displayColumns.length === 0 ? (
+            )}
+            {displayColumns.length === 0 && schemaResource.status === 'error' ? null : displayColumns.length === 0 ? (
               <div className="fl-node__empty">
                 {searchTerm ? 'Nessun campo trovato' : 'Nessun campo'}
               </div>

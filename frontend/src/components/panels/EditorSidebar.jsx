@@ -8,9 +8,7 @@ import ProjectsSidebar from './ProjectsSidebar';
 import { ResourceError } from '../common/ListState';
 import FilesSidebar from './FilesSidebar';
 import { useAuth } from '../../context/AuthContext';
-import { confirmLeave } from '../../hooks/useUnsavedChangesGuard';
-import { useConfirmOrDeny } from '../../context/ConfirmContext';
-import { useNavigate } from 'react-router-dom';
+import { useSignOut } from '../../hooks/useSignOut';
 
 function EditorSidebar({
   projects = [],
@@ -28,9 +26,9 @@ function EditorSidebar({
   sourcesError = null,
   onRetrySources = null,
 }) {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const confirm = useConfirmOrDeny();
+  const { user } = useAuth();
+  // Uscita volontaria: una sola via (chiede se c'e' qualcosa da perdere).
+  const signOut = useSignOut();
 
   const accentColors = {
     manipola:   { project: '#9B6DFF', file: '#4B8BFF' },
@@ -76,7 +74,7 @@ function EditorSidebar({
         <button
           type="button"
           className="editor-sidebar__logout"
-          onClick={async () => { if (await confirmLeave(confirm)) { logout(); navigate('/login'); } }}
+          onClick={signOut}
           title="Esci"
         >⏻</button>
       </div>
