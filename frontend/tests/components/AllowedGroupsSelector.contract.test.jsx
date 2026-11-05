@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import AllowedGroupsSelector from '../../src/components/shared/AllowedGroupsSelector';
@@ -61,14 +61,29 @@ describe('AllowedGroupsSelector contract', () => {
     consoleSpy.mockRestore();
   });
 
-  it('treats a 404 from getShares as "no shares" and stays editable', async () => {
+  it('un 404 di getShares (risorsa non trovata) lascia il pannello bloccato con «Riprova»', async () => {
     // Il messaggio non contiene "404": conta solo lo status.
-    sharesMock.getShares.mockRejectedValueOnce(httpError(404, 'Risorsa senza condivisioni'));
+    sharesMock.getShares
+      .mockRejectedValueOnce(httpError(404, 'Risorsa non trovata'))
+      .mockResolvedValueOnce({ group_ids: [], owner_group_id: 'grp-owner' });
     render(<AllowedGroupsSelector resourceType="connection" resourceId="c-1" />);
 
     const item = await screen.findByText('Comune A');
-    await waitFor(() => expect(item.closest('label').querySelector('input').disabled).toBe(false));
-    expect(screen.queryByText(/caricamento condivisioni fallito/i)).toBeNull();
+    expect(item.closest('label').querySelector('input').disabled).toBe(true);
+    expect(screen.getByText(/risorsa non trovata/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Riprova' }));
+    await waitFor(() => expect(screen.getByText('Comune A').closest('label').querySelector('input').disabled).toBe(false));
+    expect(screen.queryByRole('button', { name: 'Riprova' })).toBeNull();
+  });
+
+  it('senza owner_group_id dal server il pannello resta bloccato con errore', async () => {
+    sharesMock.getShares.mockResolvedValue({ group_ids: ['grp-a'] });
+    render(<AllowedGroupsSelector resourceType="connection" resourceId="c-1" />);
+
+    const item = await screen.findByText('Comune A');
+    expect(item.closest('label').querySelector('input').disabled).toBe(true);
+    expect(screen.getByText(/proprietario della risorsa non noto/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Riprova' })).toBeTruthy();
   });
 
   it('does not crash when the same mounted panel gains the permission', async () => {

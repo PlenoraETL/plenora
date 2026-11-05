@@ -17,6 +17,8 @@
  * |            | oppure non e' stato possibile prepararlo                    |
  * | changed    | Arricchisci: l'avvio e' stato rifiutato (409                |
  * |            | preparation_changed): stima rifatta, motivo mostrato        |
+ * | migrate    | un nodo Carica REST ha credenziali nel canvas da migrare    |
+ * |            | (utils/restSecrets): Avvia spento finche' non si migra      |
  *
  * La stima di Arricchisci e' il preflight del server (POST /preflight) con
  * GLI STESSI input dell'esecuzione sul canvas salvato; l'impronta
@@ -25,7 +27,7 @@
 import { errorReason } from '../api/errors';
 import { role } from './permissions';
 
-export const BEFORE_RUN_REASONS = Object.freeze(['inputs', 'staff', 'estimate', 'blocking', 'changed']);
+export const BEFORE_RUN_REASONS = Object.freeze(['inputs', 'staff', 'estimate', 'blocking', 'changed', 'migrate']);
 
 export const PREPARATION_CHANGED = 'preparation_changed';
 
@@ -51,8 +53,11 @@ export const preflightBlocks = (preflight) =>
  * @param {{inputDefinitions?: Array, user?: Object, preflight?: Object|null,
  *          preflightError?: string|null, changedMessage?: string|null}} ctx
  */
-export function beforeRunReasons({ inputDefinitions = [], user = null, preflight = null, preflightError = null, changedMessage = null } = {}) {
+export function beforeRunReasons({
+  inputDefinitions = [], user = null, preflight = null, preflightError = null, changedMessage = null, migration = [],
+} = {}) {
   const on = {
+    migrate: (migration || []).length > 0,
     inputs: (inputDefinitions || []).length > 0,
     staff: role.isSuperadmin(user),
     estimate: estimateNeedsConfirm(preflight),

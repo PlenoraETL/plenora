@@ -122,9 +122,11 @@ describe('PublishEseguibileModal', () => {
 
 
   it('shows the backend detail inline on publish error and skips success callbacks', async () => {
+    // Un testo del backend (frase, non un codice snake_case: quelli non si
+    // mostrano mai, utils/errorMessages.looksLikeCode).
     createEseguibileMock.mockRejectedValueOnce({
-      response: { data: { detail: 'project_already_published' } },
-      message: 'project_already_published',
+      response: { data: { detail: 'Progetto già pubblicato: project_already_published' } },
+      message: 'Progetto già pubblicato: project_already_published',
     });
     const onClose = vi.fn();
     const onSuccess = vi.fn();

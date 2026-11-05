@@ -19,6 +19,7 @@ import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { getProject, restoreCanvasVersion, updateCanvas } from '../api';
 import { CanvasVersionConflictError, isCanvasVersionConflict, tokenAfterWrite } from '../utils/canvasVersion';
 import { serializeCanvas } from '../utils/canvasSerializer';
+import { assertNoRestSecrets } from '../utils/restSecrets';
 import { COLUMN_STEP, findFreePosition, nodeSize, planInsertAfter, settleNodes } from '../utils/canvasPlacement';
 import { bindingListResolution, isParameterBindingEdge, uniqueDataEdges } from '../utils/runtimeBindingEdges';
 import { EDITOR_ACTION_NAMES } from '../components/editor/editorActions';
@@ -121,6 +122,10 @@ export const createCanvasStore = () => create(
               // Colonne derivate dalla fonte unica (Blocco A, regola 4): solo
               // quelle calcolate dalla firma di QUESTO canvas (attese con un
               // tetto), altrimenti nessuna (le ricalcola il backend).
+              // Un nodo con credenziali REST nel canvas e' "da migrare": niente
+              // salvataggio finche' l'utente non sceglie un connettore o
+              // rimuove le righe (utils/restSecrets; il messaggio e' il motivo).
+              assertNoRestSecrets(snapshot.nodes);
               let derivedColumns = derivedColumnsForSave(snapshot.projectId, {
                 nodes: snapshot.nodes, edges: snapshot.edges, mode: snapshot.mode,
               });

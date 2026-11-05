@@ -18,6 +18,7 @@ import ColumnStatusNote from '../common/ColumnStatusNote';
 import RestDestinationSection, { REST_METHODS } from './carica/RestDestinationSection';
 import DbDestinationSection, { WRITE_MODES } from './carica/DbDestinationSection';
 import AutoRunNote from './carica/autoRunNote';
+import { restSecretHeaderNames, withoutSecretHeaders } from '../../utils/restSecrets';
 import './CaricanNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 
@@ -50,6 +51,7 @@ const CaricanNode = memo(({ data, id }) => {
   const connections = useCanvasStore(s => s.connections);
   const projectId = useCanvasStore(s => s.projectId) || '';
   const _updateNodeData = useCanvasStore(s => s.updateNodeData);
+  const readOnly = useCanvasStore(s => s.isReadOnly);
 
   // Colonne che escono dall'Output (ingresso di questo nodo), con gli id:
   // dalla fonte unica (Blocco A, regola 4), non salvate nel nodo.
@@ -86,7 +88,9 @@ const CaricanNode = memo(({ data, id }) => {
   const isDbValid = connectionId && schemaName && tableName;
   const needsMatchColumns = ['upsert', 'update'].includes(writeMode);
   const matchColumnsValid = !needsMatchColumns || matchColumns.length > 0;
-  const isRestValid = /^https?:\/\//i.test(restUrl) && REST_METHODS.includes(restMethod);
+  // Credenziali nel canvas = nodo da migrare (utils/restSecrets): non valido.
+  const isRestValid = /^https?:\/\//i.test(restUrl) && REST_METHODS.includes(restMethod)
+    && restSecretHeaderNames(data).length === 0;
   const isValid = destType === 'rest' ? isRestValid : (isDbValid && matchColumnsValid);
 
   return (
@@ -118,6 +122,22 @@ const CaricanNode = memo(({ data, id }) => {
               REST
             </button>
           </div>
+
+          {destType !== 'rest' && restSecretHeaderNames(data).length > 0 && (
+            <div className="carica-node__hint carica-node__hint--warn" role="alert" data-testid="rest-secrets-migrate-db">
+              Da migrare: sono rimaste credenziali REST da una configurazione precedente
+              ({restSecretHeaderNames(data).join(', ')}). Finché restano, il progetto non si salva e non si esegue.
+              {' '}
+              <button
+                type="button"
+                className="carica-node__btn carica-node__btn--secondary"
+                disabled={readOnly}
+                onClick={() => _updateNodeData(id, { rest_headers: withoutSecretHeaders(data.rest_headers) })}
+              >
+                Rimuovi credenziali
+              </button>
+            </div>
+          )}
 
           {destType === 'db' && (
             <DbDestinationSection
@@ -162,6 +182,7 @@ const CaricanNode = memo(({ data, id }) => {
               showAdvanced={showAdvanced}
               onToggleAdvanced={() => setShowAdvanced(!showAdvanced)}
               onUpdate={handleUpdate}
+              onMultiUpdate={handleMultiUpdate}
             />
           )}
 

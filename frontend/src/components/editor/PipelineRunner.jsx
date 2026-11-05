@@ -51,6 +51,7 @@ import useRuntimeInputDefinitions from '../../hooks/useRuntimeInputDefinitions';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import useCanvasStore from '../../store/useCanvasStore';
 import { requestErrorMessage, backendMessage } from '../../utils/errorMessages';
+import { restMigrationIssues } from '../../utils/restSecrets';
 
 const OUTPUT_TYPES = new Set(['result', 'resultNode']);
 const outputId = (nodes) => (nodes || []).find(n => OUTPUT_TYPES.has(n.type))?.id || null;
@@ -185,9 +186,19 @@ export default function PipelineRunner({ user = null }) {
   const run = useCallback(async (options) => {
     const store = useCanvasStore.getState();
     if (store.runState === 'starting' || store.runState === 'running') return;
+    const runOptions = options || store.runOptions || { force_recalculate: false };
+    // Credenziali REST nel canvas da migrare: la finestra «Prima di avviare»
+    // lo dice e Avvia resta spento (utils/restSecrets). Niente salvataggio.
+    const migration = restMigrationIssues(store.nodes);
+    if (migration.length) {
+      openWindow({
+        id: Date.now(), mode: store.mode, inputDefinitions: [], user, runOptions, values: {},
+        preflight: null, preflightError: null, preflightKey: null, changedMessage: null, migration,
+      });
+      return;
+    }
     const blocked = runBlockedResult(store.nodes, store.mode);
     if (blocked) { showResult(blocked); return; }
-    const runOptions = options || store.runOptions || { force_recalculate: false };
     beginPreparation();
     // true = la finestra «Prima di avviare» resta aperta: lo stato resta
     // 'starting' finche' l'utente avvia o annulla.

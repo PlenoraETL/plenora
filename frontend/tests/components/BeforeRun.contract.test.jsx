@@ -75,7 +75,8 @@ beforeEach(() => { preflightEnrichment.mockReset(); });
 
 describe('the reasons rule (one table)', () => {
   it('each reason is declared and opens the window; none = one click', () => {
-    expect(BEFORE_RUN_REASONS).toEqual(['inputs', 'staff', 'estimate', 'blocking', 'changed']);
+    expect(BEFORE_RUN_REASONS).toEqual(['inputs', 'staff', 'estimate', 'blocking', 'changed', 'migrate']);
+    expect(beforeRunReasons({ migration: [{ nodeId: 'c1', headers: ['Authorization'] }] })).toEqual(['migrate']);
     expect(beforeRunReasons({})).toEqual([]);
     expect(beforeRunReasons({ preflight: preflight() })).toEqual(['estimate']);
     expect(beforeRunReasons({ preflight: preflight({}, { api_calls: 0 }) })).toEqual([]);

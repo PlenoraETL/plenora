@@ -14,6 +14,8 @@
  *    4xx, 5xx): messaggio in italiano (requestErrorMessage) e «Riprova», con o
  *    senza input da compilare.
  *  - Avvisi: preparazione rifiutata (Avvia spento) o cambiata dopo la stima.
+ *  - Credenziali da migrare: nodi Carica REST con intestazioni segrete nel
+ *    canvas (utils/restSecrets). Avvia spento finche' non si migra.
  *  - Opzioni dello staff (superadmin): intermediate_mode.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -25,6 +27,7 @@ import {
   describeApiCalls, describeInputRows, initialInputValues, inputsComplete, inputsKey, needsPreflight,
   preflightBlocks, runInputs,
 } from '../../utils/beforeRun';
+import { restMigrationMessage } from '../../utils/restSecrets';
 import './BeforeRunModal.css';
 
 // Valori ammessi dal backend per intermediate_mode; '' = non mandarlo
@@ -134,7 +137,8 @@ function EstimateSection({ state, nodeLabel, onRetry }) {
  */
 export default function BeforeRunModal({ request, onPreflight, onLaunch, onCancel, nodeLabel = (id) => id }) {
   const definitions = request?.inputDefinitions || [];
-  const withEstimate = Boolean(request) && needsPreflight(request.mode) && typeof onPreflight === 'function';
+  const migration = request?.migration || [];
+  const withEstimate = Boolean(request) && migration.length === 0 && needsPreflight(request.mode) && typeof onPreflight === 'function';
   const [values, setValues] = useState({});
   const [intermediateMode, setIntermediateMode] = useState('');
   const [estimate, setEstimate] = useState({ key: null, data: null, error: null, loading: false });
@@ -182,7 +186,7 @@ export default function BeforeRunModal({ request, onPreflight, onLaunch, onCance
   const estimateReady = !withEstimate || (
     estimate.key === key && !estimate.loading && !estimate.error && estimate.data && !preflightBlocks(estimate.data)
   );
-  const canLaunch = complete && estimateReady;
+  const canLaunch = complete && estimateReady && migration.length === 0;
   const isSuper = role.isSuperadmin(request.user);
   const run = term('run');
 
@@ -215,6 +219,22 @@ export default function BeforeRunModal({ request, onPreflight, onLaunch, onCance
       footer={footer}
     >
       <div className="before-run">
+        {migration.length > 0 && (
+          <section className="before-run__section" aria-label="Credenziali da migrare">
+            <h3 className="before-run__heading">Credenziali da migrare</h3>
+            <div className="before-run__notice before-run__notice--error" role="alert">
+              {restMigrationMessage(migration)}
+            </div>
+            <ul className="before-run__nodes">
+              {migration.map(item => (
+                <li key={item.nodeId} className="before-run__node before-run__node--invalid">
+                  <span className="before-run__node-title">{nodeLabel(item.nodeId)}</span>
+                  <span>{item.headers.join(', ')}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {request.changedMessage && (
           <div className="before-run__notice" role="alert">
             {request.changedMessage} La stima qui sotto è stata rifatta: controllala e conferma di nuovo.

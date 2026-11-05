@@ -40,6 +40,27 @@ def list_canvas_ids_with_runs(
     return canvas_ids
 
 
+def list_run_counts_by_canvas_group(
+    *,
+    fetchall_func: FetchAll | None = None,
+) -> list[tuple[str, str, int]]:
+    """(canvas_id, group_id, numero di run) per ogni canvas con run intermedie."""
+    fetchall_boundary = fetchall_func or _fetchall
+    rows = fetchall_boundary(
+        "SELECT canvas_id, group_id, COUNT(*) AS runs FROM runs GROUP BY canvas_id, group_id",
+        (),
+    )
+    out: list[tuple[str, str, int]] = []
+    for row in rows:
+        if isinstance(row, dict):
+            canvas_id, group_id, runs = row.get("canvas_id"), row.get("group_id"), row.get("runs")
+        else:
+            canvas_id, group_id, runs = row[0], row[1], row[2]
+        if canvas_id:
+            out.append((str(canvas_id), str(group_id or ""), int(runs or 0)))
+    return out
+
+
 def apply_runs_retention(
     canvas_id: str,
     group_id: str,

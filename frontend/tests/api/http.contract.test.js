@@ -150,7 +150,7 @@ describe('api/http error interceptor contract', () => {
   it.each([
     ['auth_token_missing', 'Token mancante'],
     ['auth_token_invalid', 'Token invalido o scaduto'],
-  ])('clears session and emits unauthorized for critical auth envelope %s', async (code, message) => {
+  ])('emits unauthorized (storage left to logout) for critical auth envelope %s', async (code, message) => {
     const onRejected = await loadRejectedInterceptor();
     const { authBus } = await import('../../src/utils/authBus');
     authBus.onUnauthorized = vi.fn();
@@ -173,8 +173,9 @@ describe('api/http error interceptor contract', () => {
 
     expect(error.message).toBe(message);
     expect(error.code).toBe(code);
-    expect(sessionStorage.getItem('urby_token')).toBeNull();
-    expect(sessionStorage.getItem('urby_user')).toBeNull();
+    // Lo storage lo svuota solo AuthContext.logout() (dopo emitBeforeLogout).
+    expect(sessionStorage.getItem('urby_token')).toBe('stale-token');
+    expect(sessionStorage.getItem('urby_user')).toBe('{"id":"u1"}');
     expect(authBus.onUnauthorized).toHaveBeenCalledTimes(1);
   });
 
@@ -228,7 +229,8 @@ describe('api/http 401: una sola chiusura per la sessione che ha fatto la richie
     await Promise.allSettled([1, 2, 3, 4].map(() => onRejected(expired('A'))));
 
     expect(authBus.onUnauthorized).toHaveBeenCalledTimes(1);
-    expect(sessionStorage.getItem('urby_token')).toBeNull();
+    // Il token resta finche' logout() (unico punto) non svuota lo storage.
+    expect(sessionStorage.getItem('urby_token')).toBe('A');
   });
 
   it('un 401 tardivo della sessione precedente non tocca la sessione nuova', async () => {

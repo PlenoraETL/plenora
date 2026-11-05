@@ -8,6 +8,7 @@ from typing import Protocol
 from app.core.intermediate.retention import (
     delete_all_runs_for_canvas,
     list_canvas_ids_with_runs as _list_canvas_ids_with_runs,
+    list_run_counts_by_canvas_group as _list_run_counts_by_canvas_group,
 )
 from app.db.pg_connection import close_connection as _close_connection
 
@@ -19,6 +20,11 @@ class CleanupLogger(Protocol):
 def list_canvas_ids_with_runs() -> list[str]:
     """Return distinct canvas IDs that currently have intermediate runs."""
     return _list_canvas_ids_with_runs()
+
+
+def list_run_counts_by_canvas_group() -> list[tuple[str, str, int]]:
+    """(canvas_id, group_id, numero di run) dei canvas con run intermedie."""
+    return _list_run_counts_by_canvas_group()
 
 
 def delete_runs_for_canvas(canvas_id: str) -> int:
@@ -55,4 +61,5 @@ __all__ = [
     "delete_runs_for_canvas",
     "delete_runs_for_canvases",
     "list_canvas_ids_with_runs",
+    "list_run_counts_by_canvas_group",
 ]

@@ -425,8 +425,8 @@ function ProjectList() {
                   onOpen={() => handleOpenProject(project)}
                   onDelete={can.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
                   onClone={canCreateProj ? () => handleCloneProject(project) : null}
-                  onRename={can.editProject(user, project) ? (newName) => handleRenameProject(project, newName) : null}
-                  onSetTags={can.editProject(user, project) ? (tags) => handleSetTags(project, tags) : null}
+                  onRename={can.editProjectMeta(user, project) ? (newName) => handleRenameProject(project, newName) : null}
+                  onSetTags={can.editProjectMeta(user, project) ? (tags) => handleSetTags(project, tags) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -464,8 +464,8 @@ function ProjectList() {
                   onOpen={() => handleOpenProject(project)}
                   onDelete={can.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
                   onClone={canCreateProj ? () => handleCloneProject(project) : null}
-                  onRename={can.editProject(user, project) ? (newName) => handleRenameProject(project, newName) : null}
-                  onSetTags={can.editProject(user, project) ? (tags) => handleSetTags(project, tags) : null}
+                  onRename={can.editProjectMeta(user, project) ? (newName) => handleRenameProject(project, newName) : null}
+                  onSetTags={can.editProjectMeta(user, project) ? (tags) => handleSetTags(project, tags) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -498,8 +498,8 @@ function ProjectList() {
                 onOpen={() => handleOpenProject(project)}
                 onDelete={can.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
                 onClone={canCreateProj ? () => handleCloneProject(project) : null}
-                onRename={can.editProject(user, project) ? (newName) => handleRenameProject(project, newName) : null}
-                onSetTags={can.editProject(user, project) ? (tags) => handleSetTags(project, tags) : null}
+                onRename={can.editProjectMeta(user, project) ? (newName) => handleRenameProject(project, newName) : null}
+                onSetTags={can.editProjectMeta(user, project) ? (tags) => handleSetTags(project, tags) : null}
                 onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
               />
             ))}

@@ -18,9 +18,9 @@ import axios from 'axios';
 import { API_ENDPOINT, API_TIMEOUT, EXPECTED_API_VERSION } from './config';
 import { authBus } from '../utils/authBus';
 import { requestErrorMessage } from '../utils/errorMessages';
+import { registerSessionReset } from '../utils/session';
 
 const TOKEN_KEY = 'urby_token';
-const USER_KEY = 'urby_user';
 
 // Le chiamate di autenticazione rispondono 401 per motivi che non sono una
 // sessione scaduta (credenziali errate al login, token gia' scaduto passato
@@ -46,20 +46,25 @@ function sentBearerToken(config) {
  * quello della sessione attuale. Per costruzione:
  *   - un 401 tardivo di una sessione precedente (token A, l'utente nel
  *     frattempo e' rientrato con B) non tocca la sessione nuova;
- *   - con N richieste parallele scadute la prima chiude la sessione e
- *     toglie il token, le altre trovano un token diverso e non fanno nulla:
- *     `authBus.onUnauthorized` (logout + /login in AuthContext) parte una
- *     volta sola per sessione.
- * Punto di aggancio per la pulizia della sessione: `authBus.onUnauthorized`.
+ *   - con N richieste parallele scadute la prima chiude la sessione, le
+ *     altre trovano il token gia' in chiusura (`closingToken`) e non fanno
+ *     nulla: `authBus.onUnauthorized` (logout + /login in AuthContext) parte
+ *     una volta sola per sessione.
+ * REGOLA (Fase 5, correzione dopo la conferma): qui NON si tocca lo storage
+ * della sessione. Lo svuota UN solo punto, AuthContext.logout(), DOPO
+ * authBus.emitBeforeLogout(): chi ha lavoro in sospeso (copia di sicurezza
+ * del canvas) lo scrive mentre l'utente e' ancora noto.
  *
  * @returns {boolean} true se la sessione e' stata chiusa.
  */
+let closingToken = null;
+// Il token in chiusura non sopravvive alla sessione (utils/session).
+registerSessionReset('http401', () => { closingToken = null; });
 export function handleUnauthorized(config) {
   if (AUTH_CALL_WITHOUT_SESSION.test(config?.url || '')) return false;
   const sent = sentBearerToken(config);
-  if (!sent || sent !== sessionStorage.getItem(TOKEN_KEY)) return false;
-  sessionStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(USER_KEY);
+  if (!sent || sent !== sessionStorage.getItem(TOKEN_KEY) || sent === closingToken) return false;
+  closingToken = sent;
   authBus.onUnauthorized?.();
   return true;
 }

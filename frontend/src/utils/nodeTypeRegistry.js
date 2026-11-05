@@ -1,5 +1,5 @@
 import { nd } from './nodeHelpers';
-import { REST_AUTH_FIELD, persistableRestHeaders } from './restSecrets';
+import { REST_AUTH_FIELD } from './restSecrets';
 
 // Backend names are canonical; reactFlowType preserves the editors' render keys.
 // Only these data fields are persisted. Runtime data is deliberately absent.
@@ -217,8 +217,9 @@ export function persistedNodeData(node) {
   for (const [key, field] of Object.entries(entry?.fields || {})) {
     if (field.persisted) data[key] = nd(node, key, structuredClone(field.default));
   }
-  // Segreti mai nel canvas (utils/restSecrets, audit R10.8).
-  if (Array.isArray(data.rest_headers)) data.rest_headers = persistableRestHeaders(data.rest_headers);
+  // Le intestazioni segrete NON si tolgono qui (niente si toglie in
+  // silenzio): un nodo che le ha e' "da migrare" e il salvataggio e'
+  // bloccato da useCanvasStore (utils/restSecrets, assertNoRestSecrets).
   return { ...data, ...backendAccessFlags(node) };
 }
 

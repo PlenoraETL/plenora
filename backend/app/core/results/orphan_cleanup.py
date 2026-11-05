@@ -7,7 +7,7 @@ from typing_extensions import TypedDict
 
 from app.core.intermediate.cleanup import (
     delete_runs_for_canvas,
-    list_canvas_ids_with_runs,
+    list_run_counts_by_canvas_group,
 )
 from app.core.projects.cleanup import list_existing_project_ids
 from app.core.results.cleanup import (
@@ -64,18 +64,28 @@ def find_orphan_result_project_ids() -> list[str]:
     ]
 
 
+def find_orphan_runs() -> list[tuple[str, str, int]]:
+    """(canvas_id, group_id, run) delle esecuzioni intermedie senza progetto.
+
+    Fonte UNICA degli orfani intermedi: la usa la bonifica
+    (find_orphan_run_canvas_ids) e il catalogo dell'Object Storage, cosi' il
+    catalogo mostra esattamente quello che la bonifica toccherebbe.
+    """
+    existing = _get_existing_project_ids()
+    return [
+        (canvas_id, group_id, runs)
+        for canvas_id, group_id, runs in list_run_counts_by_canvas_group()
+        if canvas_id not in existing
+    ]
+
+
 def find_orphan_run_canvas_ids() -> list[str]:
     """Lista canvas_id presenti in `intermediate.runs` ma non in `config.projects`.
 
     `canvas_id` corrisponde a `project_id` per convenzione PLENORA-ETL
     (vedi commento in `intermediate_schema.sql`).
     """
-    existing = _get_existing_project_ids()
-    return [
-        canvas_id
-        for canvas_id in list_canvas_ids_with_runs()
-        if canvas_id not in existing
-    ]
+    return list(dict.fromkeys(canvas_id for canvas_id, _group, _runs in find_orphan_runs()))
 
 
 def cleanup_orphans(

@@ -148,7 +148,7 @@ describe('CaricanNode REST destination controls', () => {
     }));
   });
 
-  it('credentials go by API connector reference; a secret header is never editable nor saved (R10.8)', async () => {
+  it('credentials go by API connector reference; a secret header is never editable and the node is "da migrare" (R10.8)', async () => {
     renderNode({
       dest_type: 'rest',
       rest_url: 'https://api.example.com/items',
@@ -158,12 +158,40 @@ describe('CaricanNode REST destination controls', () => {
     fireEvent.click(screen.getByText(/Intestazioni HTTP e lotti/i));
     expect(screen.queryByDisplayValue('Bearer secret')).toBeNull();
     expect(screen.getByDisplayValue('plenora')).toBeInTheDocument();
-    expect(screen.getByRole('alert').textContent).toMatch(/non viene salvata nel canvas/);
+    expect(screen.getByTestId('rest-secrets-migrate').textContent).toMatch(/Da migrare.*Authorization/);
     expect(screen.queryByText('Segreto')).toBeNull();
 
     const auth = screen.getByLabelText('Autenticazione');
     await screen.findByText('Connettore API: Gestionale');
     fireEvent.change(auth, { target: { value: 'api-1' } });
-    expect(updateNodeDataMock).toHaveBeenCalledWith('carica-1', { rest_auth_api_id: 'api-1' });
+    // Una sola modifica: riferimento al connettore e righe segrete sostituite.
+    expect(updateNodeDataMock).toHaveBeenCalledWith('carica-1', {
+      rest_auth_api_id: 'api-1',
+      rest_headers: [{ name: 'X-Client', value: 'plenora' }],
+    });
+  });
+});
+
+describe('CaricanNode: credenziali REST rimaste con destinazione database (rilettura T1+T3, R2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCaricaSchemasMock.mockResolvedValue({ schemas: ['public'] });
+    getCaricaTablesMock.mockResolvedValue({ tables: ['cities'] });
+    getCaricaColumnsMock.mockResolvedValue({ columns: [] });
+  });
+
+  it('l\'avviso e «Rimuovi credenziali» sono visibili anche con destinazione DB', () => {
+    renderNode({
+      dest_type: 'db',
+      rest_headers: [{ name: 'Authorization', value: 'Bearer x' }, { name: 'X-Client', value: 'plenora' }],
+    });
+    expect(screen.getByTestId('rest-secrets-migrate-db').textContent).toContain('Authorization');
+    fireEvent.click(screen.getByRole('button', { name: 'Rimuovi credenziali' }));
+    expect(updateNodeDataMock).toHaveBeenCalledWith('carica-1', { rest_headers: [{ name: 'X-Client', value: 'plenora' }] });
+  });
+
+  it('senza credenziali REST nessun avviso', () => {
+    renderNode({ dest_type: 'db', rest_headers: [{ name: 'X-Client', value: 'plenora' }] });
+    expect(screen.queryByTestId('rest-secrets-migrate-db')).toBeNull();
   });
 });

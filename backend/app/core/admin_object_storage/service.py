@@ -5,10 +5,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
+import logging
+
+from psycopg import Error as PsycopgError
 from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.projects import db as projects_db
 from app.core.results import db as results_db
+from app.core.results.orphan_cleanup import find_orphan_runs
 from app.core.io.object_storage import get_runtime_object_storage
 from app.core.io.tenant_namespace import (
     legacy_domain,
@@ -18,6 +23,8 @@ from app.core.io.tenant_namespace import (
     tenant_prefix,
 )
 from app.shared.resources.storage_layout import TENANT_DOMAINS
+
+logger = logging.getLogger(__name__)
 
 
 class StorageObjectEntry(BaseModel):
@@ -54,6 +61,9 @@ class StorageProjectGroup(BaseModel):
     project_type: Optional[str] = None
     group_id: str
     results: list[StorageProjectResult]
+    # Esecuzioni intermedie di un progetto orfano: anche un orfano SENZA
+    # risultati compare nel catalogo, perche' la bonifica lo toccherebbe.
+    intermediate_runs: int = 0
     # True se il progetto non esiste piu': lo decide il server per id, non il
     # nome mostrato (audit frontend R10.4).
     orphan: bool = False
@@ -63,6 +73,9 @@ class StorageProjectCatalog(BaseModel):
     projects: list[StorageProjectGroup]
     results_count: int
     size_bytes: int
+    # Le esecuzioni intermedie non si sono potute leggere (DB intermedio non
+    # disponibile): il catalogo dei risultati resta, senza quella parte.
+    intermediate_runs_unavailable: bool = False
 
 
 def _resource_id(domain: str, segments: tuple[str, ...]) -> str | None:
@@ -171,6 +184,26 @@ def list_project_results(group_id: str | None = None) -> StorageProjectCatalog:
         grouped.setdefault((row.group_id, row.project_id), []).append(entry)
         total_size += entry.size_bytes
 
+    # Orfani delle esecuzioni intermedie dalla STESSA fonte della bonifica
+    # (results.orphan_cleanup.find_orphan_runs): il catalogo mostra tutto cio'
+    # che la bonifica globale toccherebbe, anche senza risultati.
+    orphan_runs: dict[tuple[str, str], int] = {}
+    # Lettura OPZIONALE (come la bonifica, che la tollera): se il DB delle
+    # esecuzioni intermedie non risponde, il catalogo dei risultati resta.
+    intermediate_runs_unavailable = False
+    try:
+        orphan_rows = find_orphan_runs()
+    except (SQLAlchemyError, PsycopgError, OSError, RuntimeError) as exc:
+        logger.warning("Catalogo Object Storage: esecuzioni intermedie non leggibili: %s", exc)
+        orphan_rows = []
+        intermediate_runs_unavailable = True
+    for canvas_id, run_group, runs in orphan_rows:
+        if group_id and run_group != group_id:
+            continue
+        key = (run_group, canvas_id)
+        orphan_runs[key] = orphan_runs.get(key, 0) + runs
+        grouped.setdefault(key, [])
+
     catalog: list[StorageProjectGroup] = []
     for (owner_group, project_id), results in grouped.items():
         project = projects.get((owner_group, project_id))
@@ -181,6 +214,7 @@ def list_project_results(group_id: str | None = None) -> StorageProjectCatalog:
                 project_type=(project.project_type if project else None),
                 group_id=owner_group,
                 results=results,
+                intermediate_runs=orphan_runs.get((owner_group, project_id), 0),
                 orphan=project is None,
             )
         )
@@ -192,6 +226,7 @@ def list_project_results(group_id: str | None = None) -> StorageProjectCatalog:
         projects=catalog,
         results_count=sum(len(item.results) for item in catalog),
         size_bytes=total_size,
+        intermediate_runs_unavailable=intermediate_runs_unavailable,
     )
 
 

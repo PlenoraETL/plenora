@@ -32,9 +32,12 @@ def http_status_code(status_code: int) -> str:
 # Domain-specific definitions still owned by the shared envelope/catalog layer.
 
 API_CONNECTION_IN_USE = "api_connection_in_use"
-# CARICA REST: connettore API di autenticazione non visibile/utilizzabile (R10.8).
-CARICA_REST_AUTH_UNAVAILABLE = "carica_rest_auth_unavailable"
 """409: tentativo di delete di un'api_connection referenziata."""
+
+CARICA_REST_AUTH_UNAVAILABLE = "carica_rest_auth_unavailable"
+"""403/400: connettore API di autenticazione della scrittura REST non
+utilizzabile (carica/rest_auth: details.reason dice perche'); nella scrittura
+e' l'esito del task, nessuna richiesta parte."""
 
 PROJECT_HAS_DEPENDENCIES = "project_has_dependencies"
 """409: tentativo di delete progetto con discendenti."""

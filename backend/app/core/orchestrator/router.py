@@ -38,6 +38,7 @@ from app.core.orchestrator.router_mappers import (
 from app.core.orchestrator import access_control as _access_control
 from app.core.orchestrator.carica_payload_validation import (
     validate_rest_carica_task_payload,
+    assert_rest_auth_usable,
 )
 from app.core.orchestrator import download_response as _download_response
 from app.core.projects import service as project_service_module
@@ -416,6 +417,13 @@ def create_task(
             if not request.carica_node_data:
                 raise HTTPException(status_code=400, detail="carica_node_data è obbligatorio per task CARICA")
             _validate_rest_carica_task_payload(request.carica_node_data)
+            # Credenziali del connettore: chi lancia deve poterlo usare e
+            # l'endpoint deve avere la sua origine (carica.rest_auth).
+            assert_rest_auth_usable(
+                request.carica_node_data,
+                current_user,
+                project_group_id=str(getattr(_gate_meta, "group_id", "") or ""),
+            )
 
             enrich_canvas_types_from_output_contract(
                 request.carica_node_data,

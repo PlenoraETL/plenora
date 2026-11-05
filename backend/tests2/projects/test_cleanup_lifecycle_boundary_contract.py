@@ -174,16 +174,17 @@ def test_orphan_run_scan_filters_through_cleanup_boundaries(monkeypatch) -> None
         lambda: {"existing-canvas"},
     )
     # `orphan_cleanup` fa `from app.core.intermediate.cleanup import
-    # list_canvas_ids_with_runs`, quindi il binding va patchato sul
+    # list_run_counts_by_canvas_group`, quindi il binding va patchato sul
     # consumer.
     _ = intermediate_cleanup  # noqa: F841
     monkeypatch.setattr(
         orphan_cleanup,
-        "list_canvas_ids_with_runs",
-        lambda: ["existing-canvas", "orphan-canvas"],
+        "list_run_counts_by_canvas_group",
+        lambda: [("existing-canvas", "g", 1), ("orphan-canvas", "g", 2), ("orphan-canvas", "h", 1)],
     )
 
     assert orphan_cleanup.find_orphan_run_canvas_ids() == ["orphan-canvas"]
+    assert orphan_cleanup.find_orphan_runs() == [("orphan-canvas", "g", 2), ("orphan-canvas", "h", 1)]
 
 
 def test_results_cleanup_boundary_lists_project_ids(monkeypatch) -> None:

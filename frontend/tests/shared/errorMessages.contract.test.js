@@ -23,7 +23,6 @@ const ALLOWED_RAW = [
   { file: 'api/http.js', match: 'error.message = message', motivo: "l'interceptor scrive in err.message il testo gia' normalizzato" },
   { file: 'utils/errorMessages.js', match: 'err.message', motivo: "e' la normalizzazione: legge il testo di un errore locale dell'app" },
   { file: 'components/common/ErrorBoundary.jsx', match: 'error.message', motivo: "dettaglio tecnico mostrato solo nella build di sviluppo (FRONTEND_ENV.isDev)" },
-  { file: 'pages/LoginPage.jsx', match: "err.message === 'mfa_required'", motivo: 'confronto con un codice, il testo non viene mostrato' },
 ];
 
 const ALLOWED_MUTE = [

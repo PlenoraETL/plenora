@@ -7,6 +7,7 @@ from app.core.eseguibili.manifest import compile_manifest
 from app.core.manipola.canvas_data_preparation import CanvasDataPreparation, PREPARATION_ERRORS, classify_preparation_error
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
+from app.core.orchestrator.carica_payload_validation import assert_canvas_rest_auth_usable
 from app.core.projects.canvas_validation import _StaticCanvasService
 from app.core.projects.canvas_validation import validate_project_chain
 from app.shared.execution.lookup_mapping import lookup_value_text
@@ -795,6 +796,13 @@ def update_project_canvas(
     canvas = CanvasState(nodes=body.nodes, edges=body.edges)
 
     canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=True)
+    # Chi salva un riferimento a un connettore API deve poterlo usare e
+    # l'endpoint REST deve avere la sua origine (carica.rest_auth).
+    assert_canvas_rest_auth_usable(
+        [node.model_dump() for node in canvas.nodes],
+        current_user,
+        project_group_id=_metadata_group_id(metadata) or "",
+    )
 
     try:
         revision = {}

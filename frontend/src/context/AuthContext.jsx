@@ -36,7 +36,11 @@ export function AuthProvider({ children }) {
   const [user,  setUser]  = useState(() => loadFromStorage().user);
   const navigate = useNavigate();
 
-  const logout = useCallback(() => {
+  // UNICO punto che svuota lo storage della sessione (anche sul 401:
+  // api/http non lo tocca), e solo DOPO emitBeforeLogout.
+  // `{ expired: true }` = uscita per 401: il token e' gia' scaduto, niente revoca.
+  const logout = useCallback((options) => {
+    const expired = options?.expired === true;
     // Prima di tutto (anche sul 401): la copia di sicurezza in sospeso si
     // scrive mentre l'utente e' ancora in sessione. La copia resta.
     authBus.emitBeforeLogout();
@@ -49,7 +53,7 @@ export function AuthProvider({ children }) {
     //     finito il suo lavoro: l'interceptor 401 salta /auth/logout
     //     apposta per non innescare un loop logout→401→logout.
     const currentToken = sessionStorage.getItem(TOKEN_KEY);
-    if (currentToken) {
+    if (currentToken && !expired) {
       try {
         const p = apiLogout(currentToken);
         if (p && typeof p.then === 'function') {
@@ -72,7 +76,7 @@ export function AuthProvider({ children }) {
   // invece di fare window.location.href (bypassa React Router)
   useEffect(() => {
     authBus.onUnauthorized = () => {
-      logout();
+      logout({ expired: true });
       navigate('/login', { replace: true });
     };
     return () => { authBus.onUnauthorized = null; };

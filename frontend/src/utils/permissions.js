@@ -13,7 +13,7 @@
  *     liste), quello e' la fonte: la capability lo legge invece di dedurlo.
  *
  * NOTA SICUREZZA: questo file e' solo UX. Il vero controllo sta nel backend
- * (Depends(require_*), _check_ownership, compute_can_edit, ...).
+ * (Depends(require_*), owns_or_admin, compute_can_edit, ...).
  */
 
 const ROLES = {
@@ -51,25 +51,36 @@ export const role = {
 // assente = il server non lo dice, decide il ruolo minimo dell'azione.
 const serverAllows = (resource) => resource?.can_edit !== false;
 
-// Stessa regola di backend `_check_ownership` (progetti, schedule, file):
-// admin e superadmin sempre, gli altri solo sulle risorse che hanno creato.
-// Se la risorsa non porta `created_by` decide il backend (403 motivato).
+// Stessa regola di backend `ownership.owns_or_admin` (= `_check_ownership`
+// delle dependency require_project_owner / require_schedule_owner /
+// require_file_owner): admin e superadmin sempre, chiunque altro solo sulle
+// risorse che ha creato. Senza `created_by` solo admin (come il backend). Il
+// gruppo lo controlla il server: le liste portano solo risorse del gruppo.
 const ownsOrAdmin = (u, resource) => isAdminOrAbove(u)
-  || (isUserOrAbove(u) && (!resource?.created_by || resource.created_by === u?.user_id));
+  || (!!u?.user_id && !!resource?.created_by && resource.created_by === u.user_id);
+
+// Dove il server calcola il flag con la STESSA regola dell'azione (file:
+// owns_or_admin), il flag decide; senza flag, la regola dell'azione.
+const ownerFlagOrRule = (u, resource) => (typeof resource?.can_edit === 'boolean'
+  ? resource.can_edit
+  : ownsOrAdmin(u, resource));
 
 const TICKET_CLOSED = ['resolved', 'closed'];
 
-// La tabella di policy: un'azione = un predicato.
+// La tabella di policy: un'azione = un predicato. Ogni predicato e' la
+// regola del backend dell'endpoint (CAPABILITY_BACKEND qui sotto, verificata
+// da tests/shared/permissions.contract leggendo i Depends dei router).
 export const can = {
   // ── Canvas e progetti ────────────────────────────────────────────────
   editCanvas:        isUserOrAbove,   // viewer/esecutore sono read-only
   createProject:     isUserOrAbove,
-  editProject:       (u, project) => ownsOrAdmin(u, project),
+  // Rinomina e tag: PATCH /projects/{id} = user del gruppo (non solo owner).
+  editProjectMeta:   (u) => isUserOrAbove(u),
   deleteProject:     (u, project) => ownsOrAdmin(u, project),
 
   // ── File ─────────────────────────────────────────────────────────────
   uploadFile:        isUserOrAbove,
-  editFile:          (u, file) => isUserOrAbove(u) && serverAllows(file),
+  editFile:          (u, file) => ownerFlagOrRule(u, file),
 
   // ── Connessioni e sorgenti (admin del gruppo, flag del server) ───────
   createConnection:    isAdminOrAbove,
@@ -79,12 +90,10 @@ export const can = {
   createApiConnection: isAdminOrAbove,
   editApiConnection:   (u, api) => isAdminOrAbove(u) && serverAllows(api),
 
-  // ── Schedule: crea admin; esegui/attiva/modifica/elimina come il
-  //    backend (require_schedule_owner: proprietario o admin; gli schedule
-  //    li crea solo un admin, quindi admin e superadmin).
+  // ── Schedule: crea admin; esegui/attiva/modifica/elimina =
+  //    require_schedule_owner (proprietario di qualsiasi ruolo, o admin).
   createSchedule:      isAdminOrAbove,
-  manageSchedule:      (u, schedule) => isAdminOrAbove(u) || (isUserOrAbove(u)
-    && !!schedule?.created_by && schedule.created_by === u?.user_id),
+  manageSchedule:      (u, schedule) => ownsOrAdmin(u, schedule),
 
   // ── Eseguibili ───────────────────────────────────────────────────────
   createEseguibile:    isAdminOrAbove,
@@ -116,5 +125,60 @@ export const can = {
   manageBackups:       isSuperadmin,
   seeTechnicalLogs:  isAdminOrAbove,  // tab "Log Tecnici" del LogViewer
 };
+
+/**
+ * Capability -> regola del backend (Fase 5, correzione dopo la conferma).
+ *
+ * Per ogni capability: le funzioni dei router che la governano
+ * (`file`: percorso da backend/app/core, `fns`: nomi delle funzioni) e la
+ * regola:
+ *   - `depends`: la dependency di autenticazione delle funzioni
+ *     (require_user_or_above, require_admin, require_superadmin,
+ *     require_not_esecutore, get_current_user, require_*_owner);
+ *   - `rule`: 'role' (decide la dependency), 'owner' (regola
+ *     owns_or_admin), 'service' (la regola fine sta nel service: il test
+ *     controlla la dependency, i casi sono in "casi del backend");
+ *   - `serverFlag`: la capability legge anche `can_edit` della risorsa
+ *     ('exact' = il flag e' calcolato con la stessa regola dell'azione);
+ *   - `stricter`: l'interfaccia e' DICHIARATAMENTE piu' restrittiva del
+ *     backend, col motivo (nessuna azione nascosta senza motivo scritto).
+ * Il test legge i Depends delle funzioni elencate e verifica che il
+ * predicato di `can` dia, ruolo per ruolo, lo stesso esito della regola.
+ */
+export const CAPABILITY_BACKEND = Object.freeze({
+  editCanvas: { file: 'projects/router.py', fns: ['update_project_canvas', 'create_canvas_version', 'restore_canvas_version'], depends: 'require_user_or_above', rule: 'role' },
+  createProject: { file: 'projects/router.py', fns: ['create_project', 'clone_project'], depends: 'require_user_or_above', rule: 'role' },
+  editProjectMeta: { file: 'projects/router.py', fns: ['update_project_details'], depends: 'require_user_or_above', rule: 'role' },
+  deleteProject: { file: 'projects/router.py', fns: ['delete_project'], depends: 'require_project_owner', rule: 'owner' },
+  uploadFile: { file: 'files/router.py', fns: ['upload_file', 'upload_multi_layer'], depends: 'require_user_or_above', rule: 'role' },
+  editFile: { file: 'files/router.py', fns: ['update_file', 'delete_file'], depends: 'require_file_owner', rule: 'owner', serverFlag: 'exact' },
+  createConnection: { file: 'connections/router.py', fns: ['create_connection', 'create_connection_set'], depends: 'require_admin', rule: 'role' },
+  editConnection: { file: 'connections/router.py', fns: ['update_connection', 'delete_connection', 'update_connection_set', 'delete_connection_set'], depends: 'require_admin', rule: 'role', serverFlag: true },
+  createDataSource: { file: 'datasources/router.py', fns: ['create_datasource'], depends: 'require_admin', rule: 'role' },
+  editDataSource: { file: 'datasources/router.py', fns: ['update_datasource', 'delete_datasource'], depends: 'require_admin', rule: 'role', serverFlag: true },
+  createApiConnection: { file: 'arricchisci/router.py', fns: ['create_api_connection'], depends: 'require_admin', rule: 'role' },
+  editApiConnection: { file: 'arricchisci/router.py', fns: ['update_api_connection', 'delete_api_connection'], depends: 'require_admin', rule: 'role', serverFlag: true },
+  createSchedule: { file: 'scheduler/router.py', fns: ['create_schedule'], depends: 'require_admin', rule: 'role' },
+  manageSchedule: { file: 'scheduler/router.py', fns: ['update_schedule', 'delete_schedule', 'toggle_schedule', 'run_schedule_now'], depends: 'require_schedule_owner', rule: 'owner' },
+  createEseguibile: { file: 'eseguibili/router.py', fns: ['create_eseguibile'], depends: 'require_admin', rule: 'role' },
+  manageEseguibile: { file: 'eseguibili/router.py', fns: ['update_eseguibile', 'delete_eseguibile', 'republish_eseguibile', 'activate_eseguibile_version'], depends: 'require_admin', rule: 'role', serverFlag: true },
+  runEseguibile: { file: 'eseguibili/router.py', fns: ['execute_eseguibile', 'create_eseguibile_run'], depends: 'get_current_user', rule: 'role' },
+  shareResources: { file: 'auth/shares_router.py', fns: ['set_shares', 'add_share', 'remove_share'], depends: 'require_superadmin', rule: 'role' },
+  manageTickets: { file: 'tickets/router.py', fns: ['update_ticket_endpoint', 'delete_ticket_endpoint'], depends: '_require_not_esecutore', rule: 'service' },
+  reopenTicket: { file: 'tickets/router.py', fns: ['update_ticket_endpoint'], depends: '_require_not_esecutore', rule: 'service' },
+  removeTicketAttachment: { file: 'tickets/router.py', fns: ['delete_attachment_endpoint'], depends: '_require_not_esecutore', rule: 'service' },
+  manageUsers: { file: 'auth/users_router.py', fns: ['create_user', 'update_user', 'delete_user', 'reset_password'], depends: 'require_admin', rule: 'role' },
+  manageGroups: { file: 'auth/groups_router.py', fns: ['create_group'], depends: 'require_superadmin', rule: 'role' },
+  deleteGroup: { file: 'auth/groups_router.py', fns: ['delete_group'], depends: 'require_superadmin', rule: 'service' },
+  assignAdminRole: { file: 'auth/users_router.py', fns: ['create_user', 'update_user'], depends: 'require_admin', rule: 'service' },
+  createEsecutore: { file: 'auth/users_router.py', fns: ['create_user'], depends: 'require_admin', rule: 'role' },
+  manageObjectStorage: { file: 'admin_object_storage/router.py', fns: ['delete_all_previews', 'delete_object'], depends: 'require_superadmin', rule: 'role' },
+  manageTaskRuntime: { file: 'admin_task_runtime/router.py', fns: ['resolve_uncertain_carica'], depends: 'require_superadmin', rule: 'role' },
+  manageBackups: { file: 'admin_backups/router.py', fns: ['backup_trigger_endpoint'], depends: 'require_superadmin', rule: 'role' },
+  seeTechnicalLogs: {
+    file: 'logs/router.py', fns: ['get_logs'], depends: 'require_not_esecutore', rule: 'role',
+    stricter: 'scelta di interfaccia: il tab "Log Tecnici" si mostra solo agli admin; il backend filtra comunque per gruppo',
+  },
+});
 
 export default { can, role, ROLES };

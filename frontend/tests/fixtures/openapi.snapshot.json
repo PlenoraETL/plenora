@@ -8631,6 +8631,11 @@
       },
       "StorageProjectCatalog": {
         "properties": {
+          "intermediate_runs_unavailable": {
+            "default": false,
+            "title": "Intermediate Runs Unavailable",
+            "type": "boolean"
+          },
           "projects": {
             "items": {
               "$ref": "#/components/schemas/StorageProjectGroup"
@@ -8660,6 +8665,11 @@
           "group_id": {
             "title": "Group Id",
             "type": "string"
+          },
+          "intermediate_runs": {
+            "default": 0,
+            "title": "Intermediate Runs",
+            "type": "integer"
           },
           "orphan": {
             "default": false,

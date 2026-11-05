@@ -3,7 +3,7 @@ import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { acceptsInputKind } from '../../utils/runtimeInputKinds';
 import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
-import { listConnectionSets } from '../../api';
+import { loadSharedConnectionSets } from '../../utils/connectionSets';
 import {
   getNodeBindableTargets,
   isParameterBindingEdge,
@@ -24,13 +24,13 @@ const normalizeKey = value => String(value || '')
 
 // Nessuna cache di modulo (audit R5.4, R1-N4, R5-N3): il registry e' quello
 // condiviso (utils/transformRegistry, svuotato da resetSession) e i set di
-// connessioni si chiedono a ogni apertura, cosi' un set appena creato compare
-// e un altro utente non vede quelli del precedente.
+// connessioni sono la risorsa condivisa della sessione (utils/connectionSets:
+// una richiesta per N nodi, invalidata quando i set cambiano, svuotata da
+// resetSession).
 const loadRegistry = () => fetchTransformRegistry().then((value) => {
   if (!value) throw new Error('elenco delle operazioni non disponibile');
   return value;
 });
-const loadConnectionSets = () => listConnectionSets().then((value) => value?.connection_sets || []);
 
 function ProjectInputNode({ id, data }) {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
@@ -74,7 +74,7 @@ function ProjectInputNode({ id, data }) {
   useEffect(() => {
     if (kind !== 'connection') return undefined;
     let active = true;
-    loadConnectionSets()
+    loadSharedConnectionSets()
       .then(items => { if (active) setConnectionSets(items); })
       .catch(() => { if (active) setConnectionSets([]); });
     return () => { active = false; };

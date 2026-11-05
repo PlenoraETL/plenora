@@ -141,7 +141,7 @@ describe('AdminObjectStoragePage delete contract', () => {
     const user = userEvent.setup();
     render(<AdminObjectStoragePage />);
 
-    await screen.findByText('Rilevati risultati orfani');
+    await screen.findByText('Rilevati dati orfani');
     await user.click(screen.getByRole('button', { name: 'Bonifica orfani' }));
     expect(cleanupOrphanStorageMock).not.toHaveBeenCalled();
     const buttons = screen.getAllByRole('button', { name: 'Bonifica orfani' });
@@ -151,7 +151,35 @@ describe('AdminObjectStoragePage delete contract', () => {
     // Il perimetro richiesto e' quello mostrato (audit R10.4).
     expect(cleanupOrphanStorageMock).toHaveBeenCalledWith(['gone']);
     expect(await screen.findByText(
-      'Bonifica completata: 1 risultati orfani eliminati',
+      'Bonifica completata: 1 risultati e 0 esecuzioni intermedie orfani eliminati',
+    )).toBeInTheDocument();
+  });
+
+  it('un orfano con sole esecuzioni intermedie compare e la bonifica ne porta l\'id', async () => {
+    listObjectStorageProjectsMock.mockResolvedValue({
+      projects: [{
+        project_id: 'gone-runs', project_name: 'Progetto eliminato', orphan: true, project_type: null,
+        group_id: 'g1', results: [], intermediate_runs: 3,
+      }],
+      results_count: 0,
+      size_bytes: 0,
+    });
+    cleanupOrphanStorageMock.mockResolvedValue({
+      orphan_results: { rows_deleted: 0 }, orphan_runs: { runs_deleted: 3 }, errors: [],
+    });
+    const user = userEvent.setup();
+    render(<AdminObjectStoragePage />);
+
+    await screen.findByText('Rilevati dati orfani');
+    expect(screen.getByText('3 esecuzioni intermedie')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Bonifica orfani' }));
+    expect(screen.getByText(/0 risultati e 3 esecuzioni intermedie/)).toBeInTheDocument();
+    const buttons = screen.getAllByRole('button', { name: 'Bonifica orfani' });
+    await user.click(buttons.at(-1));
+
+    await waitFor(() => expect(cleanupOrphanStorageMock).toHaveBeenCalledWith(['gone-runs']));
+    expect(await screen.findByText(
+      'Bonifica completata: 0 risultati e 3 esecuzioni intermedie orfani eliminati',
     )).toBeInTheDocument();
   });
 
@@ -166,7 +194,7 @@ describe('AdminObjectStoragePage delete contract', () => {
     });
     render(<AdminObjectStoragePage />);
     await screen.findAllByText('Progetto eliminato');
-    expect(screen.queryByText('Rilevati risultati orfani')).toBeNull();
+    expect(screen.queryByText('Rilevati dati orfani')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Bonifica orfani' })).toBeNull();
   });
 });

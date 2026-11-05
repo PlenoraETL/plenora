@@ -157,3 +157,22 @@ def recheck_eseguibile_authorized(
             "success": False,
             "message": "Re-check permessi eseguibile fallito",
         }
+
+
+def load_live_user(user_id: Optional[str]) -> Optional[CurrentUser]:
+    """Utente attivo dallo stato del DB ORA (None se assente o disattivato).
+
+    Usato da chi deve decidere un permesso al momento dell'esecuzione e non
+    al submit (es. carica.rest_auth: chi usa il connettore API).
+    """
+    if not user_id:
+        return None
+    user = get_user(user_id)
+    if not user or not user.is_active:
+        return None
+    return CurrentUser(
+        user_id=user.id,
+        username=user.username,
+        group_id=user.group_id,
+        role=user.role,
+    )

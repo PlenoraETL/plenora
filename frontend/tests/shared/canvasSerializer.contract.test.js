@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { serializeCanvas, serializeEdge } from '../../src/utils/canvasSerializer';
 import { createEdgeFromData, deserializeNodes } from '../../src/utils/nodeFactories';
 import { createParameterBindingEdge } from '../../src/utils/runtimeBindingEdges';
+import { restMigrationIssues } from '../../src/utils/restSecrets';
 
 describe('canvasSerializer contract', () => {
   it('stores runtime bindings on the input node and omits virtual parameter edges', () => {
@@ -257,9 +258,11 @@ describe('canvasSerializer contract', () => {
       dest_type: 'rest',
       rest_url: 'https://api.example.com/items',
       rest_method: 'PATCH',
-      // Segreti mai nel canvas (R10.8): la credenziale e' il riferimento al
-      // connettore; l'intestazione segreta di un canvas vecchio non rientra.
-      rest_headers: [{ name: 'X-Client', value: 'plenora' }],
+      // Niente si toglie in silenzio (correzione dopo la conferma T1+T3):
+      // l'intestazione segreta di un canvas vecchio resta in memoria e il nodo
+      // e' "da migrare"; il salvataggio e' bloccato da useCanvasStore
+      // (tests/shared/restSecrets.contract.test.jsx).
+      rest_headers: [{ name: 'Authorization', value: 'Bearer token', secret: true }, { name: 'X-Client', value: 'plenora' }],
       rest_auth_api_id: 'api-1',
       rest_body_mapping: [{ source: 'city', target: 'payload.city', required: true }],
       rest_batch_mode: 'per_record',
@@ -276,9 +279,8 @@ describe('canvasSerializer contract', () => {
       rest_batch_mode: 'per_record',
       rest_batch_size: 25,
       rest_auth_api_id: 'api-1',
-      rest_headers: [{ name: 'X-Client', value: 'plenora' }],
     }));
-    expect(JSON.stringify(serialized)).not.toContain('Bearer token');
+    expect(restMigrationIssues(rehydrated)).toEqual([{ nodeId: 'carica-rest-1', headers: ['Authorization'] }]);
   });
 
   it('roundtrips a complex join edge without losing join conditions or spatial metadata', () => {

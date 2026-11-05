@@ -3,7 +3,9 @@
  *
  * Regola (T3, una sola per tutto il frontend):
  *   1. messaggio del backend, se c'e' (envelope `message`, `detail` stringa,
- *      `detail.message`, oppure l'elenco dei campi di un 422 Pydantic);
+ *      `detail.message`, oppure l'elenco dei campi di un 422 Pydantic); un
+ *      testo che e' un CODICE (snake_case senza spazi: 'mfa_invalid') non e'
+ *      un messaggio per l'utente e non si mostra mai (looksLikeCode);
  *   2. altrimenti il testo curato del codice di dominio (`{error: "<code>"}`,
  *      vedi `app/shared/error_codes.py`);
  *   3. altrimenti un testo italiano per famiglia: rete, timeout, 401, 403,
@@ -164,7 +166,11 @@ function formatValidationList(list) {
   return parts.length ? parts.join('; ') : null;
 }
 
-const nonEmpty = (v) => (typeof v === 'string' && v.trim() ? v : null);
+// Un testo del backend che e' un CODICE (snake_case senza spazi, es.
+// 'mfa_invalid', 'auth_mfa_required') non e' un messaggio per l'utente: si
+// scarta e decide il codice curato o la famiglia HTTP.
+export const looksLikeCode = (v) => typeof v === 'string' && /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(v.trim());
+const nonEmpty = (v) => (typeof v === 'string' && v.trim() && !looksLikeCode(v) ? v : null);
 
 /**
  * Messaggio fornito dal backend nel corpo dell'errore, o null.

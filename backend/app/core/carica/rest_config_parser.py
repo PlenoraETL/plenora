@@ -70,6 +70,23 @@ def parse_carica_rest_config(carica_node_data: Mapping[str, object]) -> ParsedCa
     )
 
 
+_URL_KEYS = ("url", "rest_url", "endpoint_url")
+
+
+def rest_target_url(carica_node_data: Mapping[str, object]) -> str:
+    """URL della scrittura come lo legge il parser ('' se assente o malformato).
+
+    Stesse chiavi e stesso annidamento di ``parse_carica_rest_config``: chi
+    controlla PRIMA della scrittura (salvataggio, POST /tasks) guarda lo
+    stesso URL a cui la scrittura mandera' le richieste.
+    """
+    try:
+        raw = _first_value(_rest_data(carica_node_data), _URL_KEYS)
+    except ValueError:
+        return ""
+    return raw.strip() if isinstance(raw, str) else ""
+
+
 def _rest_data(carica_node_data: Mapping[str, object]) -> Mapping[str, object]:
     nested = carica_node_data.get("rest_config")
     if nested is None:
@@ -82,7 +99,7 @@ def _rest_data(carica_node_data: Mapping[str, object]) -> Mapping[str, object]:
 
 
 def _parse_url(rest_data: Mapping[str, object]) -> str:
-    value = _string_value(rest_data, ("url", "rest_url", "endpoint_url"))
+    value = _string_value(rest_data, _URL_KEYS)
     if value is None:
         raise ValueError("CARICA REST url is required")
 

@@ -12,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { role } from '../utils/permissions';
 import { useTheme } from '../hooks/useTheme';
 import PlenoraLogo from '../components/common/PlenoraLogo';
-import { humanizeError } from '../utils/errorMessages';
+import { isMfaRequired, loginErrorMessage } from '../utils/loginErrors';
 import '../styles/LoginPage.css';
 
 // Helper: dove mandare l'utente dopo il login in base al ruolo.
@@ -134,14 +134,13 @@ export default function LoginPage() {
       const userData = await login(username, password, mfaCode.trim() || null);
       navigate(landingPathFor(userData), { replace: true });
     } catch (err) {
-      if (err?.response?.status === 403 && (err.code === 'auth_mfa_required' || err.message === 'mfa_required')) {
+      // Testo dal codice del backend (utils/loginErrors): il 401 del login
+      // non passa dal percorso di uscita (api/http).
+      if (isMfaRequired(err)) {
         setNeedsMfa(true);
         setError("Inserisci il codice MFA per completare l'accesso.");
-      } else if (err?.response?.status === 401) {
-        // Il 401 del login non passa dal percorso di uscita (api/http).
-        setError('Credenziali errate: username o password non corretti.');
       } else {
-        setError(humanizeError(err).message);
+        setError(loginErrorMessage(err));
       }
     } finally {
       setLoading(false);

@@ -6,7 +6,7 @@
  * vengono dal set di connessioni, caricato solo se serve.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { listConnectionSets } from '../api';
+import { loadSharedConnectionSets } from '../utils/connectionSets';
 
 // Stesso default del backend (eseguibili/manifest.py): senza tipo = file.
 export const runtimeInputKind = (node) => String(node?.data?.input_kind || 'file').trim().toLowerCase();
@@ -46,10 +46,10 @@ export default function useRuntimeInputDefinitions(nodes) {
   useEffect(() => {
     if (!needsSets || loadRef.current === 'loading' || loadRef.current === 'done') return;
     loadRef.current = 'loading';
-    listConnectionSets()
-      .then(data => {
+    loadSharedConnectionSets()
+      .then(items => {
         loadRef.current = 'done';
-        if (mountedRef.current) setConnectionSets(data.connection_sets || []);
+        if (mountedRef.current) setConnectionSets(items);
       })
       // Fallito: si riprova al prossimo cambio degli input.
       .catch(() => { loadRef.current = 'failed'; });

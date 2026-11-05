@@ -178,15 +178,21 @@ export default function AdminObjectStoragePage() {
     // gruppo compreso). La richiesta porta esattamente questi project_id.
     const scopeIds = orphanProjects.map((project) => project.project_id);
     if (!scopeIds.length) return;
+    // Il catalogo porta TUTTI gli orfani che la bonifica toccherebbe (anche
+    // quelli con sole esecuzioni intermedie, senza risultati): stessa fonte
+    // del server (results.orphan_cleanup.find_orphan_runs).
     const orphanResults = orphanProjects.reduce(
       (count, project) => count + project.results.length, 0,
     );
+    const orphanRuns = orphanProjects.reduce(
+      (count, project) => count + Number(project.intermediate_runs || 0), 0,
+    );
     const perimeter = catalogGroup ? `del gruppo ${catalogGroup}` : 'di tutti i gruppi';
     const confirmed = await confirmModal.confirm({
-      title: 'Bonificare i risultati orfani?',
+      title: 'Bonificare gli orfani?',
       message: (
-        `Saranno rimossi ${orphanResults} risultati ${perimeter} appartenenti a `
-        + `${orphanProjects.length} progetti non più esistenti, inclusi i relativi file e i dati intermedi. `
+        `Saranno rimossi ${orphanResults} risultati e ${orphanRuns} esecuzioni intermedie ${perimeter} `
+        + `appartenenti a ${orphanProjects.length} progetti non più esistenti, inclusi i relativi file. `
         + 'Nessun altro progetto viene toccato.'
       ),
       confirmText: 'Bonifica orfani',
@@ -200,11 +206,12 @@ export default function AdminObjectStoragePage() {
     try {
       const report = await cleanupOrphanStorage(scopeIds);
       const deleted = report?.orphan_results?.rows_deleted || 0;
+      const runsDeleted = report?.orphan_runs?.runs_deleted || 0;
       const errors = report?.errors?.length || 0;
       setNotice(
         errors
-          ? `Bonifica parziale: ${deleted} risultati eliminati, ${errors} errori`
-          : `Bonifica completata: ${deleted} risultati orfani eliminati`,
+          ? `Bonifica parziale: ${deleted} risultati e ${runsDeleted} esecuzioni intermedie eliminati, ${errors} errori`
+          : `Bonifica completata: ${deleted} risultati e ${runsDeleted} esecuzioni intermedie orfani eliminati`,
       );
       await load(null);
     } catch (err) {
@@ -248,9 +255,9 @@ export default function AdminObjectStoragePage() {
         {groupedResults && orphanProjects.length > 0 && (
           <div className="storage-admin__orphan-warning">
             <div>
-              <strong>Rilevati risultati orfani</strong>
+              <strong>Rilevati dati orfani</strong>
               <span>
-                {orphanProjects.length} progetti eliminati conservano ancora risultati nello storage.
+                {orphanProjects.length} progetti eliminati conservano ancora risultati o esecuzioni intermedie.
               </span>
             </div>
             {canManage && (
@@ -274,11 +281,20 @@ export default function AdminObjectStoragePage() {
               <span>Risultati conservati: <b>{projectCatalog?.results_count || 0}</b></span>
               <span>Dimensione risultati: <b>{formatBytes(projectCatalog?.size_bytes)}</b></span>
             </div>
+            {projectCatalog?.intermediate_runs_unavailable && (
+              <div className="storage-admin__notice" role="status">
+                Le esecuzioni intermedie non si sono potute leggere: l'elenco mostra solo i risultati conservati.
+              </div>
+            )}
             {(projectCatalog?.projects || []).map((project, index) => (
               <details className="storage-admin__project" key={`${project.group_id}:${project.project_id}`} open={index === 0}>
                 <summary>
                   <div><strong>{project.project_name}</strong><span>{project.project_type?.toUpperCase() || 'PROGETTO ELIMINATO'} - {project.project_id}</span></div>
-                  <div><span>{project.group_id}</span><b>{project.results.length} risultati</b></div>
+                  <div>
+                    <span>{project.group_id}</span>
+                    <b>{project.results.length} risultati</b>
+                    {project.intermediate_runs > 0 && <b>{project.intermediate_runs} esecuzioni intermedie</b>}
+                  </div>
                 </summary>
                 <div className="storage-admin__result-list">
                   {project.results.map((result) => (

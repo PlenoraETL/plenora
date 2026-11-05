@@ -176,13 +176,42 @@ def assert_resource_visible(
     _disclosure.raise_disclosure(_disclosure.access_denied())
 
 
+def owns_or_admin(
+    resource: dict | object | None,
+    current_user: CurrentUser,
+) -> bool:
+    """Regola UNICA delle dependency ``require_*_owner`` come booleano.
+
+    True per superadmin; per gli altri solo nel gruppo della risorsa e se
+    admin oppure creatore (``created_by``). Senza ``created_by`` decide il
+    solo ruolo admin. La usano ``_check_ownership`` (azione) e le liste che
+    espongono ``can_edit`` per le stesse azioni (es. file_sources): la lista
+    dice can_edit=true esattamente quando l'azione e' permessa.
+    """
+    if not resource:
+        return False
+    if current_user.role == "superadmin":
+        return True
+    resource_group, _ = _extract_group_and_id(resource)
+    if resource_group != current_user.group_id:
+        return False
+    if current_user.role in ROLES_ADMIN_OR_ABOVE:
+        return True
+    if isinstance(resource, dict):
+        created_by = resource.get("created_by")
+    else:
+        created_by = getattr(resource, "created_by", None)
+    return bool(created_by) and created_by == current_user.user_id
+
+
 def _check_ownership(
     resource: dict | None,
     resource_label: str,
     current_user: CurrentUser,
 ) -> None:
     """
-    Logica condivisa per le 3 dependency `require_*_owner`.
+    Logica condivisa per le 3 dependency `require_*_owner` (regola in
+    ``owns_or_admin``).
 
     - 404 se la risorsa non esiste.
     - 403 se l'utente non è del gruppo (a meno che superadmin).
@@ -190,17 +219,8 @@ def _check_ownership(
     """
     if not resource:
         raise HTTPException(status_code=404, detail=f"{resource_label} non trovato")
-
-    is_super = current_user.role == "superadmin"
-    is_admin_plus = current_user.role in ROLES_ADMIN_OR_ABOVE
-
-    if not is_super and resource.get("group_id") != current_user.group_id:
+    if owns_or_admin(resource, current_user):
+        return
+    if current_user.role != "superadmin" and resource.get("group_id") != current_user.group_id:
         _disclosure.raise_disclosure(_disclosure.access_denied())
-
-    created_by = resource.get("created_by")
-    if is_admin_plus:
-        return
-    if created_by and created_by == current_user.user_id:
-        return
-
     _disclosure.raise_disclosure(_disclosure.owner_only_required(resource_label))

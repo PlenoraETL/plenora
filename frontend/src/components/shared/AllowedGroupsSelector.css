@@ -61,6 +61,17 @@
   font-weight: 500;
 }
 
+.ags__retry {
+  margin-left: 6px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 1px 8px;
+  cursor: pointer;
+}
+
 /* ── Toggle "tutti i gruppi" ────────────────────────────────────────── */
 
 .ags__all-toggle {

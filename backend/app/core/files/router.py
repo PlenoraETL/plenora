@@ -17,7 +17,7 @@ from app.core.auth.dependencies import (
 from app.core.auth.owner_dependencies import require_file_owner
 from app.core.auth.ownership import (
     assert_resource_visible,
-    compute_can_edit,
+    owns_or_admin,
 )
 from app.core.auth.visibility import visible_resource_ids
 from app.core.files.service import FileSourceService, file_source_service
@@ -362,7 +362,8 @@ def list_files(
     # Inietta can_edit per ogni record
     files_iter = all_files.files if hasattr(all_files, 'files') else (all_files if isinstance(all_files, list) else [])
     for f in files_iter:
-        f.can_edit = compute_can_edit(f, current_user)
+        # can_edit = la regola di PUT/DELETE (require_file_owner).
+        f.can_edit = owns_or_admin(f, current_user)
 
     return all_files
 
@@ -372,7 +373,7 @@ def get_file(file_id: str, current_user: CurrentUser = Depends(require_not_esecu
     """Dettaglio file. Read-only su risorsa visibile (owned + shared)."""
     file_source = file_source_service.get_file_source(file_id)
     assert_resource_visible(file_source, "file_sources", current_user, "File")
-    file_source.can_edit = compute_can_edit(file_source, current_user)
+    file_source.can_edit = owns_or_admin(file_source, current_user)
     return file_source
 
 

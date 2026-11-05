@@ -32,6 +32,8 @@ from app.core.carica.multilayer_artifact_registry import resolve_multilayer_arti
 from app.core.carica.executor import CaricaExecutor
 from app.core.carica.rest_auth import (
     RestAuthUnavailable,
+    rest_auth_api_id,
+    resolve_rest_auth_actor,
     resolve_rest_auth_headers,
     with_auth_headers,
 )
@@ -94,6 +96,7 @@ class CaricaTaskResultPayload(TypedDict, total=False):
     message: str
     error: str
     error_message: str
+    reason: str
     project_id: str
     task_id: str
     run_id: str
@@ -350,24 +353,36 @@ def execute_rest_write(
     progress: ProgressFn,
     committed_progress: Optional[ProgressFn] = None,
     expected_group_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> CaricaTaskResultPayload:
     """Coordinate REST write progress while the domain owns REST payload writes."""
     progress(15, "Preparazione scrittura REST...")
 
     try:
         parsed_config = parse_carica_rest_config(carica_node_data)
-        # Credenziali per riferimento al connettore API (mai nel canvas).
-        group_id = str(expected_group_id or "").strip()
-        if not group_id and carica_node_data.get("rest_auth_api_id"):
-            metadata = _get_project_service().get_project_metadata(project_id)
-            group_id = str(getattr(metadata, "group_id", None) if metadata else "").strip()
+        # Credenziali per riferimento al connettore API (mai nel canvas):
+        # regola unica in carica.rest_auth (chi usa il connettore, stessa
+        # origine dell'URL del connettore, credenziale in intestazione).
         try:
-            auth_headers = resolve_rest_auth_headers(carica_node_data, group_id)
+            auth_headers = ()
+            if rest_auth_api_id(carica_node_data):
+                metadata = _get_project_service().get_project_metadata(project_id)
+                project_group = str(getattr(metadata, "group_id", None) or "")
+                group_id = str(expected_group_id or "").strip() or project_group.strip()
+                owner_id = str(getattr(metadata, "created_by", None) or "")
+                actor = resolve_rest_auth_actor(user_id, owner_id or None)
+                auth_headers = resolve_rest_auth_headers(
+                    carica_node_data,
+                    actor=actor,
+                    project_group_id=group_id,
+                    target_url=parsed_config.sink_config.url,
+                )
         except RestAuthUnavailable as exc:
             return {
                 "status": "connection_error",
                 "success": False,
                 "error": "carica_rest_auth_unavailable",
+                "reason": exc.reason,
                 "message": str(exc),
                 "error_message": str(exc),
                 "rows_written": 0,

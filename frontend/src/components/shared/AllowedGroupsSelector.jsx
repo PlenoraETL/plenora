@@ -104,23 +104,29 @@ function AllowedGroupsSelectorPanel({
         setError(`Caricamento gruppi fallito: ${humanizeError(groupsRes.reason).message}`);
       }
 
-      // Shares: 404 è "nessuna share" (non è errore), gli altri errori sì
-      if (sharesRes.status === 'fulfilled') {
+      // REGOLA (Fase 5, correzione dopo la conferma): il pannello si sblocca
+      // SOLO con le condivisioni attuali E il gruppo proprietario noto dal
+      // server. Il 404 del backend vuol dire "risorsa non trovata" (shares
+      // router), non "nessuna condivisione"; una risposta senza
+      // owner_group_id non dice quale gruppo escludere: in entrambi i casi il
+      // pannello resta bloccato con l'errore e «Riprova».
+      const ownerFromServer = sharesRes.status === 'fulfilled' ? (sharesRes.value?.owner_group_id || null) : null;
+      if (sharesRes.status === 'fulfilled' && ownerFromServer) {
         const ids = Array.isArray(sharesRes.value?.group_ids) ? sharesRes.value.group_ids : [];
         const hasAll = ids.includes(MAGIC_ALL);
         setAllChecked(hasAll);
         setSelected(ids.filter(id => id !== MAGIC_ALL));
         setInitialSelected(ids);
-        setOwnerGroupId(sharesRes.value?.owner_group_id ?? null);
+        setOwnerGroupId(ownerFromServer);
         setSharesLoaded(true);
+      } else if (sharesRes.status === 'fulfilled') {
+        setOwnerGroupId(null);
+        setError(prev => prev || 'Gruppo proprietario della risorsa non noto: la condivisione resta bloccata.');
       } else if (sharesRes.reason?.response?.status === 404) {
-        // Nessuna share registrata: stato pulito. Lo status HTTP e' l'unico
-        // segnale affidabile: l'interceptor riscrive `message` con il testo
-        // del backend, quindi la vecchia regex /404/ non scattava mai.
-        setAllChecked(false);
-        setSelected([]);
-        setInitialSelected([]);
-        setSharesLoaded(true);
+        // Lo status HTTP e' l'unico segnale affidabile: l'interceptor
+        // riscrive `message` con il testo del backend.
+        setOwnerGroupId(null);
+        setError(prev => prev || 'Risorsa non trovata: la condivisione resta bloccata.');
       } else {
         console.error('[AllowedGroupsSelector] getShares fallita:', sharesRes.reason);
         setError(prev => prev || `Caricamento condivisioni fallito: ${humanizeError(sharesRes.reason).message}`);
@@ -219,7 +225,17 @@ function AllowedGroupsSelectorPanel({
         <div className="ags__loading">Caricamento gruppi…</div>
       ) : (
         <>
-          {error && <div className="ags__error">{error}</div>}
+          {error && (
+            <div className="ags__error" role="alert">
+              {error}
+              {!sharesLoaded && (
+                <>
+                  {' '}
+                  <button type="button" className="ags__retry" onClick={load}>Riprova</button>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Toggle "tutti i gruppi" */}
           <label className={`ags__all-toggle${allChecked ? ' ags__all-toggle--on' : ''}`}>

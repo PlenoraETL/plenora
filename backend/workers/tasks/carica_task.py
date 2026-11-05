@@ -378,7 +378,7 @@ def execute_carica_task(
                 result = carica_dispatch.execute_rest_write(
                     df, carica_node_data, project_id, task_id,
                     progress=progress, committed_progress=committed_progress,
-                    expected_group_id=_group_id)
+                    expected_group_id=_group_id, user_id=user_id)
             elif write_branch == 'arcgis':
                 write_started = True
                 result = carica_dispatch.execute_arcgis_write(

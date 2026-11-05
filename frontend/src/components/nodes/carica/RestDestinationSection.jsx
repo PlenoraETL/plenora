@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { listApiConnections } from '../../../api/apiConnections';
-import { REST_AUTH_FIELD, isSecretHeader } from '../../../utils/restSecrets';
+import {
+  REST_AUTH_FIELD, isSecretHeader, replaceSecretsWithConnector, restSecretHeaderNames,
+} from '../../../utils/restSecrets';
 import {
   REST_METHODS,
   REST_BATCH_MODES as REST_BATCH_MODE_VALUES,
@@ -19,9 +21,10 @@ const REST_BATCH_MODES = [
 ];
 
 // Credenziali per riferimento (audit R10.8): l'utente sceglie un connettore
-// API, il server ne usa l'autenticazione cifrata. Nessun valore segreto nel
-// canvas: le intestazioni con nome di credenziale non si salvano
-// (utils/restSecrets) e qui lo si dice accanto alla riga.
+// API, il server ne usa l'autenticazione cifrata. Un nodo con intestazioni
+// segrete nel canvas e' "da migrare" (utils/restSecrets): l'avviso e' qui,
+// sempre visibile; scegliere un connettore sostituisce le righe segrete (e lo
+// dice), oppure l'utente le rimuove con la ×. Niente si toglie in silenzio.
 function useApiConnectors() {
   const [state, setState] = useState({ status: 'loading', items: [] });
   useEffect(() => {
@@ -52,7 +55,25 @@ function RestDestinationSection({
   showAdvanced,
   onToggleAdvanced,
   onUpdate,
+  onMultiUpdate = null,
 }) {
+  const [replacedNotice, setReplacedNotice] = useState(null);
+  const secretNames = restSecretHeaderNames({ rest_headers: restHeaders });
+  const applyUpdates = (updates) => {
+    if (onMultiUpdate) onMultiUpdate(updates);
+    else Object.entries(updates).forEach(([field, value]) => onUpdate(field, value));
+  };
+  const handleAuthChange = (apiId) => {
+    if (apiId && secretNames.length) {
+      // Scelta esplicita: le credenziali vengono dal connettore, le righe
+      // segrete del canvas vengono sostituite (e il nodo lo dice).
+      const { headers, replaced } = replaceSecretsWithConnector(restHeaders);
+      applyUpdates({ [REST_AUTH_FIELD]: apiId, rest_headers: headers });
+      setReplacedNotice(replaced);
+      return;
+    }
+    onUpdate(REST_AUTH_FIELD, apiId);
+  };
   const handleRestHeaderChange = (index, field, value) => {
     const nextHeaders = [...restHeaders];
     nextHeaders[index] = { ...nextHeaders[index], [field]: value };
@@ -102,7 +123,7 @@ function RestDestinationSection({
         <select
           id="carica-rest-auth"
           value={restAuthApiId}
-          onChange={(e) => onUpdate(REST_AUTH_FIELD, e.target.value)}
+          onChange={(e) => handleAuthChange(e.target.value)}
           className="carica-node__select"
         >
           <option value="">Nessuna</option>
@@ -114,8 +135,20 @@ function RestDestinationSection({
         <div className="carica-node__hint">
           {connectors.status === 'error'
             ? 'Elenco dei connettori non disponibile.'
-            : 'Le credenziali restano nel connettore API, cifrate sul server: il canvas ne salva solo il riferimento.'}
+            : 'Le credenziali restano nel connettore API, cifrate sul server, e partono solo verso l’indirizzo del connettore: il canvas ne salva solo il riferimento.'}
         </div>
+        {secretNames.length > 0 && (
+          <div className="carica-node__hint carica-node__hint--warn" role="alert" data-testid="rest-secrets-migrate">
+            Da migrare: questo nodo ha credenziali nel canvas ({secretNames.join(', ')}). Scegli un connettore
+            API qui sopra (le sostituisce) oppure rimuovi le righe con la × tra le intestazioni.
+            Finché restano, il progetto non si salva e non si esegue.
+          </div>
+        )}
+        {replacedNotice && replacedNotice.length > 0 && secretNames.length === 0 && (
+          <div className="carica-node__hint" role="status">
+            Intestazioni sostituite dal connettore: {replacedNotice.join(', ')}. Annulla (Ctrl+Z) per ripristinarle.
+          </div>
+        )}
       </div>
 
       <div className="carica-node__section">
@@ -248,7 +281,9 @@ function RestDestinationSection({
                         className="carica-node__mapping-input"
                       />
                       {secret ? (
-                        <span className="carica-node__mapping-input carica-node__mapping-input--locked">non salvato</span>
+                        <span className="carica-node__mapping-input carica-node__mapping-input--locked">
+                          {header.redacted ? 'valore non nella copia locale' : 'credenziale da migrare'}
+                        </span>
                       ) : (
                         <input
                           type="text"
@@ -264,7 +299,7 @@ function RestDestinationSection({
                     </div>
                     {secret && (
                       <div className="carica-node__hint carica-node__hint--warn" role="alert">
-                        Credenziale: non viene salvata nel canvas. Usala tramite un connettore API in «Autenticazione».
+                        Credenziale nel canvas: scegli un connettore API in «Autenticazione» o rimuovi la riga (×). Finché resta, il progetto non si salva.
                       </div>
                     )}
                   </div>

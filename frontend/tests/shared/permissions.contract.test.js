@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { can } from '../../src/utils/permissions';
+import { can, CAPABILITY_BACKEND } from '../../src/utils/permissions';
 
 /**
  * Contract R10 (audit 03/11/2026, Fase 5 T1): permessi solo tramite `can.*`.
@@ -59,7 +59,7 @@ const GATED = {
   deleteFile: ['editFile'],
   createProject: ['createProject'],
   cloneProject: ['createProject'],
-  updateProject: ['editProject'],
+  updateProject: ['editProjectMeta'],
   deleteProject: ['deleteProject'],
   createSchedule: ['createSchedule'],
   updateSchedule: ['manageSchedule'],
@@ -262,5 +262,97 @@ describe('tabella dei permessi: casi del backend', () => {
     expect(can.reopenTicket(user, { created_by: 'u', status: 'closed' })).toBe(true);
     expect(can.reopenTicket(user, { created_by: 'u', status: 'open' })).toBe(false);
     expect(can.reopenTicket(admin, { created_by: 'a', status: 'closed' })).toBe(false);
+  });
+});
+
+describe('ogni capability e\' la regola del backend del suo endpoint (CAPABILITY_BACKEND)', () => {
+  const backendCore = path.resolve(import.meta.dirname, '../../../backend/app/core');
+  const ROLE_LIST = ['esecutore', 'viewer', 'user', 'admin', 'superadmin'];
+  // Ruoli ammessi da ogni dependency di ruolo (app/core/auth/dependencies.py).
+  const ROLE_DEPS = {
+    get_current_user: ROLE_LIST,
+    require_not_esecutore: ['viewer', 'user', 'admin', 'superadmin'],
+    _require_not_esecutore: ['viewer', 'user', 'admin', 'superadmin'],
+    require_user_or_above: ['user', 'admin', 'superadmin'],
+    require_admin: ['admin', 'superadmin'],
+    require_superadmin: ['superadmin'],
+  };
+  const OWNER_DEPS = ['require_project_owner', 'require_file_owner', 'require_schedule_owner'];
+  // Regola owns_or_admin (backend/app/core/auth/ownership.py).
+  const ownerRule = (roleName, createdBy) => roleName === 'admin' || roleName === 'superadmin'
+    || (!!createdBy && createdBy === 'me');
+
+  // Le dependency di autenticazione di una funzione di router (Depends(...)).
+  function authDepends(file, fn) {
+    const source = fs.readFileSync(path.join(backendCore, file), 'utf-8');
+    const start = source.indexOf(`\ndef ${fn}(`);
+    if (start < 0) return null;
+    // La firma finisce alla prima ")" seguita da ":" (o "-> Tipo:") a fine riga.
+    const rest = source.slice(start);
+    const end = rest.search(/\)\s*(->[^\n]*)?:[ \t]*\r?\n/);
+    const signature = rest.slice(0, end < 0 ? 800 : end + 1);
+    return [...signature.matchAll(/Depends\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g)]
+      .map((m) => m[1])
+      .filter((name) => name in ROLE_DEPS || OWNER_DEPS.includes(name));
+  }
+
+  it('ogni capability ha la sua regola del backend e viceversa', () => {
+    expect(Object.keys(CAPABILITY_BACKEND).sort()).toEqual(Object.keys(can).sort());
+  });
+
+  it('le funzioni elencate esistono e hanno la dependency dichiarata', () => {
+    const wrong = [];
+    for (const [cap, spec] of Object.entries(CAPABILITY_BACKEND)) {
+      for (const fn of spec.fns) {
+        const deps = authDepends(spec.file, fn);
+        if (deps === null) wrong.push(`${cap}: ${spec.file}::${fn} non trovata`);
+        else if (deps.length !== 1 || deps[0] !== spec.depends) wrong.push(`${cap}: ${spec.file}::${fn} usa ${deps.join(', ') || 'nessuna'} (dichiarato ${spec.depends})`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it('ruolo per ruolo il predicato da\' l\'esito della regola del backend', () => {
+    const wrong = [];
+    for (const [cap, spec] of Object.entries(CAPABILITY_BACKEND)) {
+      if (spec.rule === 'service' || spec.stricter) continue;
+      for (const roleName of ROLE_LIST) {
+        const u = { role: roleName, user_id: 'me' };
+        if (spec.rule === 'role') {
+          const expected = ROLE_DEPS[spec.depends].includes(roleName);
+          if (can[cap](u, {}) !== expected) wrong.push(`${cap}(${roleName}) = ${!expected}, backend ${expected}`);
+        } else if (spec.rule === 'owner') {
+          for (const createdBy of ['me', 'altro', undefined]) {
+            const expected = ownerRule(roleName, createdBy);
+            if (can[cap](u, { created_by: createdBy }) !== expected) {
+              wrong.push(`${cap}(${roleName}, created_by=${createdBy}) != ${expected}`);
+            }
+          }
+        }
+        if (spec.serverFlag === true && can[cap](u, { can_edit: false })) wrong.push(`${cap}(${roleName}) ignora can_edit=false`);
+        if (spec.serverFlag === 'exact') {
+          for (const flag of [true, false]) {
+            if (can[cap](u, { can_edit: flag, created_by: 'altro' }) !== flag) wrong.push(`${cap}(${roleName}) non segue can_edit=${flag}`);
+          }
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it('le sole capability piu\' restrittive del backend hanno il motivo scritto', () => {
+    const stricter = Object.entries(CAPABILITY_BACKEND).filter(([, s]) => s.stricter).map(([cap, s]) => [cap, s.stricter.length > 20]);
+    expect(stricter).toEqual([['seeTechnicalLogs', true]]);
+  });
+
+  it('rinomina e tag del progetto: ogni user del gruppo; eliminazione: proprietario o admin', () => {
+    const member = { role: 'user', user_id: 'u' };
+    expect(can.editProjectMeta(member, { created_by: 'altro' })).toBe(true);
+    expect(can.deleteProject(member, { created_by: 'altro' })).toBe(false);
+    // Progetto senza created_by: solo admin (backend _check_ownership).
+    expect(can.deleteProject(member, {})).toBe(false);
+    expect(can.deleteProject({ role: 'admin', user_id: 'a' }, {})).toBe(true);
+    // Schedule del viewer che l'ha creato: require_schedule_owner lo ammette.
+    expect(can.manageSchedule({ role: 'viewer', user_id: 'v' }, { created_by: 'v' })).toBe(true);
   });
 });

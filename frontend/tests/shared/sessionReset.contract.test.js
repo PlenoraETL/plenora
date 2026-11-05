@@ -1,6 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
+// Import STATICI in testa (punto 13 della correzione dopo la conferma): un
+// import() a freddo nel corpo del test, sotto carico, superava i 5 s.
+import { resetSession, registeredSessionResets, registerSessionReset } from '../../src/utils/session';
+import useCanvasStore from '../../src/store/useCanvasStore';
+import useColumnStore from '../../src/store/useColumnStore';
+import * as transformRegistry from '../../src/utils/transformRegistry';
+import * as http401 from '../../src/api/http';
+import * as connectionSets from '../../src/utils/connectionSets';
+import { listConnectionSets } from '../../src/api/connections';
+
+vi.mock('../../src/api/connections', () => ({ listConnectionSets: vi.fn() }));
 
 /**
  * Contract della fine sessione (Fase 5 T1: R5.4, R5.5, R1-N4, R5-N3).
@@ -32,7 +43,6 @@ const MODULE_STATE = [
 
 // Stato di modulo che NON contiene dati dell'utente, col motivo.
 const NOT_USER_DATA = {
-  'api/http.js': 'flag "avviso di versione gia\' mostrato" (diagnostica, uguale per tutti)',
   'api/openapiClient.js': 'schema OpenAPI pubblico del server, uguale per ogni utente',
   'components/canvas/compactNodeTypes.js': 'WeakMap con chiave i tipi di nodo: muore con gli oggetti',
   'context/ToastContext.jsx': 'contatore degli id dei toast',
@@ -73,13 +83,9 @@ describe('fine sessione: registro unico (resetSession)', () => {
     expect(stray).toEqual([]);
   });
 
-  it('resetSession svuota canvas, colonne e registry delle trasformazioni', async () => {
-    const { resetSession, registeredSessionResets } = await import('../../src/utils/session');
-    const { default: useCanvasStore } = await import('../../src/store/useCanvasStore');
-    const { default: useColumnStore } = await import('../../src/store/useColumnStore');
-    const transformRegistry = await import('../../src/utils/transformRegistry');
-
-    expect(registeredSessionResets()).toEqual(expect.arrayContaining(['canvasStore', 'columnStore', 'transformRegistry']));
+  it('resetSession svuota canvas, colonne e registry delle trasformazioni', () => {
+    expect(http401).toBeTruthy();
+    expect(registeredSessionResets()).toEqual(expect.arrayContaining(['canvasStore', 'columnStore', 'transformRegistry', 'connectionSets', 'http401']));
 
     useCanvasStore.setState({ nodes: [{ id: 'n1', data: {} }], edges: [], projectId: 'p-utente-A', isReadOnly: false });
     useColumnStore.setState({ projectId: 'p-utente-A', schemas: { n1: [{ name: 'segreto' }] }, status: 'ok' });
@@ -94,8 +100,7 @@ describe('fine sessione: registro unico (resetSession)', () => {
     expect(transformRegistry.getCachedTransformRegistry()).toBeNull();
   });
 
-  it('un errore di uno svuotamento non ferma gli altri', async () => {
-    const { resetSession, registerSessionReset } = await import('../../src/utils/session');
+  it('un errore di uno svuotamento non ferma gli altri', () => {
     const calls = [];
     registerSessionReset('test-rotto', () => { throw new Error('rotto'); });
     registerSessionReset('test-ok', () => calls.push('ok'));
@@ -105,5 +110,65 @@ describe('fine sessione: registro unico (resetSession)', () => {
     registerSessionReset('test-rotto', () => {});
     registerSessionReset('test-ok', () => {});
     expect(calls).toEqual(['ok']);
+  });
+});
+
+describe('set di connessioni: risorsa condivisa della sessione (punto 12)', () => {
+  it('la risposta condivisa scade dopo CACHE_TTL_MS: set creati altrove compaiono (rilettura R3)', async () => {
+    vi.useFakeTimers({ now: new Date('2026-11-05T10:00:00Z') });
+    try {
+      connectionSets.invalidateConnectionSets();
+      listConnectionSets.mockReset();
+      listConnectionSets.mockResolvedValue({ connection_sets: [{ id: 'vecchio' }] });
+      await connectionSets.loadSharedConnectionSets();
+      listConnectionSets.mockResolvedValue({ connection_sets: [{ id: 'nuovo-altrove' }] });
+      vi.setSystemTime(Date.now() + connectionSets.CACHE_TTL_MS - 1);
+      expect((await connectionSets.loadSharedConnectionSets())[0].id).toBe('vecchio');
+      vi.setSystemTime(Date.now() + 2);
+      expect((await connectionSets.loadSharedConnectionSets())[0].id).toBe('nuovo-altrove');
+      expect(listConnectionSets).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('N letture contemporanee = UNA richiesta; resetSession la svuota', async () => {
+    connectionSets.invalidateConnectionSets();
+    listConnectionSets.mockReset();
+    listConnectionSets.mockResolvedValue({ connection_sets: [{ id: 'cs-A' }] });
+    const results = await Promise.all([1, 2, 3, 4, 5].map(() => connectionSets.loadSharedConnectionSets()));
+    expect(listConnectionSets).toHaveBeenCalledTimes(1);
+    expect(results.every((r) => r[0].id === 'cs-A')).toBe(true);
+    await connectionSets.loadSharedConnectionSets();
+    expect(listConnectionSets).toHaveBeenCalledTimes(1);
+
+    resetSession();
+    listConnectionSets.mockResolvedValue({ connection_sets: [{ id: 'cs-B' }] });
+    expect((await connectionSets.loadSharedConnectionSets())[0].id).toBe('cs-B');
+    expect(listConnectionSets).toHaveBeenCalledTimes(2);
+  });
+
+  it('una risposta arrivata dopo il reset non riempie la sessione nuova; un errore non resta', async () => {
+    connectionSets.invalidateConnectionSets();
+    listConnectionSets.mockReset();
+    let release;
+    listConnectionSets.mockReturnValueOnce(new Promise((r) => { release = r; }));
+    const late = connectionSets.loadSharedConnectionSets();
+    resetSession();
+    release({ connection_sets: [{ id: 'utente-precedente' }] });
+    await late;
+    listConnectionSets.mockRejectedValueOnce(new Error('rete'));
+    await expect(connectionSets.loadSharedConnectionSets()).rejects.toThrow('rete');
+    listConnectionSets.mockResolvedValueOnce({ connection_sets: [{ id: 'nuovo' }] });
+    expect((await connectionSets.loadSharedConnectionSets())[0].id).toBe('nuovo');
+  });
+
+  it('i nodi e la finestra usano la risorsa condivisa, non la richiesta diretta', () => {
+    for (const file of ['components/nodes/ProjectInputNode.jsx', 'hooks/useRuntimeInputDefinitions.js']) {
+      const content = fs.readFileSync(path.join(srcRoot, file), 'utf-8');
+      expect(content).toContain('loadSharedConnectionSets(');
+      expect(content).not.toContain('listConnectionSets(');
+    }
+    expect(fs.readFileSync(path.join(srcRoot, 'components/connections/ConnectionSetsPanel.jsx'), 'utf-8')).toContain('invalidateConnectionSets()');
   });
 });

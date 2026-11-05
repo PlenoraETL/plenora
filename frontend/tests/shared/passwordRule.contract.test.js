@@ -46,3 +46,26 @@ describe('regola della password', () => {
     expect(passwordProblem('a'.repeat(PASSWORD_MIN_LENGTH))).toBeNull();
   });
 });
+
+describe('regola della password: stessa misura del backend (len di Python)', () => {
+  it('conta i code point, non le unita\' UTF-16', () => {
+    // 6 emoji = 12 unita' UTF-16 ma 6 caratteri per Python: corta.
+    expect(passwordProblem('😀'.repeat(6))).toMatch(/almeno 12/);
+    expect(passwordProblem('😀'.repeat(PASSWORD_MIN_LENGTH))).toBeNull();
+    expect(passwordProblem('è'.repeat(PASSWORD_MIN_LENGTH))).toBeNull();
+  });
+
+  it('soli spazi: come il backend (nessuna regola speciale)', () => {
+    expect(passwordProblem(' '.repeat(PASSWORD_MIN_LENGTH))).toBeNull();
+    expect(passwordProblem('   ')).toMatch(/almeno 12/);
+    expect(passwordProblem(undefined)).toBe('Password obbligatoria');
+  });
+
+  it('il backend non toglie gli spazi prima di misurare', () => {
+    const repo = path.resolve(import.meta.dirname, '../../..');
+    for (const file of BACKEND_RULES) {
+      const content = fs.readFileSync(path.join(repo, file), 'utf-8');
+      expect(content).not.toMatch(/password\.strip\(\)/);
+    }
+  });
+});

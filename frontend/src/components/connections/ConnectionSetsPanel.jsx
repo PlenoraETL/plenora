@@ -6,6 +6,7 @@ import {
   updateConnectionSet,
 } from '../../api/connections';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import { invalidateConnectionSets } from '../../utils/connectionSets';
 import { toastApiError } from '../../utils/toastApiError';
 import './ConnectionSetsPanel.css';
 
@@ -116,6 +117,7 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
       };
       if (editing) await updateConnectionSet(editing.id, payload);
       else await createConnectionSet(payload);
+      invalidateConnectionSets();
       setEditing(null);
       setShowEditor(false);
       setForm(emptyForm());
@@ -138,6 +140,7 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
     if (!accepted) return;
     try {
       await deleteConnectionSet(item.id);
+      invalidateConnectionSets();
       await load();
     } catch (error) {
       toastApiError(toast, error, 'Errore eliminazione Connection Set');
