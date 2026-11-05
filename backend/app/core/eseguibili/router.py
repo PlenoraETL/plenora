@@ -87,6 +87,9 @@ def _summary_response(
         "project_type": record.project_type,
         "active_version": record.active_version,
         "inputs_count": record.inputs_count,
+        "binding_warnings": eseguibili_service.binding_warnings(
+            list(record.bindings), {"nodes": list(record.binding_target_nodes)},
+        ),
     }
     data["can_edit"] = compute_can_edit(record, user)
     return data
@@ -979,6 +982,9 @@ def _to_details(record: eseguibili_db.EseguibileRow) -> Mapping[str, object]:
         "active_version_id": record.active_version_id,
         "manifest": raw_manifest,
         "can_edit": None,
+        "binding_warnings": eseguibili_service.binding_warnings(
+            (record.manifest or {}).get("bindings"), canvas,
+        ),
         "output_is_file_based": is_file_based,
         "inferred_output_extension": inferred_ext,
     }

@@ -23,6 +23,9 @@ import { analyzeEseguibileUpload, preflightEseguibile, runEseguibile } from '../
 import { requestErrorMessage, backendMessage } from '../../utils/errorMessages';
 import { isPreparationChanged, needsPreflight } from '../../utils/beforeRun';
 import BeforeRunModal from '../editor/BeforeRunModal';
+import BindingWarnings from './BindingWarnings';
+import { useAuth } from '../../context/AuthContext';
+import { can } from '../../utils/permissions';
 import ExecutionModal from '../modals/ExecutionModal';
 import { executionResult } from '../../hooks/useExecution';
 import { useEseguibileRun } from './useEseguibileRun';
@@ -183,7 +186,23 @@ function FileInputs({ definitions, files, setFiles, eseguibileId }) {
   ));
 }
 
+// Utente collegato, se c'e' un AuthProvider (come useSignedInUsername di
+// BeforeRunModal): senza, nessun avviso per chi gestisce.
+function useSignedInUser() {
+  try {
+    return useAuth()?.user || null;
+  } catch {
+    return null;
+  }
+}
+
 function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
+  const user = useSignedInUser();
+  // Binding non letti dall'esecuzione: avviso NON bloccante per chi puo'
+  // ripubblicare (can.manageEseguibile, la stessa regola della card).
+  const bindingNotice = can.manageEseguibile(user, eseguibile)
+    ? <BindingWarnings warnings={eseguibile.binding_warnings} />
+    : null;
   const manifest = eseguibile.manifest;
   const projectType = String(eseguibile.project_type || 'estrai').toLowerCase();
   const modalVariant = ['estrai', 'manipola', 'arricchisci'].includes(projectType) ? projectType : 'estrai';
@@ -290,6 +309,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
         extra={extra}
         extraInputs={fileInputs}
         extraComplete={fileReady}
+        notice={bindingNotice}
       />
     );
   }

@@ -1,5 +1,6 @@
 import React from 'react';
 import ActionMenu from '../common/ActionMenu';
+import BindingWarnings from '../eseguibili/BindingWarnings';
 
 /**
  * Card di un singolo eseguibile (catena on-demand). Il nome ed
@@ -7,8 +8,9 @@ import ActionMenu from '../common/ActionMenu';
  * (G3, DB1). Visual style derivato dal modular system di ProjectCard
  * ma piu' compatto (no schedule, no last-run status).
  */
-// onDelete arriva solo se l'utente puo' eliminare (can.manageEseguibile).
-function EseguibileCard({ item, onExecute, onDelete }) {
+// onDelete arriva solo se l'utente puo' eliminare (can.manageEseguibile);
+// canManage (stessa regola) mostra l'avviso sui binding non letti.
+function EseguibileCard({ item, onExecute, onDelete, canManage = false }) {
   const fmt = (item.default_output_format || 'xlsx').toUpperCase();
   return (
     <div className="pl__card">
@@ -19,6 +21,7 @@ function EseguibileCard({ item, onExecute, onDelete }) {
           <span className="pl__card-mod pl__card-mod--eseg">🚀 {fmt}</span>
         </div>
         {item.description && <div className="pl__card-desc">{item.description}</div>}
+        {canManage && <BindingWarnings warnings={item.binding_warnings} />}
         <div className="pl__card-meta">
           <div>
             <div className="pl__meta-key">Colonne attese</div>

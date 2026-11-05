@@ -19,6 +19,17 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 GB = 1024 ** 3
 
 
+@pytest.fixture(autouse=True)
+def _username_index_present(monkeypatch):
+    """Il blocco db_schema interroga anche l'indice sugli username (test
+    dedicati in tests2/auth/test_username_normalized_unique_index.py)."""
+    from app.core.admin_system_status import service
+    from app.core.auth.db import UsernameIndexStatus
+
+    monkeypatch.setattr(service, "get_username_index_status",
+                        lambda: UsernameIndexStatus(present=True))
+
+
 def _usage(total_gb, used_gb, free_gb, percent):
     return MagicMock(
         total=total_gb * GB,

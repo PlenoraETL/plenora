@@ -8,7 +8,8 @@ indipendenti dalle euristiche del wizard legacy.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from app.shared.contracts.payloads import JsonObject
@@ -177,6 +178,74 @@ def _compile_project_input(
     return definition, bindings
 
 
+@dataclass(frozen=True)
+class BindingProblem:
+    """Binding che l'esecuzione corrente non puo' rispettare: il bersaglio
+    manca nel canvas o non e' piu' tra quelli letti dall'esecuzione
+    (``binding_capabilities.NODE_TARGET_FAMILIES``)."""
+
+    input_key: str
+    target_node_id: str
+    target_field: str | None
+    motivo: str
+
+
+def canvas_nodes_by_id(canvas: Mapping[str, Any]) -> Mapping[str, Mapping[str, Any]]:
+    nodes = canvas.get("nodes") if isinstance(canvas, Mapping) else None
+    if not isinstance(nodes, list):
+        return {}
+    return {
+        str(node.get("id")): node
+        for node in nodes
+        if isinstance(node, Mapping) and node.get("id")
+    }
+
+
+def check_binding(
+    binding: ExecutableInputBinding,
+    nodes_by_id: Mapping[str, Mapping[str, Any]],
+) -> tuple[str | None, BindingProblem | None]:
+    """REGOLA UNICA dei binding contro le capability correnti: la usa la
+    pubblicazione (problema -> pubblicazione rifiutata) e l'elenco/dettaglio
+    degli Eseguibili gia' pubblicati (problema -> ``binding_warnings``).
+    Ritorna il campo canonico del bersaglio oppure il problema."""
+
+    def problem(motivo: str) -> tuple[None, BindingProblem]:
+        return None, BindingProblem(
+            input_key=binding.input_key,
+            target_node_id=binding.target_node_id,
+            target_field=binding.target_field,
+            motivo=motivo,
+        )
+
+    node = nodes_by_id.get(binding.target_node_id)
+    if node is None:
+        return problem(
+            f"Binding input '{binding.input_key}' verso nodo inesistente "
+            f"'{binding.target_node_id}'"
+        )
+    if binding.mode != "node_field" or not binding.target_field:
+        return binding.target_field, None
+    try:
+        return canonical_binding_path(node, binding.target_field), None
+    except ValueError as exc:
+        return problem(str(exc))
+
+
+def binding_problems(
+    bindings: Iterable[ExecutableInputBinding],
+    canvas: Mapping[str, Any],
+) -> list[BindingProblem]:
+    """Binding di un manifest pubblicato che l'esecuzione non legge piu'
+    (stessa regola della pubblicazione, :func:`check_binding`)."""
+    nodes_by_id = canvas_nodes_by_id(canvas)
+    return [
+        found
+        for found in (check_binding(binding, nodes_by_id)[1] for binding in bindings)
+        if found is not None
+    ]
+
+
 def compile_manifest(
     *,
     source_project_id: str,
@@ -191,12 +260,7 @@ def compile_manifest(
     if not isinstance(nodes, list) or not nodes:
         raise ValueError("Il progetto non ha un canvas valido")
 
-    nodes_by_id = {
-        str(node.get("id")): node
-        for node in nodes
-        if isinstance(node, Mapping) and node.get("id")
-    }
-    node_ids = set(nodes_by_id)
+    nodes_by_id = canvas_nodes_by_id(canvas)
     inputs: list[ExecutableInputDefinition] = []
     bindings: list[ExecutableInputBinding] = []
 
@@ -257,16 +321,10 @@ def compile_manifest(
         )
 
     for binding in bindings:
-        if binding.target_node_id not in node_ids:
-            raise ValueError(
-                f"Binding input '{binding.input_key}' verso nodo inesistente "
-                f"'{binding.target_node_id}'"
-            )
-        if binding.mode == "node_field" and binding.target_field:
-            binding.target_field = canonical_binding_path(
-                nodes_by_id[binding.target_node_id],
-                binding.target_field,
-            )
+        canonical, problem = check_binding(binding, nodes_by_id)
+        if problem is not None:
+            raise ValueError(problem.motivo)
+        binding.target_field = canonical
 
     claimed_targets: dict[tuple[str, str], str] = {}
     for binding in bindings:
@@ -328,4 +386,10 @@ def compile_manifest(
     )
 
 
-__all__ = ["compile_manifest"]
+__all__ = [
+    "BindingProblem",
+    "binding_problems",
+    "canvas_nodes_by_id",
+    "check_binding",
+    "compile_manifest",
+]

@@ -37,12 +37,37 @@ from .models import (
 from .runtime import resolve_runtime_inputs
 from app.shared.execution.runtime_identity import RuntimeIdentity
 from app.shared.execution.runtime_bound_fields import runtime_bound_context
-from .manifest import compile_manifest
+from .manifest import binding_problems, compile_manifest
 from .storage import INTERNAL_ARTIFACT_PREFIX
 
 logger = get_logger(__name__)
 
 UPLOAD_METADATA_KEY = "eseguibili_upload"
+
+
+def binding_warnings(raw_bindings: object, canvas: Mapping[str, object]) -> list[JsonObject]:
+    """``binding_warnings`` di un Eseguibile pubblicato: i binding del manifest
+    attivo verificati contro le capability correnti con la STESSA regola
+    della pubblicazione (``manifest.check_binding``) sul canvas della
+    versione (quello che l'esecuzione usa). Un binding non leggibile come
+    tale non produce avvisi (il manifest lo rifiuta gia' all'esecuzione)."""
+    if not isinstance(raw_bindings, list):
+        return []
+    bindings: list[ExecutableInputBinding] = []
+    for raw in raw_bindings:
+        try:
+            bindings.append(ExecutableInputBinding.model_validate(raw))
+        except ValueError:
+            continue
+    return [
+        {
+            "input_key": problem.input_key,
+            "target_node_id": problem.target_node_id,
+            "target_field": problem.target_field,
+            "motivo": problem.motivo,
+        }
+        for problem in binding_problems(bindings, canvas)
+    ]
 
 
 def hydrate_manifest_connection_options(

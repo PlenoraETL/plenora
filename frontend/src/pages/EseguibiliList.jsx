@@ -24,6 +24,7 @@ import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import PageLayout from '../components/common/PageLayout';
 import EmptyState from '../components/common/EmptyState';
 import ActionMenu from '../components/common/ActionMenu';
+import BindingWarnings from '../components/eseguibili/BindingWarnings';
 import { useToast } from '../hooks/useToast';
 import { can } from '../utils/permissions';
 import ConfirmDialog from '../components/common/ConfirmDialog';
@@ -207,6 +208,7 @@ function EseguibiliList() {
                 {item.description && (
                   <p className="esl__card-desc">{item.description}</p>
                 )}
+                {canEdit && <BindingWarnings warnings={item.binding_warnings} />}
                 <div className="esl__card-meta">
                   <span>{item.project_type?.toUpperCase()} - v{item.active_version} - {item.inputs_count} input</span>
                 </div>

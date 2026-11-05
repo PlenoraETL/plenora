@@ -187,6 +187,17 @@ class EseguibileUpdate(BaseModel):
     icon: Optional[str] = None
 
 
+class BindingWarning(BaseModel):
+    """Binding dell'Eseguibile pubblicato su un bersaglio che l'esecuzione
+    non legge (regola unica ``manifest.check_binding``): l'input parte ma il
+    suo valore e' ignorato. Si corregge ripubblicando."""
+
+    input_key: str
+    target_node_id: str
+    target_field: Optional[str] = None
+    motivo: str
+
+
 class EseguibileSummary(BaseModel):
     """Scheda compatta per la lista."""
     id: str
@@ -203,6 +214,7 @@ class EseguibileSummary(BaseModel):
     active_version: int = 1
     inputs_count: int = 1
     can_edit: Optional[bool] = None  # calcolato per l'utente corrente
+    binding_warnings: List[BindingWarning] = Field(default_factory=list)
 
 
 class EseguibileDetails(BaseModel):
@@ -224,6 +236,7 @@ class EseguibileDetails(BaseModel):
     active_version_id: Optional[str] = None
     manifest: Optional[ExecutableManifest] = None
     can_edit: Optional[bool] = None  # calcolato per l'utente corrente
+    binding_warnings: List[BindingWarning] = Field(default_factory=list)
     # Flusso file-based (rest_file come ultimo nodo api_enrich
     # il wizard di esecuzione deve disabilitare il selettore di output_format
     # perche' l'estensione e' determinata dal connettore, non dall'utente

@@ -58,6 +58,18 @@
             ],
             "title": "Alias"
           },
+          "alias_source": {
+            "anyOf": [
+              {
+                "const": "user",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias Source"
+          },
           "column": {
             "title": "Column",
             "type": "string"
@@ -664,6 +676,41 @@
           }
         },
         "title": "BeatHealthcheck",
+        "type": "object"
+      },
+      "BindingWarning": {
+        "description": "Binding dell'Eseguibile pubblicato su un bersaglio che l'esecuzione\nnon legge (regola unica ``manifest.check_binding``): l'input parte ma il\nsuo valore e' ignorato. Si corregge ripubblicando.",
+        "properties": {
+          "input_key": {
+            "title": "Input Key",
+            "type": "string"
+          },
+          "motivo": {
+            "title": "Motivo",
+            "type": "string"
+          },
+          "target_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Field"
+          },
+          "target_node_id": {
+            "title": "Target Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_key",
+          "target_node_id",
+          "motivo"
+        ],
+        "title": "BindingWarning",
         "type": "object"
       },
       "Body_analyze_upload_api_eseguibili__eseguibile_id__analyze_upload_post": {
@@ -3270,6 +3317,13 @@
             ],
             "title": "Active Version Id"
           },
+          "binding_warnings": {
+            "items": {
+              "$ref": "#/components/schemas/BindingWarning"
+            },
+            "title": "Binding Warnings",
+            "type": "array"
+          },
           "can_edit": {
             "anyOf": [
               {
@@ -3418,6 +3472,13 @@
             "default": 1,
             "title": "Active Version",
             "type": "integer"
+          },
+          "binding_warnings": {
+            "items": {
+              "$ref": "#/components/schemas/BindingWarning"
+            },
+            "title": "Binding Warnings",
+            "type": "array"
           },
           "can_edit": {
             "anyOf": [
@@ -3902,7 +3963,8 @@
               "date",
               "datetime",
               "select",
-              "connection"
+              "connection",
+              "current_user"
             ],
             "title": "Kind",
             "type": "string"
@@ -5298,6 +5360,18 @@
             ],
             "title": "Arrowstyle"
           },
+          "as_source": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "As Source"
+          },
           "batch": {
             "anyOf": [
               {},
@@ -5992,7 +6066,8 @@
                   "date",
                   "datetime",
                   "select",
-                  "connection"
+                  "connection",
+                  "current_user"
                 ],
                 "type": "string"
               },
@@ -6340,6 +6415,17 @@
           "position": {
             "$ref": "#/components/schemas/Position"
           },
+          "preview_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Username"
+          },
           "provider_id": {
             "anyOf": [
               {
@@ -6565,6 +6651,17 @@
               }
             ],
             "title": "Skip Null Params"
+          },
+          "source_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Column"
           },
           "source_freshness": {
             "anyOf": [
@@ -16509,6 +16606,7 @@
     },
     "/api/projects/{project_id}/preflight": {
       "post": {
+        "description": "Stima prima di «Esegui» del progetto: stessa identita' dell'avvio\n(``project_run``), un input «Utente che esegue» blocca gia' qui.",
         "operationId": "preflight_enrichment_api_projects__project_id__preflight_post",
         "parameters": [
           {

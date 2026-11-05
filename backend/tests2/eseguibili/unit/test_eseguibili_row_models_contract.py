@@ -149,6 +149,7 @@ def test_router_serializes_summary_row_at_api_edge(monkeypatch) -> None:
         "project_type": "arricchisci",
         "active_version": 1,
         "inputs_count": 1,
+        "binding_warnings": [],
         "can_edit": False,
     }
 

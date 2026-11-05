@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Callable, List, Optional
 
 from psycopg import sql as _sql
 
@@ -233,6 +233,27 @@ def get_migration_status() -> MigrationStatus:
     )
 
 
+def _migration_notice_logger(filename: str) -> Callable[[Any], None]:
+    """Handler psycopg dei NOTICE/WARNING emessi da una migration.
+
+    Senza handler psycopg scarta i messaggi del server: una migration che
+    salta un passo per sicurezza (es. ``RAISE WARNING`` quando i dati
+    esistenti impedirebbero un indice unico) resterebbe invisibile. Qui
+    finiscono nel log del backend, cioe' nel log dell'installer.
+    """
+
+    def _log(diag: Any) -> None:
+        severity = str(getattr(diag, "severity_nonlocalized", None)
+                       or getattr(diag, "severity", None) or "NOTICE").upper()
+        text = f"[MIGRATIONS] {filename}: {severity}: {getattr(diag, 'message_primary', '')}"
+        if severity in {"WARNING", "ERROR"}:
+            logger.warning(text)
+        else:
+            logger.info(text)
+
+    return _log
+
+
 def apply_pending_migrations() -> List[str]:
     """Applica e registra tutte le migration pending. Return l'elenco
     dei file applicati in questa chiamata.
@@ -282,8 +303,10 @@ def apply_pending_migrations() -> List[str]:
         # il rollback copre anche il tracking (non marchiamo come
         # applicata una migration che ha fallito
         conn = pg_connection_module.get_connection()
+        notice_handler = _migration_notice_logger(filename)
         try:
             conn.autocommit = False
+            conn.add_notice_handler(notice_handler)
             with conn.cursor() as cur:
                 cur.execute(sql)
                 cur.execute(
@@ -316,6 +339,10 @@ def apply_pending_migrations() -> List[str]:
             try:
                 conn.autocommit = False
             except Exception:
+                pass
+            try:
+                conn.remove_notice_handler(notice_handler)
+            except ValueError:
                 pass
             pg_connection_module.put_connection(conn)
 

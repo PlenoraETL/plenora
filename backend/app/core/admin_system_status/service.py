@@ -21,6 +21,7 @@ from app.core.admin_system_status.db_probe_store import (
     fetch_schedule_rows,
     fetch_schema_size_row,
 )
+from app.core.auth.db import get_username_index_status
 from app.core.admin_system_status.tickets_metrics import (
     get_active_ticket_metrics,
 )
@@ -752,13 +753,48 @@ def get_db_schema_size() -> AdminStatusBlock:
     else:
         status = "ok"
 
+    message = f"schema plenora: {size_pretty}"
+    username_warning = _username_index_warning()
+    extra: dict[str, object] = {}
+    if username_warning is not None:
+        if status == "ok":
+            status = "warn"
+        message = f"{message} · indice unico sugli username assente"
+        extra["warnings"] = [username_warning]
+
     return AdminStatusBlock(
         status=status,
-        message=f"schema plenora: {size_pretty}",
+        message=message,
         size_bytes=size_bytes,
         size_pretty=size_pretty,
         size_gb=round(size_gb, 3),
         tables=tables,
+        **extra,
+    )
+
+
+def _username_index_warning() -> str | None:
+    """Avviso quando l'indice unico sugli username normalizzati manca
+    (migrations/2026-11-05_users_username_normalized_unique.sql lo salta se
+    trova doppioni, per non far fallire l'installazione)."""
+    try:
+        index = get_username_index_status()
+    except Exception as e:
+        logger.warning(f"username index probe failed: {e}")
+        return None
+    if index.present:
+        return None
+    if not index.collisions:
+        return (
+            "Indice unico sugli username normalizzati assente: migrazione "
+            "2026-11-05_users_username_normalized_unique.sql non applicata."
+        )
+    groups = "; ".join(", ".join(group) for group in index.collisions)
+    return (
+        "Indice unico sugli username normalizzati non creato: username "
+        f"doppioni ({groups}). Rinomina i doppioni, cancella la riga "
+        "2026-11-05_users_username_normalized_unique.sql da "
+        "plenora.schema_migrations e riavvia il backend."
     )
 
 

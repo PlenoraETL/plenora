@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Annotated, Any, Mapping, Optional
 
+import psycopg
 from pydantic import (
     BaseModel,
     BeforeValidator,
@@ -207,6 +208,48 @@ def assert_username_writable(username: str) -> None:
         raise UsernameTakenError("Username già esistente")
 
 
+# Vincoli del DB che esprimono l'unicita' dello username: UNIQUE esatto della
+# tabella base e indice sulla forma normalizzata lower(btrim(username))
+# (migrations/2026-11-05_users_username_normalized_unique.sql). La forma del
+# DB e' piu' stretta di casefold (es. «ß»): il controllo applicativo resta la
+# regola, l'indice chiude la finestra di concorrenza.
+USERNAME_NORMALIZED_INDEX = "ux_users_username_normalized"
+USERNAME_UNIQUE_CONSTRAINTS = frozenset({"users_username_key", USERNAME_NORMALIZED_INDEX})
+
+
+def is_username_unique_violation(exc: BaseException) -> bool:
+    """La violazione di unicita' riguarda lo username (e non, es., l'id)."""
+    diag = getattr(exc, "diag", None)
+    return getattr(diag, "constraint_name", None) in USERNAME_UNIQUE_CONSTRAINTS
+
+
+@dataclass(frozen=True)
+class UsernameIndexStatus:
+    """Stato dell'indice unico sugli username normalizzati: presente, oppure
+    assente con i gruppi di username che ne impediscono la creazione."""
+
+    present: bool
+    collisions: tuple[tuple[str, ...], ...] = ()
+
+
+def get_username_index_status() -> UsernameIndexStatus:
+    present_row = _fetchone(
+        "SELECT to_regclass(%s) IS NOT NULL AS present",
+        (f"plenora.{USERNAME_NORMALIZED_INDEX}",),
+    )
+    if present_row and present_row.get("present"):
+        return UsernameIndexStatus(present=True)
+    rows = _fetchall(
+        "SELECT array_agg(username ORDER BY username) AS usernames FROM users "
+        "GROUP BY lower(btrim(username)) HAVING count(*) > 1 "
+        "ORDER BY lower(btrim(username))"
+    )
+    return UsernameIndexStatus(
+        present=False,
+        collisions=tuple(tuple(str(u) for u in row["usernames"]) for row in rows),
+    )
+
+
 def create_user(
     user_id: str,
     username: str,
@@ -219,12 +262,19 @@ def create_user(
     # seed): la regola dello username vale per tutti.
     assert_username_writable(username)
     now = _now_iso()
-    _execute(
-        "INSERT INTO users (id, username, password_hash, email, group_id, "
-        "role, is_active, created_at, updated_at) "
-        "VALUES (%s,%s,%s,%s,%s,%s,TRUE,%s,%s)",
-        (user_id, username, password_hash, email, group_id, role, now, now),
-    )
+    try:
+        _execute(
+            "INSERT INTO users (id, username, password_hash, email, group_id, "
+            "role, is_active, created_at, updated_at) "
+            "VALUES (%s,%s,%s,%s,%s,%s,TRUE,%s,%s)",
+            (user_id, username, password_hash, email, group_id, role, now, now),
+        )
+    except psycopg.errors.UniqueViolation as exc:
+        # Creazione concorrente: il controllo sopra e' passato per entrambe,
+        # il DB ne ferma una. Stesso esito del controllo applicativo.
+        if is_username_unique_violation(exc):
+            raise UsernameTakenError("Username già esistente") from exc
+        raise
     user = get_user(user_id)
     if user is None:
         raise RuntimeError(f"Inserted user {user_id} was not found")
@@ -313,6 +363,9 @@ def delete_group(group_id: str) -> bool:
 
 
 __all__ = [
+    "USERNAME_NORMALIZED_INDEX",
+    "USERNAME_UNIQUE_CONSTRAINTS",
+    "UsernameIndexStatus",
     "assert_username_writable",
     "find_users_by_normalized_username",
     "GroupRow",
@@ -326,7 +379,9 @@ __all__ = [
     "get_group_summary",
     "get_user",
     "get_user_by_username",
+    "get_username_index_status",
     "hydrate_group_row",
+    "is_username_unique_violation",
     "hydrate_group_summary_row",
     "hydrate_user_row",
     "list_all_users",

@@ -94,6 +94,10 @@ class EseguibileSummaryRow:
     project_type: str = "arricchisci"
     active_version: int = 1
     inputs_count: int = 1
+    # Binding del manifest attivo e i SOLI nodi del canvas della versione che
+    # ne sono bersaglio (per ``binding_warnings`` senza caricare il canvas).
+    bindings: tuple[JsonObject, ...] = ()
+    binding_target_nodes: tuple[JsonObject, ...] = ()
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -249,7 +253,20 @@ def eseguibile_summary_row_from_db(row: Mapping[str, object]) -> EseguibileSumma
             if row.get("inputs_count") is not None
             else 1
         ),
+        bindings=_parse_json_objects(row.get("bindings")),
+        binding_target_nodes=_parse_json_objects(row.get("binding_target_nodes")),
     )
+
+
+def _parse_json_objects(value: object) -> tuple[JsonObject, ...]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return ()
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, dict))
 
 
 def eseguibile_version_row_from_db(
@@ -373,7 +390,18 @@ def list_eseguibili(
                  e.default_output_name, e.icon, e.source_canvas_id, e.group_id,
                  e.created_by, e.created_at, e.updated_at, e.expected_columns,
                  e.project_type, COALESCE(v.version_number, 1) AS active_version,
-                 COALESCE(jsonb_array_length(v.manifest->'inputs'), 1) AS inputs_count"""
+                 COALESCE(jsonb_array_length(v.manifest->'inputs'), 1) AS inputs_count,
+                 v.manifest->'bindings' AS bindings,
+                 (SELECT jsonb_agg(n.node)
+                    FROM jsonb_array_elements(
+                         CASE WHEN jsonb_typeof(v.canvas->'nodes') = 'array'
+                              THEN v.canvas->'nodes' ELSE '[]'::jsonb END) AS n(node)
+                   WHERE n.node->>'id' IN (
+                         SELECT b.binding->>'target_node_id'
+                           FROM jsonb_array_elements(
+                                CASE WHEN jsonb_typeof(v.manifest->'bindings') = 'array'
+                                     THEN v.manifest->'bindings' ELSE '[]'::jsonb END) AS b(binding))
+                 ) AS binding_target_nodes"""
     join = " LEFT JOIN eseguibile_versions v ON v.id = e.active_version_id "
     if resource_ids is not None:
         if not resource_ids:

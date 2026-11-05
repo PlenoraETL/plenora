@@ -53,6 +53,7 @@ function EseguibiliSection({
               item={item}
               onExecute={() => onExecute(item)}
               onDelete={canDelete(item) ? () => onDelete(item) : null}
+              canManage={canDelete(item)}
             />
           ))}
         </div>

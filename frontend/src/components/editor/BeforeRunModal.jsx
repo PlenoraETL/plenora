@@ -24,7 +24,8 @@
  * Fase 5 T2 (BA2): la stessa finestra serve gli Eseguibili. Chi la apre puo'
  * aggiungere input propri (`extra`: file da analizzare, formato di uscita)
  * con il loro payload (`extraInputs`, nella stessa chiave della stima e
- * nello stesso avvio) e la loro completezza (`extraComplete`).
+ * nello stesso avvio) e la loro completezza (`extraComplete`), e un avviso
+ * NON bloccante in cima (`notice`: non cambia Avvia).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
@@ -205,7 +206,7 @@ function EstimateSection({ state, nodeLabel, onRetry }) {
  */
 export default function BeforeRunModal({
   request, onPreflight, onLaunch, onCancel, nodeLabel = (id) => id,
-  extra = null, extraInputs = null, extraComplete = true,
+  extra = null, extraInputs = null, extraComplete = true, notice = null,
 }) {
   const definitions = request?.inputDefinitions || [];
   const username = useSignedInUsername();
@@ -307,6 +308,7 @@ export default function BeforeRunModal({
       footer={footer}
     >
       <div className="before-run">
+        {notice}
         {migration.length > 0 && (
           <section className="before-run__section" aria-label="Credenziali da migrare">
             <h3 className="before-run__heading">Credenziali da migrare</h3>

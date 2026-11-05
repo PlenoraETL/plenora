@@ -281,6 +281,9 @@ function DbSchemaCard({ data }) {
       {data && (
         <>
           <div>Size totale: <b>{data.size_pretty}</b></div>
+          {(data.warnings || []).map((warning) => (
+            <div key={warning} className="sys__mt-sm" role="alert">{warning}</div>
+          ))}
           {data.tables && data.tables.length > 0 && (
             <ul className="sys__list sys__mt-sm">
               {data.tables.slice(0, 5).map((t) => (
