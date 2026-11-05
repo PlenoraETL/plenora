@@ -177,6 +177,19 @@ servizi convivono sulla macchina; sopprime SOLO il gate anti-loopback
 sul broker. Restano attivi: object storage obbligatorio, rate-limiter
 distribuiti (su PostgreSQL) fail-closed, beat leader fail-closed.
 
+**Intestazioni di sicurezza del frontend (P31)**: con `-InstallFrontend`
+l'installer genera `C:\plenora-services\plenora-caddy\security-headers.caddy`
+da `backend/app/core/security/frontend_headers.py` (l'unica definizione della
+CSP) e il Caddyfile lo importa: ogni risposta porta
+`Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy`,
+`X-Frame-Options`, `Permissions-Policy`. Le uniche origini esterne vengono
+dal `backend\.env`: `FRONTEND_MAP_TILE_ORIGINS` (tile della mappa; vuoto =
+nessuna tile esterna), `FRONTEND_SENTRY_DSN` (anche compilato nel bundle come
+`VITE_SENTRY_DSN`), piu' `-FrontendApiUrl` se assoluto. Valvola d'emergenza:
+`FRONTEND_CSP_REPORT_ONLY=true` e rieseguire `-InstallFrontend` (la CSP
+segnala in console senza bloccare). I font sono inclusi nel bundle: nessuna
+richiesta a Google Fonts.
+
 ## 5. Collaudo dell'installazione
 
 Batteria minima automatica (5 minuti) — e' la stessa usata nel collaudo
@@ -189,7 +202,8 @@ powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
 ```
 
 Lo script verifica servizi Windows, `/ready` attraverso Caddy, frontend
-statico, e smoke round-trip `dispatch -> RabbitMQ -> worker -> PG`.
+statico con le sue intestazioni di sicurezza (CSP senza `unsafe-*`, `nosniff`),
+e smoke round-trip `dispatch -> RabbitMQ -> worker -> PG`.
 Non riavvia servizi, non modifica `.env`, non cancella dati.
 
 Se l'installazione non include Caddy/frontend:

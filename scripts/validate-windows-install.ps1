@@ -123,6 +123,17 @@ function Test-FrontendPage([string]$Url) {
             Fail "frontend ha risposto HTTP $($response.StatusCode) su $Url"
         }
         Ok "frontend risponde: $Url"
+        # P31: intestazioni di sicurezza servite da Caddy (security-headers.caddy
+        # generato dall'installer). Report-Only solo se FRONTEND_CSP_REPORT_ONLY.
+        $csp = $response.Headers['Content-Security-Policy']
+        if (-not $csp) { $csp = $response.Headers['Content-Security-Policy-Report-Only'] }
+        if (-not $csp -or $csp -notmatch "default-src 'self'" -or $csp -match 'unsafe-inline|unsafe-eval') {
+            Fail "frontend senza Content-Security-Policy attesa su ${Url}: '$csp'"
+        }
+        if ($response.Headers['X-Content-Type-Options'] -ne 'nosniff') {
+            Fail "frontend senza X-Content-Type-Options: nosniff su $Url"
+        }
+        Ok "intestazioni di sicurezza presenti (CSP: $csp)"
     } catch {
         Fail "frontend non raggiungibile su ${Url}: $($_.Exception.Message)"
     }

@@ -49,6 +49,25 @@ class Settings:
 
         "CORS_ORIGINS": "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173",
 
+        # Intestazioni di sicurezza del frontend (P31): le legge SOLO
+        # app.core.security.frontend_headers, che genera la CSP per Caddy
+        # (installer Windows) e nginx (immagine Docker). Origini separate da
+        # spazi o virgole, solo `scheme://host[:porta]` (jolly `*.` ammesso).
+        # Tile delle mappe: i server di frontend/src/config/mapTiles.js;
+        # vuoto = nessuna tile esterna (mappa senza sfondo, es. offline).
+        "FRONTEND_MAP_TILE_ORIGINS": (
+            "https://*.basemaps.cartocdn.com "
+            "https://*.tile.openstreetmap.org "
+            "https://server.arcgisonline.com"
+        ),
+        # DSN Sentry del frontend: pubblico per costruzione (finisce nel
+        # bundle), quindi non e' un segreto. L'installer lo passa alla build
+        # come VITE_SENTRY_DSN e la CSP apre connect-src alla sua origine.
+        "FRONTEND_SENTRY_DSN": "",
+        # true = la CSP si serve come Content-Security-Policy-Report-Only
+        # (valvola d'emergenza dopo un deploy: segnala senza bloccare).
+        "FRONTEND_CSP_REPORT_ONLY": False,
+
         "DB_QUERY_TIMEOUT": 30,
         # PostgreSQL pool: unico set canonico dei default. pg_connection
         # mantiene la validazione fail-fast dei valori env malformati.

@@ -18,6 +18,7 @@ import { formatNumber } from '../../utils/format';
 import './PreviewModal.css';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 import { parseGeometry, drawableGeometry, geometryLabel, UNREADABLE_GEOMETRY } from '../../utils/geometry';
+import { TILE_URLS } from '../../config/mapTiles';
 
 /** Ritorna true se il tipo colonna è geometrico */
 const isGeoType = (type) =>
@@ -53,12 +54,6 @@ const MapTab = memo(({ rows, columns, active }) => {
   const labelCol = useMemo(() =>
     columns.find(c => c.type === 'str' || c.type === 'varchar' || c.type === 'text'),
   [columns]);
-
-  const TILE_URLS = {
-    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    osm:  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    sat:  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  };
 
   // Colori per feature. P6 (Fase 5 T7): la scala della colonna (minimo e
   // massimo, o indice delle categorie) si calcola UNA volta per colonna, non

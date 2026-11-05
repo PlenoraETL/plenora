@@ -47,7 +47,8 @@ afterEach(() => {
   }
 });
 
-if (!window.matchMedia) {
+// Guardia: i test con `@vitest-environment node` (es. tests/security) non hanno window.
+if (typeof window !== 'undefined' && !window.matchMedia) {
   window.matchMedia = function matchMedia(query) {
     return {
       matches: false,

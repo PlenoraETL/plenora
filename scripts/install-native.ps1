@@ -938,6 +938,26 @@ if ($InstallFrontend) {
         Fail "npm.cmd non trovato in '$npm' (Node.js LTS installato correttamente?)"
     }
 
+    # P31: intestazioni di sicurezza (CSP compresa) da UNA definizione,
+    # app/core/security/frontend_headers.py, con la configurazione reale
+    # (backend\.env: FRONTEND_MAP_TILE_ORIGINS, FRONTEND_SENTRY_DSN,
+    # FRONTEND_CSP_REPORT_ONLY). Il JSON da' anche il DSN Sentry da compilare
+    # nel bundle: build e CSP leggono lo stesso valore. `--api-url=` col segno
+    # uguale: PowerShell 5.1 scarta gli argomenti vuoti.
+    $caddySvcDir = Join-Path $ServicesRoot 'plenora-caddy'
+    New-Item -ItemType Directory -Force $caddySvcDir | Out-Null
+    $headersJson = Join-Path $caddySvcDir 'security-headers.json'
+    $headersCaddy = Join-Path $caddySvcDir 'security-headers.caddy'
+    $headerOutputs = [ordered]@{ json = $headersJson; caddy = $headersCaddy }
+    foreach ($fmt in $headerOutputs.Keys) {
+        $out = $headerOutputs[$fmt]
+        & $condaBat run -n $CondaEnv --cwd $BackendDir python -m app.core.security.frontend_headers `
+            --format $fmt "--api-url=$FrontendApiUrl" --output $out
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { Fail "intestazioni di sicurezza ($fmt) non generate: exit=$LASTEXITCODE" }
+    }
+    $frontendBuildEnv = (Get-Content $headersJson -Raw | ConvertFrom-Json).vite_env
+    Ok "Intestazioni di sicurezza generate: $headersCaddy"
+
     # Vuoto = same-origin. Un valore assoluto serve solo a deployment
     # intenzionalmente multi-host.
     Push-Location $FrontendDir
@@ -949,6 +969,7 @@ if ($InstallFrontend) {
         $nodeDir = Split-Path -Parent $npm
         $env:PATH = "$nodeDir;$originalPath"
         $env:VITE_API_URL = $FrontendApiUrl
+        $env:VITE_SENTRY_DSN = $frontendBuildEnv.VITE_SENTRY_DSN
         Write-Host '  npm ci...'
         & $npm ci
         if ($LASTEXITCODE -ne 0) { Fail "npm ci exit=$LASTEXITCODE" }
@@ -959,6 +980,7 @@ if ($InstallFrontend) {
         Pop-Location
         $env:PATH = $originalPath
         Remove-Item Env:\VITE_API_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:\VITE_SENTRY_DSN -ErrorAction SilentlyContinue
     }
     $distDir = Join-Path $FrontendDir 'dist'
     if (-not (Test-Path (Join-Path $distDir 'index.html'))) { Fail 'build FE senza dist\index.html' }
@@ -972,8 +994,6 @@ if ($InstallFrontend) {
     if ($backendSvc -and $backendSvc.Status -eq 'Running') { Restart-Service plenora-backend }
 
     # Caddy: singolo exe dal download service ufficiale.
-    $caddySvcDir = Join-Path $ServicesRoot 'plenora-caddy'
-    New-Item -ItemType Directory -Force $caddySvcDir | Out-Null
     $caddyExe = Join-Path $caddySvcDir 'caddy.exe'
     if (-not (Test-Path $caddyExe)) {
         Write-Host '  Scarico caddy.exe (download service ufficiale)...'
@@ -985,10 +1005,13 @@ if ($InstallFrontend) {
     # Cache: i file in /assets hanno l'hash nel nome (immutabili, e se
     # mancano 404, non index.html); index.html va sempre riconvalidato,
     # altrimenti dopo un deploy il browser chiede i file della build vecchia.
+    # Intestazioni di sicurezza: `import` a livello del sito, quindi su ogni
+    # risposta (statici, index.html, API proxate); mai scritte qui (P31).
     $caddyfile = Join-Path $caddySvcDir 'Caddyfile'
     @"
 :$FrontendPort {
     encode gzip
+    import $headersCaddy
     @backend path /api/* /health /ready
     handle @backend {
         reverse_proxy 127.0.0.1:5004

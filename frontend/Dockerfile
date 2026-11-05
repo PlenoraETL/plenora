@@ -23,11 +23,25 @@ ENV VITE_SENTRY_DSN=${VITE_SENTRY_DSN}
 ARG VITE_SENTRY_TRACES_SAMPLE_RATE="0.1"
 ENV VITE_SENTRY_TRACES_SAMPLE_RATE=${VITE_SENTRY_TRACES_SAMPLE_RATE}
 
+# P31: nginx serve security-headers.nginx.conf, generato coi DEFAULTS
+# (connect-src 'self'): un'API su un altro host o un DSN Sentry verrebbero
+# bloccati dalla CSP senza errori visibili. Si ferma la build e lo si dice.
+RUN case "$VITE_API_URL" in ""|/*) ;; *) \
+      echo "VITE_API_URL assoluto: la CSP dell'immagine Docker ammette solo lo stesso origin (connect-src 'self')." >&2; \
+      exit 1 ;; \
+    esac; \
+    if [ -n "$VITE_SENTRY_DSN" ]; then \
+      echo "VITE_SENTRY_DSN impostato: la CSP dell'immagine Docker ha connect-src 'self'." >&2; \
+      echo "Il frontend con Sentry si installa con l'installer Windows (FRONTEND_SENTRY_DSN nel backend/.env)." >&2; \
+      exit 1; \
+    fi
+
 RUN npm run build
 
 FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS runtime
 
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/security-headers.nginx.conf /etc/nginx/plenora-security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80

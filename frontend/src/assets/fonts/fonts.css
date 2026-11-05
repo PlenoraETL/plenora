@@ -1,0 +1,85 @@
+/*
+ * Font dell'interfaccia, ospitati con l'app (P31): nessuna richiesta a
+ * Google Fonts o a CDN a runtime, la CSP ha font-src 'self'.
+ *
+ * File woff2 presi dai pacchetti npm Fontsource 5.3.0
+ * (@fontsource-variable/inter, @fontsource-variable/syne, @fontsource/dm-mono),
+ * sottoinsiemi latin e latin-ext. Licenza: SIL Open Font License 1.1, testo
+ * e copyright in LICENSE-Inter.txt, LICENSE-Syne.txt, LICENSE-DMMono.txt.
+ *
+ * Famiglie con gli stessi nomi usati dai CSS (--plen-font-*): Inter e Syne
+ * variabili (tutti i pesi), DM Mono 400 e 500 (gli unici pesi pubblicati
+ * oltre al 300; il 700 resta sintetizzato dal browser come prima).
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('./inter-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('./inter-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'Syne';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 800;
+  src: url('./syne-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Syne';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 800;
+  src: url('./syne-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('./dm-mono-latin-ext-400-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('./dm-mono-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('./dm-mono-latin-ext-500-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('./dm-mono-latin-500-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}

@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import securityHeaders from './vite-plugins/securityHeaders.js';
 
 /**
  * vite.config.js — Configurazione build URBY-ETL Frontend
@@ -24,7 +25,9 @@ export default defineConfig(({ mode }) => {
   const isProd = mode === 'production';
 
   return {
-    plugins: [react()],
+    // securityHeaders: CSP e intestazioni di sicurezza (P31) in `vite` (Report-Only)
+    // e `vite preview` (identiche alla produzione).
+    plugins: [react(), securityHeaders({ apiUrl: env.VITE_API_URL })],
     test: {
       environment: 'jsdom',
       globals: true,
