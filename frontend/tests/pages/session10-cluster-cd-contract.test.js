@@ -4,7 +4,7 @@
  * Bug coperti:
  * - carica.js postCaricaAutoMapping: JSDoc allineato a connection_id/schema_name/table_name
  * - ScheduleList.jsx: requestGenRef per scartare response stale su projectFilter change
- * - useProjectListData.js: Promise.allSettled + toast.warning partial-failure
+ * - useProjectListData.js: Promise.allSettled + avviso dei servizi non caricati
  * - ManipolaEditor.jsx: nessun salvataggio automatico (era il mutex triggerAutosave)
  */
 
@@ -56,18 +56,21 @@ describe('Sessione 10 cluster CD', () => {
     expect(window).not.toMatch(/payload\.target_table/);
   });
 
-  it('ScheduleList usa requestGenRef per scartare response stale', () => {
+  // Fase 5 T2: l'id di richiesta e' quello unico di hooks/useResource, con il
+  // filtro di progetto nella chiave (una risposta superata non scrive).
+  it('ScheduleList carica dall\'hook comune con il filtro nella chiave', () => {
     const src = readSrc('pages/ScheduleList.jsx');
-    expect(src).toContain('requestGenRef');
-    // Sia loadData che refreshData devono fare il check
-    expect(src).toMatch(/myGen\s*!==\s*requestGenRef\.current/);
+    expect(src).toContain('useResource(');
+    expect(src).toMatch(/key:\s*\['schedules',\s*projectFilter/);
+    expect(src).not.toContain('requestGenRef');
   });
 
-  it('useProjectListData usa Promise.allSettled + toast.warning per partial-failure', () => {
+  it('useProjectListData usa Promise.allSettled e mostra i servizi non caricati (Fase 5 T2: avviso con Riprova)', () => {
     const src = readSrc('components/projects/useProjectListData.js');
     expect(src).toContain('Promise.allSettled');
-    expect(src).toContain('toast.warning');
-    expect(src).toContain('failedServices');
+    expect(src).toContain('failures:');
+    expect(src).toContain('useResource');
+    expect(readSrc('pages/ProjectList.jsx')).toContain('title="Alcuni dati non caricati"');
   });
 
   it('ManipolaEditor non salva da solo (Fase 4, M7): niente PUT concorrenti da sincronizzare', () => {

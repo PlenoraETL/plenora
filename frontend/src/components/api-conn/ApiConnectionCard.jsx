@@ -72,6 +72,7 @@ export default function ApiConnectionCard({
   onEdit,
   onDelete,
   onQuickTest,
+  testing = false,
   onShare,
 }) {
   const api = connection;
@@ -122,7 +123,7 @@ export default function ApiConnectionCard({
           <div className="acm__quota-bar"><div className={`acm__quota-fill acm__quota-fill--${status}`} style={{width:`${Math.min(quotaPercent,100)}%`}}/></div>
         )}
         <div className="acm__card-footer">
-          <button type="button" className="acm__btn acm__btn--ghost acm__btn--sm" onClick={()=>onQuickTest?.(api)}>🧪 Test</button>
+          <button type="button" className="acm__btn acm__btn--ghost acm__btn--sm" disabled={testing} onClick={()=>onQuickTest?.(api)}>{testing ? '⏳ Test…' : '🧪 Test'}</button>
           <div className="acm__card-actions">
             {canEdit && (
               <button type="button" className="acm__icon-btn" title="Modifica" aria-label="Modifica connettore" onClick={()=>onEdit?.(api)}>⚙️</button>

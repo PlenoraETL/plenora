@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { postCaricaCheckConflicts } from '../../../api/carica';
 import { WRITE_MODES as WRITE_MODE_VALUES } from '../../../constants/canvasTypes';
 import { useCaricaSchemaSelect } from './useCaricaSchemaSelect';
+import '../../common/ListState.css';
 import ColumnMappingPanel from './ColumnMappingPanel';
 import DbAdvancedOptions from './DbAdvancedOptions';
 import ConflictModal from './ConflictModal';
@@ -57,6 +58,10 @@ function DbDestinationSection({
     tables,
     isLoadingSchemas,
     isLoadingTables,
+    schemasError,
+    tablesError,
+    reloadSchemas,
+    reloadTables,
   } = useCaricaSchemaSelect({ connectionId, destType: 'db', schemaName });
 
   const handleConnectionChange = (newConnectionId) => {
@@ -201,6 +206,12 @@ function DbDestinationSection({
               <option key={schema} value={schema}>{schema}</option>
             ))}
           </select>
+          {schemasError && (
+            <div className="carica-node__hint carica-node__hint--warn" role="alert">
+              Schemi non caricati: {schemasError}{' '}
+              <button type="button" className="nodrag list-state__retry" onClick={() => reloadSchemas()}>Riprova</button>
+            </div>
+          )}
         </div>
       )}
 
@@ -230,6 +241,12 @@ function DbDestinationSection({
                 <option key={table} value={table}>{table}</option>
               ))}
             </select>
+          )}
+          {tablesError && writeMode !== 'create' && writeMode !== 'replace' && (
+            <div className="carica-node__hint carica-node__hint--warn" role="alert">
+              Tabelle non caricate: {tablesError}{' '}
+              <button type="button" className="nodrag list-state__retry" onClick={() => reloadTables()}>Riprova</button>
+            </div>
           )}
         </div>
       )}

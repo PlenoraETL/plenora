@@ -5,10 +5,11 @@
  * la lista degli eseguibili visibili al proprio gruppo (owned + shared
  * cross-gruppo) e può lanciarli. Niente accesso al resto della UI.
  *
- * Privacy: dopo il download del risultato la wizard chiama
+ * Privacy: a fine esecuzione la finestra chiama
  * `cleanupTaskCompletely(taskId)` per rimuovere ogni traccia
  * dell'esecuzione dal server (results.db, log entries, file su disco,
- * record del task).
+ * record del task): dopo il download, alla chiusura senza download e con
+ * un esito fallito o annullato (Fase 5 T2, R9.3: useEseguibileRun).
  *
  * Route: /run
  * Accesso: solo utenti con role === 'esecutore'.
@@ -16,7 +17,7 @@
  *
  * Top bar: logo + saluto + cambia password + logout. Niente altro.
  */
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listEseguibili, cleanupTaskCompletely } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -26,7 +27,8 @@ import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteW
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
 import PlenoraLogo from '../components/common/PlenoraLogo';
-import { toastApiError } from '../utils/toastApiError';
+import { useResource } from '../hooks/useResource';
+import ListState from '../components/common/ListState';
 import './EsecutoreHome.css';
 function Logo() {
   const { theme } = useTheme();
@@ -70,8 +72,13 @@ function EsecutoreHome() {
   const toast = useToast();
   const { user, logout } = useAuth();
 
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Fase 5 T2 (R4.8): un errore di caricamento e' un errore con «Riprova»,
+  // mai "Nessuna azione disponibile".
+  const resource = useResource(async () => {
+    const data = await listEseguibili();
+    return Array.isArray(data) ? data : [];
+  });
+  const items = useMemo(() => resource.data || [], [resource.data]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showPwdModal, setShowPwdModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,26 +95,12 @@ function EsecutoreHome() {
     );
   }, [items, searchQuery]);
 
-  const loadItems = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await listEseguibili();
-      setItems(Array.isArray(data) ? data : []);
-    } catch (e) {
-      toastApiError(toast, e, 'Errore caricamento eseguibili');
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  useEffect(() => { loadItems(); }, [loadItems]);
-
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  // Hook che la wizard chiama dopo un download riuscito.
+  // Chiamato dalla finestra a fine esecuzione (scaricato o no, R9.3).
   // Per l'esecutore: cleanup completo del task (privacy GDPR).
   // Pre-fix (P0 contracts-flows): un cleanup parziale (HTTP 207 dal BE)
   // o un network error veniva silenziato — il claim GDPR "nessuna
@@ -172,18 +165,21 @@ function EsecutoreHome() {
         </p>
       </div>
 <main className="esh__main">
-        {loading ? (
-          <div className="esh__loading">Caricamento azioni disponibili…</div>
-        ) : items.length === 0 ? (
-          <div className="esh__empty">
-            <div className="esh__empty-icon">📭</div>
-            <h3>Nessuna azione disponibile</h3>
-            <p>
-              Al momento non ci sono azioni configurate per il tuo gruppo.
-              Contatta un amministratore.
-            </p>
-          </div>
-        ) : (
+        <ListState
+          resource={resource}
+          loading={<div className="esh__loading">Caricamento azioni disponibili…</div>}
+          errorTitle="Azioni non caricate"
+          empty={(
+            <div className="esh__empty">
+              <div className="esh__empty-icon">📭</div>
+              <h3>Nessuna azione disponibile</h3>
+              <p>
+                Al momento non ci sono azioni configurate per il tuo gruppo.
+                Contatta un amministratore.
+              </p>
+            </div>
+          )}
+        >
           <>
             <div className="esh__search">
               <span className="esh__search-icon" aria-hidden="true">🔍</span>
@@ -223,7 +219,7 @@ function EsecutoreHome() {
               </div>
             )}
           </>
-        )}
+        </ListState>
       </main>
 {selectedItem && (
         <EseguibileExecuteWizard

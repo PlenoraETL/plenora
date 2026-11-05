@@ -99,6 +99,16 @@ export const executeEseguibile = async (eseguibileId, payload) => {
   return r.data;
 };
 
+/**
+ * Stima prima di avviare un eseguibile versionato (Arricchisci): stessi
+ * input dell'avvio, nessuna esecuzione. Ritorna { valid, nodes,
+ * preparation_fingerprint, checks } come il preflight dell'editor.
+ */
+export const preflightEseguibile = async (eseguibileId, payload) => {
+  const r = await http.post(`/eseguibili/${eseguibileId}/preflight`, payload);
+  return r.data;
+};
+
 /** Avvia il contratto multi-input/versionato. */
 export const runEseguibile = async (eseguibileId, payload) => {
   const r = await http.post(`/eseguibili/${eseguibileId}/runs`, payload);

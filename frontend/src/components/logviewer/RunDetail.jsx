@@ -4,8 +4,10 @@
  *   runId {string} - ID della run da visualizzare
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { getLogRun } from '../../api/logRuns';
+import { useResource } from '../../hooks/useResource';
+import { ResourceError } from '../common/ListState';
 import { fmtDuration, fmtRows } from '../../utils/logViewerHelpers.jsx';
 
 const LEVEL_CONFIG = {
@@ -20,21 +22,21 @@ const MODULE_COLORS = {
   files: '#A78BFA', services: '#94A3B8', db: '#F87171', utils: '#6B7280', workers: '#F472B6',
 };
 
-export default function RunDetail({ runId }) {
-  const [detail, setDetail]   = useState(null);
-  const [loading, setLoading] = useState(true);
+// Fase 5 T2 (R4.13): dettaglio dall'hook comune; con Live (`live`) si
+// aggiorna finche' la run e' in corso; un errore ha «Riprova».
+export default function RunDetail({ runId, live = false }) {
+  const resource = useResource(() => getLogRun(runId, true, 300), { key: runId, refreshInterval: live ? 5000 : 0 });
+  const detail = resource.data || null;
   const [tab, setTab]         = useState('steps');
 
-  useEffect(() => {
-    setLoading(true);
-    getLogRun(runId, true, 300)
-      .then(setDetail)
-      .catch(() => setDetail(null))
-      .finally(() => setLoading(false));
-  }, [runId]);
-
-  if (loading) return <div className="lv__run-detail-loading">Caricamento...</div>;
-  if (!detail)  return <div className="lv__run-detail-loading">Dati non disponibili</div>;
+  if (resource.initialLoading) return <div className="lv__run-detail-loading">Caricamento...</div>;
+  if (!detail) {
+    return (
+      <div className="lv__run-detail-loading">
+        <ResourceError compact title="Dettaglio non caricato" message={resource.error || 'Dati non disponibili'} onRetry={resource.reload} />
+      </div>
+    );
+  }
 
   const steps = Array.isArray(detail.steps) ? detail.steps : [];
   const logs  = Array.isArray(detail.logs)  ? detail.logs  : [];

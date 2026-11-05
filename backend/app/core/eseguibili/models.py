@@ -277,6 +277,18 @@ class ExecutableRunRequest(BaseModel):
     inputs: ObjectMap = Field(default_factory=dict)
     output_format: Optional[str] = None
     output_name: Optional[str] = None
+    # Impronta della stima confermata (POST /preflight): se la preparazione e'
+    # cambiata l'avvio risponde 409 preparation_changed (Fase 5 T2, BA2).
+    preparation_fingerprint: Optional[str] = None
+
+
+class ExecutablePreflightRequest(BaseModel):
+    """Stima prima di avviare: gli stessi input dell'avvio, senza eseguire."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version_id: Optional[str] = None
+    inputs: ObjectMap = Field(default_factory=dict)
 
 
 class ExecutableRunResult(BaseModel):

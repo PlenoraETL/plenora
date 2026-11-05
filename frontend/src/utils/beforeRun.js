@@ -77,9 +77,15 @@ export const inputsComplete = (inputDefinitions = [], values = {}) => (inputDefi
   d.required === false || (values[d.input_key] !== '' && values[d.input_key] != null)
 ));
 
-/** Input da mandare: solo quelli dichiarati (stesso payload di stima e avvio). */
-export const runInputs = (inputDefinitions = [], values = {}) => Object.fromEntries(
-  (inputDefinitions || []).map(d => [d.input_key, values[d.input_key] ?? '']),
+/**
+ * Input da mandare: solo quelli dichiarati (stesso payload di stima e avvio).
+ * `omitEmptyOptional` (Eseguibili): un input facoltativo vuoto non si manda,
+ * cosi' vale il suo default dichiarato.
+ */
+export const runInputs = (inputDefinitions = [], values = {}, { omitEmptyOptional = false } = {}) => Object.fromEntries(
+  (inputDefinitions || [])
+    .filter(d => !omitEmptyOptional || d.required !== false || (values[d.input_key] !== '' && values[d.input_key] != null))
+    .map(d => [d.input_key, values[d.input_key] ?? '']),
 );
 
 /** Chiave degli input di una stima: la stima vale solo per quegli input. */

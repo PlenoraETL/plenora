@@ -10,7 +10,8 @@
  *   [sidebar: lista run] | [area principale: dati / confronto]
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useResource } from '../../hooks/useResource';
 import { useParams } from 'react-router-dom';
 import ModalWrapper from '../common/ModalWrapper';
 import { listRuns, getNodeData, compareRunsL1, compareRunsL2, pinRun } from '../../api/runs';
@@ -76,101 +77,72 @@ const StatusBadge = ({ status }) => {
 export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nodeLabel }) {
   const params = useParams();
   const effectiveCanvasId = canvasId || params.projectId || params.id || params.canvasId;
-  // Lista runs
-  const [runs, setRuns] = useState([]);
-  const [runsLoading, setRunsLoading] = useState(false);
-  const [runsError, setRunsError] = useState(null);
-
-  // Selezione run (una o due per confronto)
+  // Fase 5 T2 (R4.5): esecuzioni, dati del passo e confronto dall'hook
+  // comune: la risposta per una run (o una coppia) superata non scrive mai
+  // sulla selezione attuale; ogni apertura rilegge l'elenco.
   const [selectedA, setSelectedA] = useState(null);
   const [selectedB, setSelectedB] = useState(null);
   const [compareMode, setCompareMode] = useState(false);
-
-  // Dati nodo
-  const [nodeData, setNodeData] = useState(null);
-  const [nodeDataLoading, setNodeDataLoading] = useState(false);
-
-  // Confronto
-  const [compareL1, setCompareL1] = useState(null);
-  const [compareL2, setCompareL2] = useState(null);
-  const [compareLoading, setCompareLoading] = useState(false);
-  const [compareError, setCompareError] = useState(null);
-
   // Tab area principale
   const [activeTab, setActiveTab] = useState('data'); // 'data' | 'compare'
-const loadRuns = useCallback(async () => {
-    if (!effectiveCanvasId) return;
-    setRunsLoading(true);
-    setRunsError(null);
-    try {
-      const data = await listRuns(effectiveCanvasId, 50);
-      setRuns(data);
-      // Seleziona automaticamente la più recente
-      if (data.length > 0 && !selectedA) {
-        setSelectedA(data[0]);
-      }
-    } catch (e) {
-      setRunsError(`Errore nel caricamento delle esecuzioni: ${requestErrorMessage(e)}`);
-    } finally {
-      setRunsLoading(false);
-    }
-  }, [effectiveCanvasId]);
-
+  const [openCount, setOpenCount] = useState(0);
   useEffect(() => {
-    if (isOpen) {
-      loadRuns();
-      setSelectedA(null);
-      setSelectedB(null);
-      setCompareMode(false);
-      setNodeData(null);
-      setCompareL1(null);
-      setCompareL2(null);
-    }
+    if (!isOpen) return;
+    setOpenCount(n => n + 1);
+    setSelectedA(null);
+    setSelectedB(null);
+    setCompareMode(false);
   }, [isOpen, canvasId]);
-const [nodeDataError, setNodeDataError] = useState(null);
 
+  const runsResource = useResource(() => listRuns(effectiveCanvasId, 50), {
+    key: [effectiveCanvasId, openCount],
+    enabled: Boolean(isOpen && effectiveCanvasId),
+    errorMessage: (e) => `Errore nel caricamento delle esecuzioni: ${requestErrorMessage(e)}`,
+  });
+  const runs = runsResource.data || [];
+  const setRuns = runsResource.setData;
+  const runsLoading = runsResource.initialLoading;
+  const runsError = runsResource.error;
+  // Seleziona automaticamente la piu' recente.
   useEffect(() => {
-    if (!selectedA || !nodeId) return;
-    setNodeData(null);
-    setNodeDataError(null);
-    setNodeDataLoading(true);
-    getNodeData(selectedA.run_id, nodeId, 200)
-      .then(setNodeData)
-      .catch((err) => {
-        // Prima: catch silenzioso → l'utente vedeva area dati vuota senza spiegazione.
-        console.error('[RunHistoryModal] errore caricamento dati nodo:', err);
-        setNodeData(null);
-        setNodeDataError(requestErrorMessage(err, 'Errore nel caricamento dei dati del passo'));
-      })
-      .finally(() => setNodeDataLoading(false));
-  }, [selectedA, nodeId]);
-useEffect(() => {
-    if (!compareMode || !selectedA || !selectedB) return;
-    setCompareLoading(true);
-    setCompareError(null);
-    setCompareL1(null);
-    setCompareL2(null);
+    if (runsResource.data?.length && !selectedA) setSelectedA(runsResource.data[0]);
+  }, [runsResource.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    Promise.all([
+  const nodeResource = useResource(() => getNodeData(selectedA.run_id, nodeId, 200), {
+    key: [selectedA?.run_id || null, nodeId || null],
+    enabled: Boolean(selectedA && nodeId),
+    errorMessage: (err) => requestErrorMessage(err, 'Errore nel caricamento dei dati del passo'),
+  });
+  const nodeData = nodeResource.data || null;
+  const nodeDataLoading = nodeResource.loading;
+  const nodeDataError = nodeResource.error;
+
+  const compareResource = useResource(async () => {
+    const [l1, l2] = await Promise.all([
       compareRunsL1(selectedA.run_id, selectedB.run_id),
       compareRunsL2(selectedA.run_id, selectedB.run_id, nodeId),
-    ])
-      .then(([l1, l2]) => {
-        setCompareL1(l1);
-        setCompareL2(l2);
-        setActiveTab('compare');
-      })
-      .catch((err) => {
-        // PR-A UX Tier 1: backend (intermediate/router.py) ritorna 422
-        // con details.reason (new envelope) o detail.reason (legacy).
-        const reason = errorReason(err);
-        const msg = backendMessage(err?.response?.data)
-          || (reason ? null : requestErrorMessage(err, 'Errore durante il confronto'));
-        setCompareError(mapCompareErrorReason(reason, msg));
-      })
-      .finally(() => setCompareLoading(false));
-  }, [compareMode, selectedA, selectedB, nodeId]);
-const handleSelectRun = (run) => {
+    ]);
+    return { l1, l2 };
+  }, {
+    key: [selectedA?.run_id || null, selectedB?.run_id || null, nodeId || null],
+    enabled: Boolean(compareMode && selectedA && selectedB),
+    // PR-A UX Tier 1: backend (intermediate/router.py) ritorna 422
+    // con details.reason (new envelope) o detail.reason (legacy).
+    errorMessage: (err) => {
+      const reason = errorReason(err);
+      const msg = backendMessage(err?.response?.data)
+        || (reason ? null : requestErrorMessage(err, 'Errore durante il confronto'));
+      return mapCompareErrorReason(reason, msg);
+    },
+  });
+  const compareL1 = compareResource.data?.l1 || null;
+  const compareL2 = compareResource.data?.l2 || null;
+  const compareLoading = compareResource.loading;
+  const compareError = compareResource.error;
+  useEffect(() => { if (compareResource.data) setActiveTab('compare'); }, [compareResource.data]);
+  // Il confronto e' derivato dalla selezione (chiave): niente da azzerare a mano.
+
+  const handleSelectRun = (run) => {
     if (!compareMode) {
       setSelectedA(run);
       setActiveTab('data');
@@ -179,8 +151,6 @@ const handleSelectRun = (run) => {
       if (!selectedA || (selectedA && selectedB)) {
         setSelectedA(run);
         setSelectedB(null);
-        setCompareL1(null);
-        setCompareL2(null);
       } else if (run.run_id !== selectedA.run_id) {
         setSelectedB(run);
       }
@@ -190,9 +160,6 @@ const handleSelectRun = (run) => {
   const handleToggleCompareMode = () => {
     setCompareMode(!compareMode);
     setSelectedB(null);
-    setCompareL1(null);
-    setCompareL2(null);
-    setCompareError(null);
     if (!compareMode) setActiveTab('compare');
     else setActiveTab('data');
   };

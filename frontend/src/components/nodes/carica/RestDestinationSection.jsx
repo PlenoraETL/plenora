@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useResource } from '../../../hooks/useResource';
+import '../../common/ListState.css';
 import { listApiConnections } from '../../../api/apiConnections';
 import {
   REST_AUTH_FIELD, isSecretHeader, replaceSecretsWithConnector, restSecretHeaderNames,
@@ -25,19 +27,14 @@ const REST_BATCH_MODES = [
 // segrete nel canvas e' "da migrare" (utils/restSecrets): l'avviso e' qui,
 // sempre visibile; scegliere un connettore sostituisce le righe segrete (e lo
 // dice), oppure l'utente le rimuove con la ×. Niente si toglie in silenzio.
+// Connettori dall'hook comune (Fase 5 T2): errore con «Riprova».
 function useApiConnectors() {
-  const [state, setState] = useState({ status: 'loading', items: [] });
-  useEffect(() => {
-    let active = true;
-    listApiConnections()
-      .then((data) => {
-        const items = Array.isArray(data) ? data : (data?.connections || data?.items || []);
-        if (active) setState({ status: 'ready', items });
-      })
-      .catch(() => { if (active) setState({ status: 'error', items: [] }); });
-    return () => { active = false; };
-  }, []);
-  return state;
+  const resource = useResource(async () => {
+    const data = await listApiConnections();
+    return Array.isArray(data) ? data : (data?.connections || data?.items || data?.api_connections || []);
+  }, { key: 'rest-connectors' });
+  const status = resource.status === 'error' ? 'error' : resource.hasData ? 'ready' : 'loading';
+  return { status, items: resource.data || [], error: resource.error, reload: resource.reload };
 }
 
 function RestDestinationSection({
@@ -134,7 +131,7 @@ function RestDestinationSection({
         </select>
         <div className="carica-node__hint">
           {connectors.status === 'error'
-            ? 'Elenco dei connettori non disponibile.'
+            ? <>Elenco dei connettori non disponibile: {connectors.error} <button type="button" className="nodrag list-state__retry" onClick={() => connectors.reload()}>Riprova</button></>
             : 'Le credenziali restano nel connettore API, cifrate sul server, e partono solo verso l’indirizzo del connettore: il canvas ne salva solo il riferimento.'}
         </div>
         {secretNames.length > 0 && (

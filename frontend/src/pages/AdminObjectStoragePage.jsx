@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import AppSidebar from '../components/AppSidebar';
 import {
   cleanupOrphanStorage,
@@ -13,6 +13,9 @@ import { useConfirmModal } from '../hooks/useConfirmModal';
 import { humanizeErrorMessage } from '../utils/errorMessages';
 import { useAuth } from '../context/AuthContext';
 import { can } from '../utils/permissions';
+import { useResource } from '../hooks/useResource';
+import { useBusy } from '../hooks/useBusy';
+import { useDownload } from '../hooks/useDownload';
 import '../styles/AdminObjectStoragePage.css';
 
 const DOMAINS = [
@@ -33,70 +36,63 @@ function formatBytes(value) {
 }
 
 export default function AdminObjectStoragePage() {
-  const [scope, setScope] = useState('canonical');
-  const [groupId, setGroupId] = useState('');
-  const [domain, setDomain] = useState('results');
-  const [page, setPage] = useState(null);
-  const [projectCatalog, setProjectCatalog] = useState(null);
+  // Fase 5 T2 (R4.5, R9.10): pagina dall'hook comune con filtri e cursore
+  // nella chiave (vince l'ultima richiesta), errore di caricamento distinto
+  // da quello di un'azione, download ed eliminazioni per oggetto.
+  const [scope, setScopeRaw] = useState('canonical');
+  const [groupId, setGroupIdRaw] = useState('');
+  const [domain, setDomainRaw] = useState('results');
   const [cursor, setCursor] = useState(null);
   const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
-  const [downloading, setDownloading] = useState('');
-  const [deleting, setDeleting] = useState('');
   const [purgingPreviews, setPurgingPreviews] = useState(false);
   const [cleaningOrphans, setCleaningOrphans] = useState(false);
   const confirmModal = useConfirmModal();
   const { user } = useAuth();
   const canManage = can.manageObjectStorage(user);
   const groupedResults = scope === 'canonical' && domain === 'results';
+  // Un filtro nuovo riparte dalla prima pagina.
+  const resetPaging = () => { setCursor(null); setHistory([]); };
+  const setScope = (v) => { resetPaging(); setScopeRaw(v); };
+  const setGroupId = (v) => { resetPaging(); setGroupIdRaw(v); };
+  const setDomain = (v) => { resetPaging(); setDomainRaw(v); };
+
+  const resource = useResource(async () => {
+    const group = groupId.trim();
+    const objectRequest = listObjectStorage({
+      scope,
+      group_id: scope === 'canonical' && group ? group : undefined,
+      domain: domain || undefined,
+      limit: 100,
+      cursor: cursor || undefined,
+    });
+    if (scope === 'canonical' && domain === 'results') {
+      const [data, catalog] = await Promise.all([
+        objectRequest,
+        listObjectStorageProjects({ group_id: group || undefined }),
+      ]);
+      return { page: data, catalog, catalogGroup: group };
+    }
+    return { page: await objectRequest, catalog: null, catalogGroup: '' };
+  }, { key: { scope, groupId, domain, cursor }, keepPreviousData: true, errorMessage: humanizeErrorMessage });
+  const page = resource.data?.page || null;
+  const projectCatalog = resource.data?.catalog || null;
+  // Gruppo del catalogo caricato: e' il perimetro mostrato e chiesto.
+  const catalogGroup = resource.data?.catalogGroup || '';
+  const loading = resource.loading;
+  const load = () => resource.reload();
+  const error = resource.error || actionError;
   // Orfano = il server dice che il progetto non esiste piu' (per id, non per
   // il nome mostrato). Il catalogo e' gia' quello del filtro di gruppo.
   const orphanProjects = (projectCatalog?.projects || []).filter((project) => project.orphan === true);
-  // Gruppo del catalogo caricato: e' il perimetro mostrato e chiesto.
-  const [catalogGroup, setCatalogGroup] = useState('');
-
-  const load = useCallback(async (requestedCursor = null) => {
-    setLoading(true);
-    setError('');
-    try {
-      const objectRequest = listObjectStorage({
-        scope,
-        group_id: scope === 'canonical' && groupId.trim() ? groupId.trim() : undefined,
-        domain: domain || undefined,
-        limit: 100,
-        cursor: requestedCursor || undefined,
-      });
-      if (scope === 'canonical' && domain === 'results') {
-        const [data, catalog] = await Promise.all([
-          objectRequest,
-          listObjectStorageProjects({ group_id: groupId.trim() || undefined }),
-        ]);
-        setPage(data);
-        setProjectCatalog(catalog);
-        setCatalogGroup(groupId.trim());
-      } else {
-        setPage(await objectRequest);
-        setProjectCatalog(null);
-      }
-      setCursor(requestedCursor);
-    } catch (err) {
-      setError(humanizeErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [scope, groupId, domain]);
-
-  useEffect(() => {
-    setHistory([]);
-    load(null);
-  }, [load]);
+  const busy = useBusy();
+  const downloads = useDownload({ onError: (message) => setActionError(message) });
 
   const next = () => {
     if (!page?.next_cursor) return;
     setHistory((items) => [...items, cursor]);
-    load(page.next_cursor);
+    setCursor(page.next_cursor);
   };
 
   const previous = () => {
@@ -104,20 +100,15 @@ export default function AdminObjectStoragePage() {
     const items = [...history];
     const previousCursor = items.pop() || null;
     setHistory(items);
-    load(previousCursor);
+    setCursor(previousCursor);
   };
 
-  const download = async (key) => {
-    setDownloading(key);
-    setError('');
-    try {
-      await downloadStorageObject(key);
-    } catch (err) {
-      setError(humanizeErrorMessage(err));
-    } finally {
-      setDownloading('');
-    }
+  const download = (key) => {
+    setActionError('');
+    return downloads.run(key, () => downloadStorageObject(key));
   };
+  const downloading = (key) => downloads.isBusy(key);
+  const deleting = (key) => busy.isBusy(key);
 
   const remove = async (item) => {
     const confirmed = await confirmModal.confirm({
@@ -131,15 +122,12 @@ export default function AdminObjectStoragePage() {
       variant: 'danger',
     });
     if (!confirmed) return;
-    setDeleting(item.key);
-    setError('');
+    setActionError('');
     try {
-      await deleteStorageObject(item.key);
-      await load(cursor);
+      const r = await busy.run(item.key, () => deleteStorageObject(item.key));
+      if (!r.skipped) await load();
     } catch (err) {
-      setError(humanizeErrorMessage(err));
-    } finally {
-      setDeleting('');
+      setActionError(humanizeErrorMessage(err));
     }
   };
 
@@ -157,7 +145,7 @@ export default function AdminObjectStoragePage() {
     });
     if (!confirmed) return;
     setPurgingPreviews(true);
-    setError('');
+    setActionError('');
     setNotice('');
     try {
       const result = await deleteAllStoragePreviews({
@@ -165,9 +153,10 @@ export default function AdminObjectStoragePage() {
         group_id: scopedGroup || undefined,
       });
       setNotice(`Preview eliminate: ${result.deleted_count}`);
-      await load(null);
+      resetPaging();
+      await load();
     } catch (err) {
-      setError(humanizeErrorMessage(err));
+      setActionError(humanizeErrorMessage(err));
     } finally {
       setPurgingPreviews(false);
     }
@@ -201,7 +190,7 @@ export default function AdminObjectStoragePage() {
     });
     if (!confirmed) return;
     setCleaningOrphans(true);
-    setError('');
+    setActionError('');
     setNotice('');
     try {
       const report = await cleanupOrphanStorage(scopeIds);
@@ -213,9 +202,10 @@ export default function AdminObjectStoragePage() {
           ? `Bonifica parziale: ${deleted} risultati e ${runsDeleted} esecuzioni intermedie eliminati, ${errors} errori`
           : `Bonifica completata: ${deleted} risultati e ${runsDeleted} esecuzioni intermedie orfani eliminati`,
       );
-      await load(null);
+      resetPaging();
+      await load();
     } catch (err) {
-      setError(humanizeErrorMessage(err));
+      setActionError(humanizeErrorMessage(err));
     } finally {
       setCleaningOrphans(false);
     }
@@ -237,7 +227,7 @@ export default function AdminObjectStoragePage() {
                 {purgingPreviews ? 'Eliminazione preview...' : 'Elimina tutte le preview'}
               </button>
             )}
-            <button type="button" onClick={() => load(cursor)} disabled={loading}>
+            <button type="button" onClick={() => load()} disabled={loading}>
               {loading ? 'Caricamento…' : 'Aggiorna'}
             </button>
           </div>
@@ -249,7 +239,7 @@ export default function AdminObjectStoragePage() {
           <label>Tipo<select value={domain} onChange={(event) => setDomain(event.target.value)}><option value="">Tutti</option>{DOMAINS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </section>
 
-        {error && <div className="storage-admin__error">{error}</div>}
+        {error && <div className="storage-admin__error" role="alert">{error}</div>}
         {notice && <div className="storage-admin__notice">{notice}</div>}
 
         {groupedResults && orphanProjects.length > 0 && (
@@ -300,13 +290,13 @@ export default function AdminObjectStoragePage() {
                   {project.results.map((result) => (
                     <div className="storage-admin__result" key={result.id}>
                       <div><strong>{result.filename}</strong><span>{result.format.toUpperCase()} · {result.rows_count ?? '—'} righe · {formatBytes(result.size_bytes)}</span><small>{new Date(result.created_at).toLocaleString('it-IT')}</small></div>
-                      <button type="button" className="storage-admin__download" onClick={() => download(result.key)} disabled={downloading === result.key}>{downloading === result.key ? '…' : 'Scarica'}</button>
+                      <button type="button" className="storage-admin__download" onClick={() => download(result.key)} disabled={downloading(result.key)}>{downloading(result.key) ? '…' : 'Scarica'}</button>
                     </div>
                   ))}
                 </div>
               </details>
             ))}
-            {!loading && !(projectCatalog?.projects || []).length && <div className="storage-admin__empty">Nessun risultato conservato</div>}
+            {projectCatalog && !(projectCatalog.projects || []).length && <div className="storage-admin__empty">Nessun risultato conservato</div>}
           </section>
         ) : (
           <div className="storage-admin__table-wrap">
@@ -318,12 +308,12 @@ export default function AdminObjectStoragePage() {
                     <td>{item.tenant_group_id || <span className="storage-admin__legacy">legacy</span>}</td><td>{item.domain}</td><td>{item.resource_id || '—'}</td>
                     <td className="storage-admin__key" title={item.key}>{item.key}</td><td>{formatBytes(item.size_bytes)}</td><td>{new Date(item.last_modified).toLocaleString('it-IT')}</td>
                     <td className="storage-admin__actions">
-                      <button type="button" className="storage-admin__download" onClick={() => download(item.key)} disabled={downloading === item.key || deleting === item.key}>{downloading === item.key ? '…' : 'Scarica'}</button>
-                      {canManage && <button type="button" className="storage-admin__delete" onClick={() => remove(item)} disabled={deleting === item.key || downloading === item.key}>{deleting === item.key ? 'Eliminazione…' : 'Elimina'}</button>}
+                      <button type="button" className="storage-admin__download" onClick={() => download(item.key)} disabled={downloading(item.key) || deleting(item.key)}>{downloading(item.key) ? '…' : 'Scarica'}</button>
+                      {canManage && <button type="button" className="storage-admin__delete" onClick={() => remove(item)} disabled={deleting(item.key) || downloading(item.key)}>{deleting(item.key) ? 'Eliminazione…' : 'Elimina'}</button>}
                     </td>
                   </tr>
                 ))}
-                {!loading && !(page?.objects || []).length && <tr><td colSpan="7" className="storage-admin__empty">Nessun oggetto</td></tr>}
+                {page && !(page.objects || []).length && <tr><td colSpan="7" className="storage-admin__empty">Nessun oggetto</td></tr>}
               </tbody>
             </table>
           </div>

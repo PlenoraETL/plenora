@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useResource } from '../../hooks/useResource';
+import { ResourceError } from '../common/ListState';
 import {
   createConnectionSet,
   deleteConnectionSet,
@@ -27,26 +29,17 @@ const normalizeKey = value => String(value || '')
 // canEdit = can.createConnection, canEditItem = can.editConnection sulla
 // riga (ConnectionManager): le azioni non permesse non si mostrano.
 function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, toast, confirm }) {
-  const [sets, setSets] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Fase 5 T2 (R4.8): elenco dall'hook comune, errore con «Riprova» (mai
+  // "Nessun Connection Set configurato" per un errore).
+  const resource = useResource(async () => (await listConnectionSets()).connection_sets || [], { key: 'connection-sets-admin' });
+  const sets = resource.data || [];
+  const loading = resource.initialLoading;
+  const load = () => resource.reload();
   const [editing, setEditing] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
-    try {
-      setLoading(true);
-      const data = await listConnectionSets();
-      setSets(data.connection_sets || []);
-    } catch (error) {
-      toastApiError(toast, error, 'Errore caricamento Connection Set');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, []);
 
   const open = item => {
     setShowEditor(true);
@@ -165,6 +158,8 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
 
       {loading ? (
         <div className="cset__empty">Caricamento set…</div>
+      ) : resource.status === 'error' && !resource.hasData ? (
+        <ResourceError title="Connection Set non caricati" message={resource.error} onRetry={resource.reload} />
       ) : sets.length === 0 ? (
         <div className="cset__empty">Nessun Connection Set configurato.</div>
       ) : (

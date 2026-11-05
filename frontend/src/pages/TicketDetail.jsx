@@ -11,8 +11,14 @@
  *
  * Visibilita' actions: derivata da user.role + ticket.created_by,
  * ma il backend e' comunque la fonte di verita' (403 se bypass UI).
+ *
+ * Fase 5 T2 (R4.1, R4.7, R4.8): il ticket viene da useResource con chiave
+ * l'id (mai i dati di A sotto l'indirizzo di B), gli aggiornamenti dopo
+ * un'azione non sostituiscono la pagina con il caricamento, un errore e' un
+ * errore con «Riprova» (mai pagina bianca). La bozza del commento e' del
+ * ticket: dopo l'invio si svuota solo se e' ancora il testo inviato.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import AppSidebar from '../components/AppSidebar';
@@ -21,6 +27,8 @@ import { useAuth } from '../context/AuthContext';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useToast } from '../hooks/useToast';
 import { toastApiError } from '../utils/toastApiError';
+import { useResource } from '../hooks/useResource';
+import { ResourceError } from '../components/common/ListState';
 import { can } from '../utils/permissions';
 import {
   addComment, deleteAttachment, deleteTicket, getTicket, getTicketsMeta,
@@ -55,34 +63,21 @@ export default function TicketDetail() {
   const confirmModal = useConfirmModal();
   const fileInputRef = useRef(null);
 
-  const [meta, setMeta] = useState(null);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [commentBody, setCommentBody] = useState('');
+  const metaResource = useResource(getTicketsMeta, { key: 'tickets-meta' });
+  const meta = metaResource.data || null;
+  const resource = useResource(() => getTicket(id), { key: id });
+  const data = resource.data || null;
+  const load = resource.reload;
+  // Bozza del commento PER TICKET.
+  const [drafts, setDrafts] = useState({});
+  const commentBody = drafts[id] || '';
+  const setCommentBody = (text) => setDrafts(d => ({ ...d, [id]: text }));
   const [saving, setSaving] = useState(false);
 
   const ticket = data?.ticket;
   // Permessi dalla tabella unica (utils/permissions, audit R10.1/R10.9).
   const canManage = can.manageTickets(user);
   const canReopen = can.reopenTicket(user, ticket);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await getTicket(id);
-      setData(result);
-    } catch (e) {
-      toastApiError(toast, e, 'Errore caricamento ticket');
-      if (e.response?.status === 404) navigate('/tickets');
-    } finally {
-      setLoading(false);
-    }
-  }, [id, toast, navigate]);
-
-  useEffect(() => {
-    getTicketsMeta().then(setMeta).catch(() => {});
-    load();
-  }, [load]);
 
   const handleStatusChange = async (newStatus) => {
     try {
@@ -117,9 +112,12 @@ export default function TicketDetail() {
     // duplicato. Riusiamo il flag `saving` gia' definito per gli altri
     // form action della pagina (status change, field change).
     setSaving(true);
+    const ticketId = id;
+    const sent = commentBody;
     try {
-      await addComment(id, commentBody);
-      setCommentBody('');
+      await addComment(ticketId, sent);
+      // Il testo scritto durante l'invio resta.
+      setDrafts(d => (d[ticketId] === sent ? { ...d, [ticketId]: '' } : d));
       load();
     } catch (err) {
       toastApiError(toast, err, 'Errore invio commento');
@@ -191,16 +189,30 @@ export default function TicketDetail() {
     }
   };
 
-  if (loading) {
+  if (resource.initialLoading) {
     return (
       <div className="tk-page">
         <AppSidebar />
-        <main className="tk-page__main"><div>Caricamento…</div></main>
+        <main className="tk-page__main"><div role="status">Caricamento…</div></main>
       </div>
     );
   }
 
-  if (!ticket) return null;
+  if (!ticket) {
+    return (
+      <div className="tk-page">
+        <AppSidebar />
+        <main className="tk-page__main">
+          <button type="button" className="tk-detail__back" onClick={() => navigate('/tickets')}>← Ticket</button>
+          <ResourceError
+            title={resource.rawError?.response?.status === 404 ? 'Ticket non trovato' : 'Ticket non caricato'}
+            message={resource.error || 'Il ticket non è disponibile.'}
+            onRetry={resource.reload}
+          />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="tk-page">

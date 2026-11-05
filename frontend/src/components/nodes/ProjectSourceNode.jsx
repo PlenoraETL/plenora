@@ -8,6 +8,7 @@
  * Usato in: ManipolaEditor, ArricchisciEditor
  */
 import React, { useState, useEffect, memo } from 'react';
+import { useResource } from '../../hooks/useResource';
 import { Position } from '@xyflow/react';
 import { getProject } from '../../api';
 import { getColumnTypeIcon, getColumnTypeLabel, isGeometryType, getColumnSRID, normalizeColumnType } from '../../utils/columnUtils';
@@ -25,114 +26,101 @@ import NodeHandle from '../canvas/NodeHandle';
  * - Expand/collapse per molte colonne
  */
 const ProjectSourceNode = ({ id, data }) => {
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  // Fase 5 T2: progetto sorgente dall'hook comune (id di richiesta: il
+  // progetto scelto prima non scrive le colonne di quello scelto dopo).
+  const resource = useResource(() => getProject(data.source_project_id), {
+    key: ['source-project', data.source_project_id || null],
+    enabled: Boolean(data.source_project_id),
+    errorMessage: (err) => humanizeError(err).message,
+  });
+  const selectedProject = resource.data || null;
+  const loading = resource.initialLoading;
+  const noContract = Boolean(selectedProject) && !(selectedProject.output_contract?.columns || []).length;
+  const error = resource.error || (noContract ? 'Colonne in uscita non ancora note: esegui prima il progetto sorgente.' : null);
 
-  // Carica dettagli progetto quando cambia source_project_id
   useEffect(() => {
-    if (data.source_project_id) {
-      loadProjectDetails(data.source_project_id);
-    }
-  }, [data.source_project_id]);
-
-
-  const loadProjectDetails = async (projectId) => {
-    if (!projectId) return;
+    const projectData = selectedProject;
+    if (!projectData) return;
+    const { updateNodeData } = useCanvasStore.getState();
     
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const projectData = await getProject(projectId);
-      setSelectedProject(projectData);
-      const { updateNodeData } = useCanvasStore.getState();
-      
-      // Costruisci colonne dal contratto pubblico del progetto sorgente.
-      let columnsWithTypes = [];
+    // Costruisci colonne dal contratto pubblico del progetto sorgente.
+    let columnsWithTypes = [];
 
-      const contractColumns = projectData.output_contract?.columns || [];
-      if (contractColumns.length > 0) {
-        // Pre-fix (P1 contracts-schemas): `col.type?.logical || 'string'`
-        // maschera silenziosamente un drift BE: se il BE rinomina la
-        // chiave (es. da `type.logical` a `data_type`) o cambia la
-        // shape, TUTTE le colonne ricadono al default 'string' senza
-        // alcun warning → quando il BE evolve schema, i nodi mostrano
-        // tipi sbagliati ovunque ma il bug e' invisibile.
-        // Post-fix: log warn aggregato (1 per render) quando >=1 colonna
-        // ha mancanza del campo, cosi' il drift e' visibile in devtools.
-        const _missingLogicalCount = contractColumns
-          .filter(col => col.status !== 'removed' && col.status !== 'deleted')
-          .filter(col => !col?.type?.logical).length;
-        if (_missingLogicalCount > 0) {
-          console.warn(
-            `[ProjectSourceNode] Drift schema BE: ${_missingLogicalCount}/${contractColumns.length} ` +
-            `colonne nel output_contract senza 'type.logical'. ` +
-            `Fallback a 'string' applicato. Verifica shape backend.`
-          );
-        }
-        columnsWithTypes = contractColumns
-          .filter(col => col.status !== 'removed' && col.status !== 'deleted')
-          .map(col => {
-            const name = col.physical_name || col.display_name || col.source_name;
-            const logicalType = col.type?.logical || 'string';
-            return {
-              id: col.id,
-              column_id: col.id,
-              source_name: col.source_name,
-              display_name: col.display_name || name,
-              name,
-              type: normalizeColumnType({ type: logicalType }),
-              visible: true
-            };
-          })
-          .filter(col => col.id && col.name);
-      } else {
-        setError('Colonne in uscita non ancora note: esegui prima il progetto sorgente.');
-        updateNodeData(id, { columns: [] }, { derived: true });
+    const contractColumns = projectData.output_contract?.columns || [];
+    if (contractColumns.length > 0) {
+      // Pre-fix (P1 contracts-schemas): `col.type?.logical || 'string'`
+      // maschera silenziosamente un drift BE: se il BE rinomina la
+      // chiave (es. da `type.logical` a `data_type`) o cambia la
+      // shape, TUTTE le colonne ricadono al default 'string' senza
+      // alcun warning → quando il BE evolve schema, i nodi mostrano
+      // tipi sbagliati ovunque ma il bug e' invisibile.
+      // Post-fix: log warn aggregato (1 per render) quando >=1 colonna
+      // ha mancanza del campo, cosi' il drift e' visibile in devtools.
+      const _missingLogicalCount = contractColumns
+        .filter(col => col.status !== 'removed' && col.status !== 'deleted')
+        .filter(col => !col?.type?.logical).length;
+      if (_missingLogicalCount > 0) {
+        console.warn(
+          `[ProjectSourceNode] Drift schema BE: ${_missingLogicalCount}/${contractColumns.length} ` +
+          `colonne nel output_contract senza 'type.logical'. ` +
+          `Fallback a 'string' applicato. Verifica shape backend.`
+        );
       }
-      
-      // Usa updateNodeData dallo store direttamente — funziona in tutti gli editor
-      if (columnsWithTypes.length > 0) {
-        if (data.columns && data.columns.length > 0) {
-          const existingVisibility = {};
-          data.columns.forEach(col => {
-            const key = col.id || col.column_id;
-            if (key) {
-              existingVisibility[key] = col.visible;
+      columnsWithTypes = contractColumns
+        .filter(col => col.status !== 'removed' && col.status !== 'deleted')
+        .map(col => {
+          const name = col.physical_name || col.display_name || col.source_name;
+          const logicalType = col.type?.logical || 'string';
+          return {
+            id: col.id,
+            column_id: col.id,
+            source_name: col.source_name,
+            display_name: col.display_name || name,
+            name,
+            type: normalizeColumnType({ type: logicalType }),
+            visible: true
+          };
+        })
+        .filter(col => col.id && col.name);
+    } else {
+      updateNodeData(id, { columns: [] }, { derived: true });
+    }
+    
+    // Usa updateNodeData dallo store direttamente — funziona in tutti gli editor
+    if (columnsWithTypes.length > 0) {
+      const currentColumns = useCanvasStore.getState().nodes.find(n => n.id === id)?.data?.columns || [];
+      if (currentColumns.length > 0) {
+        const existingVisibility = {};
+        currentColumns.forEach(col => {
+          const key = col.id || col.column_id;
+          if (key) {
+            existingVisibility[key] = col.visible;
+          }
+          [col.source_name, col.name, col.display_name].forEach(name => {
+            if (name) {
+              existingVisibility[String(name)] = col.visible;
             }
-            [col.source_name, col.name, col.display_name].forEach(name => {
-              if (name) {
-                existingVisibility[String(name)] = col.visible;
-              }
-            });
           });
-          
-          columnsWithTypes = columnsWithTypes.map(col => ({
-            ...col,
-            visible: existingVisibility[col.id] !== undefined
-              ? existingVisibility[col.id]
-              : existingVisibility[col.source_name] !== undefined
-                ? existingVisibility[col.source_name]
-                : existingVisibility[col.name] !== undefined
-                  ? existingVisibility[col.name]
-                  : col.visible
-          }));
-        }
+        });
         
-        // Schema caricato dal progetto sorgente: dato DERIVATO (salvato via
-        // pendingSync, niente avviso "modifiche non salvate" all'apertura).
-        updateNodeData(id, { columns: columnsWithTypes }, { derived: true });
+        columnsWithTypes = columnsWithTypes.map(col => ({
+          ...col,
+          visible: existingVisibility[col.id] !== undefined
+            ? existingVisibility[col.id]
+            : existingVisibility[col.source_name] !== undefined
+              ? existingVisibility[col.source_name]
+              : existingVisibility[col.name] !== undefined
+                ? existingVisibility[col.name]
+                : col.visible
+        }));
       }
       
-    } catch (err) {
-      console.error(`[ProjectSourceNode] Errore caricamento progetto ${projectId}:`, err);
-      setError(humanizeError(err).message);
-    } finally {
-      setLoading(false);
+      // Schema caricato dal progetto sorgente: dato DERIVATO (salvato via
+      // pendingSync, niente avviso "modifiche non salvate" all'apertura).
+      updateNodeData(id, { columns: columnsWithTypes }, { derived: true });
     }
-  };
+  }, [selectedProject, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleToggleColumn = (columnId) => {
     if (!data.columns) return;

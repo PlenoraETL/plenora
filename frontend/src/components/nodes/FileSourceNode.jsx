@@ -7,7 +7,8 @@
  *
  * Usato in: ManipolaEditor, ArricchisciEditor
  */
-import React, { useState, useEffect, memo } from 'react';
+import React, { useEffect, memo } from 'react';
+import { useResource } from '../../hooks/useResource';
 import { Position } from '@xyflow/react';
 import { getFile } from '../../api/files';
 import { getColumnTypeIcon, getColumnTypeLabel, normalizeColumnType } from '../../utils/columnUtils';
@@ -23,53 +24,26 @@ import NodeHandle from '../canvas/NodeHandle';
  * Il file viene selezionato dal drag&drop dalla sidebar.
  */
 const FileSourceNode = ({ id, data }) => {
-  const [fileInfo, setFileInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  // Carica dettagli file quando cambia file_source_id
+  // Fase 5 T2: dettagli del file dall'hook comune (id di richiesta: il
+  // file scelto prima non scrive le colonne del file scelto dopo).
+  const resource = useResource(() => getFile(data.file_source_id), {
+    key: ['file-source', data.file_source_id || null],
+    enabled: Boolean(data.file_source_id),
+    errorMessage: (err) => humanizeError(err).message,
+  });
+  const fileInfo = resource.data || null;
+  const loading = resource.initialLoading;
+  const error = resource.error;
   useEffect(() => {
-    if (data.file_source_id) {
-      loadFileDetails(data.file_source_id);
-    }
-  }, [data.file_source_id]);
-
-
-  const loadFileDetails = async (fileId) => {
-    if (!fileId) return;
-    
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const fileData = await getFile(fileId);
-      
-      setFileInfo(fileData);
-      
-      // Costruisci colonne con tipi normalizzati
-      let columnsWithTypes = [];
-      
-      if (fileData.columns && fileData.columns.length > 0) {
-        columnsWithTypes = fileData.columns.map(col => ({
-          name: col.name,
-          type: normalizeColumnType(col),
-          visible: true
-        }));
-      }
-      
-      // Usa updateNodeData dallo store direttamente
-      if (columnsWithTypes.length > 0) {
-        // Schema letto dal file: dato DERIVATO (non rende il canvas modificato).
-        useCanvasStore.getState().updateNodeData(id, { columns: columnsWithTypes }, { derived: true });
-      }
-      
-    } catch (err) {
-      console.error(`[FileSourceNode] Errore caricamento file ${fileId}:`, err);
-      setError(humanizeError(err).message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (!fileInfo?.columns?.length) return;
+    const columnsWithTypes = fileInfo.columns.map(col => ({
+      name: col.name,
+      type: normalizeColumnType(col),
+      visible: true,
+    }));
+    // Schema letto dal file: dato DERIVATO (non rende il canvas modificato).
+    useCanvasStore.getState().updateNodeData(id, { columns: columnsWithTypes }, { derived: true });
+  }, [fileInfo, id]);
 
   const handleToggleColumn = (colName) => {
     if (!data.columns) return;

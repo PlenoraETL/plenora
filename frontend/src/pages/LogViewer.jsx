@@ -4,11 +4,14 @@
  * Route: /logs
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useResource } from '../hooks/useResource';
+import { saveBlob } from '../utils/downloadBlob';
+import { ResourceError } from '../components/common/ListState';
+import { LIVE_REFRESH_MS } from '../components/logviewer/RunsTab';
 import { useNavigate } from 'react-router-dom';
 import { getLogs, getLogsStats } from '../api/logs';
 import { useAuth } from '../context/AuthContext';
-import { useToast } from '../hooks/useToast';
 import RunsTab from '../components/logviewer/RunsTab';
 import { formatTime, truncateProjectId } from '../utils/logViewerHelpers.jsx';
 
@@ -38,7 +41,6 @@ const MODULE_COLORS = {
 };
 function LogViewer() {
   const navigate     = useNavigate();
-  const toast        = useToast();
   const { user } = useAuth();
   const canvasRef    = useRef(null);
   useHexCanvas(canvasRef);
@@ -46,22 +48,21 @@ function LogViewer() {
   // Capability resolution dal policy file unico (vedi utils/permissions.js)
   const canSeeTechnicalLog = can.seeTechnicalLogs(user);
 
-  const [logs,         setLogs]         = useState([]);
-  const [stats,        setStats]        = useState(null);
-  const [total,        setTotal]        = useState(0);
-  const [hasMore,      setHasMore]      = useState(false);
-  const [filterLevel,  setFilterLevel]  = useState('');
-  const [filterModule, setFilterModule] = useState('');
-  const [filterOp,     setFilterOp]     = useState('');
-  const [searchText,   setSearchText]   = useState('');
+  const [filterLevel,  setFilterLevelRaw]  = useState('');
+  const [filterModule, setFilterModuleRaw] = useState('');
+  const [filterOp,     setFilterOpRaw]     = useState('');
+  const [searchText,   setSearchTextRaw]   = useState('');
   const [searchInput,  setSearchInput]  = useState('');
   const [offset,       setOffset]       = useState(0);
   const [autoRefresh,  setAutoRefresh]  = useState(false);
   const [expandedRow,  setExpandedRow]  = useState(null);
-  const [loading,      setLoading]      = useState(true);
   const [mainTab,      setMainTab]      = useState('runs');
-  const [refreshTick,  setRefreshTick]  = useState(0);
-  const intervalRef = useRef(null);
+  // Un filtro nuovo riparte dalla prima pagina.
+  const resetting = (setter) => (value) => { setOffset(0); setter(value); };
+  const setFilterLevel = resetting(setFilterLevelRaw);
+  const setFilterModule = resetting(setFilterModuleRaw);
+  const setFilterOp = resetting(setFilterOpRaw);
+  const setSearchText = resetting(setSearchTextRaw);
 
   // Se un utente non-admin ha per qualche motivo mainTab='logs', forziamo
   // 'runs' (l'unico tab che vede). Evita stati incoerenti.
@@ -69,65 +70,32 @@ function LogViewer() {
     if (!canSeeTechnicalLog && mainTab === 'logs') setMainTab('runs');
   }, [canSeeTechnicalLog, mainTab]);
 
-  // Ref di mounted: previene setState() su componente smontato dopo
-  // un fetch lento o un tick di setInterval che si scatena durante l'unmount.
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  const loadLogs = useCallback(async (newOffset = 0) => {
-    try {
-      setLoading(true);
-      const data = await getLogs({ level: filterLevel, module: filterModule, op: filterOp, search: searchText, limit: PAGE_SIZE, offset: newOffset });
-      if (!mountedRef.current) return;
-      setLogs(data.entries || []);
-      setTotal(data.total || 0);
-      setHasMore(data.has_more || false);
-      setOffset(newOffset);
-    } catch (err) {
-      console.error('[LogViewer] errore caricamento logs:', err);
-      // Non resettiamo lo stato precedente: l'utente vede i log vecchi
-      // invece di una pagina vuota improvvisa.
-    }
-    finally { if (mountedRef.current) setLoading(false); }
-  }, [filterLevel, filterModule, filterOp, searchText]);
-
-  const loadStats = useCallback(async () => {
-    try {
-      const data = await getLogsStats();
-      if (!mountedRef.current) return;
-      setStats(data);
-    } catch (err) {
-      console.error('[LogViewer] errore caricamento stats:', err);
-    }
-  }, []);
-
-  useEffect(() => { loadLogs(0); loadStats(); }, [filterLevel, filterModule, filterOp, searchText]);
-
-  useEffect(() => {
-    let stopped = false;
-    if (autoRefresh) {
-      const poll = async () => {
-        // Doppio check: il setInterval può scattare DOPO l'unmount se il
-        // cleanup non è ancora stato eseguito (race tra clearInterval e tick).
-        if (stopped || !mountedRef.current) return;
-        await Promise.all([loadLogs(0), loadStats()]);
-        if (stopped || !mountedRef.current) return;
-        setRefreshTick(t => t + 1);
-        intervalRef.current = setTimeout(poll, 5000);
-      };
-      intervalRef.current = setTimeout(poll, 5000);
-    }
-    return () => {
-      stopped = true;
-      if (intervalRef.current) {
-        clearTimeout(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [autoRefresh, loadLogs, loadStats]);
+  // Fase 5 T2 (R4.13): log tecnici e statistiche dall'hook comune, chiesti
+  // SOLO a chi puo' vederli e solo sulla loro scheda; Live aggiorna la
+  // pagina mostrata (non torna alla prima) e si ferma con la scheda nascosta.
+  const techTab = canSeeTechnicalLog && mainTab === 'logs';
+  const logsResource = useResource(() => getLogs({
+    level: filterLevel, module: filterModule, op: filterOp, search: searchText, limit: PAGE_SIZE, offset,
+  }), {
+    key: { filterLevel, filterModule, filterOp, searchText, offset },
+    enabled: techTab,
+    keepPreviousData: true,
+    refreshInterval: autoRefresh ? LIVE_REFRESH_MS : 0,
+  });
+  const statsResource = useResource(getLogsStats, {
+    key: 'logs-stats',
+    enabled: techTab,
+    refreshInterval: autoRefresh ? LIVE_REFRESH_MS : 0,
+  });
+  const logs = logsResource.data?.entries || [];
+  const total = logsResource.data?.total || 0;
+  const hasMore = logsResource.data?.has_more || false;
+  const stats = statsResource.data || null;
+  const loading = logsResource.loading;
+  const loadLogs = (newOffset) => setOffset(newOffset);
+  // Riga aperta per identita' del log, non per posizione: un aggiornamento
+  // che aggiunge righe in testa non apre un'altra riga.
+  const entryKey = (entry) => entry.id || `${entry.ts}|${entry.module}|${entry.op}|${entry.msg}`;
 
   const handleSearch = e => { e.preventDefault(); setSearchText(searchInput); };
   const handleExportCSV = () => {
@@ -136,9 +104,7 @@ function LogViewer() {
     const rows = logs.map(l => [l.ts||'', l.level||'', l.module||'', l.op||'', `"${(l.msg||'').replace(/"/g,'""')}"`, l.project_id||'', l.details?`"${JSON.stringify(l.details).replace(/"/g,'""')}"`:'' ]);
     const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
     const blob = new Blob(['\uFEFF'+csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download=`plenora-logs-${new Date().toISOString().slice(0,10)}.csv`; a.click();
-    URL.revokeObjectURL(url);
+    saveBlob(blob, `plenora-logs-${new Date().toISOString().slice(0,10)}.csv`);
   };
   const resetFilters = () => { setFilterLevel(''); setFilterModule(''); setFilterOp(''); setSearchText(''); setSearchInput(''); };
   const hasFilters = filterLevel || filterModule || filterOp || searchText;
@@ -192,7 +158,7 @@ function LogViewer() {
           )}
 
           {/* Tab Esecuzioni — visibile a tutti gli utenti loggati */}
-          {mainTab === 'runs' && <RunsTab refreshTick={refreshTick} />}
+          {mainTab === 'runs' && <RunsTab live={autoRefresh} />}
 
           {/* Tab Log Tecnici — solo admin/superadmin */}
           {mainTab === 'logs' && canSeeTechnicalLog && <>
@@ -268,8 +234,10 @@ function LogViewer() {
                 </tr>
               </thead>
               <tbody>
-                {loading && !logs.length ? (
+                {logsResource.initialLoading ? (
                   <tr><td colSpan="6" className="lv__empty">Caricamento...</td></tr>
+                ) : logsResource.status === 'error' && !logsResource.hasData ? (
+                  <tr><td colSpan="6"><ResourceError title="Log non caricati" message={logsResource.error} onRetry={logsResource.reload} /></td></tr>
                 ) : logs.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="lv__empty">
@@ -281,20 +249,21 @@ function LogViewer() {
                 ) : logs.map((entry, idx) => {
                   const levelCfg = LEVEL_CONFIG[entry.level] || {};
                   const modColor = MODULE_COLORS[entry.module] || '#6B7280';
-                  const isExpanded = expandedRow === idx;
+                  const rowKey = entryKey(entry);
+                  const isExpanded = expandedRow === rowKey;
                   const hasDetails = entry.details || entry.error || entry.project_id;
                   const detailRowId = `lv-detail-row-${idx}`;
                   return (
-                    <React.Fragment key={idx}>
+                    <React.Fragment key={`${rowKey}|${idx}`}>
                       <tr
                         className={`lv__row lv__row--${(entry.level||'').toLowerCase()} ${hasDetails ? 'lv__row--expandable' : 'lv__row--inert'}${isExpanded ? ' lv__row--expanded' : ''}`}
-                        onClick={() => hasDetails && setExpandedRow(isExpanded ? null : idx)}>
+                        onClick={() => hasDetails && setExpandedRow(isExpanded ? null : rowKey)}>
                         <td className="lv__td lv__td--time">
                           {hasDetails && (
                             <button
                               type="button"
                               className="lv__expand-toggle"
-                              onClick={e => { e.stopPropagation(); setExpandedRow(isExpanded ? null : idx); }}
+                              onClick={e => { e.stopPropagation(); setExpandedRow(isExpanded ? null : rowKey); }}
                               aria-expanded={isExpanded}
                               aria-controls={detailRowId}
                               aria-label={isExpanded ? 'Comprimi dettagli log' : 'Espandi dettagli log'}

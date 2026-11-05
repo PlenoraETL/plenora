@@ -867,7 +867,9 @@ EXPECTED_VALUE_ERROR_STR_E_COUNTS: Dict[str, int] = {
     "backend/app/core/datasources/router.py": 5,
     # Create/update/version/manifest/execute: ValueError di validazione
     # boundary, con sanitizzazione dove il dettaglio puo' essere tecnico.
-    "backend/app/core/eseguibili/router.py": 8,
+    # 8 -> 9 (Fase 5 T2, BA2): POST /preflight, stessa validazione degli
+    # input dell'avvio (KEEP_DYNAMIC_VALIDATION_COMPAT, sanitize_http_detail).
+    "backend/app/core/eseguibili/router.py": 9,
     # 1 -> 3: preview-formula (#26) usa 2 HTTPException(detail=str(e)) per i
     # messaggi di validazione dinamica (espressione/alias non validi).
     "backend/app/core/estrai/router.py": 3,
@@ -915,10 +917,11 @@ def test_value_error_str_e_callsite_lock():
 
 
 def test_value_error_str_e_total_count_lock():
-    """Sanity check: somma per-file == 48 (47 + input runtime di
-    Arricchisci, Fase 4 M7). Lock indipendente che cattura desync fra
-    `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e somma intesa nel commit message."""
-    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 48
+    """Sanity check: somma per-file == 49 (47 + input runtime di
+    Arricchisci, Fase 4 M7, + preflight degli Eseguibili, Fase 5 T2). Lock
+    indipendente che cattura desync fra `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e
+    somma intesa nel commit message."""
+    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 49
 
 
 def test_value_error_str_e_pattern_in_accepted_fallback():

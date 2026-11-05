@@ -16,6 +16,7 @@
  */
 
 import http from './http';
+import { openBlob, saveBlob } from '../utils/downloadBlob';
 import {
   assertFileSize,
   throwIfUploadTooLarge,
@@ -134,18 +135,6 @@ export const openAttachment = async (ticketId, attachmentId, filename) => {
   );
   const disposition = res.headers['content-disposition'] || '';
   const isInline = disposition.toLowerCase().startsWith('inline');
-  const url = URL.createObjectURL(res.data);
-  if (isInline) {
-    window.open(url, '_blank', 'noopener,noreferrer');
-    // Revoke dopo un delay: alcuni browser serializzano la open async.
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } else {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename || 'attachment';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
+  if (isInline) openBlob(res.data);
+  else saveBlob(res.data, filename || 'attachment');
 };

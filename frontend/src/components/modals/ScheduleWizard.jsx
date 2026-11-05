@@ -2,6 +2,7 @@
  * ScheduleWizard.jsx — Wizard multi-step schedule
  * Redesign Plenora design system
  */
+import { useResource } from '../../hooks/useResource';
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../hooks/useToast';
 import { humanizeError } from '../../utils/errorMessages';
@@ -47,9 +48,23 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
   const toast = useToast();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [projects, setProjects] = useState([]);
-  const [connections, setConnections] = useState([]);
-  const [loadingData, setLoadingData] = useState(true);
+  // Fase 5 T2: dati del modulo dall'hook comune (id di richiesta). Il
+  // modulo parte dallo schedule caricato con un effetto senza richieste.
+  const formResource = useResource(async () => {
+    const [projectsData, connectionsData, existing] = await Promise.all([
+      listProjects(),
+      listConnections(),
+      editId ? getSchedule(editId) : Promise.resolve(null),
+    ]);
+    return {
+      projects: projectsData.projects || projectsData || [],
+      connections: connectionsData.connections || connectionsData || [],
+      existing,
+    };
+  }, { key: ['schedule-form', editId || null], errorMessage: (e) => humanizeError(e).message || 'Errore caricamento dati' });
+  const projects = formResource.data?.projects || [];
+  const connections = formResource.data?.connections || [];
+  const loadingData = formResource.initialLoading;
   const [cronPreset, setCronPreset] = useState('0 3 * * *');
   const [errors, setErrors] = useState({});
 
@@ -78,52 +93,40 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     enabled: true,
   });
 
-  useEffect(() => { loadFormData(); }, []);
-
-  const loadFormData = async () => {
-    try {
-      setLoadingData(true);
-      const [projectsData, connectionsData] = await Promise.all([
-        listProjects(),
-        listConnections(),
-      ]);
-      setProjects(projectsData.projects || projectsData || []);
-      setConnections(connectionsData.connections || connectionsData || []);
-      if (editId) {
-        const existing = await getSchedule(editId);
-        setForm({
-          project_id: existing.pipeline?.project_id || '',
-          cron_expression: existing.schedule?.cron_expression || '0 3 * * *',
-          description: existing.schedule?.description || '',
-          timezone: existing.schedule?.timezone || 'Europe/Rome',
-          use_cache: existing.execution?.use_cache ?? false,
-          concurrency_max_queue: existing.execution?.concurrency_max_queue ?? 3,
-          enable_destination: !!existing.destination,
-          connection_id: existing.destination?.connection_id || '',
-          schema_name: existing.destination?.schema_name || 'public',
-          table_name: existing.destination?.table_name || '',
-          write_mode: existing.destination?.write_mode || 'replace',
-          match_columns: (existing.destination?.match_columns || []).join(', '),
-          batch_size: existing.destination?.batch_size ?? 1000,
-          verify_destination_connection: existing.destination?.verify_destination_connection ?? true,
-          max_retries: existing.on_error?.max_retries ?? 3,
-          retry_backoff_seconds: (existing.on_error?.retry_backoff_seconds || [60,300,900]).join(', '),
-          append_conflicts: existing.on_error?.append_conflicts || 'skip',
-          log_skipped_rows: existing.on_error?.log_skipped_rows ?? true,
-          enabled: existing.schedule?.enabled ?? true,
-        });
-        const isPreset = CRON_PRESETS.find(p => p.value === existing.schedule?.cron_expression);
-        setCronPreset(isPreset ? existing.schedule.cron_expression : 'custom');
-      }
-    } catch (e) {
-      // In modifica non si puo' proseguire con il form di default: salvando
-      // si sovrascriverebbe lo schedule esistente con valori inventati.
-      toast.error(humanizeError(e).message || 'Errore caricamento dati');
-      if (editId) { onClose(); return; }
-    } finally {
-      setLoadingData(false);
-    }
-  };
+  const existing = formResource.data?.existing || null;
+  useEffect(() => {
+    if (!existing) return;
+    setForm({
+      project_id: existing.pipeline?.project_id || '',
+      cron_expression: existing.schedule?.cron_expression || '0 3 * * *',
+      description: existing.schedule?.description || '',
+      timezone: existing.schedule?.timezone || 'Europe/Rome',
+      use_cache: existing.execution?.use_cache ?? false,
+      concurrency_max_queue: existing.execution?.concurrency_max_queue ?? 3,
+      enable_destination: !!existing.destination,
+      connection_id: existing.destination?.connection_id || '',
+      schema_name: existing.destination?.schema_name || 'public',
+      table_name: existing.destination?.table_name || '',
+      write_mode: existing.destination?.write_mode || 'replace',
+      match_columns: (existing.destination?.match_columns || []).join(', '),
+      batch_size: existing.destination?.batch_size ?? 1000,
+      verify_destination_connection: existing.destination?.verify_destination_connection ?? true,
+      max_retries: existing.on_error?.max_retries ?? 3,
+      retry_backoff_seconds: (existing.on_error?.retry_backoff_seconds || [60,300,900]).join(', '),
+      append_conflicts: existing.on_error?.append_conflicts || 'skip',
+      log_skipped_rows: existing.on_error?.log_skipped_rows ?? true,
+      enabled: existing.schedule?.enabled ?? true,
+    });
+    const isPreset = CRON_PRESETS.find(p => p.value === existing.schedule?.cron_expression);
+    setCronPreset(isPreset ? existing.schedule.cron_expression : 'custom');
+  }, [existing]);
+  // In modifica non si puo' proseguire con il form di default: salvando si
+  // sovrascriverebbe lo schedule esistente con valori inventati.
+  useEffect(() => {
+    if (formResource.status !== 'error') return;
+    toast.error(formResource.error);
+    if (editId) onClose();
+  }, [formResource.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateForm = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));

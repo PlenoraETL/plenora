@@ -14,7 +14,9 @@
  * dietro (stack unico delle finestre), quindi nessuna modifica persa nella
  * pausa prima del reload.
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useResource } from '../../hooks/useResource';
+import { ResourceError } from '../common/ListState';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
@@ -39,8 +41,6 @@ function fmtDate(d) {
 
 export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
   const toast = useToast();
-  const [versions, setVersions] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [label, setLabel] = useState('');
   const [restoring, setRestoring] = useState(null); // id della versione in ripristino
@@ -51,20 +51,18 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
   const unsaved = useCanvasStore(hasUnsavedChanges);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
 
-  const load = useCallback(async () => {
-    if (!projectId) return;
-    setLoading(true);
-    try {
-      const res = await listCanvasVersions(projectId);
-      setVersions(res.versions || []);
-    } catch (err) {
-      toastApiError(toast, err, 'Errore caricamento versioni');
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, toast]);
-
-  useEffect(() => { if (isOpen) load(); }, [isOpen, load]);
+  // Fase 5 T2: versioni dall'hook comune, chieste a ogni apertura (la
+  // chiave cambia), errore con «Riprova» al posto di "Nessuna versione".
+  const [openCount, setOpenCount] = useState(0);
+  useEffect(() => { if (isOpen) setOpenCount(n => n + 1); }, [isOpen]);
+  const resource = useResource(async () => (await listCanvasVersions(projectId)).versions || [], {
+    key: [projectId, openCount],
+    enabled: Boolean(isOpen && projectId),
+    keepPreviousData: true,
+  });
+  const versions = resource.data || [];
+  const loading = resource.initialLoading;
+  const load = resource.reload;
 
   const handleSave = async () => {
     if (unsaved || isReadOnly) return;
@@ -148,6 +146,8 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
 
         {loading ? (
           <div className="cv-versions__empty">Caricamento…</div>
+        ) : resource.status === 'error' && !resource.hasData ? (
+          <ResourceError title="Versioni non caricate" message={resource.error} onRetry={resource.reload} />
         ) : versions.length === 0 ? (
           <div className="cv-versions__empty">
             Nessuna versione salvata. Salva una copia del canvas corrente per

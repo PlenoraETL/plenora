@@ -43,6 +43,7 @@ const MODULE_STATE = [
 
 // Stato di modulo che NON contiene dati dell'utente, col motivo.
 const NOT_USER_DATA = {
+  'hooks/useTransformRegistry.js': 'insieme dei setter dei componenti montati (avviso quando il catalogo arriva): nessun dato dell utente, il catalogo vive in utils/transformRegistry che e registrato',
   'api/openapiClient.js': 'schema OpenAPI pubblico del server, uguale per ogni utente',
   'components/canvas/compactNodeTypes.js': 'WeakMap con chiave i tipi di nodo: muore con gli oggetti',
   'context/ToastContext.jsx': 'contatore degli id dei toast',
@@ -168,7 +169,8 @@ describe('set di connessioni: risorsa condivisa della sessione (punto 12)', () =
   it('i nodi e la finestra usano la risorsa condivisa, non la richiesta diretta', () => {
     for (const file of ['components/nodes/ProjectInputNode.jsx', 'hooks/useRuntimeInputDefinitions.js']) {
       const content = fs.readFileSync(path.join(srcRoot, file), 'utf-8');
-      expect(content).toContain('loadSharedConnectionSets(');
+      // Fase 5 T2: passata a useResource come caricatore (stessa risorsa condivisa).
+      expect(content).toMatch(/loadSharedConnectionSets\(|useResource\(loadSharedConnectionSets/);
       expect(content).not.toContain('listConnectionSets(');
     }
     expect(fs.readFileSync(path.join(srcRoot, 'components/connections/ConnectionSetsPanel.jsx'), 'utf-8')).toContain('invalidateConnectionSets()');

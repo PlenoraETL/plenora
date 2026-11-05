@@ -7,6 +7,8 @@
  */
 import React from 'react';
 import { downloadProjectFile } from '../../api/projects';
+import { useDownload } from '../../hooks/useDownload';
+import { saveBlob } from '../../utils/downloadBlob';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { humanizeError, ERROR_MESSAGES } from '../../utils/errorMessages';
@@ -40,7 +42,11 @@ function caricaTaskErrorText(t) {
  * «Prima di avviare» (editor/BeforeRunModal, Blocco A regola 5): qui solo
  * avanzamento ed esito.
  *
- * REFACTORED: Usa ModalWrapper per struttura base
+ * Fase 5 T2 (R4.11, R9.4, R9.8, R9-N3, R9-N4): stesse props nei tre editor
+ * (hooks/useExecution.executionModalProps). Annulla per ogni tipo di
+ * progetto quando il task e' partito; la finestra si chiude sempre
+ * ("Continua in secondo piano", ×, Esc) e la barra la riapre; download del
+ * risultato e del rapporto errori con l'errore mostrato qui.
  */
 function ExecutionModal({
   isOpen,
@@ -54,10 +60,17 @@ function ExecutionModal({
   progressMessage = '',
   taskStatus = null,
   onCancel = null,
+  cancelling = false,
+  cancelError = null,
+  downloading = false,
+  downloadError = null,
   caricaTasks = [],
   caricaPolling = false,
+  // false = la finestra non va in secondo piano (Eseguibili: niente barra
+  // da cui riaprirla): durante l'esecuzione resta aperta, con Annulla.
+  backgroundable = true,
 }) {
-  const isAsync = projectType === 'arricchisci';
+  const reportDownload = useDownload();
   // Progress percepita fluida (Epic C): se il backend resta a 0% la barra
   // striscia comunque verso un tetto, così non sembra bloccata.
   const smoothProgress = useSmoothProgress(progress, isExecuting);
@@ -89,35 +102,27 @@ function ExecutionModal({
   const hasEnrichmentErrors = totalErrors > 0;
   const errorReportPath = result?.error_report;
 
-  const handleDownloadErrorReport = async () => {
+  const handleDownloadErrorReport = () => reportDownload.run('report', async () => {
     if (!errorReportPath || !result?.project_id) return;
     const filename = errorReportPath.split(/[/\\]/).pop();
     const r = await downloadProjectFile(result.project_id, filename);
-    const b = window.URL.createObjectURL(new Blob([r.data]));
-    const a = document.createElement('a');
-    a.href = b;
-    a.download = 'error_report.csv';
-    a.click();
-    window.URL.revokeObjectURL(b);
-  };
+    saveBlob(new Blob([r.data]), 'error_report.csv');
+  });
 
   // Footer con pulsanti
   const isStillWorking = isExecuting || caricaPolling;
+  const lockedOpen = isStillWorking && !backgroundable;
 
   const footer = (
     <div className="execution-modal__actions">
-      {isExecuting && isAsync && onCancel && (
-        <ModalButton variant="danger" onClick={onCancel}>
-          🛑 Annulla
+      {isExecuting && onCancel && (
+        <ModalButton variant="danger" onClick={onCancel} disabled={cancelling}>
+          {cancelling ? 'Annullamento…' : '🛑 Annulla'}
         </ModalButton>
       )}
 
-      <ModalButton
-        variant="secondary"
-        onClick={onClose}
-        disabled={isExecuting && !isAsync}
-      >
-        {isStillWorking ? 'Continua in secondo piano' : 'Chiudi'}
+      <ModalButton variant="secondary" onClick={() => onClose()} disabled={lockedOpen}>
+        {isStillWorking && backgroundable ? 'Continua in secondo piano' : 'Chiudi'}
       </ModalButton>
     </div>
   );
@@ -127,17 +132,19 @@ function ExecutionModal({
     : projectType === 'manipola' ? 'manipola' 
     : 'estrai';
 
+  // Stack unico (T4): senza secondo piano la finestra e' occupata (`busy`:
+  // niente Esc, overlay ne' ×); con il secondo piano Esc e × la mandano
+  // dietro, un clic sull'overlay no (si riapre dalla barra, non per sbaglio).
   return (
     <ModalWrapper
       isOpen={isOpen}
-      onClose={isExecuting && !isAsync ? undefined : onClose}
+      onClose={() => onClose()}
       title={title}
       size="md"
       variant={variant}
       footer={footer}
-      closeOnOverlay={!isExecuting}
-      closeOnEsc={!isExecuting || isAsync}
-      showCloseButton={!isExecuting || isAsync}
+      busy={lockedOpen}
+      closeOnOverlay={!isStillWorking}
     >
       {/* Loading State con Progress Bar */}
       {isExecuting && (
@@ -166,7 +173,14 @@ function ExecutionModal({
               {taskStatus === 'pending' && '⏳ In coda...'}
               {taskStatus === 'progress' && '⚙️ In esecuzione...'}
               {taskStatus === 'started' && '🚀 Avviato...'}
+              {taskStatus === 'retry' && '🔁 Nuovo tentativo...'}
             </div>
+            {cancelError && (
+              <p className="execution-modal__error-message" role="alert">Annullamento non riuscito: {cancelError}</p>
+            )}
+            {backgroundable && (
+              <p className="execution-modal__hint">Puoi chiudere questa finestra: l'esecuzione continua e la riapri dalla barra.</p>
+            )}
           </>
         </div>
       )}
@@ -272,9 +286,17 @@ function ExecutionModal({
                     {totalErrors} righe hanno generato errori durante l'arricchimento.
                     Scarica il rapporto CSV per vedere i dettagli di ogni errore.
                   </p>
-                  <button type="button" className="execution-modal__error-report-btn" onClick={handleDownloadErrorReport}>
-                    📋 Scarica il rapporto degli errori
+                  <button
+                    type="button"
+                    className="execution-modal__error-report-btn"
+                    onClick={handleDownloadErrorReport}
+                    disabled={reportDownload.busy}
+                  >
+                    {reportDownload.busy ? 'Scaricamento…' : '📋 Scarica il rapporto degli errori'}
                   </button>
+                  {reportDownload.error && (
+                    <p className="execution-modal__error-message" role="alert">{reportDownload.error}</p>
+                  )}
                 </div>
               )}
 
@@ -295,10 +317,14 @@ function ExecutionModal({
                 <button
                   type="button"
                   className="execution-modal__download-btn"
-                  onClick={onDownload}
+                  onClick={() => onDownload()}
+                  disabled={downloading}
                 >
-                  ⬇️ Scarica File
+                  {downloading ? 'Scaricamento…' : '⬇️ Scarica File'}
                 </button>
+              )}
+              {downloadError && (
+                <p className="execution-modal__error-message" role="alert">{downloadError}</p>
               )}
 
               {/* CARICA Tasks */}

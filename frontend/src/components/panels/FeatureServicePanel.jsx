@@ -11,7 +11,9 @@
  * - Modal creazione/test rapida connessione ArcGIS
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useResource } from '../../hooks/useResource';
+import '../common/ListState.css';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { humanizeError, requestErrorMessage } from '../../utils/errorMessages';
 import {
@@ -52,18 +54,12 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
   const [view, setView] = useState(lockedConnection ? 'services' : 'connections'); // connections | services | layers
   
   // Connessioni
-  const [connections, setConnections] = useState([]);
   const [selectedConnection, setSelectedConnection] = useState(lockedConnection);
-  const [loadingConnections, setLoadingConnections] = useState(false);
   
   // Servizi
-  const [services, setServices] = useState([]);
-  const [loadingServices, setLoadingServices] = useState(false);
   
   // Layer
-  const [layers, setLayers] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
-  const [loadingLayers, setLoadingLayers] = useState(false);
   const [layerSchemas, setLayerSchemas] = useState({});
   
   // Search
@@ -81,63 +77,42 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
   const [newConnTesting, setNewConnTesting] = useState(false);
   const [newConnError, setNewConnError] = useState('');
   
-  // Error
-  const [error, setError] = useState('');
+  // Fase 5 T2 (R4.5): connessioni, servizi e layer dall'hook comune con la
+  // scelta nella chiave: scelta la connessione A e poi la B, i servizi di A
+  // arrivati dopo non compaiono sotto B (id di richiesta).
+  const humanize = (err) => humanizeError(err).message;
+  const connsResource = useResource(async () => {
+    const data = await listFeatureConnections();
+    return data.connections || data || [];
+  }, { key: 'feature-connections', enabled: !lockedConnection, errorMessage: humanize });
+  const servicesResource = useResource(async () => {
+    const data = await browseServices(selectedConnection.id);
+    return data.services || data || [];
+  }, { key: ['feature-services', selectedConnection?.id || null], enabled: Boolean(selectedConnection) && view !== 'connections', errorMessage: humanize });
+  const layersResource = useResource(async () => {
+    const data = await browseLayers(selectedConnection.id, selectedService.url);
+    return data.layers || data || [];
+  }, { key: ['feature-layers', selectedConnection?.id || null, selectedService?.url || null], enabled: Boolean(selectedConnection && selectedService) && view === 'layers', errorMessage: humanize });
+  const connections = connsResource.data || [];
+  const setConnections = connsResource.setData;
+  const loadingConnections = connsResource.initialLoading;
+  const services = servicesResource.data || [];
+  const loadingServices = servicesResource.initialLoading;
+  const layers = layersResource.data || [];
+  const loadingLayers = layersResource.initialLoading;
+  const current = view === 'layers' ? layersResource : view === 'services' ? servicesResource : connsResource;
+  const error = current.status === 'error' ? current.error : '';
 
-  useEffect(() => {
-    if (lockedConnection) {
-      // Connessione bloccata dal progetto: carica servizi direttamente
-      handleSelectConnection(lockedConnection);
-    } else {
-      loadConnections();
-    }
-  }, []);
-
-  const loadConnections = async () => {
-    setLoadingConnections(true);
-    setError('');
-    try {
-      const data = await listFeatureConnections();
-      setConnections(data.connections || data || []);
-    } catch (err) {
-      setError(humanizeError(err).message);
-    } finally {
-      setLoadingConnections(false);
-    }
-  };
-
-  const handleSelectConnection = async (conn) => {
+  const handleSelectConnection = (conn) => {
     setSelectedConnection(conn);
     setView('services');
-    setLoadingServices(true);
-    setError('');
     setSearchQuery('');
-    try {
-      const data = await browseServices(conn.id);
-      setServices(data.services || data || []);
-    } catch (err) {
-      setError(humanizeError(err).message);
-      setServices([]);
-    } finally {
-      setLoadingServices(false);
-    }
   };
 
-  const handleSelectService = async (service) => {
+  const handleSelectService = (service) => {
     setSelectedService(service);
     setView('layers');
-    setLoadingLayers(true);
-    setError('');
     setSearchQuery('');
-    try {
-      const data = await browseLayers(selectedConnection.id, service.url);
-      setLayers(data.layers || data || []);
-    } catch (err) {
-      setError(humanizeError(err).message);
-      setLayers([]);
-    } finally {
-      setLoadingLayers(false);
-    }
   };
 
   const loadLayerSchema = useCallback(async (layer) => {
@@ -179,7 +154,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
     setNewConnError('');
     try {
       const created = await createFeatureConnection(newConnForm);
-      setConnections(prev => [...prev, created]);
+      setConnections(prev => [...(prev || []), created]);
       setShowNewConn(false);
       setNewConnForm({ name: '', server_url: '', username: '', password: '', auth_type: 'public' });
     } catch (err) {
@@ -190,15 +165,12 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
   };
 
   const handleBack = () => {
-    setError('');
     setSearchQuery('');
     if (view === 'layers') {
       setView('services');
-      setLayers([]);
       setSelectedService(null);
     } else if (view === 'services' && !lockedConnection) {
       setView('connections');
-      setServices([]);
       setSelectedConnection(null);
     }
   };
@@ -293,8 +265,9 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
       </div>
 
       {error && (
-        <div className="fs-panel__error">
-          ⚠️ {error}
+        <div className="fs-panel__error" role="alert">
+          ⚠️ {error}{' '}
+          <button type="button" className="list-state__retry" onClick={() => current.reload()}>Riprova</button>
         </div>
       )}
 
@@ -303,7 +276,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
         {view === 'connections' && (
           loadingConnections ? (
             <div className="fs-panel__loading">Caricamento connessioni...</div>
-          ) : connections.length === 0 ? (
+          ) : connsResource.status === 'error' && !connsResource.hasData ? null : connections.length === 0 ? (
             <div className="fs-panel__empty">
               <p>Nessuna connessione ArcGIS configurata</p>
               {canCreateConnection ? (
@@ -340,7 +313,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
         {view === 'services' && (
           loadingServices ? (
             <div className="fs-panel__loading">Caricamento servizi...</div>
-          ) : services.length === 0 ? (
+          ) : servicesResource.status === 'error' && !servicesResource.hasData ? null : services.length === 0 ? (
             <div className="fs-panel__empty">
               <p>Nessun FeatureServer trovato</p>
             </div>
@@ -368,7 +341,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
           <>
             {loadingLayers ? (
               <div className="fs-panel__loading">Caricamento layer...</div>
-            ) : layers.length === 0 ? (
+            ) : layersResource.status === 'error' && !layersResource.hasData ? null : layers.length === 0 ? (
               <div className="fs-panel__empty">
                 <p>Nessun layer trovato</p>
               </div>

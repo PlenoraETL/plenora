@@ -15,6 +15,7 @@ const {
   openAttachmentMock,
   deleteTicketMock,
   authState,
+  paramsState,
 } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   toastMock: {
@@ -32,6 +33,7 @@ const {
   openAttachmentMock: vi.fn(),
   deleteTicketMock: vi.fn(),
   authState: { user: null },
+  paramsState: { id: 'tk-1' },
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -39,7 +41,7 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useNavigate: () => navigateMock,
-    useParams: () => ({ id: 'tk-1' }),
+    useParams: () => ({ id: paramsState.id }),
   };
 });
 
@@ -109,6 +111,7 @@ function renderDetail() {
 describe('TicketDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    paramsState.id = 'tk-1';
     authState.user = { user_id: 'u-admin', username: 'admin1', role: 'admin' };
     getTicketsMetaMock.mockResolvedValue(META);
     getTicketMock.mockResolvedValue(BASE_DETAIL);
@@ -476,12 +479,49 @@ describe('TicketDetail', () => {
 
   // ERROR HANDLING
 
-  it('404 sul fetch redirige a /tickets', async () => {
+  // Fase 5 T2 (R4.1, R4.8): errori come errori, dati per ticket.
+  it('404: "Ticket non trovato" con ritorno ai ticket, non una pagina bianca', async () => {
     getTicketMock.mockRejectedValue({ response: { status: 404, data: { detail: 'Not found' } } });
     renderDetail();
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/tickets');
-    });
+    expect(await screen.findByText('Ticket non trovato')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '← Ticket' }));
+    expect(navigateMock).toHaveBeenCalledWith('/tickets');
+  });
+
+  it('errore diverso da 404: messaggio e Riprova che ricarica', async () => {
+    getTicketMock.mockRejectedValueOnce({ response: { status: 500, data: {} } });
+    renderDetail();
+    expect(await screen.findByText('Ticket non caricato')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Riprova' }));
+    expect(await screen.findByText('SSO non funziona')).toBeInTheDocument();
+  });
+
+  it('cambio di ticket: la risposta di A arrivata dopo non compare sotto B', async () => {
+    let resolveA;
+    getTicketMock.mockImplementation((tid) => (tid === 'tk-1'
+      ? new Promise((r) => { resolveA = r; })
+      : Promise.resolve({ ...BASE_DETAIL, ticket: { ...BASE_TICKET, id: 'tk-2', title: 'Ticket B' } })));
+    const view = renderDetail();
+    paramsState.id = 'tk-2';
+    view.rerender(<MemoryRouter><TicketDetail /></MemoryRouter>);
+    expect(await screen.findByText('Ticket B')).toBeInTheDocument();
+    resolveA(BASE_DETAIL);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText('SSO non funziona')).toBeNull();
+    expect(screen.getByText('Ticket B')).toBeInTheDocument();
+  });
+
+  it('il testo scritto durante l\'invio del commento resta', async () => {
+    let finish;
+    addCommentMock.mockImplementation(() => new Promise((r) => { finish = r; }));
+    renderDetail();
+    const textarea = await screen.findByPlaceholderText(/scrivi un commento/i);
+    await userEvent.type(textarea, 'primo');
+    await userEvent.click(screen.getByRole('button', { name: /invia/i }));
+    await userEvent.type(textarea, ' e altro');
+    finish({ id: 'c-1' });
+    await waitFor(() => expect(getTicketMock).toHaveBeenCalledTimes(2));
+    expect(textarea).toHaveValue('primo e altro');
   });
 
   it('Rimuovi allegato: solo admin o chi lo ha caricato (R10.9)', async () => {

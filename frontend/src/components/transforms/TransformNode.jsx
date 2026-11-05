@@ -10,7 +10,7 @@
  * Nessun calcolo colonne: le colonne in ingresso (tutte e per lato, nell'ordine
  * delle maniglie) vengono dalla fonte unica (hooks/useColumns, columnsOf).
  */
-import React, { memo, useState, useEffect, useMemo } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useColumnsOf, useNodesInfo } from '../../hooks/useColumns';
 import { columnsConfirmed } from '../../utils/columnSource';
@@ -20,30 +20,23 @@ import DynamicConfig from './DynamicConfig';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { isParameterBindingEdge } from '../../utils/runtimeBindingEdges';
 import { OPERATION_PANELS, LookupSuggestion } from './panels';
-import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
+import { useTransformRegistry } from '../../hooks/useTransformRegistry';
+import { ResourceError } from '../common/ListState';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import { term } from '../../utils/glossary';
 
-// Cache del registry condivisa con i riassunti dei nodi compatti.
-const fetchRegistry = fetchTransformRegistry;
-const getRegistryCache = getCachedTransformRegistry;
 
 const TransformNode = memo(({ data, id }) => {
   const transform_op = data.transform_op || 'filter';
   const config = data.config || {};
 
   // Registry
-  const [registry, setRegistry] = useState(getRegistryCache());
+  // Catalogo condiviso (hooks/useTransformRegistry): errore con «Riprova».
+  const registryResource = useTransformRegistry();
+  const registry = registryResource.data || null;
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
 
-  useEffect(() => {
-    if (!registry) {
-      fetchRegistry().then(data => {
-        if (data) setRegistry(data);
-      });
-    }
-  }, [registry]);
 
   // Config della trasformazione corrente
   const transformConfig = registry?.transforms?.[transform_op];
@@ -138,13 +131,16 @@ const TransformNode = memo(({ data, id }) => {
       <div className="ppanel__field">
         <label className="ppanel__label" htmlFor={`op-${id}`}>Operazione</label>
         <select id={`op-${id}`} value={transform_op} onChange={onOpChange} className="ppanel__input" disabled={isReadOnly || !registry}>
-          {!registry && <option value={transform_op}>Caricamento operazioni…</option>}
+          {!registry && <option value={transform_op}>{registryResource.status === 'error' ? 'Operazioni non disponibili' : 'Caricamento operazioni…'}</option>}
           {opsByCategory.map(({ catId, cat, ops }) => (
             <optgroup key={catId} label={`${cat.icon || ''} ${cat.name}`}>
               {ops.map(([opId, cfg]) => <option key={opId} value={opId}>{cfg.icon} {cfg.name}</option>)}
             </optgroup>
           ))}
         </select>
+        {registryResource.status === 'error' && (
+          <ResourceError compact title="Operazioni non caricate" message={registryResource.error} onRetry={registryResource.reload} />
+        )}
         {Panel && transformConfig?.description && <div className="ppanel__note">{transformConfig.description}</div>}
         <ColumnStatusNote result={input} />
       </div>

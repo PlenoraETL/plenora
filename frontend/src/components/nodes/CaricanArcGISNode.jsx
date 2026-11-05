@@ -9,7 +9,9 @@
  *
  * Si aspetta un edge in ingresso da ResultNode (handle "output").
  */
-import React, { useState, useEffect, memo } from 'react';
+import { useResource } from '../../hooks/useResource';
+import '../common/ListState.css';
+import React, { useState, memo } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useColumnsOf } from '../../hooks/useColumns';
@@ -31,17 +33,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   const [showMapping, setShowMapping] = useState(false);
 
   // State ArcGIS
-  const [arcgisConnections, setArcgisConnections] = useState([]);
-  const [isLoadingArcgisConns, setIsLoadingArcgisConns] = useState(false);
-  const [arcgisServices, setArcgisServices] = useState([]);
-  const [isLoadingServices, setIsLoadingServices] = useState(false);
-  const [arcgisLayers, setArcgisLayers] = useState([]);
-  const [isLoadingLayers, setIsLoadingLayers] = useState(false);
-  const [arcgisLayerSchema, setArcgisLayerSchema] = useState(null);
-  const [isLoadingSchema, setIsLoadingSchema] = useState(false);
-  const [arcgisError, setArcgisError] = useState('');
-  const [arcgisFolders, setArcgisFolders] = useState([]);
-  const [isLoadingFolders, setIsLoadingFolders] = useState(false);
 
   const arcgisConnectionId = data.arcgis_connection_id || '';
   const arcgisServiceUrl = data.arcgis_service_url || '';
@@ -109,127 +100,62 @@ const CaricanArcGISNode = memo(({ data, id }) => {
         { value: 'create_service', label: 'Crea servizio', desc: 'Crea un nuovo Feature Service e carica i dati' },
       ];
 
-  useEffect(() => {
-    loadArcgisConnections();
-  }, []);
-
-  useEffect(() => {
-    // RB.7.C: skip API calls quando la connection e' marcata access_denied
-    // dal backend (RB.7.B). Pulisce stato derivato per evitare flash di
-    // dati stantii.
-    if (isAccessDenied) {
-      setArcgisServices([]); setArcgisLayers([]); setArcgisLayerSchema(null);
-      return;
-    }
-    if (arcgisConnectionId) {
-      loadArcgisServices(arcgisConnectionId);
-    } else {
-      setArcgisServices([]); setArcgisLayers([]); setArcgisLayerSchema(null);
-    }
-  }, [arcgisConnectionId, isAccessDenied]);
-
-  useEffect(() => {
-    if (isAccessDenied) {
-      setArcgisLayers([]); setArcgisLayerSchema(null);
-      return;
-    }
-    if (arcgisConnectionId && arcgisServiceUrl && arcgisOperation !== 'create_service') {
-      loadArcgisLayers(arcgisConnectionId, arcgisServiceUrl);
-    } else {
-      setArcgisLayers([]); setArcgisLayerSchema(null);
-    }
-  }, [arcgisConnectionId, arcgisServiceUrl, arcgisOperation, isAccessDenied]);
-
-  // Carica cartelle quando connessione selezionata e operazione create_service
-  useEffect(() => {
-    if (isAccessDenied) {
-      setArcgisFolders([]);
-      return;
-    }
-    if (arcgisConnectionId && arcgisOperation === 'create_service') {
-      loadArcgisFolders(arcgisConnectionId);
-    } else {
-      setArcgisFolders([]);
-    }
-  }, [arcgisConnectionId, arcgisOperation, isAccessDenied]);
-
-  useEffect(() => {
-    if (isAccessDenied) {
-      setArcgisLayerSchema(null);
-      return;
-    }
-    if (arcgisConnectionId && arcgisLayerUrl && arcgisOperation !== 'create_service') {
-      loadArcgisLayerSchema(arcgisConnectionId, arcgisLayerUrl);
-    } else {
-      setArcgisLayerSchema(null);
-    }
-  }, [arcgisConnectionId, arcgisLayerUrl, arcgisOperation, isAccessDenied]);
-
-  const loadArcgisConnections = async () => {
-    setIsLoadingArcgisConns(true);
-    try {
-      const res = await listFeatureConnections();
-      setArcgisConnections(Array.isArray(res) ? res : res.connections || []);
-    } catch (error) {
-      console.error('Errore caricamento connessioni ArcGIS:', error);
-    } finally {
-      setIsLoadingArcgisConns(false);
-    }
-  };
-
-  const loadArcgisServices = async (connId) => {
-    setIsLoadingServices(true);
-    setArcgisError('');
-    try {
-      const res = await browseServices(connId);
-      setArcgisServices(Array.isArray(res) ? res : res.services || []);
-    } catch (error) {
-      setArcgisError(humanizeError(error).message);
-      setArcgisServices([]);
-    } finally {
-      setIsLoadingServices(false);
-    }
-  };
-
-  const loadArcgisLayers = async (connId, serviceUrl) => {
-    setIsLoadingLayers(true);
-    setArcgisError('');
-    try {
-      const res = await browseLayers(connId, serviceUrl);
-      setArcgisLayers(res.layers || res || []);
-    } catch (error) {
-      setArcgisError(humanizeError(error).message);
-      setArcgisLayers([]);
-    } finally {
-      setIsLoadingLayers(false);
-    }
-  };
-
-  const loadArcgisFolders = async (connId) => {
-    setIsLoadingFolders(true);
-    try {
-      const res = await listFolders(connId);
-      setArcgisFolders(res.folders || res || []);
-    } catch (error) {
-      console.error('Errore caricamento cartelle ArcGIS:', error);
-      setArcgisFolders([{ id: '', title: '(root)' }]);
-    } finally {
-      setIsLoadingFolders(false);
-    }
-  };
-
-  const loadArcgisLayerSchema = async (connId, layerUrl) => {
-    setIsLoadingSchema(true);
-    try {
-      const res = await getLayerSchema(connId, layerUrl);
-      setArcgisLayerSchema(res);
-    } catch (error) {
-      console.error('Errore schema layer:', error);
-      setArcgisLayerSchema(null);
-    } finally {
-      setIsLoadingSchema(false);
-    }
-  };
+  // Fase 5 T2 (R4.5, R4.17): connessioni, servizi, layer, cartelle e schema
+  // del layer dall'hook comune. Ogni scelta cambiata e' una nuova richiesta
+  // (la risposta di prima non scrive sulla scelta nuova); ogni errore e'
+  // mostrato con «Riprova» (prima connessioni, cartelle e schema finivano
+  // solo in console). RB.7.C: niente richieste con la connessione
+  // access_denied.
+  const live = !isAccessDenied;
+  const connsResource = useResource(async () => {
+    const res = await listFeatureConnections();
+    return Array.isArray(res) ? res : res.connections || [];
+  }, { key: 'arcgis-connections', errorMessage: (e) => humanizeError(e).message });
+  const servicesResource = useResource(async () => {
+    const res = await browseServices(arcgisConnectionId);
+    return Array.isArray(res) ? res : res.services || [];
+  }, { key: ['arcgis-services', arcgisConnectionId || null], enabled: live && Boolean(arcgisConnectionId), errorMessage: (e) => humanizeError(e).message });
+  const layersResource = useResource(async () => {
+    const res = await browseLayers(arcgisConnectionId, arcgisServiceUrl);
+    return res.layers || res || [];
+  }, {
+    key: ['arcgis-layers', arcgisConnectionId || null, arcgisServiceUrl || null],
+    enabled: live && Boolean(arcgisConnectionId && arcgisServiceUrl) && arcgisOperation !== 'create_service',
+    errorMessage: (e) => humanizeError(e).message,
+  });
+  const foldersResource = useResource(async () => {
+    const res = await listFolders(arcgisConnectionId);
+    return res.folders || res || [];
+  }, {
+    key: ['arcgis-folders', arcgisConnectionId || null],
+    enabled: live && Boolean(arcgisConnectionId) && arcgisOperation === 'create_service',
+    errorMessage: (e) => humanizeError(e).message,
+  });
+  const schemaResource = useResource(() => getLayerSchema(arcgisConnectionId, arcgisLayerUrl), {
+    key: ['arcgis-layer-schema', arcgisConnectionId || null, arcgisLayerUrl || null],
+    enabled: live && Boolean(arcgisConnectionId && arcgisLayerUrl) && arcgisOperation !== 'create_service',
+    errorMessage: (e) => humanizeError(e).message,
+  });
+  const arcgisConnections = connsResource.data || [];
+  const isLoadingArcgisConns = connsResource.loading;
+  const arcgisServices = servicesResource.data || [];
+  const isLoadingServices = servicesResource.loading;
+  const arcgisLayers = layersResource.data || [];
+  const isLoadingLayers = layersResource.loading;
+  // Senza cartelle note la root resta scegliibile.
+  const arcgisFolders = foldersResource.status === 'error' ? [{ id: '', title: '(root)' }] : (foldersResource.data || []);
+  const isLoadingFolders = foldersResource.loading;
+  const arcgisLayerSchema = schemaResource.data || null;
+  const isLoadingSchema = schemaResource.loading;
+  const failed = [
+    ['Connessioni ArcGIS non caricate', connsResource],
+    ['Servizi non caricati', servicesResource],
+    ['Layer non caricati', layersResource],
+    ['Cartelle non caricate', foldersResource],
+    ['Schema del layer non caricato', schemaResource],
+  ].find(([, r]) => r.status === 'error');
+  const arcgisError = failed ? `${failed[0]}: ${failed[1].error}` : '';
+  const retryArcgis = failed ? failed[1].reload : null;
 
   const autoMapArcgis = () => {
     if (!arcgisLayerSchema?.fields || availableColumns.length === 0) return;
@@ -543,6 +469,9 @@ const CaricanArcGISNode = memo(({ data, id }) => {
           )}
 
           {/* Errori ArcGIS */}
+          {arcgisError && retryArcgis && (
+            <button type="button" className="nodrag list-state__retry" onClick={() => retryArcgis()}>Riprova</button>
+          )}
           {arcgisError && (
             <div className="carica-arcgis-node__warning carica-arcgis-node__warning--err">
               {arcgisError}

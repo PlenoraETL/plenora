@@ -53,6 +53,7 @@ const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'))
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
 const ConnectionSelectorModal = lazy(() => import('../components/arricchisci/ConnectionSelectorModal'));
 const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
+import { executionModalProps, executionToolbarProps } from '../hooks/useExecution';
 import { usePreview, useExecution, useCanvasCore, useMultiModal, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
@@ -118,7 +119,7 @@ const ArricchisciEditorContent = () => {
 
   const {
     project, connections, loading, error: loadError,
-    availableSources, availableFiles,
+    availableSources, availableFiles, sourcesError, sourcesLoading, reloadSources,
     reload: reloadData,
   } = useEditorData(projectId, {
     withSources: true,
@@ -391,7 +392,7 @@ const ArricchisciEditorContent = () => {
     onBack: handleBack,
     onSave: handleSaveCanvas,
     saving,
-    executing: execution.isExecuting,
+    ...executionToolbarProps(execution),
     theme,
     setTheme,
     statusExtra: <ValidationStatusBadge />,
@@ -419,6 +420,7 @@ const ArricchisciEditorContent = () => {
   const sidebar = !isReadOnly ? (
     <EditorSidebar
       variant="arricchisci" projects={availableSources} files={availableFiles} onDragStart={onDragStart}
+      sourcesLoading={sourcesLoading} sourcesError={sourcesError} onRetrySources={reloadSources}
       projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto nel canvas',
         emptyMessage: 'Nessun progetto disponibile.', emptyHint: 'Crea prima un progetto Estrai, Manipola o Arricchisci.',
         filterTypes: ['estrai', 'manipola', 'arricchisci'], showSearch: true }}
@@ -435,7 +437,7 @@ const ArricchisciEditorContent = () => {
       {showVersions && (
         <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
       )}
-      <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title={`${term('run').icon} Esecuzione dell'arricchimento`} projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} />
+      <ExecutionModal {...executionModalProps(execution)} title={`${term('run').icon} Esecuzione dell'arricchimento`} projectType="arricchisci" />
       <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
         data={(() => {
           if (!preview.data?.columns) return preview.data;
@@ -522,12 +524,16 @@ const ArricchisciEditorContent = () => {
   );
 };
 
-const ArricchisciEditor = () => (
-  <ReactFlowProvider>
-    <ConfirmProvider>
-      <ArricchisciEditorContent />
-    </ConfirmProvider>
-  </ReactFlowProvider>
-);
+// Fase 5 T2 (R4.6): un progetto = un editor (rimontato al cambio di progetto).
+const ArricchisciEditor = () => {
+  const { projectId } = useParams();
+  return (
+    <ReactFlowProvider key={projectId}>
+      <ConfirmProvider>
+        <ArricchisciEditorContent />
+      </ConfirmProvider>
+    </ReactFlowProvider>
+  );
+};
 
 export default ArricchisciEditor;

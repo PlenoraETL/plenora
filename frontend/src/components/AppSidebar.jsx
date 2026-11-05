@@ -27,11 +27,12 @@
  *     <main className="page__main">...</main>
  *   </div>
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { can, role } from '../utils/permissions';
 import { getTicketsCounts } from '../api/tickets';
+import { useResource } from '../hooks/useResource';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
 import PlenoraLogo from './common/PlenoraLogo';
@@ -75,49 +76,14 @@ export default function AppSidebar({ counts = {} }) {
   const [showPwdModal, setShowPwdModal] = useState(false);
 
   // Badge ticket: count attivi visibili all'utente (self/group/global
-  // a seconda del ruolo, enforcement backend). Refresh ogni 60s —
-  // tradeoff: abbastanza veloce perche' l'utente veda cambiamenti
-  // senza reload manuale, abbastanza lento da non saturare di
-  // richieste un admin aperto su 10 tab.
-  const [ticketsActiveCount, setTicketsActiveCount] = useState(null);
-  useEffect(() => {
-    if (!user || role.isEsecutore(user)) return undefined;
-    let cancelled = false;
-    let timer = null;
-    // Logga l'errore al massimo una volta per sessione del componente
-    // — il polling 60s renderebbe inutile spammare console.warn ad ogni
-    // tick se /tickets/counts e' down. Pieno fail-silent rendeva
-    // invisibile la regressione (badge sparito = "feature disattivata?").
-    let warnedThisSession = false;
-    const load = async () => {
-      try {
-        const data = await getTicketsCounts();
-        if (cancelled) return;
-        const n = (data.active_total ?? data.active_mine ?? 0);
-        setTicketsActiveCount(n);
-        warnedThisSession = false;  // recuperata
-      } catch (e) {
-        if (!cancelled) setTicketsActiveCount(null);
-        if (!warnedThisSession) {
-          // eslint-disable-next-line no-console
-          // console.warn diagnostico volutamente non instradato a toast: il
-          // badge tickets è secondario, l'endpoint può essere temporaneamente
-          // assente (lab/canary) e non vogliamo notifica utente per ogni load.
-          console.warn(
-            '[AppSidebar] /tickets/counts non raggiungibile, badge nascosto:',
-            e?.response?.status || e?.message,
-          );
-          warnedThisSession = true;
-        }
-      }
-      if (!cancelled) timer = setTimeout(load, 60_000);
-    };
-    load();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [user]);
+  // a seconda del ruolo, enforcement backend). Aggiornato ogni 60s dall'hook
+  // comune (useResource: un poll alla volta, fermo con la scheda nascosta).
+  // Un errore nasconde il badge (dato secondario, nessun avviso all'utente).
+  const countsResource = useResource(async () => {
+    const data = await getTicketsCounts();
+    return data.active_total ?? data.active_mine ?? 0;
+  }, { key: ['tickets-counts', user?.user_id || null], enabled: Boolean(user) && !role.isEsecutore(user), refreshInterval: 60_000 });
+  const ticketsActiveCount = countsResource.status === 'error' ? null : (countsResource.data ?? null);
 
   // Merge del count ticket dentro `counts` senza modificare la prop
   // passata dall'esterno (alcuni chiamanti potrebbero gia' popolare

@@ -1,15 +1,22 @@
 /**
  * RunsTab.jsx — Tabella esecuzioni pipeline con filtri e dettaglio
  * Props:
- *   refreshTick {number} - Incrementato dall'esterno per forzare un reload
+ *   live {boolean} - aggiornamento periodico (Live) della pagina mostrata
+ *
+ * Fase 5 T2 (R4.13): pagina dall'hook comune con filtri e posizione nella
+ * chiave: Live aggiorna la pagina corrente (non torna alla prima), la riga
+ * aperta resta aperta (chiave = run_id), il dettaglio aperto si aggiorna
+ * con Live; un errore e' un errore con «Riprova», non una tabella vuota.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { getLogRuns } from '../../api/logRuns';
 import { fmtDuration, fmtRows, formatTime, truncateProjectId } from '../../utils/logViewerHelpers.jsx';
-import { useToast } from '../../hooks/useToast';
 import RunDetail from './RunDetail';
-import { requestErrorMessage } from '../../utils/errorMessages';
+import { useResource } from '../../hooks/useResource';
+import { ResourceError } from '../common/ListState';
+
+export const LIVE_REFRESH_MS = 5000;
 
 const MODULE_COLORS = {
   estrai: '#34C17A', manipola: '#9B6DFF', arricchisci: '#F5A623', carica: '#4B8BFF',
@@ -25,47 +32,30 @@ const STATUS_CONFIG = {
 
 const PAGE = 30;
 
-export default function RunsTab({ refreshTick = 0 }) {
-  const toast = useToast();
-  const [runs,         setRuns]         = useState([]);
-  const [total,        setTotal]        = useState(0);
-  const [hasMore,      setHasMore]      = useState(false);
+export default function RunsTab({ live = false }) {
   const [offset,       setOffset]       = useState(0);
-  const [loading,      setLoading]      = useState(true);
-  const [loadError,    setLoadError]    = useState(null);
   const [expandedRun,  setExpandedRun]  = useState(null);
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterModule, setFilterModule] = useState('');
+  const [filterStatus, setFilterStatusRaw] = useState('');
+  const [filterModule, setFilterModuleRaw] = useState('');
+  // Un filtro nuovo riparte dalla prima pagina.
+  const setFilterStatus = (v) => { setOffset(0); setFilterStatusRaw(v); };
+  const setFilterModule = (v) => { setOffset(0); setFilterModuleRaw(v); };
+  const resource = useResource(() => getLogRuns({
+    status: filterStatus || undefined,
+    module: filterModule || undefined,
+    limit:  PAGE,
+    offset,
+  }), {
+    key: { filterStatus, filterModule, offset },
+    keepPreviousData: true,
+    refreshInterval: live ? LIVE_REFRESH_MS : 0,
+  });
+  const runs = resource.data?.runs || [];
+  const total = resource.data?.total || 0;
+  const hasMore = resource.data?.has_more || false;
+  const loading = resource.loading;
+  const load = (newOffset) => setOffset(newOffset);
 
-  const load = useCallback(async (newOffset = 0) => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await getLogRuns({
-        status: filterStatus || undefined,
-        module: filterModule || undefined,
-        limit:  PAGE,
-        offset: newOffset,
-      });
-      setRuns(data.runs || []);
-      setTotal(data.total || 0);
-      setHasMore(data.has_more || false);
-      setOffset(newOffset);
-    } catch (err) {
-      // Prima: catch{} silenzioso → l'utente vedeva tabella vuota senza spiegazione.
-      // Ora: log + toast + stato di errore visibile inline.
-      console.error('[RunsTab] errore caricamento runs:', err);
-      const msg = requestErrorMessage(err);
-      setLoadError(msg);
-      toast.error(`Errore caricamento esecuzioni: ${msg}`);
-      setRuns([]);
-      setTotal(0);
-      setHasMore(false);
-    }
-    finally { setLoading(false); }
-  }, [filterStatus, filterModule, toast]);
-
-  useEffect(() => { load(0); }, [filterStatus, filterModule, refreshTick]);
 
   const countOk  = runs.filter(r => r.status === 'success').length;
   const countErr = runs.filter(r => r.status === 'failure').length;
@@ -129,6 +119,10 @@ export default function RunsTab({ refreshTick = 0 }) {
         </div>
       </div>
 
+      {resource.status === 'error' && (
+        <ResourceError title="Esecuzioni non caricate" message={resource.error} onRetry={resource.reload} />
+      )}
+
       {/* Tabella */}
       <div className="lv__table-wrap">
         <table className="lv__table">
@@ -144,9 +138,9 @@ export default function RunsTab({ refreshTick = 0 }) {
             </tr>
           </thead>
           <tbody>
-            {loading && !runs.length ? (
+            {resource.initialLoading ? (
               <tr><td colSpan="7" className="lv__empty">Caricamento...</td></tr>
-            ) : runs.length === 0 ? (
+            ) : resource.status === 'error' && !resource.hasData ? null : runs.length === 0 ? (
               <tr><td colSpan="7" className="lv__empty">
                 <div className="lv__empty-icon">🚀</div>
                 <div>Nessuna esecuzione trovata</div>
@@ -209,7 +203,7 @@ export default function RunsTab({ refreshTick = 0 }) {
                             <span className="lv__run-error-msg">{run.error_message}</span>
                           </div>
                         )}
-                        <RunDetail runId={run.run_id} />
+                        <RunDetail runId={run.run_id} live={live && run.status === 'running'} />
                       </td>
                     </tr>
                   )}

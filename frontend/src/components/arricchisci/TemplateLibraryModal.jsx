@@ -3,7 +3,8 @@
  * Redesign Plenora design system — 4-column grid gallery
  */
 import { getTemplates } from '../../api/templates';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useResource } from '../../hooks/useResource';
 import ModalWrapper from '../common/ModalWrapper';
 import { humanizeError } from '../../utils/errorMessages';
 import './TemplateLibraryModal.css';
@@ -105,24 +106,18 @@ function TemplateCard({ template, onSelect }) {
 }
 
 function TemplateLibraryModal({ onClose, onSelectTemplate }) {
-  const [templates, setTemplates] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Fase 5 T2: catalogo dall'hook comune (errore con il testo unico).
+  const resource = useResource(async () => {
+    const data = await getTemplates();
+    if (!data.success) throw new Error(data.error || 'Errore caricamento template');
+    return data.templates || [];
+  }, { key: 'templates', errorMessage: (err) => humanizeError(err).message });
+  const templates = useMemo(() => resource.data || [], [resource.data]);
+  const loading = resource.initialLoading;
+  const error = resource.error;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const data = await getTemplates();
-        if (data.success) setTemplates(data.templates || []);
-        else throw new Error(data.error || 'Errore caricamento template');
-      } catch (err) { setError(humanizeError(err).message); }
-      finally { setLoading(false); }
-    };
-    load();
-  }, []);
 
   const filtered = useMemo(() => templates.filter(t => {
     const q = searchQuery.toLowerCase();

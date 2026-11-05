@@ -4,6 +4,12 @@
  * Step 1: Upload file (CSV/XLSX/GeoJSON/Shapefile...)
  * Step 2: Mapping colonne (auto + manuale) + preview
  * Step 3: Output format + nome + Esegui + progress + download
+ *
+ * Fase 5 T2 (R9.2, R9.3, R4.2, N12): dati dall'hook comune useResource;
+ * esecuzione, esito, download e pulizia da useEseguibileRun (ciclo unico
+ * hooks/useTask): "Esecuzione completata" solo con un successo vero,
+ * Annulla durante l'esecuzione, pulizia dell'esecutore a ogni chiusura dopo
+ * la fine. L'analisi di un file scrive solo se quel file e' ancora scelto.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -11,14 +17,13 @@ import {
   getEseguibile,
   analyzeEseguibileUpload,
   executeEseguibile,
-  downloadEseguibileOutput,
 } from '../../api';
-import { useToast } from '../../hooks/useToast';
-import { useTaskPolling } from '../../hooks/useTaskPolling';
 import useDialog from '../../hooks/useDialog';
+import { useResource } from '../../hooks/useResource';
+import { useEseguibileRun } from './useEseguibileRun';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
-import { toastApiError } from '../../utils/toastApiError';
-import { humanizeError } from '../../utils/errorMessages';
+import { ResourceError } from '../common/ListState';
+import { requestErrorMessage } from '../../utils/errorMessages';
 import './EseguibileExecuteWizard.css';
 import ExecutableDynamicRunForm from './ExecutableDynamicRunForm';
 
@@ -32,18 +37,19 @@ const OUTPUT_FORMATS = [
 ];
 
 function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null }) {
-  const toast = useToast();
   const dialogRef = useRef(null);
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [eseguibile, setEseguibile] = useState(null);
   const [error, setError] = useState(null);
+  const resource = useResource(() => getEseguibile(eseguibileId), { key: eseguibileId });
+  const eseguibile = resource.data || null;
+  const loading = resource.initialLoading;
 
   // Step 1
   const [file, setFile] = useState(null);
   const [uploadResult, setUploadResult] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const uploadSeq = useRef(0);
 
   // Step 2
   const [mapping, setMapping] = useState({}); // {chain_column: file_column}
@@ -51,157 +57,85 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
   // Step 3
   const [outputFormat, setOutputFormat] = useState('xlsx');
   const [outputName, setOutputName] = useState('');
-  const [executing, setExecuting] = useState(false);
-  const [taskId, setTaskId] = useState(null);
-  const [taskStatus, setTaskStatus] = useState(null);
-  const [taskProgress, setTaskProgress] = useState(0);
-  const [taskMessage, setTaskMessage] = useState('');
-  const [taskResult, setTaskResult] = useState(null);
-
-  // Polling task: il hook gestisce single-flight + cleanup unmount.
-  const { startPolling } = useTaskPolling({ interval: 1500 });
+  const run = useEseguibileRun({ eseguibileId, onCleanup: onAfterDownload, onClose });
+  const { state } = run;
+  const executing = run.task.isActive;
+  const close = () => { run.close(); };
   // Stack unico delle finestre: durante l'esecuzione niente Esc, overlay o ×.
   // Con il manifest la finestra e' quella di ExecutableDynamicRunForm.
   const dialog = useDialog({
-    isOpen: !(!loading && eseguibile?.manifest), onClose, ref: dialogRef, busy: executing,
+    isOpen: !eseguibile?.manifest, onClose: close, ref: dialogRef, busy: executing,
   });
 
-  // Load eseguibile details
+  // Formato e nome di partenza quando arriva l'eseguibile. Se il flusso e'
+  // file-based l'estensione e' decisa dal connettore (selettore spento).
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const data = await getEseguibile(eseguibileId);
-        if (!mounted) return;
-        setEseguibile(data);
-        // Se il flusso è file-based (rest_file/executable come ultimo
-        // nodo), l'estensione è decisa dal connettore: forziamo
-        // outputFormat all'estensione inferita dal backend, ignorando
-        // default_output_format (il selettore verrà disabilitato).
-        if (data.output_is_file_based && data.inferred_output_extension) {
-          setOutputFormat(data.inferred_output_extension);
-        } else {
-          setOutputFormat(data.default_output_format || 'xlsx');
-        }
-        setOutputName(data.default_output_name || '');
-      } catch (e) {
-        if (!mounted) return;
-        setError(humanizeError(e).message);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [eseguibileId]);
+    if (!eseguibile) return;
+    if (eseguibile.output_is_file_based && eseguibile.inferred_output_extension) {
+      setOutputFormat(eseguibile.inferred_output_extension);
+    } else {
+      setOutputFormat(eseguibile.default_output_format || 'xlsx');
+    }
+    setOutputName(eseguibile.default_output_name || '');
+  }, [eseguibile]);
 
-  // Cleanup polling on unmount: gestito da useTaskPolling.
+  // Un file nuovo annulla l'analisi del precedente (id di richiesta).
+  const chooseFile = (next) => {
+    uploadSeq.current += 1;
+    setUploading(false);
+    setUploadResult(null);
+    setFile(next);
+  };
 
   // Handle file upload & analyze
   const handleUpload = async () => {
     if (!file) return;
+    const mine = ++uploadSeq.current;
     setUploading(true);
     setError(null);
     try {
       const result = await analyzeEseguibileUpload(eseguibileId, file);
+      if (mine !== uploadSeq.current) return;
       setUploadResult(result);
       // Applica auto-mapping suggerito
       setMapping({ ...result.auto_mapping });
       setStep(2);
     } catch (e) {
-      setError(humanizeError(e).message);
+      if (mine !== uploadSeq.current) return;
+      setError(requestErrorMessage(e));
     } finally {
-      setUploading(false);
+      if (mine === uploadSeq.current) setUploading(false);
     }
   };
 
   // Handle execute
   const handleExecute = async () => {
-    setExecuting(true);
     setError(null);
-    try {
-      const column_mapping = Object.entries(mapping)
-        .filter(([, v]) => v)
-        .map(([chain_column, file_column]) => ({ chain_column, file_column }));
-
-      const resp = await executeEseguibile(eseguibileId, {
-        file_id: uploadResult.file_id,
-        column_mapping,
-        output_format: outputFormat,
-        output_name: outputName || undefined,
-      });
-
-      setTaskId(resp.task_id);
-      setTaskStatus('pending');
-      setTaskMessage('Task in coda...');
-      startTaskPolling(resp.task_id);
-    } catch (e) {
-      setError(humanizeError(e).message);
-      setExecuting(false);
-    }
+    const column_mapping = Object.entries(mapping)
+      .filter(([, v]) => v)
+      .map(([chain_column, file_column]) => ({ chain_column, file_column }));
+    await run.start(() => executeEseguibile(eseguibileId, {
+      file_id: uploadResult.file_id,
+      column_mapping,
+      output_format: outputFormat,
+      output_name: outputName || undefined,
+    }), { startMessage: 'Task in coda...' });
   };
 
-  const startTaskPolling = (tid) => {
-    startPolling(
-      tid,
-      (data) => {
-        setTaskStatus(data.status);
-        setTaskProgress(data.progress || 0);
-        setTaskMessage(data.message || '');
-        if (data.status === 'success') {
-          setTaskResult(data.result);
-          setExecuting(false);
-          toast.success('Esecuzione completata!');
-          return true;
-        }
-        if (data.status === 'failure' || data.status === 'revoked') {
-          setExecuting(false);
-          // PR-A UX Tier 1: distinguiamo permission_revoked (ruolo
-          // declassato/utenza disabilitata mid-task) dal failure
-          // generico. Banner inline mantenuto via setTaskResult per
-          // restare visibile durante la review.
-          const innerStatus = data.result?.status;
-          if (innerStatus === 'permission_revoked') {
-            setTaskResult({ ...data.result, permissionRevoked: true });
-            setError(null);
-          } else {
-            setError(data.error || data.result?.message || 'Esecuzione fallita');
-          }
-          return true;
-        }
-        return false;
-      },
-      { immediate: true },
-    );
+  const handleDownload = () => {
+    // Il backend invia il nome via Content-Disposition; questo e' il ripiego.
+    const cleanBase = (outputName || eseguibile.name || 'risultato')
+      .trim()
+      .replace(/\.[a-zA-Z0-9]{1,5}$/, '')   // togli estensione
+      .replace(/[\\/:*?"<>|]/g, '_')        // sanitizza
+      || 'risultato';
+    return run.download(`${cleanBase}.${outputFormat}`);
   };
 
-  const handleDownload = async () => {
-    try {
-      // Costruisci un fallback ragionevole: il backend invia comunque il nome
-      // corretto via Content-Disposition (che ora è esposto via CORS), ma se
-      // qualcosa non funziona usiamo questo come ultima spiaggia.
-      const cleanBase = (outputName || eseguibile.name || 'risultato')
-        .trim()
-        .replace(/\.[a-zA-Z0-9]{1,5}$/, '')   // togli estensione
-        .replace(/[\\/:*?"<>|]/g, '_')        // sanitizza
-        || 'risultato';
-      const fallbackName = `${cleanBase}.${outputFormat}`;
-      await downloadEseguibileOutput(eseguibileId, taskId, fallbackName);
-
-      // Hook post-download: usato dalla kiosk page degli esecutori per
-      // chiamare cleanupTaskCompletely(taskId) e cancellare ogni traccia
-      // dell'esecuzione (privacy / GDPR). Per gli altri ruoli è no-op.
-      if (onAfterDownload && taskId) {
-        try { await onAfterDownload(taskId); } catch (e) { /* best-effort */ }
-      }
-
-      // Chiudi il modal dopo aver avviato il download: il blob e' gia' stato
-      // consegnato al browser (fire-and-forget), quindi la chiusura non interrompe
-      // il trasferimento.
-      if (onClose) onClose();
-    } catch (e) {
-      toastApiError(toast, e, 'Errore download');
-    }
-  };
+  const succeeded = state.phase === 'success';
+  const permissionRevoked = state.phase === 'permission_revoked';
+  const runFailed = ['failure', 'lost', 'revoked'].includes(state.phase);
+  const shownError = error || (runFailed ? state.error : null);
 
   // Validazione mapping: tutte le required mappate?
   const allRequiredMapped = eseguibile?.expected_columns
@@ -212,7 +146,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
     ?.filter(c => c.required && !mapping[c.name])
     ?.map(c => c.name) || [];
 
-  if (!loading && eseguibile?.manifest) {
+  if (eseguibile?.manifest) {
     return (
       <ExecutableDynamicRunForm
         eseguibile={eseguibile}
@@ -256,15 +190,17 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
 
         {/* PR-A UX Tier 1: banner inline quando permessi revocati
             mid-esecuzione. Prevale sul generic error rendering. */}
-        {taskResult?.permissionRevoked && (
-          <PermissionRevokedBanner message={taskResult?.message} />
+        {permissionRevoked && (
+          <PermissionRevokedBanner message={state.error} />
         )}
-        {error && !taskResult?.permissionRevoked && (
-          <div className="esw-error">❌ {error}</div>
+        {shownError && !permissionRevoked && (
+          <div className="esw-error" role="alert">❌ {shownError}</div>
         )}
 
         {loading ? (
           <div className="esw-loading">Caricamento eseguibile...</div>
+        ) : resource.status === 'error' ? (
+          <ResourceError title="Eseguibile non caricato" message={resource.error} onRetry={resource.reload} />
         ) : (
           <div className="esw-body">
             {step === 1 && eseguibile && (
@@ -299,14 +235,14 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                     e.preventDefault(); e.stopPropagation();
                     setIsDragging(false);
                     const dropped = e.dataTransfer.files?.[0];
-                    if (dropped) setFile(dropped);
+                    if (dropped) chooseFile(dropped);
                   }}
                 >
                   <input
                     type="file"
                     id="esw-file-input"
                     accept=".csv,.xlsx,.xls,.json,.geojson,.gpkg,.zip"
-                    onChange={(e) => setFile(e.target.files[0] || null)}
+                    onChange={(e) => chooseFile(e.target.files[0] || null)}
                   />
                   <label htmlFor="esw-file-input" className="esw-dropzone-label">
                     {file ? (
@@ -328,7 +264,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                 </div>
 
                 <div className="esw-actions">
-                  <button type="button" className="esw-btn esw-btn--ghost" onClick={onClose}>Annulla</button>
+                  <button type="button" className="esw-btn esw-btn--ghost" onClick={close}>Annulla</button>
                   <button
                     type="button"
                     className="esw-btn esw-btn--primary"
@@ -420,7 +356,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
             )}
             {step === 3 && eseguibile && (
               <div className="esw-step-content">
-                {!executing && !taskResult ? (
+                {state.phase === 'idle' || runFailed || permissionRevoked ? (
                   <>
                     <h3>Configura l'output ed esegui</h3>
                     <div className="esw-form">
@@ -466,27 +402,36 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                     <div className="esw-progress-icon">⚙️</div>
                     <h3>Esecuzione in corso...</h3>
                     <div className="esw-progress-bar">
-                      <div className="esw-progress-fill" style={{ width: `${taskProgress}%` }} />
+                      <div className="esw-progress-fill" style={{ width: `${state.progress}%` }} />
                     </div>
-                    <div className="esw-progress-text">{taskProgress}% — {taskMessage || 'Avvio...'}</div>
+                    <div className="esw-progress-text">{state.progress}% — {state.message || 'Avvio...'}</div>
                     <p className="esw-hint">Non chiudere questa finestra fino al completamento.</p>
+                    {state.cancelError && <div className="esw-error" role="alert">Annullamento non riuscito: {state.cancelError}</div>}
+                    {state.taskId && (
+                      <div className="esw-actions">
+                        <button type="button" className="esw-btn esw-btn--ghost" onClick={run.cancel} disabled={state.cancelling}>
+                          {state.cancelling ? 'Annullamento…' : '🛑 Annulla'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : taskResult ? (
+                ) : succeeded ? (
                   <div className="esw-success">
                     <div className="esw-success-icon">✅</div>
                     <h3>Esecuzione completata!</h3>
                     <div className="esw-success-stats">
-                      {taskResult.rows_processed != null && (
-                        <div>Righe processate: <strong>{taskResult.rows_processed}</strong></div>
+                      {state.result?.rows_processed != null && (
+                        <div>Righe processate: <strong>{state.result.rows_processed}</strong></div>
                       )}
-                      {taskResult.output_file && (
-                        <div>File: <code>{taskResult.output_file}</code></div>
+                      {state.result?.output_file && (
+                        <div>File: <code>{state.result.output_file}</code></div>
                       )}
                     </div>
+                    {run.downloadError && <div className="esw-error" role="alert">❌ {run.downloadError}</div>}
                     <div className="esw-actions">
-                      <button type="button" className="esw-btn esw-btn--ghost" onClick={onClose}>Chiudi</button>
-                      <button type="button" className="esw-btn esw-btn--primary" onClick={handleDownload}>
-                        ⬇ Scarica Risultato
+                      <button type="button" className="esw-btn esw-btn--ghost" onClick={close}>Chiudi</button>
+                      <button type="button" className="esw-btn esw-btn--primary" onClick={handleDownload} disabled={run.downloading}>
+                        {run.downloading ? 'Scaricamento…' : '⬇ Scarica Risultato'}
                       </button>
                     </div>
                   </div>

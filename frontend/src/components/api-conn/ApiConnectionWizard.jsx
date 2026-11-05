@@ -13,7 +13,7 @@
  * Il CHROME (overlay/dialog/step-bar/footer/a11y) e' delegato al componente
  * condiviso `common/Wizard` (classe "wizard" del FE).
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Wizard from '../common/Wizard';
 import { useToast } from '../../hooks/useToast';
 import {
@@ -250,9 +250,14 @@ const [editingApi, setEditingApi] = useState(null);
   const [testRawResponse, setTestRawResponse] = useState(null);
   const [testing, setTesting] = useState(false);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
+  // Fase 5 T2 (R4.5): id del test in corso. Un test partito per un altro
+  // connettore (seed cambiato) o superato da un test nuovo non scrive.
+  const testSeqRef = useRef(0);
 
   useEffect(() => {
     if (!isOpen) return;
+    testSeqRef.current += 1;
+    setTesting(false);
     if (!seed || seed.kind === 'new') {
       setEditingApi(null);
       setFormData(EMPTY_FORM);
@@ -369,6 +374,8 @@ const getCustomHeadersObject = () => {
   };
 
   const handleTest = async () => {
+    const mine = ++testSeqRef.current;
+    const live = () => mine === testSeqRef.current;
     setTesting(true); setTestResult(null); setTestRawResponse(null);
     try {
       const authError = validateAuthConfig(formData.auth);
@@ -407,6 +414,7 @@ const getCustomHeadersObject = () => {
           include_raw: true,
           config_overrides: buildConnectionPayload(),
         });
+        if (!live()) return;
         setTestResult(result);
         if (result.raw_response) setTestRawResponse(result.raw_response);
         applyTestSampling(result);
@@ -448,13 +456,14 @@ const getCustomHeadersObject = () => {
         };
       }
       const result = await testApiConfig(testPayload);
+      if (!live()) return;
       setTestResult(result);
       if (result.raw_response) setTestRawResponse(result.raw_response);
       applyTestSampling(result);
     } catch (e) {
-      setTestResult({ success: false, error: requestErrorMessage(e) });
+      if (live()) setTestResult({ success: false, error: requestErrorMessage(e) });
     } finally {
-      setTesting(false);
+      if (live()) setTesting(false);
     }
   };
 

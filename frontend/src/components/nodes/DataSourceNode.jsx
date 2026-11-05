@@ -7,6 +7,8 @@
  *
  * Usato in: ArricchisciEditor (come alternativa ai nodi progetto/file)
  */
+import { useResource } from '../../hooks/useResource';
+import '../common/ListState.css';
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -51,34 +53,82 @@ const DataSourceNode = memo(({ id, data }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const isReadOnly     = useCanvasStore(s => s.isReadOnly);
   const confirm        = useConfirmOrDeny();
-const [datasources, setDatasources]         = useState([]);
-  const [loadingDs, setLoadingDs]             = useState(false);
-  const [browserFiles, setBrowserFiles]       = useState([]);
   const [browserPath, setBrowserPath]         = useState('');
   const [showBrowser, setShowBrowser]         = useState(false);
-  const [browserLoading, setBrowserLoading]   = useState(false);
-  const [browserError, setBrowserError]       = useState(null);
-  const [loadingSchema, setLoadingSchema]     = useState(false);
-  const [schemaError, setSchemaError]         = useState(null);
-  // Sheet/layer disponibili per file multi-tabella.
-  const [availableSheets, setAvailableSheets] = useState([]);
-  const [availableLayers, setAvailableLayers] = useState([]);
+  // Foglio/layer scelti per il file mostrato (vale solo per quel file).
+  const [schemaOpts, setSchemaOpts]           = useState({ file: null });
 
   const mode         = data.mode || 'source';
   const dsId         = data.datasource_id || '';
   const fileMode     = data.file_mode || 'fixed';
   const dynamicRule  = data.dynamic_rule || 'latest';
-useEffect(() => {
-    const load = async () => {
-      setLoadingDs(true);
-      try {
-        const res = await listDataSources();
-        setDatasources(res.datasources || []);
-      } catch { /* silenzioso */ }
-      finally { setLoadingDs(false); }
-    };
-    load();
-  }, []);
+// Fase 5 T2 (R4.5, R4.8, N3): connettori, cartelle e schema dall'hook
+  // comune. Lo schema e' della coppia (connettore, file) della richiesta:
+  // scelto X e poi Y, lo schema di X arrivato dopo non diventa mai le
+  // colonne di Y (id di richiesta). Gli errori si vedono, con «Riprova».
+  const dsResource = useResource(async () => (await listDataSources()).datasources || [], { key: 'datasources' });
+  const datasources = dsResource.data || [];
+  const loadingDs = dsResource.initialLoading;
+  const browser = useResource(() => listFiles(dsId, { path: browserPath }), {
+    key: ['ds-files', dsId || null, browserPath],
+    enabled: Boolean(showBrowser && dsId),
+    errorMessage: requestErrorMessage,
+  });
+  const browserFiles = browser.data || [];
+  const browserLoading = browser.loading;
+  const browserError = browser.error;
+
+  const filePath = data.file_path || null;
+  const opts = schemaOpts.file === filePath ? schemaOpts : {};
+  const schemaResource = useResource(async () => {
+    const base = await getFileSchema(dsId, filePath);
+    const sheets = Array.isArray(base.sheets) ? base.sheets : [];
+    const layers = Array.isArray(base.layers) ? base.layers : [];
+    const po = data.parse_options || {};
+    const effSheet = opts.sheet ?? po.sheet ?? (sheets.length > 1 ? sheets[0] : null);
+    const effLayer = opts.layer ?? po.layer ?? (layers.length > 1 ? layers[0] : null);
+    let cols = base.columns || [];
+    const needsDetail = (effSheet && sheets.length > 1) || (effLayer && layers.length > 1);
+    if (needsDetail) {
+      const detail = await getFileSchema(dsId, filePath, {
+        sheet: effSheet || undefined,
+        layer: effLayer || undefined,
+      });
+      cols = detail.columns || [];
+    }
+    const updates = { columns: cols, format: base.format || data.format };
+    const poChanged = (sheets.length > 1 && !po.sheet && effSheet) || (layers.length > 1 && !po.layer && effLayer);
+    if (poChanged) {
+      const newPo = { ...po };
+      if (sheets.length > 1 && !po.sheet && effSheet) newPo.sheet = effSheet;
+      if (layers.length > 1 && !po.layer && effLayer) newPo.layer = effLayer;
+      updates.parse_options = newPo;
+    }
+    return { sheets, layers, updates, filePath };
+  }, {
+    key: ['ds-schema', dsId || null, filePath, opts.sheet || null, opts.layer || null],
+    enabled: Boolean(dsId && filePath),
+  });
+  const availableSheets = schemaResource.data?.sheets || [];
+  const availableLayers = schemaResource.data?.layers || [];
+  const loadingSchema = schemaResource.loading;
+  const schemaError = schemaResource.status === 'error';
+  // Schema letto dalla sorgente: dato DERIVATO (pendingSync), non una
+  // modifica dell'utente; arriva al server col prossimo Salva/Esegui
+  // (Fase 4, M7: niente salvataggi automatici). Le colonne a valle le
+  // ricalcola la fonte unica (hooks/useColumns) dal canvas cambiato.
+  const schemaData = schemaResource.data;
+  useEffect(() => {
+    if (!schemaData) return;
+    if (useCanvasStore.getState().nodes.find(n => n.id === id)?.data?.file_path !== schemaData.filePath) return;
+    updateNodeData(id, schemaData.updates, { derived: true });
+  }, [schemaData, id, updateNodeData]);
+  const fetchSchema = (path, nextOpts = {}) => {
+    if (path !== filePath) return;
+    const next = { file: path, sheet: nextOpts.sheet ?? opts.sheet, layer: nextOpts.layer ?? opts.layer };
+    if (next.sheet === opts.sheet && next.layer === opts.layer) schemaResource.reload();
+    else setSchemaOpts(next);
+  };
 const upd = useCallback((fields) => updateNodeData(id, fields), [id, updateNodeData]);
 
   // Cambio di modalita' (sorgente <-> scrittura): toglie le colonne lette,
@@ -97,20 +147,10 @@ const upd = useCallback((fields) => updateNodeData(id, fields), [id, updateNodeD
     }
     upd({ mode: next, columns: [] });
   }, [mode, data.columns, confirm, upd]);
-const openBrowser = useCallback(async (path = '') => {
+const openBrowser = useCallback((path = '') => {
     if (!dsId) return;
     setShowBrowser(true);
     setBrowserPath(path);
-    setBrowserLoading(true);
-    setBrowserError(null);
-    try {
-      const files = await listFiles(dsId, { path });
-      setBrowserFiles(files);
-    } catch (e) {
-      setBrowserError(requestErrorMessage(e));
-    } finally {
-      setBrowserLoading(false);
-    }
   }, [dsId]);
 
   const handleSelectFile = useCallback((file) => {
@@ -121,66 +161,6 @@ const openBrowser = useCallback(async (path = '') => {
     upd({ file_path: file.path, format: file.type });
     setShowBrowser(false);
   }, [upd, openBrowser]);
-const fetchSchema = useCallback(async (filePath, opts = {}) => {
-    if (!dsId || !filePath) return;
-    setLoadingSchema(true);
-    setSchemaError(null);
-    try {
-      const base = await getFileSchema(dsId, filePath);
-      const sheets = Array.isArray(base.sheets) ? base.sheets : [];
-      const layers = Array.isArray(base.layers) ? base.layers : [];
-      setAvailableSheets(sheets);
-      setAvailableLayers(layers);
-
-      const po = data.parse_options || {};
-      const effSheet = opts.sheet ?? po.sheet ?? (sheets.length > 1 ? sheets[0] : null);
-      const effLayer = opts.layer ?? po.layer ?? (layers.length > 1 ? layers[0] : null);
-
-      let cols = base.columns || [];
-      const needsDetail =
-        (effSheet && sheets.length > 1) ||
-        (effLayer && layers.length > 1);
-      if (needsDetail) {
-        const detail = await getFileSchema(dsId, filePath, {
-          sheet: effSheet || undefined,
-          layer: effLayer || undefined,
-        });
-        cols = detail.columns || [];
-      }
-
-      const updates = {
-        columns: cols,
-        format:  base.format || data.format,
-      };
-      const poChanged =
-        (sheets.length > 1 && !po.sheet && effSheet) ||
-        (layers.length > 1 && !po.layer && effLayer);
-      if (poChanged) {
-        const newPo = { ...po };
-        if (sheets.length > 1 && !po.sheet && effSheet) newPo.sheet = effSheet;
-        if (layers.length > 1 && !po.layer && effLayer) newPo.layer = effLayer;
-        updates.parse_options = newPo;
-      }
-      // Schema letto dalla sorgente: dato DERIVATO (pendingSync), non una
-      // modifica dell'utente; arriva al server col prossimo Salva/Esegui
-      // (Fase 4, M7: niente salvataggi automatici). Le colonne a valle le
-      // ricalcola la fonte unica (hooks/useColumns) dal canvas cambiato.
-      updateNodeData(id, updates, { derived: true });
-    } catch {
-      setSchemaError(true);
-    } finally {
-      setLoadingSchema(false);
-    }
-  }, [dsId, id, updateNodeData, data.format, data.parse_options]);
-
-  useEffect(() => {
-    if (!dsId || !data.file_path) return;
-    // Unica fetch per cambio file: handleSelectFile aggiorna file_path e
-    // questo effect esegue schema + autosave. Prima entrambi i percorsi
-    // chiamavano fetchSchema, generando due richieste e due salvataggi.
-    fetchSchema(data.file_path);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dsId, data.file_path]);
 const BreadCrumb = () => {
     const parts = browserPath.split('/').filter(Boolean);
     return (
@@ -205,6 +185,11 @@ const selectedDs = datasources.find(d => d.id === dsId);
       <label className="dsn__label">Connettore</label>
       {loadingDs ? (
         <div className="dsn__loading-inline">⏳ Caricamento...</div>
+      ) : dsResource.status === 'error' && !dsResource.hasData ? (
+        <div className="dsn__loading-inline" role="alert">
+          ⚠️ Connettori non caricati: {dsResource.error}{' '}
+          <button type="button" className="nodrag list-state__retry" onClick={() => dsResource.reload()}>Riprova</button>
+        </div>
       ) : (
         <select
           className="dsn__select"
@@ -409,8 +394,9 @@ return (
                     {loadingSchema ? (
                       <div className="dsn__columns-empty">⏳ Rilevamento schema...</div>
                     ) : schemaError ? (
-                      <div className="dsn__columns-empty dsn__columns-empty--err">
-                        ⚠️ Schema non disponibile
+                      <div className="dsn__columns-empty dsn__columns-empty--err" role="alert">
+                        ⚠️ Schema non disponibile: {schemaResource.error}{' '}
+                        <button type="button" className="nodrag list-state__retry" onClick={() => schemaResource.reload()}>Riprova</button>
                       </div>
                     ) : data.columns?.length > 0 ? (
                       data.columns.map((col, i) => (

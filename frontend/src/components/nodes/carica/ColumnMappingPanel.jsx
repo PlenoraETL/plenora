@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { postCaricaAutoMapping } from '../../../api/carica';
+import { requestErrorMessage } from '../../../utils/errorMessages';
+import { useBusy } from '../../../hooks/useBusy';
+import '../../common/ListState.css';
 
 function ColumnMappingPanel({
   columnMappings,
@@ -11,8 +14,13 @@ function ColumnMappingPanel({
   onToggleMapping,
   onUpdate,
 }) {
-  const loadAutoMapping = async () => {
+  // Fase 5 T2 (R4.17): l'errore della mappatura automatica si vede (prima
+  // solo in console); un secondo clic durante la richiesta non parte.
+  const busy = useBusy();
+  const [autoError, setAutoError] = useState(null);
+  const loadAutoMapping = () => busy.run('auto', async () => {
     if (!connectionId || availableColumns.length === 0) return;
+    setAutoError(null);
     try {
       // Payload al backend: solo name e type (alias non accettato dal modello)
       const data = await postCaricaAutoMapping({
@@ -36,9 +44,10 @@ function ColumnMappingPanel({
       }));
       onUpdate('column_mappings', normalized);
     } catch (error) {
-      console.error('Errore auto-mapping:', error);
+      console.warn('Errore auto-mapping:', error);
+      setAutoError(requestErrorMessage(error));
     }
-  };
+  });
 
   const handleMappingChange = (index, field, value) => {
     const newMappings = [...columnMappings];
@@ -66,12 +75,19 @@ function ColumnMappingPanel({
 
       {showMapping && (
         <div className="carica-node__mapping">
+          {autoError && (
+            <div className="carica-node__hint carica-node__hint--warn" role="alert">
+              Mappatura automatica non riuscita: {autoError}{' '}
+              <button type="button" className="nodrag list-state__retry" onClick={loadAutoMapping}>Riprova</button>
+            </div>
+          )}
           <div className="carica-node__mapping-actions">
             <button type="button"
               onClick={loadAutoMapping}
+              disabled={busy.isBusy('auto')}
               className="carica-node__btn carica-node__btn--secondary"
             >
-              🪄 Mappatura automatica
+              {busy.isBusy('auto') ? '⏳ Mappatura…' : '🪄 Mappatura automatica'}
             </button>
             <button type="button"
               onClick={handleAddMapping}

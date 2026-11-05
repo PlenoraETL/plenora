@@ -22,15 +22,13 @@ describe('Sessione 11 misc P1', () => {
     expect(src).toMatch(/console\.warn[\s\S]{0,200}Drift schema BE/);
   });
 
-  it('DataSourceManager handleDelete ha guard re-entrancy + disabling button', () => {
+  // Fase 5 T2 (R9.10): eliminazione per elemento con hooks/useBusy (un
+  // secondo clic sullo stesso elemento non parte; la fine di A non riabilita B).
+  it('DataSourceManager handleDelete per elemento (useBusy) + bottone spento', () => {
     const src = readSrc('pages/DataSourceManager.jsx');
-    expect(src).toContain('deletingId');
-    expect(src).toContain('setDeletingId');
-    // Re-entrancy guard nel handler
-    expect(src).toMatch(/if\s*\(deletingId\s*===\s*id\)\s*return/);
-    // Bottone Elimina con disabled state
-    expect(src).toMatch(/disabled=\{deletingId\s*===\s*confirmDelete\.id\}/);
-    // Setting back to null nel finally
-    expect(src).toMatch(/setDeletingId\(null\)/);
+    expect(src).toContain('useBusy()');
+    expect(src).toMatch(/busy\.run\(`delete:\$\{id\}`/);
+    expect(src).toMatch(/disabled=\{busy\.isBusy\(`delete:\$\{confirmDelete\.id\}`\)\}/);
+    expect(src).not.toContain('setDeletingId');
   });
 });

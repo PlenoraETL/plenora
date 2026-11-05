@@ -5,6 +5,7 @@
 import './SourcesSidebar.css';
 import React from 'react';
 import ProjectsSidebar from './ProjectsSidebar';
+import { ResourceError } from '../common/ListState';
 import FilesSidebar from './FilesSidebar';
 import { useAuth } from '../../context/AuthContext';
 import { confirmLeave } from '../../hooks/useUnsavedChangesGuard';
@@ -20,7 +21,12 @@ function EditorSidebar({
   variant = 'manipola',
   showProjects = true,
   showFiles = true,
-  className = ''
+  className = '',
+  // Fase 5 T2 (R4.8): sorgenti in caricamento o non caricate. Senza questo
+  // la sidebar diceva "Nessun progetto disponibile" anche per un errore.
+  sourcesLoading = false,
+  sourcesError = null,
+  onRetrySources = null,
 }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -38,6 +44,10 @@ function EditorSidebar({
 
       {/* Body scrollabile */}
       <div className="editor-sidebar__body">
+        {sourcesLoading && <div className="list-state__loading" role="status">Caricamento sorgenti…</div>}
+        {sourcesError && (
+          <ResourceError compact title="Sorgenti non caricate" message={sourcesError} onRetry={onRetrySources} />
+        )}
         {showProjects && (
           <ProjectsSidebar
             projects={projects}

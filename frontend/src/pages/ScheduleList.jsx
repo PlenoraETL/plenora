@@ -4,6 +4,10 @@
  * Route: /schedules
  */
 import React, { useState, useEffect, useRef } from 'react';
+import { useResource } from '../hooks/useResource';
+import { useDownload } from '../hooks/useDownload';
+import { useNow } from '../hooks/useNow';
+import { ResourceError } from '../components/common/ListState';
 import { useToast } from '../hooks/useToast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -49,15 +53,28 @@ const formatRunTimestamp = (ts) => {
   const date = new Date(`${y}-${m}-${d}T${hh}:${mm}:00`);
   return date.toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'})+', '+date.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
 };
-const getElapsed = (v) => {
+const getElapsed = (v, now = Date.now()) => {
   if (!v) return null;
   const ms = typeof v === 'number' ? v : new Date(v).getTime();
-  const s = Math.floor((Date.now()-ms)/1000);
+  const s = Math.floor((now-ms)/1000);
   if (s < 0) return '0s';
   if (s < 60) return `${s}s`;
   if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s`;
   return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
 };
+// Tempo trascorso che si aggiorna da solo: solo questa etichetta si
+// ridisegna ogni secondo, non l'intera lista (Fase 5 T2, R4.16).
+function Elapsed({ since }) {
+  const now = useNow(1000, Boolean(since));
+  return <>{getElapsed(since, now)}</>;
+}
+
+// Aggiornamento della lista: ogni 3 s con un'esecuzione in corso o in coda,
+// altrimenti ogni 30 s (cosi' si vedono anche le esecuzioni partite dal
+// pianificatore); mai con la scheda nascosta (hooks/useResource).
+const FAST_REFRESH_MS = 3000;
+const SLOW_REFRESH_MS = 30000;
+
 const getStatusConfig = (status) => ({
   idle:      { label:'Inattivo',       cls:'sl__badge--idle',      bar:'var(--sl-text-dim)' },
   running:   { label:'In esecuzione',  cls:'sl__badge--running',   bar:'var(--sl-blue)' },
@@ -93,129 +110,53 @@ function ScheduleList() {
   const canvasRef = useRef(null);
   useHexCanvas(canvasRef);
 
-  const [schedules,      setSchedules]      = useState([]);
-  const [loading,        setLoading]        = useState(true);
-  const loadedOnceRef = useRef(false);
-  const [beatHealth,     setBeatHealth]     = useState(null);
+  // Fase 5 T2 (R4.16, R9.14): lista e salute del pianificatore dall'hook
+  // comune (id di richiesta, filtro nella chiave, errore con «Riprova»,
+  // spinner a pagina intera solo al primo caricamento).
+  const [runningManual,  setRunningManual]  = useState({}); // id -> ora del clic su "Esegui ora"
+  const [anyActive, setAnyActive] = useState(false);
+  const resource = useResource(async () => (await listSchedules(projectFilter)).schedules || [], {
+    key: ['schedules', projectFilter || null],
+    refreshInterval: anyActive ? FAST_REFRESH_MS : SLOW_REFRESH_MS,
+  });
+  const schedules = resource.data || [];
+  const setSchedules = resource.setData;
+  const loading = resource.initialLoading;
+  const health = useResource(() => getBeatHealthcheck(), { key: 'beat-health' });
+  const beatHealth = health.status === 'error'
+    ? { status: 'unknown', message: 'Stato del pianificatore non raggiungibile' }
+    : (health.data || null);
   const [expandedLogs,   setExpandedLogs]   = useState({});
   const [expandedRuns,   setExpandedRuns]   = useState({});
   const [activeFilter,   setActiveFilter]   = useState('all');
   const [showWizard,     setShowWizard]     = useState(false);
   const [editingId,      setEditingId]      = useState(null);
-  const [runStartTimes,  setRunStartTimes]  = useState({});
-  const [runningManual,  setRunningManual]  = useState({});
-  const [tick,           setTick]           = useState(0);
-  const pollingRef = useRef(null);
-  const tickRef    = useRef(null);
-  const pollingGenerationRef = useRef(0);
-  // Generation counter per scartare response stale dopo cambio projectFilter.
-  // Pre-fix (P1 contracts-flows): se l'utente cambiava filter mentre una
-  // listSchedules in volo non era ancora arrivata, la response stale
-  // (filter precedente) sovrascriveva setSchedules dopo che la nuova
-  // listSchedules era partita. Pattern equivalente a AbortController
-  // ma Go-friendly: monotonic counter int condiviso.
-  const requestGenRef = useRef(0);
+  const downloads = useDownload({ onError: (message) => toast.error(`Download non riuscito: ${message}`) });
 
+  const activeIds = schedules
+    .filter(s => s.runtime?.status === 'running' || s.runtime?.status === 'queued')
+    .map(s => s.id);
+  const hasActive = activeIds.length > 0 || Object.keys(runningManual).length > 0;
+  useEffect(() => { setAnyActive(hasActive); }, [hasActive]);
+  // Un avvio manuale si dimentica quando un aggiornamento arrivato DOPO il
+  // clic mostra lo schedule non piu' in corso.
+  const listData = resource.data;
   useEffect(() => {
-    // Bump generation: tutte le response in volo precedenti diventano stale.
-    requestGenRef.current += 1;
-    loadData();
-    return () => stopPolling();
-  }, [projectFilter]);
-
-  useEffect(() => {
-    const runningIds = new Set(schedules.filter(s => s.runtime?.status === 'running' || s.runtime?.status === 'queued').map(s => s.id));
-    setRunStartTimes(prev => {
-      const next = { ...prev };
-      runningIds.forEach(id => { if (!next[id]) next[id] = Date.now(); });
-      Object.keys(next).forEach(id => { if (!runningIds.has(id)) delete next[id]; });
-      return next;
-    });
+    if (!listData) return;
     setRunningManual(prev => {
-      const next = { ...prev };
-      Object.keys(next).forEach(id => { if (!runningIds.has(id)) delete next[id]; });
-      return next;
+      const stale = Object.keys(prev).filter(id => {
+        const st = listData.find(item => item.id === id)?.runtime?.status;
+        return st !== 'running' && st !== 'queued' && Date.now() - prev[id] > FAST_REFRESH_MS;
+      });
+      if (!stale.length) return prev;
+      const n = { ...prev };
+      stale.forEach(id => delete n[id]);
+      return n;
     });
-    if (runningIds.size > 0 && !pollingRef.current) startPolling();
-    else if (runningIds.size === 0 && pollingRef.current) stopPolling();
-  }, [schedules]);
+  }, [listData]);
 
-  const startPolling = () => {
-    if (pollingRef.current) return;
-    const generation = ++pollingGenerationRef.current;
-    const poll = async () => {
-      await refreshData();
-      if (
-        pollingRef.current
-        && pollingGenerationRef.current === generation
-      ) pollingRef.current = setTimeout(poll, 3000);
-    };
-    pollingRef.current = setTimeout(poll, 3000);
-    tickRef.current    = setInterval(() => setTick(t => t+1), 1000);
-  };
-  const stopPolling = () => {
-    pollingGenerationRef.current += 1;
-    if (pollingRef.current) { clearTimeout(pollingRef.current); pollingRef.current = null; }
-    if (tickRef.current)    { clearInterval(tickRef.current);    tickRef.current    = null; }
-  };
-  const refreshData = async () => {
-    const myGen = requestGenRef.current;
-    try {
-      const d = await listSchedules(projectFilter);
-      // Scarta response stale: se projectFilter e' cambiato durante
-      // l'await, l'effect ha incrementato requestGenRef e questa
-      // response e' obsoleta — non sovrascrivere setSchedules con
-      // dati del filter precedente.
-      if (myGen !== requestGenRef.current) return;
-      setSchedules(d.schedules || []);
-    }
-    catch (err) {
-      console.error('[ScheduleList] refresh fallito:', err);
-      // Sessione scaduta o accesso revocato: fermare il polling evita
-      // un flood di richieste 401/403 che inquinano i log server e
-      // generano rumore lato monitoring.
-      const status = err?.response?.status;
-      if (status === 401 || status === 403) {
-        stopPolling();
-      }
-    }
-  };
-  const loadData = async () => {
-    const myGen = requestGenRef.current;
-    try {
-      // Spinner a pagina intera solo al primo caricamento: i reload dopo
-      // toggle/delete/salvataggio aggiornano la lista senza farla sparire
-      // (prima la pagina lampeggiava e perdeva lo scroll; audit M1).
-      if (!loadedOnceRef.current) setLoading(true);
-      const [sd, hd] = await Promise.all([
-        listSchedules(projectFilter),
-        getBeatHealthcheck().catch((err) => {
-          // Pre-fix: silent catch nascondeva errori network/auth del
-          // beat healthcheck. Log esplicito facilita il triage quando
-          // lo scheduler banner mostra "unknown" per troppo tempo.
-          console.warn('[ScheduleList] beat healthcheck fallito:', err?.message || err);
-          return { status: 'unknown', message: 'Non raggiungibile' };
-        }),
-      ]);
-      // Scarta response stale: vedi requestGenRef in refreshData.
-      if (myGen !== requestGenRef.current) return;
-      setSchedules(sd.schedules || []);
-      setBeatHealth(hd);
-      const init = {};
-      (sd.schedules || []).forEach(s => { if (s.runtime?.status === 'running' || s.runtime?.status === 'queued') init[s.id] = Date.now(); });
-      if (Object.keys(init).length) setRunStartTimes(prev => ({ ...prev, ...init }));
-    } catch (err) {
-      // Pre-fix (P1 frontend-pages): solo console.error → l'utente
-      // vedeva la pagina vuota senza spiegazione se listSchedules
-      // falliva (auth, network, DB transient).
-      console.error('[ScheduleList] load fallito:', err);
-      const msg = requestErrorMessage(err, 'Errore caricamento schedules');
-      toast.error(msg);
-    } finally {
-      loadedOnceRef.current = true;
-      setLoading(false);
-    }
-  };
+  const loadData = () => { resource.reload(); health.reload(); };
+  const refreshData = () => resource.reload();
 
   const handleToggle = async (id, current) => {
     // Optimistic update + rollback su failure: l'utente vede subito il
@@ -228,13 +169,13 @@ function ScheduleList() {
     // (audit R9.12).
     const withEnabled = (s, value) => ({ ...s, schedule: { ...s.schedule, enabled: value } });
     const next = !current;
-    setSchedules(prev => prev.map(s => (s.id === id ? withEnabled(s, next) : s)));
+    setSchedules(prev => (prev || []).map(s => (s.id === id ? withEnabled(s, next) : s)));
     try {
       await toggleSchedule(id, next);
       loadData();
     } catch (e) {
       // Rollback: ripristina lo state precedente prima di mostrare l'errore.
-      setSchedules(prev => prev.map(s => (s.id === id ? withEnabled(s, current) : s)));
+      setSchedules(prev => (prev || []).map(s => (s.id === id ? withEnabled(s, current) : s)));
       toastApiError(toast, e, 'Errore toggle');
     }
   };
@@ -281,21 +222,19 @@ function ScheduleList() {
     // `handleToggle` per coerenza UX.
     const prevStatus = schedules.find(s => s.id === id)?.runtime?.status;
     try {
-      setRunningManual(prev => ({ ...prev, [id]: true }));
-      setRunStartTimes(prev => ({ ...prev, [id]: Date.now() }));
-      setSchedules(prev => prev.map(s =>
+      setRunningManual(prev => ({ ...prev, [id]: Date.now() }));
+      setSchedules(prev => (prev || []).map(s =>
         s.id === id ? { ...s, runtime: { ...(s.runtime || {}), status: 'queued' } } : s
       ));
       await runScheduleNow(id);
       await refreshData();
     } catch (e) {
       // Rollback ottimistico: ripristina lo status precedente.
-      setSchedules(prev => prev.map(s =>
+      setSchedules(prev => (prev || []).map(s =>
         s.id === id ? { ...s, runtime: { ...(s.runtime || {}), status: prevStatus } } : s
       ));
       toastApiError(toast, e, 'Errore');
       setRunningManual(prev => { const n={...prev}; delete n[id]; return n; });
-      setRunStartTimes(prev => { const n={...prev}; delete n[id]; return n; });
     }
   };
   const handleToggleLogs = async (id) => {
@@ -368,6 +307,10 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
         <div className="sl__content">
           <canvas ref={canvasRef} className="sl__hex-bg" />
 
+          {resource.status === 'error' && (
+            <ResourceError title="Schedule non caricati" message={resource.error} onRetry={resource.reload} />
+          )}
+
           {/* Beat health banner */}
           {beatHealth && beatHealth.status !== 'ok' && (
             <div className={`sl__banner sl__banner--${beatHealth.status === 'down' ? 'error' : 'warning'}`}>
@@ -378,7 +321,7 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
           {/* Running banner */}
           {runningCount > 0 && (
             <div className="sl__banner sl__banner--running">
-              ⚡ {runningCount === 1 ? '1 schedule in esecuzione' : `${runningCount} schedule in esecuzione`} — aggiornamento automatico ogni 3s
+              ⚡ {runningCount === 1 ? '1 schedule in esecuzione o in coda' : `${runningCount} schedule in esecuzione o in coda`} — aggiornamento automatico ogni 3s
             </div>
           )}
 
@@ -410,7 +353,7 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
           </div>
 
           {/* List */}
-          {filteredSchedules.length === 0 ? (
+          {resource.status === 'error' && !resource.hasData ? null : filteredSchedules.length === 0 ? (
             <div className="sl__empty">
               <div className="sl__empty-icon">{activeFilter === 'all' ? '⏰' : filterConfigs[activeFilter]?.icon}</div>
               <div className="sl__empty-title">{activeFilter === 'all' ? (projectFilter ? 'Nessuno schedule per questo progetto' : 'Nessuno schedule configurato') : `Nessuno schedule ${filterConfigs[activeFilter]?.label?.toLowerCase()}`}</div>
@@ -428,19 +371,19 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
                   key={s.id}
                   schedule={s}
                   canManage={can.manageSchedule(user, s)}
-                  isRunning={s.runtime?.status === 'running' || s.runtime?.status === 'queued' || !!runningManual[s.id]}
-                  runStartTime={runStartTimes[s.id]}
+                  isRunning={s.runtime?.status === 'running' || (!!runningManual[s.id] && s.runtime?.status !== 'queued')}
+                  runStartTime={runningManual[s.id] || null}
                   logs={expandedLogs[s.id]}
                   runs={expandedRuns[s.id]}
-                  runningManual={runningManual[s.id]}
+                  runningManual={!!runningManual[s.id]}
                   onToggle={() => handleToggle(s.id, s.schedule?.enabled)}
                   onDelete={() => handleDelete(s.id, s.schedule?.description)}
                   onRunNow={() => handleRunNow(s.id)}
                   onToggleLogs={() => handleToggleLogs(s.id)}
                   onToggleRuns={() => handleToggleRuns(s.id)}
                   onEdit={() => { setEditingId(s.id); setShowWizard(true); }}
-                  onDownload={() => downloadScheduleOutput(s.id)}
-                  onDownloadRun={(ts) => downloadScheduleOutput(s.id, ts)}
+                  onDownload={() => downloads.run(`${s.id}:last`, () => downloadScheduleOutput(s.id))}
+                  onDownloadRun={(ts) => downloads.run(`${s.id}:${ts}`, () => downloadScheduleOutput(s.id, ts))}
                   formatDate={formatDate}
                   formatCron={formatCron}
                   getElapsed={getElapsed}
@@ -618,24 +561,27 @@ function StatusBar({ schedule, isRunning, runStartTime, getElapsed }) {
   const maxRetries       = schedule.on_error?.max_retries || 0;
   const consecutiveFails = runtime?.consecutive_failures || 0;
 
-  if (status === 'running' || isRunning) {
-    const elapsed = runStartTime ? getElapsed(runStartTime) : null;
-    return (
-      <div className="sl__statusbar sl__statusbar--running">
-        <div className="sl__statusbar-left">
-          <span className="sl__statusbar-dot sl__statusbar-dot--running" />
-          Pipeline in esecuzione...
-          {elapsed && <span className="sl__statusbar-elapsed">({elapsed})</span>}
-        </div>
-        {runtime?.current_task_id && <span className="sl__statusbar-task">Task: {runtime.current_task_id.slice(0,8)}…</span>}
-      </div>
-    );
-  }
+  // In coda prima di "in esecuzione": una run in coda non e' partita.
   if (status === 'queued') return (
     <div className="sl__statusbar sl__statusbar--queued">
       <span className="sl__statusbar-dot sl__statusbar-dot--queued" /> In coda — un'altra esecuzione è in corso
     </div>
   );
+  if (status === 'running' || isRunning) {
+    // Tempo trascorso solo se si sa quando e' partita (avvio da questa
+    // pagina): il server non lo espone, e "da quando la pagina la vede"
+    // sarebbe un tempo falso.
+    return (
+      <div className="sl__statusbar sl__statusbar--running">
+        <div className="sl__statusbar-left">
+          <span className="sl__statusbar-dot sl__statusbar-dot--running" />
+          Pipeline in esecuzione...
+          {runStartTime && <span className="sl__statusbar-elapsed">(<Elapsed since={runStartTime} />)</span>}
+        </div>
+        {runtime?.current_task_id && <span className="sl__statusbar-task">Task: {runtime.current_task_id.slice(0,8)}…</span>}
+      </div>
+    );
+  }
   if (status === 'failed') {
     const errorMsg = lastExec?.error || lastExec?.event || 'Errore sconosciuto';
     const isRetrying = consecutiveFails > 0 && consecutiveFails < maxRetries;

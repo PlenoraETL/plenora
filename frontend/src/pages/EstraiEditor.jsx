@@ -33,6 +33,8 @@ import { columnsOf, estraiSourceLabel } from '../utils/columnSource';
 import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
 import { getLayerSchema } from '../api/features';
 import { serverVersionOf } from '../utils/canvasVersion';
+import { executionModalProps, executionToolbarProps } from '../hooks/useExecution';
+import { ResourceError } from '../components/common/ListState';
 import { usePreview, useExecution, useValidationHighlights, useEdgeHandlers, useCanvasCore, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
@@ -86,6 +88,7 @@ function EstraiEditor() {
   const {
     project, connections, loading, error: loadError,
     catalog, views, projectConnection, sourceType,
+    catalogLoading, catalogError, reloadCatalog,
     reload: reloadData,
   } = useEditorData(projectId, { withCatalog: true });
   const TABLES_PAGE_SIZE = 15;
@@ -149,8 +152,11 @@ function EstraiEditor() {
       toast.warning('Questo layer è già presente nel canvas'); return;
     }
     let schema;
+    // Fase 5 T2 (R4.6): il layer va nel canvas del progetto che l'ha chiesto.
+    const forProject = useCanvasStore.getState().projectId;
     try { schema = await getLayerSchema(originNode.data.connection_id, relation.related_url); }
     catch (err) { toastApiError(toast, err, 'Errore caricamento schema'); return; }
+    if (useCanvasStore.getState().projectId !== forProject) return;
     const newNodeId = `fl_${Date.now()}`;
     const columns   = (schema.fields || []).map(f => ({ name: f.name, type: f.field_type || f.type || 'str', alias: null, visible: true }));
     const newNode   = {
@@ -330,7 +336,11 @@ function EstraiEditor() {
           data: { type: 'feature_source', layer_name: ld.layerName, layer_url: ld.layerUrl,
             connection_id: ld.connectionId, connection_name: ld.connectionName, service_name: ld.serviceName,
             geometry_type: ld.geometryType, feature_count: ld.featureCount, where: '', columns: [] } });
-      } catch (err) { console.error('Errore parsing feature layer data:', err); }
+      } catch (err) {
+        // Fase 5 T2 (N10): un trascinamento non leggibile si dice.
+        console.warn('Errore parsing feature layer data:', err);
+        toast.error('Il layer trascinato non è leggibile: riprova dal pannello dei servizi.');
+      }
       return;
     }
 
@@ -338,7 +348,7 @@ function EstraiEditor() {
     if (!tableName) return;
     const isView = event.dataTransfer.getData('isView') === 'true';
     addNodes(buildTableNode(tableName, isView, position));
-  }, [reactFlowInstance, addNodes, buildTableNode]);
+  }, [reactFlowInstance, addNodes, buildTableNode, toast]);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
@@ -379,7 +389,7 @@ function EstraiEditor() {
     onBack: handleBack,
     onSave: handleSaveCanvas,
     saving,
-    executing: execution.isExecuting,
+    ...executionToolbarProps(execution),
     theme,
     setTheme: toggleTheme,
     statusExtra: <span className="etb__stats">{nodes.length} nodi · {edges.length} collegamenti</span>,
@@ -441,7 +451,13 @@ function EstraiEditor() {
 
                 {!tablesCollapsed && (
                   <div className="estrai-sidebar__items">
-                    {availableTables.length === 0
+                    {/* Fase 5 T2 (R4.8, R4.18): il catalogo arriva dopo
+                        l'apertura e un errore e' un errore con «Riprova». */}
+                    {catalogLoading ? (
+                      <div className="estrai-sidebar__empty" role="status">Caricamento tabelle…</div>
+                    ) : catalogError ? (
+                      <ResourceError compact title="Tabelle non caricate" message={catalogError} onRetry={reloadCatalog} />
+                    ) : availableTables.length === 0
                       ? <div className="estrai-sidebar__empty">
                           {filteredTables.length === 0 ? 'Nessuna tabella trovata' : 'Tutte nel canvas'}
                         </div>
@@ -586,11 +602,8 @@ function EstraiEditor() {
           />
         )}
         <ExecutionModal
-          isOpen={execution.showModal} onClose={execution.closeModal}
-          isExecuting={execution.isExecuting} result={execution.result}
-          onDownload={execution.downloadTaskResult}
+          {...executionModalProps(execution)}
           title={`${term('run').icon} Esecuzione della query`} projectType="estrai"
-          caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling}
         />
         <PreviewModal
         isOpen={preview.showModal} onClose={preview.closeModal}
@@ -685,9 +698,12 @@ function EstraiEditor() {
 // Il pannello laterale della nuova interfaccia (NodeInspector) mostra i form
 // dei nodi fuori dal canvas: serve il provider React Flow sopra l'editor,
 // come in Manipola e Arricchisci.
+// Fase 5 T2 (R4.6): un progetto = un editor. Cambiare progetto nella
+// stessa route rimonta tutto (dati, esecuzione, anteprime, polling).
 function EstraiEditorWithProvider() {
+  const { projectId } = useParams();
   return (
-    <ReactFlowProvider>
+    <ReactFlowProvider key={projectId}>
       <EstraiEditor />
     </ReactFlowProvider>
   );

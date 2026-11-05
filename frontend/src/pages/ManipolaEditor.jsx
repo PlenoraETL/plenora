@@ -38,6 +38,7 @@ const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersio
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
 import DataSourceNode from '../components/nodes/DataSourceNode';
+import { executionModalProps, executionToolbarProps } from '../hooks/useExecution';
 import { usePreview, useExecution, useCanvasCore, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
@@ -69,7 +70,8 @@ import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 import { addFirstMessage, menuEntry, onlyOneMessage, term, termName } from '../utils/glossary';
 import { buildManipolaPaletteGroups } from '../components/canvas/manipolaPalette';
-import { fetchTransformRegistry, getCachedTransformRegistry, isMultiInputOp } from '../utils/transformRegistry';
+import { isMultiInputOp } from '../utils/transformRegistry';
+import { useTransformRegistry } from '../hooks/useTransformRegistry';
 import useEditorActions from '../components/editor/useEditorActions';
 
 // Costante stabile — evita array literal nelle deps di useEditorData
@@ -121,7 +123,7 @@ const ManipolaEditorContent = () => {
 
   const {
     project, connections, loading, error: loadError,
-    availableSources, availableFiles,
+    availableSources, availableFiles, sourcesError, sourcesLoading, reloadSources,
     reload: reloadData,
   } = useEditorData(projectId, {
     withSources: true,
@@ -276,13 +278,10 @@ const ManipolaEditorContent = () => {
   }, [addNodes, addEdges]);
 
   // ── Palette "Cosa vuoi fare?" (Fase 4, M2) ────────────────────────────
-  const [transformRegistry, setTransformRegistry] = useState(getCachedTransformRegistry());
-  useEffect(() => {
-    if (transformRegistry) return undefined;
-    let alive = true;
-    fetchTransformRegistry().then(r => { if (alive && r) setTransformRegistry(r); });
-    return () => { alive = false; };
-  }, [transformRegistry]);
+  // Catalogo condiviso con errore e «Riprova» (hooks/useTransformRegistry,
+  // audit N13): la palette lo dice invece di restare senza operazioni.
+  const registryResource = useTransformRegistry();
+  const transformRegistry = registryResource.data || null;
 
   // Il nuovo passo nasce dopo il nodo di partenza, gia' selezionato
   // (pannello aperto). Se quel nodo ha un solo passo successivo e il nuovo
@@ -326,10 +325,13 @@ const ManipolaEditorContent = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insertNode, handleAddCaricanNode, toast]);
 
+  const registryFailed = registryResource.status === 'error';
+  const retryRegistry = registryResource.reload;
   const palette = useMemo(() => ({
     groups: buildManipolaPaletteGroups(transformRegistry),
     onPick: handlePalettePick,
-  }), [transformRegistry, handlePalettePick]);
+    notice: registryFailed ? { message: 'Le operazioni non sono state caricate.', onRetry: retryRegistry } : null,
+  }), [transformRegistry, handlePalettePick, registryFailed, retryRegistry]);
 
   // ── Rami (Fase 4, M6) ─────────────────────────────────────────────────
   const branchEdge = useCallback((params) => ({
@@ -471,7 +473,7 @@ const ManipolaEditorContent = () => {
     onBack: handleBack,
     onSave: handleSaveCanvas,
     saving,
-    executing: execution.isExecuting,
+    ...executionToolbarProps(execution),
     theme,
     setTheme,
     // Lo stato delle colonne e' nella barra comune (EditorToolbar, ColumnSyncBadge).
@@ -496,6 +498,7 @@ const ManipolaEditorContent = () => {
   const sidebar = !isReadOnly ? (
     <EditorSidebar
       variant="manipola" projects={availableSources} files={availableFiles} onDragStart={onDragStart}
+      sourcesLoading={sourcesLoading} sourcesError={sourcesError} onRetrySources={reloadSources}
       projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto SQL nel canvas',
         emptyMessage: 'Nessun progetto SQL disponibile.', emptyHint: 'Crea prima un progetto di tipo Estrai.',
         filterTypes: ['estrai', 'manipola', 'arricchisci'], showSearch: true }}
@@ -511,7 +514,7 @@ const ManipolaEditorContent = () => {
         {showVersions && (
           <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
         )}
-        <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title={`${term('run').icon} Esecuzione del flusso Manipola`} projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} />
+        <ExecutionModal {...executionModalProps(execution)} title={`${term('run').icon} Esecuzione del flusso Manipola`} projectType="manipola" />
         <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
           data={preview.data} loading={preview.loading} error={preview.error}
           permissionRevoked={preview.permissionRevoked}
@@ -565,12 +568,16 @@ const ManipolaEditorContent = () => {
   );
 };
 
-const ManipolaEditor = () => (
-  <ReactFlowProvider>
-    <ConfirmProvider>
-      <ManipolaEditorContent />
-    </ConfirmProvider>
-  </ReactFlowProvider>
-);
+// Fase 5 T2 (R4.6): un progetto = un editor (rimontato al cambio di progetto).
+const ManipolaEditor = () => {
+  const { projectId } = useParams();
+  return (
+    <ReactFlowProvider key={projectId}>
+      <ConfirmProvider>
+        <ManipolaEditorContent />
+      </ConfirmProvider>
+    </ReactFlowProvider>
+  );
+};
 
 export default ManipolaEditor;

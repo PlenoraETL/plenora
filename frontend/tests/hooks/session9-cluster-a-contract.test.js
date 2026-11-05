@@ -21,14 +21,17 @@ function readSrc(relPath) {
 
 
 describe('Sessione 9 cluster A hooks unmount safety', () => {
-  it('useExecution startCaricaPolling usa timeout single-flight con mountedRef guard', () => {
+  // Fase 5 T2: i task di Carica usano il poller unico (utils/taskPoller: un
+  // poll alla volta, stop allo smontaggio e a ogni nuovo avvio).
+  it('useExecution: i task di Carica usano pollTask e si fermano allo smontaggio', () => {
     const src = readSrc('hooks/useExecution.js');
-    const idx = src.indexOf('const startCaricaPolling =');
+    const idx = src.indexOf('const startCaricaTasksPolling =');
     expect(idx).toBeGreaterThan(-1);
-    const window = src.slice(idx, idx + 3500);
-    expect(window).toContain('setTimeout(poll, pollInterval)');
-    expect(window).not.toContain('setInterval(poll, pollInterval)');
-    expect(window).toMatch(/if\s*\(\s*!\s*mountedRef\.current/);
+    const window = src.slice(idx, idx + 2500);
+    expect(window).toContain('pollTask(task_id');
+    expect(window).toContain('stopAllCaricaPolling()');
+    expect(src).not.toContain('setInterval(');
+    expect(src).toMatch(/caricaStops\.current\.forEach\(stop => stop\(\)\)/);
   });
 
   it('useCanvasCore dataNodes usa useMemo con dep [nodes]', () => {

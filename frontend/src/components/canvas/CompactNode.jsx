@@ -10,7 +10,7 @@
 import React, { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useStore } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
-import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
+import { useTransformRegistry } from '../../hooks/useTransformRegistry';
 import { derivedTitle, nodeDescriptor, nodeIcon, nodeTitle, titlePatch, userTitle } from './nodeDescriptors';
 import { CanvasGraphContext } from './CanvasGraphContext';
 import './CompactNode.css';
@@ -50,18 +50,12 @@ function CompactNode({ id, type, data = {}, selected }) {
   const connectedKey = useStore(connectedHandlesKey(id));
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
-  const [, forceRegistry] = useState(getCachedTransformRegistry());
+  // Il nome leggibile dell'operazione arriva dal catalogo condiviso: quando
+  // arriva il nodo si ridisegna (hooks/useTransformRegistry).
+  useTransformRegistry({ enabled: type === 'transform' });
   const [editing, setEditing] = useState(false);
   // Esc annulla: il blur che segue la chiusura del campo non scrive.
   const cancelledRef = useRef(false);
-
-  // Il nome leggibile dell'operazione arriva dal registry (caricato una volta).
-  useEffect(() => {
-    if (type !== 'transform' || getCachedTransformRegistry()) return undefined;
-    let alive = true;
-    fetchTransformRegistry().then(r => { if (alive) forceRegistry(r); });
-    return () => { alive = false; };
-  }, [type]);
 
   const handles = useMemo(
     () => mergeHandles(descriptor.defaultHandles(data), connectedKey, descriptor.nextFreeInput),

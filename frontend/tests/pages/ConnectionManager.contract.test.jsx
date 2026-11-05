@@ -139,4 +139,38 @@ describe('ConnectionManager', () => {
       });
     });
   });
+
+  // Fase 5 T2 (R9.10): test per connessione, la fine del test di A non
+  // riabilita B mentre il suo test gira.
+  it('test paralleli: la fine di A non riabilita B', async () => {
+    listConnectionsMock.mockResolvedValue({
+      connections: [
+        { id: 'a', name: 'DB A', type: 'postgres', host: 'h', port: 5432, database: 'a', can_edit: true },
+        { id: 'b', name: 'DB B', type: 'postgres', host: 'h', port: 5432, database: 'b', can_edit: true },
+      ],
+    });
+    let finishA;
+    testConnectionMock.mockImplementation((id) => (id === 'a'
+      ? new Promise((r) => { finishA = r; })
+      : new Promise(() => {})));
+    render(<ConnectionManager />);
+    expect(await screen.findByText('DB A')).toBeInTheDocument();
+    const [testA, testB] = screen.getAllByRole('button', { name: /test/i });
+    await userEvent.click(testA);
+    await userEvent.click(testB);
+    expect(testConnectionMock).toHaveBeenCalledTimes(2);
+    finishA({ success: true, message: 'ok' });
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /test/i })[0]).not.toBeDisabled());
+    expect(screen.getAllByRole('button', { name: '⏳' })).toHaveLength(1);
+  });
+
+  // Fase 5 T2 (R4.8): un errore di caricamento e' un errore, non "nessuna connessione".
+  it('errore di caricamento: messaggio con Riprova, non lo stato vuoto', async () => {
+    listConnectionsMock.mockRejectedValueOnce({ response: { status: 500, data: {} } });
+    listFeatureConnectionsMock.mockRejectedValueOnce({ response: { status: 500, data: {} } });
+    render(<ConnectionManager />);
+    expect(await screen.findByText('Connessioni non caricate')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Riprova' }));
+    expect(await screen.findByText('Warehouse DB')).toBeInTheDocument();
+  });
 });

@@ -148,10 +148,19 @@ export default function PipelineRunner({ user = null }) {
     setRequest(next);
   }, []);
 
-  const validate = useCallback(async () => {
+  // Fase 5 T2 (R9.7): una lettura del server alla volta (Valida, Anteprima):
+  // un secondo clic durante la prima non apre un altro "Salva e continua".
+  const readingRef = useRef(false);
+  const oneRead = useCallback(async (fn) => {
+    if (readingRef.current) return;
+    readingRef.current = true;
+    try { await fn(); } finally { readingRef.current = false; }
+  }, []);
+
+  const validate = useCallback(() => oneRead(async () => {
     const result = await validateViaBackend(() => saveBeforeServerRead('La validazione'));
     if (result) showResult(result);
-  }, [showResult]);
+  }), [showResult, oneRead]);
 
   // Avvio vero: le scelte della finestra (o nessuna) vanno a onExecute.
   // 409 preparation_changed: stima rifatta e finestra riaperta col motivo.
@@ -253,13 +262,13 @@ export default function PipelineRunner({ user = null }) {
     return res.preflight;
   }, [request]);
 
-  const preview = useCallback(async (id) => {
+  const preview = useCallback((id) => oneRead(async () => {
     const result = await validateViaBackend(() => saveBeforeServerRead("L'anteprima"));
     if (!result) return;
     broadcastHighlights(result);
     if (!result.isValid) { setShown(result); return; }
     useCanvasStore.getState().getEditorAction('onPreview')?.(id || outputId(useCanvasStore.getState().nodes));
-  }, []);
+  }), [oneRead]);
 
   // Riferimenti stabili: le azioni registrate non cambiano a ogni render.
   const ref = useRef({});

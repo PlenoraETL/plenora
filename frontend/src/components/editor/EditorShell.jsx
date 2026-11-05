@@ -477,6 +477,7 @@ canvasConfig = EMPTY_OBJ,
           open={Boolean(paletteState)}
           context={paletteAfterNode ? nodeTitle(paletteAfterNode.type, paletteAfterNode.data) : null}
           groups={palette.groups}
+          notice={palette.notice || null}
           onPick={(item) => palette.onPick(item, paletteAfter)}
           onClose={() => setPaletteState(null)}
         />

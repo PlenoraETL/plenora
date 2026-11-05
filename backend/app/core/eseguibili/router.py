@@ -8,13 +8,14 @@ import json as _json
 
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
-from typing import Annotated, List, Mapping, Optional
+from typing import Annotated, List, Mapping, NamedTuple, Optional
 
 from app.core.auth.dependencies import (
     get_current_user,
     require_admin,
 )
 from app.shared.contracts.auth import CurrentUser
+from app.shared.contracts.payloads import JsonObject
 from app.core.auth.ownership import (
     assert_resource_visible,
     assert_can_modify,
@@ -38,10 +39,12 @@ from . import db as eseguibili_db
 from . import output_store as _output_store
 from .download_response import build_consume_once_response
 from . import service as eseguibili_service
+from . import preflight as eseguibili_preflight
 from .models import (
     EseguibileCreate, EseguibileUpdate, EseguibileSummary, EseguibileDetails,
     ExecuteRequest, AnalyzeUploadResponse, ExecutableManifest,
     ExecutableRunRequest,
+    ExecutablePreflightRequest,
     EseguibileVersionSummary,
 )
 
@@ -594,6 +597,110 @@ def execute_eseguibile(
     return result.to_api_dict()
 
 
+class _TrustedRunInputs(NamedTuple):
+    inputs: Mapping[str, object]
+    uploads: list[str]
+
+
+def _trusted_run_inputs(
+    eseguibile_id: str,
+    manifest: ExecutableManifest,
+    raw_inputs: Mapping[str, object],
+    current_user: CurrentUser,
+) -> _TrustedRunInputs:
+    """Input dell'esecuzione con gli upload verificati (stesso eseguibile, stesso
+    utente, stesso input). Restituisce anche gli upload usati: l'avvio li
+    consuma, la stima no. Errori = HTTPException 400/403."""
+
+    trusted_inputs = dict(raw_inputs)
+    consumed_uploads: list[str] = []
+    for definition in manifest.inputs:
+        if definition.kind != "file" or definition.key not in trusted_inputs:
+            continue
+        raw = trusted_inputs[definition.key]
+        raw_files = raw if isinstance(raw, list) else [raw]
+        if definition.multiple and not isinstance(raw, list):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Payload multi-file non valido per {definition.label}",
+            )
+        if not definition.multiple and not isinstance(raw, Mapping):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Payload file non valido per {definition.label}",
+            )
+        trusted_files = []
+        for raw_file in raw_files:
+            if not isinstance(raw_file, Mapping):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Payload file non valido per {definition.label}",
+                )
+            file_id = str(raw_file.get("file_id") or "")
+            upload = _load_upload_meta(file_id) if file_id else None
+            if not upload:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Upload non trovato o scaduto per {definition.label}",
+                )
+            if upload.get("eseguibile_id") != eseguibile_id:
+                raise HTTPException(status_code=400, detail="Upload di altro eseguibile")
+            if upload.get("user_id") not in (None, current_user.user_id):
+                raise HTTPException(status_code=403, detail="Upload di un altro utente")
+            upload_input_key = upload.get("input_key")
+            if upload_input_key not in (None, definition.key):
+                raise HTTPException(status_code=400, detail="Upload associato a un altro input")
+            trusted_file = dict(raw_file)
+            trusted_file["_upload_group_id"] = str(
+                upload.get("group_id") or current_user.group_id
+            )
+            trusted_files.append(trusted_file)
+            consumed_uploads.append(file_id)
+        trusted_inputs[definition.key] = (
+            trusted_files if definition.multiple else trusted_files[0]
+        )
+    return _TrustedRunInputs(trusted_inputs, consumed_uploads)
+
+
+def _run_version(record: object, eseguibile_id: str, version_id: Optional[str]) -> tuple[object, ExecutableManifest]:
+    version = (
+        eseguibili_db.get_eseguibile_version(version_id, eseguibile_id=eseguibile_id)
+        if version_id
+        else eseguibili_db.get_active_eseguibile_version(eseguibile_id)
+    )
+    if version is None:
+        raise HTTPException(status_code=404, detail="Versione eseguibile non trovata")
+    try:
+        manifest = ExecutableManifest.model_validate(version.manifest)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=sanitize_http_detail(str(exc)))
+    return version, manifest
+
+
+@router.post("/{eseguibile_id}/preflight")
+def preflight_eseguibile_run(
+    eseguibile_id: str,
+    payload: ExecutablePreflightRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> JsonObject:
+    """Stima prima di avviare (Fase 5 T2, BA2): gli stessi input dell'avvio,
+    nessuna esecuzione, nessun upload consumato. Risponde come il preflight
+    dell'editor: { valid, nodes, preparation_fingerprint, checks }."""
+
+    record = eseguibili_db.get_eseguibile(eseguibile_id)
+    _check_visible(record, current_user)
+    version, manifest = _run_version(record, eseguibile_id, payload.version_id)
+    trusted_inputs, _uploads = _trusted_run_inputs(eseguibile_id, manifest, payload.inputs, current_user)
+    try:
+        return eseguibili_preflight.preflight_versioned(
+            eseguibile=record,
+            raw_inputs=trusted_inputs,
+            version_id=version.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=sanitize_http_detail(str(exc)))
+
+
 @router.post("/{eseguibile_id}/runs")
 @audit_action(action="eseguibile.run", target_param="eseguibile_id")
 def create_eseguibile_run(
@@ -605,68 +712,26 @@ def create_eseguibile_run(
 
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
-    version = (
-        eseguibili_db.get_eseguibile_version(
-            payload.version_id, eseguibile_id=eseguibile_id
-        )
-        if payload.version_id
-        else eseguibili_db.get_active_eseguibile_version(eseguibile_id)
-    )
-    if version is None:
-        raise HTTPException(status_code=404, detail="Versione eseguibile non trovata")
-    try:
-        manifest = ExecutableManifest.model_validate(version.manifest)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=sanitize_http_detail(str(exc)))
+    version, manifest = _run_version(record, eseguibile_id, payload.version_id)
 
-    trusted_inputs = dict(payload.inputs)
     consumed_uploads: list[str] = []
     try:
-        for definition in manifest.inputs:
-            if definition.kind != "file" or definition.key not in trusted_inputs:
-                continue
-            raw = trusted_inputs[definition.key]
-            raw_files = raw if isinstance(raw, list) else [raw]
-            if definition.multiple and not isinstance(raw, list):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Payload multi-file non valido per {definition.label}",
-                )
-            if not definition.multiple and not isinstance(raw, Mapping):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Payload file non valido per {definition.label}",
-                )
-            trusted_files = []
-            for raw_file in raw_files:
-                if not isinstance(raw_file, Mapping):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Payload file non valido per {definition.label}",
-                    )
-                file_id = str(raw_file.get("file_id") or "")
-                upload = _load_upload_meta(file_id) if file_id else None
-                if not upload:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Upload non trovato o scaduto per {definition.label}",
-                    )
-                if upload.get("eseguibile_id") != eseguibile_id:
-                    raise HTTPException(status_code=400, detail="Upload di altro eseguibile")
-                if upload.get("user_id") not in (None, current_user.user_id):
-                    raise HTTPException(status_code=403, detail="Upload di un altro utente")
-                upload_input_key = upload.get("input_key")
-                if upload_input_key not in (None, definition.key):
-                    raise HTTPException(status_code=400, detail="Upload associato a un altro input")
-                trusted_file = dict(raw_file)
-                trusted_file["_upload_group_id"] = str(
-                    upload.get("group_id") or current_user.group_id
-                )
-                trusted_files.append(trusted_file)
-                consumed_uploads.append(file_id)
-            trusted_inputs[definition.key] = (
-                trusted_files if definition.multiple else trusted_files[0]
+        trusted_inputs, consumed_uploads = _trusted_run_inputs(
+            eseguibile_id, manifest, payload.inputs, current_user,
+        )
+        # Stima confermata: se la preparazione e' cambiata (versione, input,
+        # connettori), niente avvio e gli upload restano per la nuova stima.
+        if payload.preparation_fingerprint is not None:
+            current = eseguibili_preflight.fingerprint_for(
+                eseguibile=record, raw_inputs=trusted_inputs, version_id=version.id,
             )
+            if current != payload.preparation_fingerprint:
+                consumed_uploads = []
+                raise HTTPException(409, detail={
+                    "error": error_codes.VALIDATION_ERROR,
+                    "reason": "preparation_changed",
+                    "message": "Preparazione cambiata: versione, input o connettori diversi dalla stima",
+                })
 
         reserved_task_id = _task_service.reserve_task_id()
         _save_task_owner(

@@ -1,286 +1,175 @@
 /**
- * useEditorData.js — Hook per il caricamento dati iniziale degli editor
+ * useEditorData.js — dati iniziali degli editor (Estrai, Manipola, Arricchisci).
  *
- * Centralizza la logica di bootstrap comune a EstraiEditor, ManipolaEditor
- * e ArricchisciEditor: caricamento progetto, connessioni, sorgenti e catalogo.
+ * Fase 5 T2 (R4.8, R4.18, E2): sopra l'hook comune hooks/useResource.
  *
- * Prima di questo hook ogni editor ridefiniva ~80 righe identiche:
- *   const [project, setProject]         = useState(null);
- *   const [loading, setLoading]         = useState(true);
- *   const [connections, setConnections] = useState([]);
- *   const loadProjectAndSources = async () => { ... };
- *   useEffect(() => { loadProjectAndSources(); }, [projectId]);
+ *  - Avvio (bloccante, `loading`): progetto e connessioni IN PARALLELO; la
+ *    connessione del progetto si risolve qui (anche ArcGIS) perche' il canvas
+ *    di Estrai si costruisce con essa. Un errore del progetto e' `error`.
+ *  - Catalogo tabelle/viste (Estrai, `withCatalog`): NON blocca l'apertura;
+ *    ha i suoi `catalogLoading`/`catalogError`/`reloadCatalog`: un errore e'
+ *    un errore con «Riprova», mai "Nessuna tabella trovata".
+ *  - Sorgenti (Manipola/Arricchisci, `withSources`): progetti e file in
+ *    parallelo, insieme all'avvio; `sourcesError` per quelli non caricati.
+ *  - Connessioni non caricate: `connectionsError` (non una lista vuota muta).
+ *  - Ogni risposta e' del progetto che l'ha chiesta (id di richiesta): un
+ *    cambio di progetto nella stessa route non riceve dati del precedente.
  *
- * Ora basta:
- *   const data = useEditorData(projectId, { withSources: true });
- *
- *
- * Il bootstrap e' un grafo di fetch in cascata (getProject → listConnections →
- * optionally loadCatalog/loadSources). Due race da evitare:
- *
- *   1. unmount durante un await → setState su componente smontato
- *   2. projectId switch durante un await → setState del progetto vecchio
- *      sovrascrive quello del progetto nuovo (B1)
- *
- * Entrambe risolte dallo stesso pattern: un flag `cancelled` scoped al
- * singolo run dell'effect di bootstrap. La cleanup function setta
- * cancelled=true, ogni await guardato all'uscita controlla e esce prima
- * di setState. Su projectId switch, il cleanup del vecchio run e' scollegato
- * da cancelled del nuovo run (closure fresh), quindi i due run non si
- * pestano.
- *
- *
- *   withSources  (bool, default false)
- *     Carica listProjects() + getFiles() per popolare la sidebar sorgenti.
- *     Usato da: ManipolaEditor, ArricchisciEditor.
- *     sourceTypes: array di project_type da includere (default tutti)
- *
- *   withCatalog  (bool, default false)
- *     Carica il catalogo tabelle/viste della connessione di default del progetto.
- *     Se la connessione è ArcGIS carica i feature layer invece delle tabelle.
- *     Usato da: EstraiEditor.
- *
- *
- *   Sempre disponibili:
- *     project       {Object|null}   — dati del progetto
- *     connections   {Array}         — connessioni DB disponibili
- *     loading       {boolean}       — true durante il caricamento iniziale
- *     error         {string|null}   — messaggio di errore se il caricamento fallisce
- *     reload        {() => void}    — forza un ricaricamento completo
- *
- *   Con withSources=true:
- *     availableSources  {Array}  — lista progetti sorgente filtrati per tipo
- *     availableFiles    {Array}  — lista file caricati
- *
- *   Con withCatalog=true:
- *     catalog           {Object}      — { tableName: [columns] }
- *     views             {Object}      — { viewName: [columns] }
- *     projectConnection {Object|null} — connessione DB/ArcGIS del progetto
- *     sourceType        {string|null} — 'database' | 'featureService'
+ * Valori: project, connections, loading, error, reload, availableSources,
+ * availableFiles, sourcesError, catalog, views, catalogLoading, catalogError,
+ * reloadCatalog, projectConnection, sourceType, connectionsError.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useToast } from './useToast';
+import { useResource } from './useResource';
 import { getProject, listProjects }    from '../api/projects';
 import { listConnections, getConnectionTables } from '../api/connections';
 import { listFeatureConnections }       from '../api/features';
 import { getFiles }                     from '../api/files';
-import { humanizeError }                from '../utils/errorMessages';
+import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 
-/**
- * Hook per il caricamento dati iniziale degli editor URBY-ETL.
- *
- * @param {string}  projectId
- * @param {Object}  options
- * @param {boolean} options.withSources   - Carica sorgenti (progetti + file)
- * @param {boolean} options.withCatalog   - Carica catalogo tabelle/viste (solo Estrai)
- * @param {Array}   options.sourceTypes   - Tipi di progetto da includere come sorgenti
- *                                         (default: ['estrai', 'manipola', 'arricchisci'])
- * @returns {Object} Dati caricati + stato loading/error + reload
- */
+const EMPTY_OBJ = Object.freeze({});
+const EMPTY_LIST = Object.freeze([]);
+
+async function loadBoot(projectId, withCatalog) {
+  const [projectData, connectionsRes] = await Promise.all([
+    getProject(projectId),
+    listConnections().then(d => ({ ok: d.connections || [] }), err => ({ err })),
+  ]);
+  const allConnections = connectionsRes.ok || [];
+  let projectConnection = null;
+  let sourceType = null;
+  if (withCatalog) {
+    // BE: `{ metadata: { default_connection_id, ... }, canvas, output_contract }`.
+    const defaultConnectionId = projectData.metadata?.default_connection_id;
+    let isArcgis = false;
+    if (defaultConnectionId) {
+      projectConnection = allConnections.find(c => c.id === defaultConnectionId) || null;
+      // Se non trovata nelle DB, cerca nelle ArcGIS Feature Service.
+      if (!projectConnection) {
+        try {
+          const arcgisData = await listFeatureConnections();
+          const arcgisConn = (arcgisData.connections || arcgisData || []).find(c => c.id === defaultConnectionId);
+          if (arcgisConn) { projectConnection = { ...arcgisConn, type: 'arcgis' }; isArcgis = true; }
+        } catch (_) { /* connessione non risolta: il catalogo resta vuoto */ }
+      }
+    }
+    sourceType = isArcgis ? 'featureService' : 'database';
+  }
+  return {
+    project: projectData,
+    connections: allConnections,
+    connectionsError: connectionsRes.err ? requestErrorMessage(connectionsRes.err) : null,
+    projectConnection,
+    sourceType,
+  };
+}
+
 export function useEditorData(projectId, options = {}) {
   const {
     withSources  = false,
     withCatalog  = false,
     sourceTypes  = ['estrai', 'manipola', 'arricchisci'],
   } = options;
-
-  // sourceTypes stabilizzato con ref: evita che un array literal nelle deps
-  // di useCallback causi un nuovo riferimento ad ogni render → loop infinito.
   const toast = useToast();
-  const sourceTypesRef = useRef(sourceTypes);
-  // Pre-fix: `[sourceTypes?.join(',')]` quando `sourceTypes` era undefined
-  // produceva dep `undefined` → React passava sempre `Object.is(undefined,
-  // undefined) === true`, l'effect non firerava mai sul primo array
-  // valido. Fix: fallback esplicito a '' rende la dep stabile e
-  // l'effect prevedibile.
-  const sourceTypesKey = (sourceTypes && Array.isArray(sourceTypes))
-    ? sourceTypes.join(',')
-    : '';
+  const sourceTypesKey = Array.isArray(sourceTypes) ? sourceTypes.join(',') : '';
+
+  const boot = useResource(() => loadBoot(projectId, withCatalog), {
+    key: ['editor-boot', projectId || null, withCatalog],
+    enabled: Boolean(projectId),
+    errorMessage: (err) => humanizeError(err).message,
+  });
+  const bootData = boot.data;
+  const projectConnection = bootData?.projectConnection || null;
+
+  // #2 (trasparenza): rename di colonna auto-applicati ai project_source
+  // (rinominati a monte) detti all'utente, una volta per progetto caricato.
+  const notifiedRef = useRef(null);
   useEffect(() => {
-    sourceTypesRef.current = sourceTypes;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // Joinata stringa stabile: una nuova string identity firera' solo
-    // quando il contenuto array cambia veramente.
-  }, [sourceTypesKey]);
-const [project,     setProject]     = useState(null);
-  const [connections, setConnections] = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState(null);
-const [availableSources, setAvailableSources] = useState([]);
-  const [availableFiles,   setAvailableFiles]   = useState([]);
-const [catalog,           setCatalog]           = useState({});
-  const [views,             setViews]             = useState({});
-  const [projectConnection, setProjectConnection] = useState(null);
-  const [sourceType,        setSourceType]        = useState(null);
+    const migs = bootData?.project?.applied_migrations || [];
+    if (!bootData || notifiedRef.current === bootData.project || migs.length === 0) return;
+    notifiedRef.current = bootData.project;
+    const renames = migs.flatMap((m) => m.renames || []);
+    const preview = renames.slice(0, 3).map((r) => `${r.from}→${r.to}`).join(', ');
+    const more = renames.length > 3 ? ` +${renames.length - 3}` : '';
+    toast.info(`Aggiornati ${renames.length} riferimenti a colonne rinominate a monte: ${preview}${more}`, 10000);
+  }, [bootData, toast]);
 
-  // Tick per reload: bump → useEffect rigirato, cleanup cancella il run precedente.
-  const [reloadTick, setReloadTick] = useState(0);
-useEffect(() => {
-    if (!projectId) return;
-    let cancelled = false;
+  // Connessioni non caricate: si dice (i selettori dei nodi resterebbero
+  // vuoti senza motivo), una volta per caricamento.
+  const connectionsError = bootData?.connectionsError || null;
+  useEffect(() => {
+    if (connectionsError) toast.warning(`Connessioni non caricate: ${connectionsError}`);
+  }, [connectionsError, bootData, toast]);
 
-    // Helper: catalogo tabelle/viste (EstraiEditor). Tutti i setState guardati.
-    const loadCatalog = async (projectData, allConnections) => {
-      let connection         = null;
-      let isArcgisConnection = false;
-      // BE risponde `{ metadata: { default_connection_id, ... }, canvas,
-      // output_contract }`. Il path root `projectData.default_connection_id`
-      // e' undefined (pre-fix il fallback `||` lo salvava per coincidenza).
-      // Accesso canonico via metadata: rimuove il ramo fragile e
-      // documenta l'invariante della response shape.
-      const defaultConnectionId = projectData.metadata?.default_connection_id;
+  const dbConnection = withCatalog && projectConnection && bootData?.sourceType === 'database' ? projectConnection : null;
+  const catalogResource = useResource(async () => {
+    const d = await getConnectionTables(dbConnection.id);
+    return { tables: d.tables || {}, views: d.views || {} };
+  }, {
+    key: ['editor-catalog', projectId || null, dbConnection?.id || null],
+    enabled: Boolean(dbConnection),
+  });
 
-      if (defaultConnectionId) {
-        connection = allConnections.find(c => c.id === defaultConnectionId) || null;
-
-        // Se non trovata nelle DB, cerca nelle ArcGIS Feature Service
-        if (!connection) {
-          try {
-            const arcgisData = await listFeatureConnections();
-            if (cancelled) return;
-            const arcgisConns = arcgisData.connections || arcgisData || [];
-            const arcgisConn  = arcgisConns.find(c => c.id === defaultConnectionId);
-            if (arcgisConn) {
-              connection         = { ...arcgisConn, type: 'arcgis' };
-              isArcgisConnection = true;
-            }
-          } catch {
-            if (cancelled) return;
-          }
-        }
-
-        if (cancelled) return;
-        setProjectConnection(connection || null);
-        setSourceType(isArcgisConnection ? 'featureService' : 'database');
-      }
-
-      // Tabelle/viste da connessione DB
-      if (connection && !isArcgisConnection) {
-        try {
-          const d = await getConnectionTables(connection.id);
-          if (cancelled) return;
-          setCatalog(d.tables || {});
-          setViews(d.views || {});
-        } catch {
-          if (cancelled) return;
-          setCatalog({});
-          setViews({});
-        }
-      } else if (!isArcgisConnection) {
-        if (cancelled) return;
-        setCatalog({});
-        setViews({});
-      }
-      // ArcGIS: feature layer lazy-load in FeatureServicePanel, nulla da fare qui.
+  const sourcesResource = useResource(async () => {
+    const types = sourceTypesKey ? sourceTypesKey.split(',') : [];
+    const [projectsRes, filesRes] = await Promise.allSettled([listProjects(), getFiles()]);
+    if (projectsRes.status === 'rejected' && filesRes.status === 'rejected') throw projectsRes.reason;
+    const all = projectsRes.status === 'fulfilled' ? (projectsRes.value.projects || []) : [];
+    return {
+      sources: all.filter(p => types.includes(p.project_type || 'estrai')),
+      files: filesRes.status === 'fulfilled' ? (filesRes.value.files || []) : [],
+      errors: [
+        projectsRes.status === 'rejected' ? `Progetti non caricati: ${requestErrorMessage(projectsRes.reason)}` : null,
+        filesRes.status === 'rejected' ? `File non caricati: ${requestErrorMessage(filesRes.reason)}` : null,
+      ].filter(Boolean),
     };
+  }, {
+    key: ['editor-sources', projectId || null, sourceTypesKey],
+    enabled: Boolean(projectId && withSources),
+  });
 
-    // Helper: sorgenti (Manipola/Arricchisci). Tutti i setState guardati.
-    const loadSources = async () => {
-      const types = sourceTypesRef.current;
-      try {
-        const projectsData = await listProjects();
-        if (cancelled) return;
-        const all = projectsData.projects || [];
-        const filtered = all.filter(p => types.includes(p.project_type || 'estrai'));
-        setAvailableSources(filtered);
-      } catch {
-        if (cancelled) return;
-        setAvailableSources([]);
-      }
-
-      try {
-        const filesData = await getFiles();
-        if (cancelled) return;
-        setAvailableFiles(filesData.files || []);
-      } catch {
-        if (cancelled) return;
-        setAvailableFiles([]);
-      }
-    };
-
-    // Run principale
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // 1. Progetto (sempre)
-        const projectData = await getProject(projectId);
-        if (cancelled) return;
-        setProject(projectData);
-
-        // #2 (trasparenza): notifica i rename di colonna auto-applicati ai
-        // project_source (rinominati a monte) invece di riscriverli in silenzio.
-        const migs = projectData?.applied_migrations || [];
-        if (migs.length > 0) {
-          const renames = migs.flatMap((m) => m.renames || []);
-          const preview = renames.slice(0, 3).map((r) => `${r.from}→${r.to}`).join(', ');
-          const more = renames.length > 3 ? ` +${renames.length - 3}` : '';
-          toast.info(
-            `Aggiornati ${renames.length} riferimenti a colonne rinominate a monte: ${preview}${more}`,
-            10000,
-          );
-        }
-
-        // 2. Connessioni DB (sempre)
-        let allConnections = [];
-        try {
-          const d = await listConnections();
-          if (cancelled) return;
-          allConnections = d.connections || [];
-          setConnections(allConnections);
-        } catch {
-          if (cancelled) return;
-          setConnections([]);
-        }
-
-        // 3. Catalogo tabelle (solo EstraiEditor)
-        if (withCatalog) {
-          await loadCatalog(projectData, allConnections);
-          if (cancelled) return;
-        }
-
-        // 4. Sorgenti (Manipola + Arricchisci)
-        if (withSources) {
-          await loadSources();
-          if (cancelled) return;
-        }
-      } catch (err) {
-        if (cancelled) return;
-        console.error('[useEditorData] Errore caricamento:', err);
-        setError(humanizeError(err).message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, withCatalog, withSources, reloadTick]);
-
-  // reload: API esterna stabile () => void, internamente bump tick → effect ri-gira.
+  const { reload: reloadBoot } = boot;
+  const { reload: reloadSources } = sourcesResource;
+  const { reload: reloadCatalog } = catalogResource;
   const reload = useCallback(() => {
-    setReloadTick(t => t + 1);
-  }, []);
+    reloadBoot();
+    if (withSources) reloadSources();
+    if (dbConnection) reloadCatalog();
+  }, [reloadBoot, reloadSources, reloadCatalog, withSources, dbConnection]);
 
-  return {
+  const sourcesError = sourcesResource.status === 'error'
+    ? sourcesResource.error
+    : (sourcesResource.data?.errors || []).join(' · ') || null;
+
+  return useMemo(() => ({
     // Sempre disponibili
-    project,
-    connections,
-    loading,
-    error,
+    project: bootData?.project || null,
+    connections: bootData?.connections || EMPTY_LIST,
+    connectionsError: bootData?.connectionsError || null,
+    loading: Boolean(projectId) && boot.initialLoading,
+    error: boot.status === 'error' && !boot.hasData ? boot.error : null,
     reload,
 
     // Con withSources=true
-    availableSources,
-    availableFiles,
+    availableSources: sourcesResource.data?.sources || EMPTY_LIST,
+    availableFiles: sourcesResource.data?.files || EMPTY_LIST,
+    sourcesError,
+    sourcesLoading: Boolean(withSources) && sourcesResource.initialLoading,
+    reloadSources,
 
     // Con withCatalog=true
-    catalog,
-    views,
+    catalog: catalogResource.data?.tables || EMPTY_OBJ,
+    views: catalogResource.data?.views || EMPTY_OBJ,
+    catalogLoading: catalogResource.initialLoading,
+    catalogError: catalogResource.status === 'error' ? catalogResource.error : null,
+    reloadCatalog,
     projectConnection,
-    sourceType,
-  };
+    sourceType: bootData?.sourceType || null,
+  }), [bootData, projectId, boot.initialLoading, boot.status, boot.hasData, boot.error, reload,
+    sourcesResource.data, sourcesResource.initialLoading, withSources, sourcesError, reloadSources, catalogResource.data, catalogResource.initialLoading,
+    catalogResource.status, catalogResource.error, reloadCatalog, projectConnection]);
 }
+
+export default useEditorData;

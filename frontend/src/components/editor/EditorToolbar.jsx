@@ -99,6 +99,9 @@ function OverflowMenu({ items }) {
 export default function EditorToolbar({
   mode, title, onBack, leftExtra, statusExtra,
   onSave, saving, onAddStep, executing = false,
+  // Fase 5 T2 (R9.8): la finestra di esecuzione chiusa ("Continua in secondo
+  // piano") si riapre da qui, mentre gira o con un esito non ancora visto.
+  onShowExecution = null, executionUnseen = false,
   menuItems = [], theme, setTheme,
 }) {
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
@@ -164,6 +167,11 @@ export default function EditorToolbar({
         >
           <span aria-hidden="true">{busy ? '⏳ ' : `${term('run').icon} `}</span>{busy ? term('run').busyName : term('run').name}
         </button>
+        {onShowExecution && (
+          <button type="button" className="etb-btn" onClick={() => onShowExecution()}>
+            {executionUnseen ? "Vedi l'esito" : "Mostra l'esecuzione"}
+          </button>
+        )}
         {!isReadOnly && onSave && (
           <button type="button" className="etb-btn" onClick={onSave} disabled={saving} title={term('save').description}>
             {saving ? term('save').busyName : <><span aria-hidden="true">{term('save').icon} </span>{term('save').name}</>}

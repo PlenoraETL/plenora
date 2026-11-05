@@ -51,8 +51,12 @@ const NOT_A_DIALOG = {
 
 // Coppia closeOnEsc/closeOnOverlay con semantica diversa da "occupato".
 const CLOSE_PAIR_EXCEPTIONS = {
-  'components/modals/ExecutionModal.jsx': 'esecuzione asincrona: Esc chiude (la corsa continua), l\'overlay no (tranche T2)',
-  'components/eseguibili/ExecutableDynamicRunForm.jsx': 'polling senza onError (N12, tranche T2): la × deve restare usabile finche\' T2 non chiude N12',
+  // Il blocco vero (Eseguibili, backgroundable=false) e' `busy`; resta solo
+  // l'overlay: con l'esecuzione in secondo piano Esc e × mandano la finestra
+  // dietro (la barra la riapre), un clic accidentale sull'overlay no.
+  // ExecutableDynamicRunForm non ha piu' eccezioni: dopo T2 (N12 chiuso)
+  // disegna BeforeRunModal ed ExecutionModal, nessuna coppia closeOn*.
+  'components/modals/ExecutionModal.jsx': 'esecuzione in secondo piano: Esc e × la mandano dietro, l\'overlay no; il blocco senza secondo piano e\' busy',
 };
 
 afterEach(() => cleanup());

@@ -11,6 +11,8 @@
  * - Nessuna colonna calcolata (non applicabile)
  */
 
+import { useResource } from '../../hooks/useResource';
+import '../common/ListState.css';
 import React, { useState, useEffect, memo } from 'react';
 import { Position } from '@xyflow/react';
 import { getLayerSchema } from '../../api/features';
@@ -59,7 +61,6 @@ const FeatureLayerNode = memo(({ data, id }) => {
   const [showWhereEditor, setShowWhereEditor] = useState(false);
   const [whereClause, setWhereClause] = useState(data.where || '');
   const [tempWhere, setTempWhere] = useState(data.where || '');
-  const [loadingSchema, setLoadingSchema] = useState(false);
 
   // Props dal nodo
   const serviceName = data.service_name || '';
@@ -70,32 +71,26 @@ const FeatureLayerNode = memo(({ data, id }) => {
   const relationships = data.relationships || [];
   const [addingRelation, setAddingRelation] = useState(null);
   
+  // Fase 5 T2 (N10): schema del layer dall'hook comune, solo se il layer
+  // non ha ancora colonne. Errore visibile con «Riprova» (prima solo in
+  // console, e il layer restava con "Nessun campo").
+  const schemaResource = useResource(() => getLayerSchema(data.connection_id, data.layer_url), {
+    key: ['layer-schema', data.connection_id || null, data.layer_url || null],
+    enabled: columns.length === 0 && Boolean(data.layer_url && data.connection_id),
+  });
+  const loadingSchema = schemaResource.initialLoading;
+  const schemaData = schemaResource.data;
   useEffect(() => {
-    if (columns.length === 0 && data.layer_url && data.connection_id) {
-      loadSchema();
-    }
-  }, []);
-
-  const loadSchema = async () => {
-    setLoadingSchema(true);
-    try {
-      const schema = await getLayerSchema(data.connection_id, data.layer_url);
-      if (schema && schema.fields) {
-        const columns = schema.fields.map(f => ({
-          name:    f.name,
-          type:    f.type || 'str',
-          alias:   f.alias || null,
-          visible: true,
-        }));
-        // Schema caricato dal servizio: dato derivato, non dirty (audit R1.8).
-        updateNodeData(id, { columns }, { derived: true });
-      }
-    } catch (err) {
-      console.error('Errore caricamento schema layer:', err);
-    } finally {
-      setLoadingSchema(false);
-    }
-  };
+    if (!schemaData?.fields) return;
+    const columns = schemaData.fields.map(f => ({
+      name:    f.name,
+      type:    f.type || 'str',
+      alias:   f.alias || null,
+      visible: true,
+    }));
+    // Schema caricato dal servizio: dato derivato, non dirty (audit R1.8).
+    updateNodeData(id, { columns }, { derived: true });
+  }, [schemaData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleColumn     = useCanvasStore(s => s.toggleColumn);
   const toggleAllColumns = useCanvasStore(s => s.toggleAllColumns);
@@ -229,7 +224,12 @@ const FeatureLayerNode = memo(({ data, id }) => {
             )}
 
             {/* Lista campi */}
-            {displayColumns.length === 0 ? (
+            {displayColumns.length === 0 && schemaResource.status === 'error' ? (
+              <div className="fl-node__empty" role="alert">
+                Campi del layer non caricati: {schemaResource.error}{' '}
+                <button type="button" className="nodrag list-state__retry" onClick={() => schemaResource.reload()}>Riprova</button>
+              </div>
+            ) : displayColumns.length === 0 ? (
               <div className="fl-node__empty">
                 {searchTerm ? 'Nessun campo trovato' : 'Nessun campo'}
               </div>

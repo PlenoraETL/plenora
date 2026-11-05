@@ -18,13 +18,15 @@ describe('Connection Set runtime contract', () => {
     expect(source).toContain('seleziona la connessione dell’intero progetto Estrai');
   });
 
+  // Fase 5 T2 (BA2): gli Eseguibili usano la finestra unica dell'editor; le
+  // opzioni di connessione sono le etichette pubbliche, si invia la chiave.
   it('renders searchable public labels while submitting only selector keys', () => {
-    const source = read(
-      'src/components/eseguibili/ExecutableDynamicRunForm.jsx',
-    );
-    expect(source).toContain("definition.kind === 'connection'");
-    expect(source).toContain('option.key');
-    expect(source).toContain('option.label');
+    const form = read('src/components/eseguibili/ExecutableDynamicRunForm.jsx');
+    expect(form).toContain('input_kind: d.kind');
+    const window = read('src/components/editor/BeforeRunModal.jsx');
+    expect(window).toContain("definition.input_kind === 'connection'");
+    expect(window).toContain('value: o.key');
+    expect(window).toContain('label: o.label');
   });
 
   it('binds Estrai filter values through parameter-binding edges', () => {

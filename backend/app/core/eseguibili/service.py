@@ -709,19 +709,12 @@ def _configure_runtime_output(
         return
 
 
-def execute_versioned(
-    *,
+def resolve_version_manifest(
     eseguibile: eseguibili_db.EseguibileRow,
-    raw_inputs: Mapping[str, object],
-    user_id: str,
     version_id: Optional[str] = None,
-    output_format: Optional[str] = None,
-    output_name: Optional[str] = None,
-    task_id: Optional[str] = None,
-) -> ExecutableRunResult:
-    """Valida una run v2 e la inoltra all'executor del tipo progetto."""
-
-    from app.core.orchestrator.task_service import task_service
+) -> tuple[eseguibili_db.EseguibileVersionRow, ExecutableManifest]:
+    """Versione (indicata o attiva) e manifest validato: lo stesso per la stima
+    (eseguibili/preflight) e per l'avvio (execute_versioned)."""
 
     version = (
         eseguibili_db.get_eseguibile_version(
@@ -759,6 +752,36 @@ def execute_versioned(
                 ]
             }
         )
+    return version, manifest
+
+
+def discard_temp_file_sources(file_source_ids: Sequence[str]) -> None:
+    """Elimina i file temporanei creati per gli input (best-effort)."""
+
+    for file_source_id in file_source_ids:
+        try:
+            file_source_service.delete_file_source(file_source_id)
+        except Exception:
+            # Pulizia best-effort: un file temporaneo rimasto non deve
+            # nascondere l'esito (avvio fallito o stima riuscita).
+            pass
+
+
+def execute_versioned(
+    *,
+    eseguibile: eseguibili_db.EseguibileRow,
+    raw_inputs: Mapping[str, object],
+    user_id: str,
+    version_id: Optional[str] = None,
+    output_format: Optional[str] = None,
+    output_name: Optional[str] = None,
+    task_id: Optional[str] = None,
+) -> ExecutableRunResult:
+    """Valida una run v2 e la inoltra all'executor del tipo progetto."""
+
+    from app.core.orchestrator.task_service import task_service
+
+    version, manifest = resolve_version_manifest(eseguibile, version_id)
 
     canvas, cleanup_ids, input_summary = resolve_runtime_inputs(
         eseguibile_id=eseguibile.id,
@@ -868,13 +891,7 @@ def execute_versioned(
                 "Task service ha restituito un task_id diverso da quello riservato"
             )
     except Exception as exc:
-        from app.core.files.service import file_source_service
-
-        for file_source_id in cleanup_ids:
-            try:
-                file_source_service.delete_file_source(file_source_id)
-            except Exception:
-                pass
+        discard_temp_file_sources(cleanup_ids)
         if run_id is not None:
             eseguibili_db.complete_eseguibile_run(
                 run_id,

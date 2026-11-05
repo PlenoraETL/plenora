@@ -3,7 +3,7 @@
  * Redesign Plenora: sidebar layout, hex bg, nuovo design system
  * Route: /connections
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +26,9 @@ import { useConfirmModal } from '../hooks/useConfirmModal';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { can, role } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
+import { useResource } from '../hooks/useResource';
+import { useBusy } from '../hooks/useBusy';
+import { ResourceError } from '../components/common/ListState';
 import '../styles/ConnectionManager.css';
 import { requestErrorMessage } from '../utils/errorMessages';
 import { goBack } from '../utils/navigation';
@@ -46,12 +49,12 @@ function ConnectionManager() {
   const canvasRef = useRef(null);
   useHexCanvas(canvasRef);
 
-  const [allConnections,    setAllConnections]    = useState([]);
-  const [loading,           setLoading]           = useState(true);
   const [showModal,         setShowModal]         = useState(false);
   const [editingConnection, setEditingConnection] = useState(null);
   const [editingCategory,   setEditingCategory]   = useState(null);
-  const [testingId,         setTestingId]         = useState(null);
+  // Test per connessione (Fase 5 T2, R9.10): la fine del test di A non
+  // riabilita B mentre il suo test gira.
+  const testing = useBusy();
   const [saving,            setSaving]            = useState(false);
   const [testResults,       setTestResults]       = useState({});
   const [activeTab,         setActiveTab]         = useState('all');
@@ -68,50 +71,27 @@ function ConnectionManager() {
     server_url: '', auth_type: 'public', client_id: '', client_secret: '',
   });
 
-  useEffect(() => { loadConnections(); }, []);
-
-  const loadConnections = async () => {
-    try {
-      setLoading(true);
-      // Pre-fix (P1 frontend-pages): i `.catch(() => ({connections: []}))`
-      // inghiottivano silenziosamente errori network/auth, mostrando una
-      // lista vuota all'utente come se non avesse connessioni configurate.
-      // Post-fix: cattura esplicita con flag errore per ciascun branch,
-      // toast warning visibile all'utente quando uno dei due fallisce.
-      const [dbResult, arcResult] = await Promise.allSettled([
-        listConnections(),
-        listFeatureConnections(),
-      ]);
-
-      const dbData = dbResult.status === 'fulfilled'
-        ? dbResult.value
-        : { connections: [] };
-      const arcData = arcResult.status === 'fulfilled'
-        ? arcResult.value
-        : { connections: [] };
-
-      const dbConns  = (dbData.connections || []).map(c => ({ ...c, _category: 'database', _typeInfo: ALL_TYPES.find(t => t.value === c.type) || ALL_TYPES[0] }));
-      const arcConns = (arcData.connections || arcData || []).map(c => ({ ...c, type: 'arcgis', _category: 'arcgis', _typeInfo: ALL_TYPES.find(t => t.value === 'arcgis') }));
-      setAllConnections([...dbConns, ...arcConns]);
-
-      // Segnaliamo all'utente quale partial-failure e' avvenuta
-      if (dbResult.status === 'rejected') {
-        const msg = requestErrorMessage(dbResult.reason, 'Errore caricamento connessioni DB');
-        toast.warning(`Connessioni database non caricate: ${msg}`);
-      }
-      if (arcResult.status === 'rejected') {
-        const msg = requestErrorMessage(arcResult.reason, 'Errore caricamento connessioni ArcGIS');
-        toast.warning(`Connessioni ArcGIS non caricate: ${msg}`);
-      }
-    } catch (err) {
-      // Catch globale per errori NON gestiti da allSettled (es. typo nel
-      // codice sopra). Toast esplicito invece di silent console.error.
-      console.error('[ConnectionManager] loadConnections fallito:', err);
-      toastApiError(toast, err, 'Errore caricamento connessioni');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fase 5 T2 (R4.7, R4.8): elenco dall'hook comune. Spinner a pagina
+  // intera solo al primo caricamento; una delle due liste non caricata e'
+  // un avviso con «Riprova» (non una lista vuota); entrambe = errore.
+  const resource = useResource(async () => {
+    const [dbResult, arcResult] = await Promise.allSettled([
+      listConnections(),
+      listFeatureConnections(),
+    ]);
+    if (dbResult.status === 'rejected' && arcResult.status === 'rejected') throw dbResult.reason;
+    const dbData = dbResult.status === 'fulfilled' ? dbResult.value : { connections: [] };
+    const arcData = arcResult.status === 'fulfilled' ? arcResult.value : { connections: [] };
+    const dbConns  = (dbData.connections || []).map(c => ({ ...c, _category: 'database', _typeInfo: ALL_TYPES.find(t => t.value === c.type) || ALL_TYPES[0] }));
+    const arcConns = (arcData.connections || arcData || []).map(c => ({ ...c, type: 'arcgis', _category: 'arcgis', _typeInfo: ALL_TYPES.find(t => t.value === 'arcgis') }));
+    const failures = [];
+    if (dbResult.status === 'rejected') failures.push(`Connessioni database non caricate: ${requestErrorMessage(dbResult.reason)}`);
+    if (arcResult.status === 'rejected') failures.push(`Connessioni ArcGIS non caricate: ${requestErrorMessage(arcResult.reason)}`);
+    return { connections: [...dbConns, ...arcConns], failures };
+  }, { key: 'connections' });
+  const allConnections = resource.data?.connections || [];
+  const loadFailures = resource.data?.failures || [];
+  const loadConnections = () => resource.reload();
 
   const handleOpenModal = (conn = null) => {
     if (conn) {
@@ -186,13 +166,12 @@ function ConnectionManager() {
   };
 
   const handleTest = async (conn) => {
-    setTestingId(conn.id);
     try {
-      const result = conn._category === 'arcgis' ? await testFeatureConnection(conn.id) : await testConnection(conn.id);
-      setTestResults(prev => ({ ...prev, [conn.id]: result }));
-    } catch {
-      setTestResults(prev => ({ ...prev, [conn.id]: { success: false, message: 'Errore durante il test' } }));
-    } finally { setTestingId(null); }
+      const r = await testing.run(conn.id, () => (conn._category === 'arcgis' ? testFeatureConnection(conn.id) : testConnection(conn.id)));
+      if (!r.skipped) setTestResults(prev => ({ ...prev, [conn.id]: r.value }));
+    } catch (err) {
+      setTestResults(prev => ({ ...prev, [conn.id]: { success: false, message: requestErrorMessage(err) } }));
+    }
   };
 
   const currentTypeInfo = ALL_TYPES.find(t => t.value === formData.type);
@@ -203,7 +182,7 @@ function ConnectionManager() {
   const visibleDb  = ['arcgis', 'sets'].includes(activeTab) ? [] : dbConns;
   const visibleArc = ['database', 'sets'].includes(activeTab) ? [] : arcConns;
 
-  if (loading) return (
+  if (resource.initialLoading) return (
     <div className="cm cm--loading">
       <div className="cm__loading-inner"><div className="cm__loading-icon">⬡</div>Caricamento...</div>
     </div>
@@ -241,7 +220,13 @@ function ConnectionManager() {
             ))}
           </div>
 
-          {allConnections.length === 0 && activeTab !== 'sets' ? (
+          {resource.status === 'error' && (
+            <ResourceError title="Connessioni non caricate" message={resource.error} onRetry={resource.reload} />
+          )}
+          {loadFailures.map(message => (
+            <ResourceError key={message} compact title="Elenco incompleto" message={message} onRetry={resource.reload} />
+          ))}
+          {resource.status === 'error' && !resource.hasData ? null : allConnections.length === 0 && activeTab !== 'sets' ? (
             <EmptyState
               onNew={() => handleOpenModal()}
               canCreate={canCreateConnection}
@@ -254,7 +239,7 @@ function ConnectionManager() {
                   subtitle="PostgreSQL, MS SQL Server, Oracle, MySQL, SQLite"
                   connections={visibleDb}
                   testResults={testResults}
-                  testingId={testingId}
+                  isTesting={testing.isBusy}
                   onTest={handleTest}
                   onEdit={handleOpenModal}
                   onDelete={handleDelete}
@@ -270,7 +255,7 @@ function ConnectionManager() {
                   subtitle="Feature Server e Map Service"
                   connections={visibleArc}
                   testResults={testResults}
-                  testingId={testingId}
+                  isTesting={testing.isBusy}
                   onTest={handleTest}
                   onEdit={handleOpenModal}
                   onDelete={handleDelete}
@@ -489,7 +474,7 @@ function EmptyState({ onNew, canCreate = true }) {
     </div>
   );
 }
-function ConnTable({ title, subtitle, connections, testResults, testingId, onTest, onEdit, onDelete, onShare, canEditOf, canShare, arcgis }) {
+function ConnTable({ title, subtitle, connections, testResults, isTesting: isTestingOf, onTest, onEdit, onDelete, onShare, canEditOf, canShare, arcgis }) {
   return (
     <div className="cm__section">
       <div className="cm__section-header">
@@ -512,7 +497,7 @@ function ConnTable({ title, subtitle, connections, testResults, testingId, onTes
             {connections.map(conn => {
               const info       = conn._typeInfo;
               const testResult = testResults[conn.id];
-              const isTesting  = testingId === conn.id;
+              const isTesting  = isTestingOf(conn.id);
               const canEdit    = canEditOf(conn);
               return (
                 <tr key={conn.id} className="cm__tr">

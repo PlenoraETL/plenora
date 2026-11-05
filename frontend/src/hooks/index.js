@@ -27,7 +27,6 @@ export { useMultiModal }                            from './useMultiModal';
 export { useConfirmModal }                          from './useConfirmModal';
 export { useToast }                                 from './useToast';
 export { useEditorData }                            from './useEditorData';
-export { useTaskPolling }                           from './useTaskPolling';
 export { useUnsavedChangesGuard }                   from './useUnsavedChangesGuard';
 export { useMountedRef }                            from './useMountedRef';
 export { useValidationHighlights }                  from './useValidationHighlights';

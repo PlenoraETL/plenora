@@ -162,6 +162,13 @@
   word-break: break-word;
 }
 
+/* Fase 5 T2: la finestra si chiude durante l'esecuzione (si riapre dalla barra). */
+.execution-modal__hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--plen-text-sub, #7D8BA8);
+}
+
 /* ── Stats base ─────────────────────────────────────────────────── */
 .execution-modal__stats {
   display: flex;

@@ -6,6 +6,7 @@
  * quando si aggiunge un nuovo nodo ApiEnrich senza creare un nuovo connettore.
  */
 import React, { useState, useEffect, useMemo } from 'react';
+import { useResource } from '../../hooks/useResource';
 import { listApiConnections } from '../../api/apiConnections';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { humanizeError } from '../../utils/errorMessages';
@@ -26,33 +27,18 @@ function ConnectionSelectorModal({
   emptyHint,
   createLink
 }) {
-  const [connections, setConnections] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Fase 5 T2: elenco dall'hook comune (id di richiesta per categoria).
+  const resource = useResource(async () => (await listApiConnections({ connection_type: category })).api_connections || [], {
+    key: ['api-connections', category || null],
+    enabled: Boolean(isOpen),
+    errorMessage: (err) => humanizeError(err).message,
+  });
+  const connections = resource.data || [];
+  const loading = resource.initialLoading;
+  const error = resource.error;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState(null);
 
-  // Carica connessioni dal backend
-  useEffect(() => {
-    if (!isOpen) return;
-    
-    const loadConnections = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const data = await listApiConnections({ connection_type: category });
-        setConnections(data.api_connections || []);
-      } catch (err) {
-        console.error(`Errore caricamento connessioni ${category}:`, err);
-        setError(humanizeError(err).message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadConnections();
-  }, [isOpen, category]);
 
   // Reset quando si chiude
   useEffect(() => {

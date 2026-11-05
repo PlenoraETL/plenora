@@ -4075,6 +4075,30 @@
         "title": "ExecutableManifest",
         "type": "object"
       },
+      "ExecutablePreflightRequest": {
+        "additionalProperties": false,
+        "description": "Stima prima di avviare: gli stessi input dell'avvio, senza eseguire.",
+        "properties": {
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "title": "ExecutablePreflightRequest",
+        "type": "object"
+      },
       "ExecutableRunRequest": {
         "additionalProperties": false,
         "description": "Payload v2: valori indicizzati dalla chiave stabile del manifest.",
@@ -4105,6 +4129,17 @@
               }
             ],
             "title": "Output Name"
+          },
+          "preparation_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preparation Fingerprint"
           },
           "version_id": {
             "anyOf": [
@@ -13642,6 +13677,62 @@
           }
         ],
         "summary": "Execute Eseguibile",
+        "tags": [
+          "eseguibili"
+        ]
+      }
+    },
+    "/api/eseguibili/{eseguibile_id}/preflight": {
+      "post": {
+        "description": "Stima prima di avviare (Fase 5 T2, BA2): gli stessi input dell'avvio,\nnessuna esecuzione, nessun upload consumato. Risponde come il preflight\ndell'editor: { valid, nodes, preparation_fingerprint, checks }.",
+        "operationId": "preflight_eseguibile_run_api_eseguibili__eseguibile_id__preflight_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eseguibile_id",
+            "required": true,
+            "schema": {
+              "title": "Eseguibile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutablePreflightRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Preflight Eseguibile Run",
         "tags": [
           "eseguibili"
         ]

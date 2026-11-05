@@ -26,6 +26,7 @@ const ALLOWED_RAW = [
 ];
 
 const ALLOWED_MUTE = [
+  { file: 'pages/EstraiEditor.jsx', match: "Il layer trascinato non è leggibile", motivo: "JSON.parse dei dati del trascinamento (fase 5 T2, N10): il testo fisso e' il motivo esatto, non un errore del server" },
   { file: 'components/arricchisci/OpenAPIImportModal.jsx', match: "setError('File non valido", motivo: "errore di lettura del file scelto dall'utente (JSON.parse/schema): il testo fisso e' il motivo esatto" },
 ];
 

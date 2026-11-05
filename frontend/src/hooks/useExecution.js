@@ -1,10 +1,17 @@
 /**
- * useExecution.js — Hook per esecuzione asincrona pipeline
+ * useExecution.js — Esecuzione dell'editor (Estrai, Manipola, Arricchisci).
  *
- * Gestisce l'intero ciclo di vita di una esecuzione:
- * avvio task asincrono → polling stato → completamento/errore → download output.
+ * Avvio -> polling -> esito -> download, sopra il ciclo unico di
+ * hooks/useTask (Fase 5 T2): id di richiesta, 404/5xx/revoked/
+ * permission_revoked con un esito vero (mai "completata" falsa), Annulla per
+ * tutti i tipi di progetto (annullamento cooperativo del backend), stop al
+ * cambio di progetto e allo smontaggio. I task di Carica che partono dopo
+ * l'esecuzione (anche piu' d'uno) usano lo stesso poller (utils/taskPoller).
  *
- * Ritorna: { executing, taskId, progress, result, error, execute, cancel }
+ * La finestra di esecuzione si chiude sempre ("Continua in secondo piano")
+ * e si riapre con openModal() (barra dell'editor: executionToolbarProps).
+ * Le props della finestra sono le stesse nei tre editor:
+ * executionModalProps(execution).
  *
  * Usato da: EstraiEditor, ManipolaEditor, ArricchisciEditor (onExecute,
  * chiamato dal percorso unico editor/PipelineRunner dopo la finestra
@@ -12,12 +19,46 @@
  * Un rifiuto 409 `preparation_changed` (Arricchisci) torna a chi ha avviato.
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { executeProjectQuery, getTaskStatus, cancelTask as cancelTaskApi, downloadTaskOutput, downloadProjectOutput } from '../api';
-import { useTaskPolling } from './useTaskPolling';
+import { executeProjectQuery, downloadTaskOutput, downloadProjectOutput } from '../api';
+import { useTask } from './useTask';
+import { useDownload } from './useDownload';
 import useCanvasStore from '../store/useCanvasStore';
-import { taskFailureMessage } from '../utils/taskFailureMessage';
+import { pollTask } from '../utils/taskPoller';
 import { isPreparationChanged } from '../utils/beforeRun';
-import { requestErrorMessage } from '../utils/errorMessages';
+
+/** Esito della finestra a partire dall'esito del task. */
+export function executionResult(outcome, taskId) {
+  if (!outcome) return null;
+  if (outcome.phase === 'success') return { success: true, ...(outcome.result || {}), task_id: taskId || undefined };
+  if (outcome.phase === 'permission_revoked') {
+    return { success: false, permissionRevoked: true, status: 'permission_revoked', message: outcome.error };
+  }
+  return { success: false, message: outcome.error, code: outcome.code || undefined };
+}
+
+// Stato mostrato dalla finestra (colori, "annullata").
+const statusOfPhase = (phase, raw) => {
+  if (phase === 'running') return raw || 'pending';
+  if (phase === 'starting') return 'pending';
+  if (phase === 'success') return 'success';
+  if (phase === 'revoked') return 'revoked';
+  if (phase === 'idle') return null;
+  return 'failure';
+};
+
+const caricaRow = (task, outcome) => {
+  const failed = outcome.phase === 'failure' || outcome.phase === 'lost' || outcome.phase === 'permission_revoked';
+  return {
+    ...task,
+    status: failed ? 'failure' : outcome.phase === 'running' ? (outcome.status || 'pending') : outcome.phase,
+    message: outcome.error || outcome.result?.message || outcome.message || '',
+    rows_written: outcome.result?.rows_written || 0,
+    // Codice strutturato (es. carica_arcgis_write_failed): la finestra lo
+    // traduce in un messaggio azionabile.
+    error: failed ? (outcome.code || null) : null,
+    error_message: failed ? outcome.error : null,
+  };
+};
 
 export function useExecution(projectId, options = {}) {
   const {
@@ -30,26 +71,71 @@ export function useExecution(projectId, options = {}) {
     tracksRunState = false,
   } = options;
 
-  // Stati base pipeline
-  const [showModal, setShowModal]           = useState(false);
-  const [result, setResult]                 = useState(null);
-  const [isExecuting, setIsExecuting]       = useState(false);
-  const [taskId, setTaskId]                 = useState(null);
-  const [progress, setProgress]             = useState(0);
-  const [progressMessage, setProgressMessage] = useState('');
-  const [taskStatus, setTaskStatus]         = useState(null);
+  const task = useTask({ scope: projectId, interval: pollInterval });
+  const { state, run: runTask, reset: resetTask, cancel: cancelRunningTask } = task;
+  const isExecuting = task.isActive;
 
-  // Stati CARICA tasks
-  const [caricaTasks, setCaricaTasks]       = useState([]);
-  const [caricaPolling, setCaricaPolling]   = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [result, setResult] = useState(null);
+  // Esito arrivato a finestra chiusa: la barra offre "Vedi esito".
+  const [unseenResult, setUnseenResult] = useState(false);
+  const showModalRef = useRef(false);
+  showModalRef.current = showModal;
+  const dl = useDownload();
+  const { run: runDownload, clearError: clearDownloadError } = dl;
+
+  // Task di Carica partiti dopo l'esecuzione.
+  const [caricaTasks, setCaricaTasks] = useState([]);
+  const caricaStops = useRef(new Map());
+  const [caricaPolling, setCaricaPolling] = useState(false);
+
+  const stopAllCaricaPolling = useCallback(() => {
+    caricaStops.current.forEach(stop => stop());
+    caricaStops.current.clear();
+    setCaricaPolling(false);
+  }, []);
+  useEffect(() => () => {
+    caricaStops.current.forEach(stop => stop());
+    caricaStops.current.clear();
+  }, []);
+
+  const startCaricaTasksPolling = useCallback((pipelineResult) => {
+    const tasks = pipelineResult?.carica?.tasks;
+    if (!tasks || tasks.length === 0) return;
+    stopAllCaricaPolling();
+    setCaricaTasks(tasks.map(t => ({
+      task_id: t.task_id, node_id: t.node_id, status: 'pending', message: 'In coda...', rows_written: 0, error: null,
+    })));
+    setCaricaPolling(true);
+    tasks.forEach(({ task_id }) => {
+      const update = (o) => setCaricaTasks(prev => prev.map(t => (t.task_id === task_id ? caricaRow(t, o) : t)));
+      const stop = pollTask(task_id, {
+        interval: pollInterval,
+        outcome: { businessStatus: true },
+        onUpdate: update,
+        onDone: (o) => {
+          update(o);
+          caricaStops.current.delete(task_id);
+          if (caricaStops.current.size === 0) setCaricaPolling(false);
+        },
+      });
+      caricaStops.current.set(task_id, stop);
+    });
+  }, [pollInterval, stopAllCaricaPolling]);
+
+  // Cambio di progetto: niente di quello di prima resta qui.
+  const projectRef = useRef(projectId);
+  useEffect(() => {
+    if (projectRef.current === projectId) return;
+    projectRef.current = projectId;
+    stopAllCaricaPolling();
+    setCaricaTasks([]);
+    setShowModal(false);
+    setResult(null);
+    setUnseenResult(false);
+  }, [projectId, stopAllCaricaPolling]);
 
   const executingRef = useRef(false);
-  // Fine (o azzeramento) dell'esecuzione: il blocco si toglie SUBITO, anche
-  // se React accorpa "inizia" e "finisce" in un solo render.
-  const stopExecuting = useCallback(() => {
-    executingRef.current = false;
-    setIsExecuting(false);
-  }, []);
   useEffect(() => {
     executingRef.current = isExecuting;
     if (!tracksRunState) return;
@@ -61,279 +147,124 @@ export function useExecution(projectId, options = {}) {
     if (tracksRunState && useCanvasStore.getState().runState === 'running') useCanvasStore.getState().setRunState?.('idle');
   }, [tracksRunState]);
 
-  const caricaRefs    = useRef({});
-  const caricaGenerationsRef = useRef({});
-
-  // Polling base dal hook condiviso
-  const { mountedRef, stopPolling, startPolling } = useTaskPolling({ interval: pollInterval });
-
-  // Cleanup carica refs su unmount
-  useEffect(() => () => {
-    Object.values(caricaRefs.current).forEach(id => clearTimeout(id));
-    caricaRefs.current = {};
-    caricaGenerationsRef.current = {};
-  }, []);
-
-  const stopAllCaricaPolling = useCallback(() => {
-    Object.values(caricaRefs.current).forEach(id => clearTimeout(id));
-    caricaRefs.current = {};
-    caricaGenerationsRef.current = {};
-    setCaricaPolling(false);
-  }, []);
-const startCaricaPolling = useCallback((caricaTask) => {
-    const { task_id } = caricaTask;
-    const generation = (caricaGenerationsRef.current[task_id] || 0) + 1;
-    caricaGenerationsRef.current[task_id] = generation;
-
-    const scheduleNext = () => {
-      if (!mountedRef.current || caricaGenerationsRef.current[task_id] !== generation) return;
-      caricaRefs.current[task_id] = setTimeout(poll, pollInterval);
-    };
-
-    const poll = async () => {
-      if (!mountedRef.current || caricaGenerationsRef.current[task_id] !== generation) return;
-      try {
-        const data = await getTaskStatus(task_id);
-        if (!mountedRef.current || caricaGenerationsRef.current[task_id] !== generation) return;
-        if (!data) {
-          scheduleNext();
-          return;
-        }
-
-        const isDone = ['success', 'failure', 'revoked'].includes(data.status);
-
-        // data.status = stato task (success/failure/revoked)
-        // data.result.status = stato business logic (validation_error, write_error, ecc.)
-        const businessStatus = data.result?.status;
-        const isBusinessError = businessStatus && businessStatus !== 'success' && businessStatus !== 'completed' && businessStatus !== 'partial_success';
-        const effectiveStatus = data.status === 'failure' ? 'failure'
-          : data.status === 'revoked' ? 'revoked'
-          : isBusinessError ? 'failure'
-          : data.status;
-        const effectiveError = (data.status === 'failure' || isBusinessError)
-          ? taskFailureMessage(data, businessStatus || 'Errore')
-          : null;
-        // Codice strutturato (es. carica_arcgis_write_failed) propagato dal
-        // backend: lo conserviamo così il modal lo traduce in un messaggio
-        // umano azionabile (Epic A). Prima veniva scartato (error: null).
-        const effectiveCode = data.result?.error
-          || (data.status === 'failure' ? data.error : null);
-
-        setCaricaTasks(prev => prev.map(t =>
-          t.task_id === task_id
-            ? {
-                ...t,
-                status: effectiveStatus,
-                message: effectiveError || data.result?.message || data.message || '',
-                rows_written: data.result?.rows_written || 0,
-                error: effectiveStatus === 'failure' ? effectiveCode : null,
-                error_message: effectiveError,
-              }
-            : t
-        ));
-
-        if (isDone) {
-          clearTimeout(caricaRefs.current[task_id]);
-          delete caricaRefs.current[task_id];
-          delete caricaGenerationsRef.current[task_id];
-          if (Object.keys(caricaRefs.current).length === 0) {
-            setCaricaPolling(false);
-          }
-          return;
-        }
-      } catch (e) {
-        if (!mountedRef.current || caricaGenerationsRef.current[task_id] !== generation) return;
-        // 404 = task non ancora registrato, aspetta il prossimo poll
-        if (e.response?.status !== 404) {
-          console.error('[useExecution] Errore polling CARICA:', e);
-        }
-      }
-      scheduleNext();
-    };
-
-    // Single-flight per task_id: se startCaricaPolling viene richiamato
-    // sullo stesso task (retry, ri-build del result), non lasciare due
-    // timeout orfani — clear del precedente prima di reassign.
-    // Cfr. RESOURCE_LEAKS.md §3.
-    if (caricaRefs.current[task_id]) {
-      clearTimeout(caricaRefs.current[task_id]);
+  const settle = useCallback((outcome, taskId) => {
+    executingRef.current = false;
+    const r = executionResult(outcome, taskId);
+    setResult(r);
+    if (!showModalRef.current) setUnseenResult(true);
+    if (outcome.phase === 'success') {
+      // Ultimo esito nel canvas store: i nodi (es. ResultNode IMDF) lo leggono.
+      try { useCanvasStore.getState().setLastTaskResult?.(r); } catch (_) { /* store assente nei test */ }
+      startCaricaTasksPolling(outcome.result);
     }
-    // mountedRef guard PRIMA di avviare il loop. Pre-fix (P1 frontend-hooks):
-    // startCaricaPolling poteva essere chiamato da una callback async di
-    // un createTask che risolveva DOPO che il componente si era smontato
-    // registrava un poll su componente unmounted. Il cleanup
-    // useEffect alla riga 50-53 lo cancellava, ma il primo `poll()` sync
-    // sotto poteva girare prima del cleanup → setState post-unmount.
-    if (!mountedRef.current) return;
-    poll();
-  }, [pollInterval, mountedRef]);
-const startCaricaTasksPolling = useCallback((pipelineResult) => {
-    const tasks = pipelineResult?.carica?.tasks;
-    if (!tasks || tasks.length === 0) return;
+  }, [startCaricaTasksPolling]);
 
-    const initialTasks = tasks.map(t => ({
-      task_id: t.task_id,
-      node_id: t.node_id,
-      status: 'pending',
-      message: 'In coda...',
-      rows_written: 0,
-      error: null,
-    }));
-
-    setCaricaTasks(initialTasks);
-    setCaricaPolling(true);
-    initialTasks.forEach(t => startCaricaPolling(t));
-  }, [startCaricaPolling]);
-const startMainPolling = useCallback((taskIdToWatch) => {
-    startPolling(taskIdToWatch, (data) => {
-      setTaskStatus(data.status);
-      setProgress(data.progress || 0);
-      setProgressMessage(data.message || '');
-
-      if (data.status === 'success') {
-        stopExecuting();
-        const r = { success: true, ...data.result, task_id: taskIdToWatch };
-        setResult(r);
-        // Salva l'ultimo task result completo nel canvas store, cosi' i nodi
-        // (es. ResultNode in modalita' IMDF) possono leggerlo via selector
-        // reattivo per popolare modali/badge post-esecuzione.
-        try { useCanvasStore.getState().setLastTaskResult(r); } catch (_) {}
-        startCaricaTasksPolling(data.result);
-        return true;
-      } else if (data.status === 'failure') {
-        stopExecuting();
-        // `code: data.error` → se il backend ha propagato un codice strutturato
-        // (es. memory_limit_exceeded) il modal lo traduce; altrimenti resta il
-        // messaggio originale (es. errore SQL, già informativo). Epic A.
-        setResult({ success: false, message: taskFailureMessage(data), code: data.error });
-        return true;
-      } else if (data.status === 'revoked') {
-        stopExecuting();
-        setResult({ success: false, message: "Esecuzione annullata dall'utente" });
-        return true;
-      }
-      return false;
-    });
-  }, [startPolling, startCaricaTasksPolling]);
-const handleExecute = useCallback(async (executeOptions = {}) => {
+  const handleExecute = useCallback(async (executeOptions = {}) => {
     // Un'esecuzione alla volta (es. pannello cliccato a finestra chiusa).
     if (executingRef.current) return;
     executingRef.current = true;
     setShowModal(true);
-    setIsExecuting(true);
+    setUnseenResult(false);
     setResult(null);
-    setTaskId(null);
-    setProgress(0);
-    setProgressMessage('Avvio...');
-    setTaskStatus('pending');
+    clearDownloadError();
     setCaricaTasks([]);
-    setCaricaPolling(false);
     stopAllCaricaPolling();
 
-    try {
+    let preparationChanged = null;
+    const outcome = await runTask(async () => {
       if (onBeforeExecute) await onBeforeExecute();
-
       const executeFn = executeFunction || executeProjectQuery;
-      const response = await executeFn(projectId, executeOptions);
-      if (!mountedRef.current) return;
-
-      if (response.async && response.task_id) {
-        setTaskId(response.task_id);
-        setProgressMessage(response.message || 'Esecuzione avviata...');
-        startMainPolling(response.task_id);
-      } else {
-        stopExecuting();
-        setProgress(100);
-        setTaskStatus('success');
-        setResult(response);
-        startCaricaTasksPolling(response);
-      }
-    } catch (error) {
-      console.error('[useExecution] Errore:', error);
-      // Guard: se il componente ha smontato mentre executeFn/onBeforeExecute
-      // era in flight e poi la promise rejecta, evita 4 setState post-unmount
-      // (React warning + leak di reference allo state). Simmetrico al check
-      // nel success path (riga sopra).
-      if (!mountedRef.current) return;
-      stopExecuting();
-      if (isPreparationChanged(error)) {
+      return executeFn(projectId, executeOptions);
+    }, {
+      onDone: settle,
+      onLaunchError: (err) => {
+        if (!isPreparationChanged(err)) return false;
         // Arricchisci: la preparazione e' cambiata dalla stima confermata.
-        // Niente esito qui: la finestra «Prima di avviare» rifa' la stima e
-        // mostra il motivo (editor/PipelineRunner).
-        setShowModal(false);
-        setProgress(0);
-        setProgressMessage('');
-        setTaskStatus(null);
-        throw error;
-      }
-      setProgress(0);
-      setTaskStatus('failure');
-      setResult({ success: false, message: requestErrorMessage(error) });
+        // Niente esito qui: la finestra «Prima di avviare» rifa' la stima.
+        preparationChanged = err;
+        return true;
+      },
+    });
+    if (outcome.superseded) return;
+    if (outcome.error && !outcome.handled) console.warn('[useExecution] Avvio non riuscito:', outcome.error);
+    if (outcome.error || outcome.outcome) executingRef.current = false;
+    if (preparationChanged) {
+      setShowModal(false);
+      throw preparationChanged;
     }
-  }, [projectId, onBeforeExecute, executeFunction, startMainPolling, startCaricaTasksPolling, stopAllCaricaPolling, mountedRef]);
+  }, [projectId, onBeforeExecute, executeFunction, runTask, settle, stopAllCaricaPolling, clearDownloadError]);
 
-  const cancelTask = useCallback(async () => {
-    if (!taskId) return;
-    try {
-      await cancelTaskApi(taskId);
-      if (!mountedRef.current) return;
-      setProgressMessage('Annullamento richiesto...');
-    } catch (error) {
-      console.error('[useExecution] Errore annullamento:', error);
-    }
-  }, [taskId, mountedRef]);
-
-  const closeModal = useCallback((resetResult = false) => {
-    setShowModal(false);
-    if (resetResult) {
-      setResult(null); setProgress(0); setProgressMessage('');
-      setTaskId(null); setTaskStatus(null);
-      setCaricaTasks([]); setCaricaPolling(false);
-    }
+  const closeModal = useCallback(() => setShowModal(false), []);
+  const openModal = useCallback(() => {
+    setShowModal(true);
+    setUnseenResult(false);
   }, []);
 
   const reset = useCallback(() => {
-    stopPolling(); stopAllCaricaPolling();
-    setShowModal(false); setResult(null); stopExecuting();
-    setTaskId(null); setProgress(0); setProgressMessage('');
-    setTaskStatus(null); setCaricaTasks([]); setCaricaPolling(false);
-  }, [stopPolling, stopAllCaricaPolling]);
+    resetTask();
+    stopAllCaricaPolling();
+    executingRef.current = false;
+    setShowModal(false); setResult(null); setUnseenResult(false);
+    setCaricaTasks([]); clearDownloadError();
+  }, [resetTask, stopAllCaricaPolling, clearDownloadError]);
 
-  const downloadTaskResult = useCallback(async () => {
-    // P1 (2026-05-26): `output_path` non e' piu' emesso dal pipeline
-    // (sostituito da `output_file` basename). Rimosso il fallback
-    // dead-code (era sempre undefined). `output_file` resta il
-    // canale canonico; il branch result_id sotto copre i casi in cui
-    // il BE non emette output_file (es. arricchimento DB output).
+  // Download con errore mostrato nella finestra (410 scaduto, 404, rete).
+  const downloadTaskResult = useCallback(() => runDownload('result', async () => {
+    // `output_file` e' il canale canonico; senza, `result_id` + formato.
     const outputPath = result?.output_file || null;
-    let filename   = outputPath ? outputPath.split(/[/\\]/).pop() : null;
-
-    // P1 (2026-05-26): fallback su `result_id` + `output_format` se
-    // output_file/output_path non e' presente. Post RAM refactor il
-    // BE propaga `result_id` (canale canonico di download) ma in
-    // alcuni branch (es. arricchimento DB output) output_file resta
-    // null. Pre-fix il filename era null e `downloadBlob` cadeva sul
-    // fallback `task_${taskId}_output` perdendo l'estensione reale.
+    let filename = outputPath ? outputPath.split(/[/\\]/).pop() : null;
     if (!filename && result?.result_id) {
-      const ext = result?.output_format
-        ? `.${String(result.output_format).replace(/^\.+/, '')}`
-        : '';
+      const ext = result?.output_format ? `.${String(result.output_format).replace(/^\.+/, '')}` : '';
       filename = `result_${result.result_id}${ext}`;
     }
+    if (state.taskId) await downloadTaskOutput(state.taskId, filename);
+    else await downloadProjectOutput(projectId, filename);
+  }), [runDownload, result, state.taskId, projectId]);
 
-    if (taskId) {
-      await downloadTaskOutput(taskId, filename);
-    } else {
-      await downloadProjectOutput(projectId, filename);
-    }
-  }, [taskId, projectId, result]);
+  const isStillWorking = isExecuting || caricaPolling;
 
   return {
     showModal, result, isExecuting,
-    taskId, progress, progressMessage, taskStatus,
-    caricaTasks, caricaPolling,
-    handleExecute, closeModal, reset, cancelTask, downloadTaskResult,
+    taskId: state.taskId, progress: state.progress, progressMessage: state.message,
+    taskStatus: statusOfPhase(state.phase, state.status),
+    cancelling: state.cancelling, cancelError: state.cancelError,
+    canCancel: isExecuting && Boolean(state.taskId),
+    caricaTasks, caricaPolling, isStillWorking,
+    unseenResult,
+    downloading: dl.busy, downloadError: dl.error,
+    handleExecute, closeModal, openModal, reset, cancelTask: cancelRunningTask, downloadTaskResult,
     setShowModal, setResult,
+  };
+}
+
+/** Le stesse props della finestra di esecuzione nei tre editor. */
+export function executionModalProps(execution) {
+  return {
+    isOpen: execution.showModal,
+    onClose: execution.closeModal,
+    isExecuting: execution.isExecuting,
+    result: execution.result,
+    onDownload: execution.downloadTaskResult,
+    downloading: execution.downloading,
+    downloadError: execution.downloadError,
+    progress: execution.progress,
+    progressMessage: execution.progressMessage,
+    taskStatus: execution.taskStatus,
+    onCancel: execution.canCancel ? execution.cancelTask : null,
+    cancelling: execution.cancelling,
+    cancelError: execution.cancelError,
+    caricaTasks: execution.caricaTasks,
+    caricaPolling: execution.caricaPolling,
+  };
+}
+
+/** Barra dell'editor: riapre la finestra mentre gira o con un esito non visto. */
+export function executionToolbarProps(execution) {
+  const reopen = !execution.showModal && (execution.isStillWorking || execution.unseenResult);
+  return {
+    executing: execution.isExecuting,
+    onShowExecution: reopen ? execution.openModal : null,
+    executionUnseen: !execution.isStillWorking && execution.unseenResult,
   };
 }
 

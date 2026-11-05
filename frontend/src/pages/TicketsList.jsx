@@ -10,15 +10,19 @@
  *
  * Filtri: kind, status (multi), severity (multi), "solo i miei".
  * Ordine: updated_at DESC (backend).
+ *
+ * Fase 5 T2 (R4.5, R4.8): lista da useResource con i filtri nella chiave
+ * (vince l'ultima richiesta), errore come errore con «Riprova» (ListState).
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import AppSidebar from '../components/AppSidebar';
 import TicketCreateModal from '../components/TicketCreateModal';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
-import { toastApiError } from '../utils/toastApiError';
+import { useResource } from '../hooks/useResource';
+import ListState from '../components/common/ListState';
 import { can } from '../utils/permissions';
 import { getTicketsMeta, listTickets } from '../api/tickets';
 import '../styles/TicketsList.css';
@@ -70,9 +74,8 @@ export default function TicketsList() {
   const { user } = useAuth();
   const toast = useToast();
 
-  const [meta, setMeta] = useState(null);
-  const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const metaResource = useResource(getTicketsMeta, { key: 'tickets-meta' });
+  const meta = metaResource.data || null;
   const [showCreate, setShowCreate] = useState(false);
 
   // Filtri
@@ -83,28 +86,15 @@ export default function TicketsList() {
 
   const isAdmin = can.manageTickets(user);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await listTickets({
-        kind: kindFilter || undefined,
-        status: statusFilter.length ? statusFilter : undefined,
-        severity: severityFilter.length ? severityFilter : undefined,
-        mine: mineOnly || undefined,
-      });
-      setTickets(result);
-    } catch (e) {
-      toastApiError(toast, e, 'Errore caricamento ticket');
-    } finally {
-      setLoading(false);
-    }
-  }, [kindFilter, statusFilter, severityFilter, mineOnly, toast]);
-
-  useEffect(() => {
-    getTicketsMeta().then(setMeta).catch(() => {});
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+  const filters = {
+    kind: kindFilter || undefined,
+    status: statusFilter.length ? statusFilter : undefined,
+    severity: severityFilter.length ? severityFilter : undefined,
+    mine: mineOnly || undefined,
+  };
+  const resource = useResource(() => listTickets(filters), { key: filters, keepPreviousData: true });
+  const tickets = resource.data || [];
+  const loading = resource.loading;
 
   const toggleArr = (setter, arr, val) => {
     setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
@@ -185,9 +175,11 @@ export default function TicketsList() {
         </section>
 
         <section className="tk-list">
-          {tickets.length === 0 && !loading && (
-            <div className="tk-list__empty">Nessun ticket con questi filtri</div>
-          )}
+          <ListState
+            resource={resource}
+            errorTitle="Ticket non caricati"
+            empty={<div className="tk-list__empty">Nessun ticket con questi filtri</div>}
+          >
           <table className="tk-list__table">
             <thead>
               <tr>
@@ -216,6 +208,7 @@ export default function TicketsList() {
               ))}
             </tbody>
           </table>
+          </ListState>
         </section>
 
         {showCreate && (

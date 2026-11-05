@@ -5,8 +5,11 @@
  * li ignoravano). Ordinati per `order`; per il tipo "connection" le opzioni
  * vengono dal set di connessioni, caricato solo se serve.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { loadSharedConnectionSets } from '../utils/connectionSets';
+import { useResource } from './useResource';
+
+const EMPTY = [];
 
 // Stesso default del backend (eseguibili/manifest.py): senza tipo = file.
 export const runtimeInputKind = (node) => String(node?.data?.input_kind || 'file').trim().toLowerCase();
@@ -33,27 +36,16 @@ export function buildRuntimeInputDefinitions(nodes, connectionSets = []) {
 }
 
 export default function useRuntimeInputDefinitions(nodes) {
-  const [connectionSets, setConnectionSets] = useState([]);
-  const loadRef = useRef('idle'); // idle | loading | done | failed
-  const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
   const inputNodes = (nodes || []).filter(n => n.type === 'project_input');
   const needsSets = inputNodes.some(n => runtimeInputKind(n) === 'connection');
   // Le definizioni cambiano solo se cambiano gli input (non a ogni modifica
   // del canvas): la finestra non perde i valori digitati.
   const inputsKey = JSON.stringify(inputNodes.map(n => [n.id, n.data]));
-
-  useEffect(() => {
-    if (!needsSets || loadRef.current === 'loading' || loadRef.current === 'done') return;
-    loadRef.current = 'loading';
-    loadSharedConnectionSets()
-      .then(items => {
-        loadRef.current = 'done';
-        if (mountedRef.current) setConnectionSets(items);
-      })
-      // Fallito: si riprova al prossimo cambio degli input.
-      .catch(() => { loadRef.current = 'failed'; });
-  }, [needsSets, inputsKey]);
+  // Set di connessioni condivisi (utils/connectionSets) dall'hook comune
+  // (Fase 5 T2): chiesti solo se un input e' di tipo connessione; un errore
+  // si riprova al prossimo cambio degli input (la chiave cambia).
+  const sets = useResource(loadSharedConnectionSets, { key: ['connection-sets', inputsKey], enabled: needsSets, keepPreviousData: true });
+  const connectionSets = sets.data || EMPTY;
 
   return useMemo(
     () => buildRuntimeInputDefinitions(JSON.parse(inputsKey).map(([id, data]) => ({ id, type: 'project_input', data })), connectionSets),

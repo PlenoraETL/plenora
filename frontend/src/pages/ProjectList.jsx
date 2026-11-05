@@ -29,6 +29,8 @@ import { useTheme } from '../hooks/useTheme';
 import { can } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
 import { humanizeErrorMessage } from '../utils/errorMessages';
+import { useBusy } from '../hooks/useBusy';
+import { ResourceError } from '../components/common/ListState';
 import '../styles/ProjectList.css';
 import { projectEditorPath } from '../utils/projectRoutes';
 function ProjectList() {
@@ -50,12 +52,17 @@ function ProjectList() {
     eseguibili,
     projectSources,
     projectFileSources,
-    runStatusByProject,
+    runStatusUnavailable,
+    runStatusFor,
+    failures,
+    resource,
     loading,
     reload: loadData,
     removeProjectLocal,
-    updateProjectLocal,
+    updateProjectOptimistic,
   } = useProjectListData();
+  // Clonazione per progetto (Fase 5 T2, R9.11): doppio clic = un clone.
+  const cloning = useBusy();
 
   // UI state
   const [showModal,         setShowModal]         = useState(false);
@@ -138,13 +145,12 @@ function ProjectList() {
     }
   };
 
+  // Ottimistiche per campo (Fase 5 T2, R9.13): un errore riporta il valore
+  // confermato dal server, mai sopra una modifica piu' recente.
   const handleSetTags = async (project, tags) => {
-    const prev = project.tags || [];
-    updateProjectLocal(project.id, { tags });   // optimistic
     try {
-      await updateProject(project.id, { tags });
+      await updateProjectOptimistic(project, { tags }, () => updateProject(project.id, { tags }));
     } catch (err) {
-      updateProjectLocal(project.id, { tags: prev });  // rollback
       toastApiError(toast, err, 'Errore aggiornamento tag');
     }
   };
@@ -152,18 +158,18 @@ function ProjectList() {
   const handleRenameProject = async (project, newName) => {
     const name = (newName || '').trim();
     if (!name || name === project.name) return;
-    updateProjectLocal(project.id, { name });   // optimistic, niente flash
     try {
-      await updateProject(project.id, { name });
+      await updateProjectOptimistic(project, { name }, () => updateProject(project.id, { name }));
     } catch (err) {
-      updateProjectLocal(project.id, { name: project.name });  // rollback
       toastApiError(toast, err, 'Errore rinomina');
     }
   };
 
   const handleCloneProject = async (project) => {
     try {
-      const res = await cloneProject(project.id);
+      const r = await cloning.run(project.id, () => cloneProject(project.id));
+      if (r.skipped) return;
+      const res = r.value;
       const newName = res?.metadata?.name || `Copia di ${project.name}`;
       toast.success(`Progetto clonato: "${newName}"`);
       loadData();
@@ -255,9 +261,11 @@ function ProjectList() {
       const q = search.toLowerCase();
       out = out.filter(p => p.name.toLowerCase().includes(q));
     }
-    if (statusFilter !== 'all') {
+    // Stato delle esecuzioni non caricato: il filtro per stato non si
+    // applica (non si sa), lo dice l'avviso sopra le sezioni.
+    if (statusFilter !== 'all' && !runStatusUnavailable) {
       out = out.filter(p => {
-        const st = runStatusByProject[p.id]?.status;
+        const st = runStatusFor(p.id)?.status;
         return statusFilter === 'never' ? !st : st === statusFilter;
       });
     }
@@ -269,7 +277,7 @@ function ProjectList() {
     else if (sortBy === 'oldest') sorted.sort((a, b) => ts(a) - ts(b));
     else                          sorted.sort((a, b) => ts(b) - ts(a)); // recent
     return sorted;
-  }, [search, statusFilter, tagFilter, sortBy, runStatusByProject]);
+  }, [search, statusFilter, tagFilter, sortBy, runStatusFor, runStatusUnavailable]);
 
   // Filtri non-default attivi? (per badge "azzera").
   const filtersActive = statusFilter !== 'all' || tagFilter !== 'all' || sortBy !== 'recent';
@@ -350,7 +358,7 @@ function ProjectList() {
               </button>
             )}
             <ThemeToggle classPrefix="pl" />
-            <button type="button" className="pl__btn pl__btn--ghost" onClick={loadData}>⟳ Aggiorna</button>
+            <button type="button" className="pl__btn pl__btn--ghost" onClick={() => loadData()} disabled={resource.refreshing}>{resource.refreshing ? '⟳ Aggiornamento…' : '⟳ Aggiorna'}</button>
             {canCreateProj && (
               <button type="button" className="pl__btn pl__btn--primary" onClick={() => setShowModal(true)}>＋ Nuovo Progetto</button>
             )}
@@ -360,6 +368,13 @@ function ProjectList() {
         {/* Content */}
         <div className="pl__content">
           <canvas ref={canvasRef} className="pl__hex-bg" />
+
+          {resource.status === 'error' && (
+            <ResourceError title="Progetti non caricati" message={resource.error} onRetry={resource.reload} />
+          )}
+          {failures.length > 0 && (
+            <ResourceError compact title="Alcuni dati non caricati" message={failures.join(', ')} onRetry={resource.reload} />
+          )}
 
           {/* Stats */}
           <div className="pl__stats-row">
@@ -412,7 +427,7 @@ function ProjectList() {
                 <ProjectCard
                   key={project.id}
                   project={project}
-                  runStatus={runStatusByProject[project.id]}
+                  runStatus={runStatusFor(project.id)}
                   accentClass="pl__card-accent--estrai"
                   modLabel="↓ Estrai"
                   meta={[
@@ -451,7 +466,7 @@ function ProjectList() {
                 <ProjectCard
                   key={project.id}
                   project={project}
-                  runStatus={runStatusByProject[project.id]}
+                  runStatus={runStatusFor(project.id)}
                   accentClass="pl__card-accent--manipola"
                   modLabel="⚙ Manipola"
                   meta={[
@@ -485,7 +500,7 @@ function ProjectList() {
               <ProjectCard
                 key={project.id}
                 project={project}
-                runStatus={runStatusByProject[project.id]}
+                runStatus={runStatusFor(project.id)}
                 accentClass="pl__card-accent--arricchisci"
                 modLabel="◈ Arricchisci"
                 meta={[

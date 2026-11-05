@@ -23,35 +23,26 @@ function readSrc(relPath) {
 
 
 describe('sessione 6 frontend error handling lint', () => {
-  it('ConnectionManager loadConnections usa toast.warning su partial failure', () => {
+  // Fase 5 T2 (R4.8): il caricamento passa da hooks/useResource e un errore
+  // si mostra come errore con «Riprova» (ResourceError), mai lista vuota.
+  it('ConnectionManager: allSettled, elenco incompleto e errore visibili', () => {
     const src = readSrc('pages/ConnectionManager.jsx');
-    const idx = src.indexOf('const loadConnections =');
-    expect(idx).toBeGreaterThan(-1);
-    const window = src.slice(idx, idx + 2500);
-
-    // Anti-regression: niente silent .catch(() => ({connections: []}))
-    expect(window).toContain('Promise.allSettled');
-    expect(window).toContain('toast.warning');
+    expect(src).toContain('useResource(');
+    expect(src).toContain('Promise.allSettled');
+    expect(src).toContain('title="Elenco incompleto"');
+    expect(src).toContain('title="Connessioni non caricate"');
   });
 
-  it('ApiConnectionManager loadApiConnections usa toast.error nel catch', () => {
+  it('ApiConnectionManager: errore di caricamento con Riprova', () => {
     const src = readSrc('pages/ApiConnectionManager.jsx');
-    const idx = src.indexOf('const loadApiConnections =');
-    expect(idx).toBeGreaterThan(-1);
-    const window = src.slice(idx, idx + 600);
-
-    expect(window).toContain('toast.error');
-    // No piu' solo console.error silenzioso
-    const consoleErrorOnly = /catch\s*\(e\)\s*\{\s*console\.error\(e\);\s*\}/;
-    expect(window).not.toMatch(consoleErrorOnly);
+    expect(src).toContain('useResource(');
+    expect(src).toContain('title="Connettori non caricati"');
   });
 
-  it('ScheduleList loadData usa toast.error nel catch', () => {
+  it('ScheduleList: errore di caricamento con Riprova', () => {
     const src = readSrc('pages/ScheduleList.jsx');
-    const idx = src.indexOf('const loadData =');
-    expect(idx).toBeGreaterThan(-1);
-    const window = src.slice(idx, idx + 2500);
-    expect(window).toContain('toast.error');
+    expect(src).toContain('useResource(');
+    expect(src).toContain('title="Schedule non caricati"');
   });
 
   it('ScheduleList handleDelete branching su 404/409', () => {

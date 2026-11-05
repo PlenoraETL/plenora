@@ -11,6 +11,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import useDialog from '../../hooks/useDialog';
 import { displayIcon } from './nodeDescriptors';
 import './NodePalette.css';
+import '../common/ListState.css';
 
 const norm = (s) => String(s || '').toLowerCase();
 
@@ -56,7 +57,9 @@ export function filterPalette(groups, query) {
   return items.length ? [{ label: 'Risultati', items }] : [];
 }
 
-export default function NodePalette({ open, context, groups = [], onPick, onClose }) {
+// `notice` (Fase 5 T2, N13): { message, onRetry } quando parte del catalogo
+// non e' arrivata; la palette lo dice con «Riprova» invece di restare vuota.
+export default function NodePalette({ open, context, groups = [], onPick, onClose, notice = null }) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const listRef = useRef(null);
@@ -100,6 +103,12 @@ export default function NodePalette({ open, context, groups = [], onPick, onClos
           />
         </div>
         {context && <div className="npal__context">Dopo <b>{context}</b></div>}
+        {notice && (
+          <div className="npal__context" role="alert">
+            {notice.message}{' '}
+            {notice.onRetry && <button type="button" className="list-state__retry" onClick={() => notice.onRetry()}>Riprova</button>}
+          </div>
+        )}
         <div className="npal__list" ref={listRef}>
           {flat.length === 0 && <div className="npal__empty">Nessun risultato</div>}
           {filtered.map(g => (

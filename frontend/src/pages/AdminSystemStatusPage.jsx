@@ -8,12 +8,12 @@
  * Ogni card legge dall'endpoint aggregato `/api/admin/system-status`.
  * Auto-refresh ogni 30s (backend aggrega in ~100ms).
  */
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppSidebar from '../components/AppSidebar';
 import { getSystemStatus } from '../api/adminSystemStatus';
 import '../styles/AdminSystemStatusPage.css';
-import { requestErrorMessage } from '../utils/errorMessages';
+import { useResource } from '../hooks/useResource';
 const STATUS_LABELS = { ok: 'OK', warn: 'WARN', error: 'ERRORE', unknown: 'N/D' };
 const STATUS_ICONS = { ok: '✓', warn: '⚠', error: '✗', unknown: '?' };
 
@@ -324,38 +324,18 @@ const STATUS_KEYS = [
 
 export default function AdminSystemStatusPage() {
   const navigate = useNavigate();
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [lastError, setLastError] = useState(null);
-  const [refreshedAt, setRefreshedAt] = useState(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await getSystemStatus();
-      setStatus(res);
-      setRefreshedAt(new Date());
-      setLastError(null);
-    } catch (e) {
-      setLastError(requestErrorMessage(e, 'Errore caricamento'));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let stopped = false;
-    let timer = null;
-    const poll = async () => {
-      await load();
-      if (!stopped) timer = setTimeout(poll, REFRESH_INTERVAL_MS);
-    };
-    poll();
-    return () => {
-      stopped = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [load]);
+  // Fase 5 T2 (R4.14): hook comune con aggiornamento periodico (un poll
+  // alla volta, fermo con la scheda nascosta); "Aggiorna ora" fa vincere
+  // l'ultima richiesta.
+  const resource = useResource(async () => ({ status: await getSystemStatus(), at: new Date() }), {
+    key: 'system-status',
+    refreshInterval: REFRESH_INTERVAL_MS,
+  });
+  const status = resource.data?.status || null;
+  const refreshedAt = resource.data?.at || null;
+  const loading = resource.loading;
+  const lastError = resource.error;
+  const load = resource.reload;
 
   const overall = useMemo(() => {
     if (!status) return null;
@@ -385,7 +365,7 @@ export default function AdminSystemStatusPage() {
           </div>
           <div className="sys__header-actions">
             <button
-              onClick={load}
+              onClick={() => load()}
               disabled={loading}
               className="sys__btn sys__btn--primary"
             >

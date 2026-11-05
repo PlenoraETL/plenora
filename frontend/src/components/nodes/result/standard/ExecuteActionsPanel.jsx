@@ -22,6 +22,7 @@
  * I CSS `result-node__*` restano in `ResultNode.css` (shared col parent).
  */
 import React, { useState } from 'react';
+import { useBusy } from '../../../../hooks/useBusy';
 import RunHistoryModal from '../../../modals/RunHistoryModal';
 import useCanvasStore from '../../../../store/useCanvasStore';
 import { term } from '../../../../utils/glossary';
@@ -43,6 +44,11 @@ export default function ExecuteActionsPanel({
   const setExecutionMode = (mode) => setRunOptions({ force_recalculate: mode === 'recalculate' });
   const busy = useCanvasStore(s => s.runState === 'starting' || s.runState === 'running');
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
+  // Fase 5 T2 (R9.7): Valida e Anteprima non partono due volte (doppio clic
+  // = un solo "Salva e continua", una sola richiesta).
+  const reads = useBusy();
+  const validating = reads.isBusy('validate');
+  const previewing = reads.isBusy('preview');
 
   return (
     <>
@@ -98,7 +104,9 @@ export default function ExecuteActionsPanel({
 
       <div className="result-node__actions">
         <button type="button"
-          onClick={onValidate}
+          onClick={() => reads.run('validate', () => onValidate())}
+          disabled={validating}
+          aria-busy={validating}
           className="result-node__validate-btn"
           title={term('validate').description}
         >
@@ -108,7 +116,9 @@ export default function ExecuteActionsPanel({
 
         {hasOnPreview && (
           <button type="button"
-            onClick={onPreview}
+            onClick={() => reads.run('preview', () => onPreview())}
+            disabled={previewing}
+            aria-busy={previewing}
             className={`result-node__preview-btn result-node__preview-btn--${nodeVariant}`}
           >
             <span className="result-node__preview-icon" aria-hidden="true">{term('preview').icon}</span>

@@ -6,7 +6,10 @@
  * - Tutti possono eseguire (apre il wizard)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useResource } from '../hooks/useResource';
+import { useBusy } from '../hooks/useBusy';
+import ListState, { ResourceError } from '../components/common/ListState';
 import { useNavigate } from 'react-router-dom';
 import {
   listEseguibili,
@@ -33,19 +36,33 @@ function EseguibiliList() {
   const toast = useToast();
   const confirmModal = useConfirmModal();
   const { user } = useAuth();
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Fase 5 T2 (R4.8, R9.11): elenco dall'hook comune (errore con
+  // «Riprova»); rinomina per eseguibile (useBusy): la fine del salvataggio
+  // di A non chiude la rinomina di B.
+  const resource = useResource(async () => {
+    const data = await listEseguibili();
+    return Array.isArray(data) ? data : [];
+  }, { key: 'eseguibili' });
+  const items = resource.data || [];
+  const setItems = resource.setData;
+  const loadItems = () => resource.reload();
+  const renameBusy = useBusy();
   const [selectedId, setSelectedId] = useState(null); // id dell'eseguibile in esecuzione
   const [sharingEseguibile, setSharingEseguibile] = useState(null); // modal condivisione cross-gruppo
   const [versioningEseguibile, setVersioningEseguibile] = useState(null);
-  const [renamingId, setRenamingId] = useState(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [savingRename, setSavingRename] = useState(false);
+  const [renaming, setRenaming] = useState(null); // { id, value }
+  const renamingId = renaming?.id ?? null;
+  const renameValue = renaming?.value ?? '';
+  const setRenameValue = (value) => setRenaming(cur => (cur ? { ...cur, value } : cur));
 
   // Selettore progetto sorgente per creazione nuovo eseguibile
   const [showSelector, setShowSelector] = useState(false);
-  const [projects, setProjects] = useState([]);
-  const [loadingProjects, setLoadingProjects] = useState(false);
+  const projectsResource = useResource(async () => {
+    const all = await listProjects();
+    return (all?.projects || []).filter(p => ['estrai', 'manipola', 'arricchisci'].includes(p.project_type));
+  }, { key: 'publishable-projects', enabled: showSelector });
+  const projects = projectsResource.data || [];
+  const loadingProjects = projectsResource.initialLoading;
   const [projectSearch, setProjectSearch] = useState('');
   const [selectedSourceProject, setSelectedSourceProject] = useState(null);
 
@@ -55,35 +72,9 @@ function EseguibiliList() {
   const selectorDialog = useDialog({ isOpen: showSelector,        onClose: () => setShowSelector(false) });
   const shareDialog    = useDialog({ isOpen: !!sharingEseguibile, onClose: () => setSharingEseguibile(null) });
 
-  const loadItems = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await listEseguibili();
-      setItems(data);
-    } catch (e) {
-      toastApiError(toast, e, 'Errore caricamento eseguibili');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadItems(); }, [loadItems]);
-
-  const openSelector = async () => {
-    setShowSelector(true);
-    setLoadingProjects(true);
+  const openSelector = () => {
     setProjectSearch('');
-    try {
-      const all = await listProjects();
-      const projects = all?.projects || [];
-      setProjects(projects.filter(p => (
-        ['estrai', 'manipola', 'arricchisci'].includes(p.project_type)
-      )));
-    } catch (e) {
-      toastApiError(toast, e, 'Errore caricamento progetti');
-    } finally {
-      setLoadingProjects(false);
-    }
+    setShowSelector(true);
   };
 
   const handleDelete = async (eid, name) => {
@@ -104,15 +95,16 @@ function EseguibiliList() {
   };
 
   const startRename = (item) => {
-    setRenamingId(item.id);
-    setRenameValue(item.name || '');
+    if (renameBusy.isBusy(item.id)) return;
+    setRenaming({ id: item.id, value: item.name || '' });
   };
 
   const cancelRename = () => {
-    if (savingRename) return;
-    setRenamingId(null);
-    setRenameValue('');
+    if (renamingId && renameBusy.isBusy(renamingId)) return;
+    setRenaming(null);
   };
+  // Chiude la rinomina di QUESTO eseguibile, non quella aperta dopo su un altro.
+  const closeRenameOf = (id) => setRenaming(cur => (cur?.id === id ? null : cur));
 
   const commitRename = async (item) => {
     const name = renameValue.trim();
@@ -121,22 +113,19 @@ function EseguibiliList() {
       return;
     }
     if (name === item.name) {
-      cancelRename();
+      closeRenameOf(item.id);
       return;
     }
-    setSavingRename(true);
     try {
-      const updated = await updateEseguibile(item.id, { name });
-      setItems(current => current.map(existing => (
-        existing.id === item.id ? { ...existing, ...updated, name } : existing
+      const r = await renameBusy.run(item.id, () => updateEseguibile(item.id, { name }));
+      if (r.skipped) return;
+      setItems(current => (current || []).map(existing => (
+        existing.id === item.id ? { ...existing, ...r.value, name } : existing
       )));
-      setRenamingId(null);
-      setRenameValue('');
+      closeRenameOf(item.id);
       toast.success('Eseguibile rinominato');
     } catch (e) {
       toastApiError(toast, e, 'Errore rinomina');
-    } finally {
-      setSavingRename(false);
     }
   };
 
@@ -159,19 +148,22 @@ function EseguibiliList() {
         )}
       </div>
 
-      {loading ? (
-        <div className="esl__loading">Caricamento...</div>
-      ) : items.length === 0 ? (
-        <div className="esl__empty">
-          <div className="esl__empty-icon">📭</div>
-          <h3>Nessun eseguibile disponibile</h3>
-          <p>
-            {canCreate
-              ? 'Seleziona un progetto Estrai, Manipola o Arricchisci e pubblicalo come eseguibile.'
-              : 'Chiedi a un amministratore del gruppo di pubblicare una catena come eseguibile.'}
-          </p>
-        </div>
-      ) : (
+      <ListState
+        resource={resource}
+        loading={<div className="esl__loading">Caricamento...</div>}
+        errorTitle="Eseguibili non caricati"
+        empty={(
+          <div className="esl__empty">
+            <div className="esl__empty-icon">📭</div>
+            <h3>Nessun eseguibile disponibile</h3>
+            <p>
+              {canCreate
+                ? 'Seleziona un progetto Estrai, Manipola o Arricchisci e pubblicalo come eseguibile.'
+                : 'Chiedi a un amministratore del gruppo di pubblicare una catena come eseguibile.'}
+            </p>
+          </div>
+        )}
+      >
         <div className="esl__grid">
           {items.map(item => {
             const canEdit = can.manageEseguibile(user, item);
@@ -197,10 +189,10 @@ function EseguibiliList() {
                         maxLength={255}
                         aria-label={`Nuovo nome per ${item.name}`}
                         autoFocus
-                        disabled={savingRename}
+                        disabled={renameBusy.isBusy(item.id)}
                       />
-                      <button type="submit" className="esl__rename-action" disabled={savingRename} aria-label="Salva nome">✓</button>
-                      <button type="button" className="esl__rename-action" onClick={cancelRename} disabled={savingRename} aria-label="Annulla rinomina">×</button>
+                      <button type="submit" className="esl__rename-action" disabled={renameBusy.isBusy(item.id)} aria-label="Salva nome">✓</button>
+                      <button type="button" className="esl__rename-action" onClick={cancelRename} disabled={renameBusy.isBusy(item.id)} aria-label="Annulla rinomina">×</button>
                     </form>
                   ) : (
                     <h3 className="esl__card-title">
@@ -253,7 +245,7 @@ function EseguibiliList() {
             );
           })}
         </div>
-      )}
+      </ListState>
 
       {selectedId && (
         <EseguibileExecuteWizard
@@ -285,6 +277,8 @@ function EseguibiliList() {
               />
               {loadingProjects ? (
                 <div className="esl__selector-loading">Caricamento progetti...</div>
+              ) : projectsResource.status === 'error' ? (
+                <ResourceError title="Progetti non caricati" message={projectsResource.error} onRetry={projectsResource.reload} />
               ) : projects.length === 0 ? (
                 <div className="esl__selector-empty">
                   <p>Nessun progetto pubblicabile disponibile.</p>

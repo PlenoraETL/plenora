@@ -16,8 +16,8 @@ const changeCanvas = (patch) => {
 };
 
 vi.mock('../../src/api', () => ({ previewProject: previewProjectMock }));
-vi.mock('../../src/hooks/useTaskPolling', () => ({
-  useTaskPolling: () => ({ mountedRef: { current: true }, stopPolling: vi.fn(), startPolling: vi.fn() }),
+vi.mock('../../src/utils/taskPoller', () => ({
+  pollTask: vi.fn(() => () => {}),
 }));
 vi.mock('../../src/store/useCanvasStore', () => {
   const hook = (selector) => selector({ ...state, handleSaveQuiet: saveMock });

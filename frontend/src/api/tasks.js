@@ -5,14 +5,10 @@
  * in modo asincrono tramite il worker. Questi endpoint permettono di monitorare
  * e controllare i task in esecuzione.
  *
- * Pattern di polling consigliato:
- *   const { task_id } = await executeProjectQuery(projectId);
- *   const interval = setInterval(async () => {
- *     const status = await getTaskStatus(task_id);
- *     if (status.status === 'success' || status.status === 'failure') {
- *       clearInterval(interval);
- *     }
- *   }, 1000);
+ * Il polling NON si scrive a mano: hooks/useTask (un task) o
+ * utils/taskPoller (piu' task) applicano le regole uniche di fine, 404,
+ * errori ripetuti e annullamento (Fase 5 T2; lo vieta
+ * tests/shared/asyncArchitecture.contract.test.js).
  */
 
 import http from './http';

@@ -1,0 +1,23 @@
+/* Stati di una risorsa (ListState): solo token del tema (variables.css). */
+.list-state { padding: 16px 0; }
+.list-state--loading,
+.list-state--empty { text-align: center; color: var(--plen-text-sub, #64748b); }
+.list-state__loading { font-size: 14px; }
+.list-state__empty { margin: 0; font-size: 14px; }
+.list-state__error {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; margin: 8px 0;
+  border: 1px solid var(--plen-err, #b91c1c); border-radius: 8px;
+  color: var(--plen-err, #b91c1c); background: var(--plen-err-bg, #fdecec);
+  font-size: 14px;
+}
+.list-state__error--compact { padding: 8px 12px; font-size: 13px; }
+.list-state__error > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.list-state__error-msg { color: var(--plen-text, #0f172a); overflow-wrap: anywhere; }
+.list-state__retry {
+  flex: none; font: inherit; font-size: 13px; cursor: pointer;
+  padding: 4px 12px; border-radius: 6px;
+  border: 1px solid currentColor; background: transparent; color: inherit;
+}
+.list-state__retry:hover { filter: brightness(0.95); }
+.list-state__retry:focus-visible { outline: 2px solid var(--plen-blue, #2563eb); outline-offset: 2px; }

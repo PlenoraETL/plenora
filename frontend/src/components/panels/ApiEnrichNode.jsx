@@ -15,6 +15,8 @@
 import { uploadFile } from '../../api/files';
 import { getApiConnection } from '../../api/apiConnections';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useResource } from '../../hooks/useResource';
+import '../common/ListState.css';
 import { Position, useReactFlow, useStore } from '@xyflow/react';
 import { getColumnTypeIcon, getColumnTypeLabel, mapApiTypeToStandard } from '../../utils/columnUtils';
 import { humanizeError } from '../../utils/errorMessages';
@@ -53,11 +55,19 @@ function ApiEnrichNode({ id, data }) {
     state => dataFlowEdges(state.edges).filter(e => e.target === id).length
   );
   // Se i parametri non sono nel data (vecchio progetto), fetch dal backend
-  const [fetchedApi, setFetchedApi] = useState(null);
-  const [loadingApi, setLoadingApi] = useState(false);
+  // Fase 5 T2: dettagli del connettore dall'hook comune (id di richiesta),
+  // chiesti solo se mancano nel nodo; errore con «Riprova». Solo dati
+  // locali: NON un update dei nodi (loop ReactFlow<->Zustand).
+  const needsApiDetails = Boolean(data.api_id && (!data.parameters?.length || !data.api_name) && !data.endpoint);
+  const apiResource = useResource(() => getApiConnection(data.api_id), {
+    key: ['api-connection', data.api_id || null],
+    enabled: needsApiDetails,
+    errorMessage: (error) => humanizeError(error).message,
+  });
+  const fetchedApi = apiResource.data || null;
+  const loadingApi = apiResource.initialLoading;
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
-  const fetchedApiIdRef = useRef(null);
   
   // Usa data.parameters se presente, altrimenti fetched
   const apiParameters = data.parameters || fetchedApi?.parameters || [];
@@ -73,35 +83,6 @@ function ApiEnrichNode({ id, data }) {
   
   const paramMapping = data.param_mapping || {};
 
-  // Fetch API details se mancano parameters O api_name (retrocompatibilità + reload canvas)
-  // schema_fields viene aggiornato dal loadApiDetails stesso, NON deve essere dependency
-  useEffect(() => {
-    if (data.api_id && (!data.parameters?.length || !data.api_name) && !data.endpoint) {
-      if (fetchedApiIdRef.current === data.api_id) return; // già fetchato con successo, no loop
-      loadApiDetails(data.api_id);
-    }
-  }, [data.api_id]);
-
-  const loadApiDetails = async (apiId) => {
-    try {
-      setLoadingApi(true);
-      // getApiConnection ritorna direttamente il body (data), non il
-      // wrapper axios — quindi il check di presenza si fa sull'oggetto.
-      const apiData = await getApiConnection(apiId);
-      if (apiData) {
-        // Segna come fetchato SOLO dopo il successo: in caso di errore di rete
-        // il prossimo render potrà riprovare (fetchedApiIdRef rimane null/precedente)
-        fetchedApiIdRef.current = apiId;
-        // Solo setFetchedApi — NON un update dei nodi, che causa loop ReactFlow↔Zustand
-        // I dati sono disponibili via fetchedApi per tutta la vita del componente
-        setFetchedApi(apiData);
-      }
-    } catch (error) {
-      console.error('Errore caricamento API:', error);
-    } finally {
-      setLoadingApi(false);
-    }
-  };
 const connectedFileSource = useMemo(() => {
     if (!isExecutable) return null;
     const edges = dataFlowEdges(getEdges());
@@ -402,6 +383,12 @@ const handleExecParamChange = (key, value) => {
         {/* Loading (retrocompatibilità) */}
         {loadingApi && (
           <div className="api-enrich-node__loading">⏳ Caricamento API...</div>
+        )}
+        {apiResource.status === 'error' && (
+          <div className="api-enrich-node__loading" role="alert">
+            ⚠️ Connettore non caricato: {apiResource.error}{' '}
+            <button type="button" className="nodrag list-state__retry" onClick={() => apiResource.reload()}>Riprova</button>
+          </div>
         )}
 
         {/* API Info */}

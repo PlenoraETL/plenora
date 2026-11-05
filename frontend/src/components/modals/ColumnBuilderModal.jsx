@@ -9,6 +9,9 @@
  */
 import { getFunctionsCatalog, translateFunction, previewFormula } from '../../api/transforms';
 import React, { useState, useEffect, useMemo } from 'react';
+import { useResource } from '../../hooks/useResource';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import '../common/ListState.css';
 import { useToast } from '../../hooks/useToast';
 import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
@@ -32,9 +35,15 @@ function ColumnBuilderModal({
 }) {
   const toast = useToast();
   // State
-  const [catalog, setCatalog] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Fase 5 T2 (R4.4): catalogo, traduzione SQL e campione dall'hook comune.
+  const catalogResource = useResource(getFunctionsCatalog, {
+    key: 'functions-catalog',
+    enabled: Boolean(isOpen),
+    errorMessage: (err) => humanizeError(err).message,
+  });
+  const catalog = catalogResource.data || null;
+  const loading = catalogResource.initialLoading;
+  const error = catalogResource.error;
   
   const [columnName, setColumnName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('geometric');
@@ -43,19 +52,9 @@ function ColumnBuilderModal({
   const [nestedExpression, setNestedExpression] = useState(null);
   const [useNested, setUseNested] = useState(false);
   
-  const [sqlPreview, setSqlPreview] = useState('');
   const [isManualEdit, setIsManualEdit] = useState(false);
   const [manualSql, setManualSql] = useState('');
-  // #26 anteprima formula su riga campione reale.
-  const [sample, setSample] = useState({ status: 'idle', value: null, error: null });
   const canSample = !!(projectId && tableName);
-
-  // Carica catalogo funzioni
-  useEffect(() => {
-    if (isOpen) {
-      loadCatalog();
-    }
-  }, [isOpen]);
 
   // Reset quando si apre
   useEffect(() => {
@@ -71,23 +70,9 @@ function ColumnBuilderModal({
         setUseNested(false);
         setIsManualEdit(false);
         setManualSql('');
-        setSqlPreview('');
       }
     }
   }, [isOpen, existingColumn]);
-
-  const loadCatalog = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getFunctionsCatalog();
-      setCatalog(data);
-    } catch (err) {
-      setError(humanizeError(err).message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Funzioni disponibili per la categoria selezionata
   const availableFunctions = useMemo(() => {
@@ -127,35 +112,49 @@ function ColumnBuilderModal({
       }));
   }, [catalog]);
 
-  // Aggiorna preview SQL quando cambia l'espressione.
-  //  - debounce 350ms per evitare un POST /functions/translate per
-  //    ogni keystroke nel wizard
-  //  - pre-validate required params: senza, ogni cambio campo del
-  //    wizard mandava una call che il backend rifiutava 400
-  //    ("Specificare column2 o value...") inquinando la console
-  //    finche' l'utente non completava l'espressione
-  useEffect(() => {
-    if (isManualEdit || !selectedFunction || !columnName) return;
-
-    const required = (currentFunctionDef?.params || []).filter(
-      (p) => p.required,
-    );
-    const missing = required.filter((p) => {
-      const v = params[p.name];
-      return v === undefined || v === null || v === '';
-    });
-    if (missing.length > 0) {
-      // espressione incompleta: niente preview, niente call. Resetto
-      // il preview cosi' l'utente vede "Configura un'espressione
-      // valida" se prova a salvare.
-      setSqlPreview('');
-      setSample({ status: 'idle', value: null, error: null });
-      return;
-    }
-
-    const handle = setTimeout(() => { updateSqlPreview(); }, 350);
-    return () => clearTimeout(handle);
-  }, [selectedFunction, params, nestedExpression, columnName, dbType, isManualEdit, currentFunctionDef]);
+  // SQL tradotta e campione (Fase 5 T2, R4.4). La richiesta e' la chiave:
+  //  - parte dopo 350 ms di quiete (niente POST /functions/translate a ogni
+  //    tasto) e solo con i parametri obbligatori compilati;
+  //  - vince sempre l'ultima richiesta (id di useResource): una traduzione
+  //    vecchia non riscrive la SQL dei parametri attuali;
+  //  - SQL mostrata e salvata = quella dei parametri ATTUALI; traduzione in
+  //    corso o fallita = nessuna SQL (Salva chiede un'espressione valida),
+  //    mai la SQL precedente.
+  const missingRequired = (currentFunctionDef?.params || [])
+    .filter((p) => p.required)
+    .some((p) => params[p.name] === undefined || params[p.name] === null || params[p.name] === '');
+  const translateRequest = (!isManualEdit && selectedFunction && columnName && !missingRequired)
+    ? { function_name: selectedFunction, params, db_type: dbType, nested: useNested ? nestedExpression : null, column_name: columnName }
+    : null;
+  const debounced = useDebouncedValue(translateRequest, 350);
+  const request = debounced.settled ? debounced.value : null;
+  const translation = useResource(() => translateFunction({
+    function_name: request.function_name,
+    params: request.params,
+    db_type: request.db_type,
+  }), { key: ['translate', request], enabled: Boolean(request) });
+  const sqlPreview = request && translation.status !== 'error' ? (translation.data?.sql || '') : '';
+  const translationError = request && translation.status === 'error' ? translation.error : null;
+  // #26: valuta la formula su una riga campione reale (solo con il contesto
+  // progetto+tabella, es. ColumnBuilder aperto da un TableNode).
+  const sampleResource = useResource(async () => previewFormula({
+    project_id: projectId,
+    table_name: tableName,
+    table_alias: tableAlias || 't',
+    db_type: request.db_type,
+    column_name: request.column_name,
+    ...(request.nested
+      ? { expression: request.nested }
+      : { function_name: request.function_name, params: request.params }),
+  }), { key: ['sample', request], enabled: Boolean(request && canSample && sqlPreview), errorMessage: (err) => humanizeError(err).message });
+  let sample = { status: 'idle', value: null, error: null };
+  if (request && canSample && sqlPreview) {
+    const res = sampleResource.data;
+    if (sampleResource.status === 'error') sample = { status: 'error', value: null, error: sampleResource.error };
+    else if (!res) sample = { status: 'loading', value: null, error: null };
+    else if (res.success) sample = { status: res.empty ? 'empty' : 'success', value: res.value, error: null };
+    else sample = { status: 'error', value: null, error: res.message || 'Errore anteprima' };
+  }
 
   // Colonne geometry disponibili
   const geometryColumns = useMemo(() => {
@@ -187,49 +186,6 @@ function ColumnBuilderModal({
 
   const handleParamChange = (paramName, value) => {
     setParams(prev => ({ ...prev, [paramName]: value }));
-  };
-
-  const updateSqlPreview = async () => {
-    if (!selectedFunction || !columnName) {
-      setSqlPreview('');
-      return;
-    }
-
-    try {
-      const data = await translateFunction({
-        function_name: selectedFunction,
-        params: params,
-        db_type: dbType
-      });
-      setSqlPreview(data.sql || '');
-    } catch (err) {
-      console.error('Errore preview SQL:', err);
-      return;
-    }
-
-    // #26: valuta la formula su una riga campione reale (solo se abbiamo il
-    // contesto progetto+tabella, es. ColumnBuilder aperto da un TableNode).
-    if (!canSample) return;
-    setSample({ status: 'loading', value: null, error: null });
-    try {
-      const res = await previewFormula({
-        project_id: projectId,
-        table_name: tableName,
-        table_alias: tableAlias || 't',
-        db_type: dbType,
-        column_name: columnName,
-        ...(useNested && nestedExpression
-          ? { expression: nestedExpression }
-          : { function_name: selectedFunction, params }),
-      });
-      if (res.success) {
-        setSample({ status: res.empty ? 'empty' : 'success', value: res.value, error: null });
-      } else {
-        setSample({ status: 'error', value: null, error: res.message || 'Errore anteprima' });
-      }
-    } catch (err) {
-      setSample({ status: 'error', value: null, error: humanizeError(err).message });
-    }
   };
 
   const handleSave = () => {
@@ -526,8 +482,14 @@ function ColumnBuilderModal({
             ) : (
               <div className="column-builder-preview">
                 <code className="column-builder-preview-code">
-                  {sqlPreview || '-- Seleziona una funzione --'}
+                  {sqlPreview || (translationError ? '-- Traduzione non riuscita --' : translateRequest && (!request || translation.loading) ? '-- Traduzione in corso… --' : '-- Seleziona una funzione --')}
                 </code>
+                {translationError && (
+                  <div className="column-builder-error" role="alert">
+                    ❌ {translationError}{' '}
+                    <button type="button" className="list-state__retry" onClick={() => translation.reload()}>Riprova</button>
+                  </div>
+                )}
               </div>
             )}
 

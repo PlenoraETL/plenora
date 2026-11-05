@@ -9,7 +9,7 @@
  *   2. altrimenti il testo curato del codice di dominio (`{error: "<code>"}`,
  *      vedi `app/shared/error_codes.py`);
  *   3. altrimenti un testo italiano per famiglia: rete, timeout, 401, 403,
- *      404, 409, 413, 422, 429, 5xx, altri 4xx;
+ *      404, 409, 410, 413, 422, 429, 5xx, altri 4xx;
  *   4. un errore locale lanciato dall'app (`new Error('...')`) mostra il suo
  *      testo; un errore di programma (TypeError, ReferenceError, ...) mai.
  *
@@ -127,6 +127,8 @@ export function statusFamilyMessage(status) {
   if (status === 403) return { title: 'Accesso negato', message: 'Non hai i permessi per questa operazione.' };
   if (status === 404) return { title: 'Non trovato', message: 'La risorsa richiesta non esiste o è stata rimossa.' };
   if (status === 409) return { title: 'Conflitto', message: 'L’operazione è in conflitto con lo stato attuale dei dati.' };
+  // Fase 5 T2 (R9.14): un risultato scaduto o gia' scaricato (consume-once).
+  if (status === 410) return { title: 'Non più disponibile', message: 'Il file non è più disponibile: è scaduto o è già stato scaricato. Esegui di nuovo per generarlo.' };
   if (status === 413) return ERROR_MESSAGES.memory_limit_exceeded;
   if (status === 422) return { title: 'Dati non validi', message: 'Alcuni campi non sono validi. Controlla e riprova.' };
   if (status === 429) return { title: 'Troppi tentativi', message: 'Hai effettuato troppe richieste. Attendi qualche istante e riprova.' };

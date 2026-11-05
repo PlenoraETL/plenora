@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -67,7 +67,7 @@ describe('RunsTab', () => {
 
 
   it('loads and renders run rows with status + trigger badges', async () => {
-    render(<RunsTab refreshTick={0} />);
+    render(<RunsTab />);
 
     // Aspetta che la tabella sia popolata. I trigger labels (`manual`,
     // `cron`) sono unici per riga; `Fallita` (status singolare nel badge)
@@ -88,7 +88,7 @@ describe('RunsTab', () => {
 
 
   it('changes the status filter via select and reloads with the status param', async () => {
-    render(<RunsTab refreshTick={0} />);
+    render(<RunsTab />);
     await screen.findByText('estrai');
 
     const allStatusOption = screen.getByRole('option', {
@@ -106,7 +106,7 @@ describe('RunsTab', () => {
 
 
   it('clicking the "Completate" stat card toggles filterStatus="success" and reloads', async () => {
-    render(<RunsTab refreshTick={0} />);
+    render(<RunsTab />);
     await screen.findByText('estrai');
 
     const statCard = (await screen.findByText('Completate')).closest('.lv__stat');
@@ -129,7 +129,7 @@ describe('RunsTab', () => {
       has_more: true, // → bottone Successivi abilitato
     });
 
-    render(<RunsTab refreshTick={0} />);
+    render(<RunsTab />);
     await screen.findByText('estrai');
 
     const nextBtn = await screen.findByRole('button', {
@@ -146,7 +146,7 @@ describe('RunsTab', () => {
 
 
   it('expands a failure row on click showing the error_message banner', async () => {
-    render(<RunsTab refreshTick={0} />);
+    render(<RunsTab />);
     await screen.findByText('cron');
 
     // Riga "cron" e' run-2 (status='failure', error_message='API quota exceeded').
@@ -159,25 +159,20 @@ describe('RunsTab', () => {
     ).toBeInTheDocument();
   });
 
-  it('toasts and shows the empty table state when getLogRuns rejects', async () => {
+  // Fase 5 T2 (R4.8): un errore e' un errore con «Riprova», mai la tabella vuota.
+  it('getLogRuns rifiuta: errore con il messaggio e Riprova, non "Nessuna esecuzione"', async () => {
     getLogRunsMock.mockReset();
     getLogRunsMock.mockRejectedValueOnce(new Error('redis offline'));
-    // RunsTab logga via console.error nel catch; tests/setup.js spia
-    // console.error per fail-on-unexpected. Silenziamo il log atteso.
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    getLogRunsMock.mockResolvedValue({ runs: [], total: 0, has_more: false });
 
-    render(<RunsTab refreshTick={0} />);
+    render(<RunsTab />);
 
-    await waitFor(() => expect(toastMock.error).toHaveBeenCalledTimes(1));
-    const [msg] = toastMock.error.mock.calls[0];
-    expect(msg).toContain('Errore caricamento esecuzioni');
-    expect(msg).toContain('redis offline');
+    expect(await screen.findByText('Esecuzioni non caricate')).toBeInTheDocument();
+    expect(screen.getByText('redis offline')).toBeInTheDocument();
+    expect(screen.queryByText('Nessuna esecuzione trovata')).toBeNull();
+    expect(toastMock.error).not.toHaveBeenCalled();
 
-    // setRuns([]) -> empty state visibile.
-    expect(
-      await screen.findByText('Nessuna esecuzione trovata'),
-    ).toBeInTheDocument();
-
-    errSpy.mockRestore();
+    fireEvent.click(screen.getByRole('button', { name: 'Riprova' }));
+    expect(await screen.findByText('Nessuna esecuzione trovata')).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import http from './http';
+import { filenameFromDisposition, saveBlob } from '../utils/downloadBlob';
 
 export async function listObjectStorage(params = {}) {
   const response = await http.get('/admin/object-storage', { params });
@@ -30,20 +31,9 @@ export async function downloadStorageObject(key) {
     params: { key },
     responseType: 'blob',
   });
-  const disposition = response.headers?.['content-disposition'] || '';
-  const match = disposition.match(/filename="?([^";]+)"?/i);
-  const filename = match?.[1] || key.split('/').pop() || 'object.bin';
-  const url = URL.createObjectURL(response.data);
-  try {
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  const filename = filenameFromDisposition(response.headers?.['content-disposition'])
+    || key.split('/').pop() || 'object.bin';
+  saveBlob(response.data, filename);
 }
 
 export async function deleteStorageObject(key) {

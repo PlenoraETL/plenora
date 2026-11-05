@@ -354,9 +354,17 @@ describe("every preparation of the run keeps runState 'starting' (also the estim
 });
 
 describe('enumeration: one window, one path', () => {
-  it('only PipelineRunner opens the window and asks for the estimate', () => {
-    expect(usersOf(/BeforeRunModal/)).toEqual(['components/editor/BeforeRunModal.jsx', 'components/editor/PipelineRunner.jsx']);
+  // Fase 5 T2 (BA2): la stessa finestra la aprono l'editor (PipelineRunner)
+  // e gli Eseguibili versionati (ExecutableDynamicRunForm), ognuno con la sua
+  // stima del server; nessun altro.
+  it('only PipelineRunner and the executable run form open the window and ask for the estimate', () => {
+    expect(usersOf(/BeforeRunModal/)).toEqual([
+      'components/editor/BeforeRunModal.jsx',
+      'components/editor/PipelineRunner.jsx',
+      'components/eseguibili/ExecutableDynamicRunForm.jsx',
+    ]);
     expect(usersOf(/preflightEnrichment/)).toEqual(['api/enrichment.js', 'api/index.js', 'components/editor/PipelineRunner.jsx']);
+    expect(usersOf(/preflightEseguibile/)).toEqual(['api/eseguibili.js', 'api/index.js', 'components/eseguibili/ExecutableDynamicRunForm.jsx']);
   });
 
   it('the old double paths are gone (confirmation + estimate, config step of the progress window)', () => {

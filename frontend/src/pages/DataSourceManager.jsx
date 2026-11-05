@@ -3,7 +3,7 @@
  * Redesign Plenora design system
  * Route: /datasources
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +20,8 @@ import { toastApiError } from '../utils/toastApiError';
 import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 import useDialog from '../hooks/useDialog';
 import { can } from '../utils/permissions';
+import { useResource } from '../hooks/useResource';
+import { useBusy } from '../hooks/useBusy';
 import '../styles/DataSourceManager.css';
 import { goBack } from '../utils/navigation';
 const DS_TYPES = [
@@ -53,23 +55,23 @@ export default function DataSourceManager() {
   const canvasRef = React.useRef(null);
   useHexCanvas(canvasRef);
 
-  const [datasources,   setDatasources]   = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState(null);
+  // Fase 5 T2 (R4.5, R4.7, R9.10): elenco e browser dall'hook comune (id
+  // di richiesta: la cartella mostrata e' sempre l'ultima chiesta), test ed
+  // eliminazioni per Data Source (useBusy).
+  const resource = useResource(async () => (await listDataSources()).datasources || [], { key: 'datasources', errorMessage: (e) => humanizeError(e).message });
+  const datasources = resource.data || [];
+  const loading = resource.initialLoading;
+  const error = resource.error;
+  const load = () => resource.reload();
+  const busy = useBusy();
   const [showModal,     setShowModal]     = useState(false);
   const [editing,       setEditing]       = useState(null);
   const [formData,      setFormData]      = useState(EMPTY_FORM);
   const [saving,        setSaving]        = useState(false);
   const [formError,     setFormError]     = useState(null);
-  const [testingId,     setTestingId]     = useState(null);
-  // P1 frontend-pages: anti double-submit su DELETE Data Source.
-  const [deletingId,    setDeletingId]    = useState(null);
   const [testResults,   setTestResults]   = useState({});
   const [browserDs,     setBrowserDs]     = useState(null);
-  const [browserFiles,  setBrowserFiles]  = useState([]);
   const [browserPath,   setBrowserPath]   = useState('');
-  const [browserLoading,setBrowserLoading]= useState(false);
-  const [browserError,  setBrowserError]  = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [sharingDatasource, setSharingDatasource] = useState(null);  // ds in sharing modal (solo super)
 
@@ -82,12 +84,12 @@ export default function DataSourceManager() {
   });
   const browserDialog = useDialog({
     isOpen: !!browserDs,
-    onClose: () => { setBrowserDs(null); setBrowserFiles([]); setBrowserPath(''); },
+    onClose: () => { setBrowserDs(null); setBrowserPath(''); },
   });
   const confirmDialog = useDialog({
     isOpen: !!confirmDelete,
     onClose: () => setConfirmDelete(null),
-    busy: Boolean(confirmDelete && deletingId === confirmDelete.id),
+    busy: Boolean(confirmDelete && busy.isBusy(`delete:${confirmDelete.id}`)),
     closeOnOverlay: false,
   });
   const shareDialog = useDialog({ isOpen: !!sharingDatasource, onClose: () => setSharingDatasource(null) });
@@ -95,12 +97,13 @@ export default function DataSourceManager() {
   const canShare       = can.shareResources(user);
   const canCreateDs    = can.createDataSource(user);
 
-  const load = useCallback(async () => {
-    try { setLoading(true); setError(null); const d = await listDataSources(); setDatasources(d.datasources || []); }
-    catch (e) { setError(humanizeError(e).message); }
-    finally { setLoading(false); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
+  const browser = useResource(
+    () => listFiles(browserDs.id, { path: browserPath }),
+    { key: { ds: browserDs?.id || null, path: browserPath }, enabled: Boolean(browserDs), errorMessage: requestErrorMessage },
+  );
+  const browserFiles = browser.data || [];
+  const browserLoading = browser.loading;
+  const browserError = browser.error;
 
   const openNew = () => { setEditing(null); setFormData(EMPTY_FORM); setFormError(null); setShowModal(true); };
   const openEdit = ds => {
@@ -126,21 +129,22 @@ export default function DataSourceManager() {
   };
 
   const handleTest = async id => {
-    setTestingId(id); setTestResults(prev => ({ ...prev, [id]: null }));
-    try { const r = await testDataSource(id); setTestResults(prev => ({ ...prev, [id]: r })); }
-    catch (e) { setTestResults(prev => ({ ...prev, [id]: { success:false, message:requestErrorMessage(e) } })); }
-    finally { setTestingId(null); }
+    if (busy.isBusy(`test:${id}`)) return;
+    setTestResults(prev => ({ ...prev, [id]: null }));
+    try {
+      const r = await busy.run(`test:${id}`, () => testDataSource(id));
+      if (!r.skipped) setTestResults(prev => ({ ...prev, [id]: r.value }));
+    } catch (e) { setTestResults(prev => ({ ...prev, [id]: { success:false, message:requestErrorMessage(e) } })); }
   };
 
   // Pre-fix (P1 frontend-pages): handleDelete async senza disabling
   // del bottone → utente puo' cliccare "Elimina" piu' volte mentre
   // l'API e' in corso, generando N DELETE concorrenti sullo stesso ID.
-  // Post-fix: deletingId flag che disabilita il bottone durante l'await.
+  // Post-fix: eliminazione per Data Source (useBusy): bottone spento durante l'await.
   const handleDelete = async id => {
-    if (deletingId === id) return;  // guard re-entrancy
-    setDeletingId(id);
     try {
-      await deleteDataSource(id);
+      const r = await busy.run(`delete:${id}`, () => deleteDataSource(id));
+      if (r.skipped) return;
       setConfirmDelete(null);
       await load();
     } catch (e) {
@@ -154,19 +158,16 @@ export default function DataSourceManager() {
         return;
       }
       toastApiError(toast, e, 'Errore');
-    } finally {
-      setDeletingId(null);
     }
   };
 
-  const openBrowser = async ds => { setBrowserDs(ds); setBrowserPath(''); setBrowserFiles([]); setBrowserError(null); await browseFiles(ds.id, ''); };
-  const browseFiles = async (dsId, path) => {
-    setBrowserLoading(true); setBrowserError(null); setBrowserPath(path);
-    try { const files = await listFiles(dsId, { path }); setBrowserFiles(files); }
-    catch (e) { setBrowserError(requestErrorMessage(e)); }
-    finally { setBrowserLoading(false); }
+  const openBrowser = ds => { setBrowserPath(''); setBrowserDs(ds); };
+  // Stessa cartella = ricarica; altra cartella = nuova richiesta (vince l'ultima).
+  const browseFiles = (dsId, path) => {
+    if (path === browserPath) browser.reload();
+    else setBrowserPath(path);
   };
-  const closeBrowser = () => { setBrowserDs(null); setBrowserFiles([]); setBrowserPath(''); };
+  const closeBrowser = () => { setBrowserDs(null); setBrowserPath(''); };
 
   return (
     <div className="dsm">
@@ -190,12 +191,12 @@ export default function DataSourceManager() {
           <canvas ref={canvasRef} className="dsm__hex-bg" />
 
           {error && (
-            <div className="dsm__error-banner">⚠️ {error} <button type="button" onClick={load}>Riprova</button></div>
+            <div className="dsm__error-banner" role="alert">⚠️ {error} <button type="button" onClick={load}>Riprova</button></div>
           )}
 
           {loading ? (
             <div className="dsm__loading"><div className="dsm__loading-icon">⬡</div>Caricamento Data Source...</div>
-          ) : datasources.length === 0 ? (
+          ) : error && !resource.hasData ? null : datasources.length === 0 ? (
             <div className="dsm__empty">
               <div className="dsm__empty-icon">🗄️</div>
               <div className="dsm__empty-title">Nessun Data Source configurato</div>
@@ -209,7 +210,7 @@ export default function DataSourceManager() {
               {datasources.map(ds => {
                 const ti = TYPE_INFO[ds.type] || {};
                 const testResult = testResults[ds.id];
-                const isTesting  = testingId === ds.id;
+                const isTesting  = busy.isBusy(`test:${ds.id}`);
                 const canEdit    = can.editDataSource(user, ds);
                 return (
                   <div key={ds.id} className="dsm__card">
@@ -441,7 +442,7 @@ export default function DataSourceManager() {
               )}
               {browserLoading && <div className="dsm__browser-loading">⏳ Caricamento...</div>}
               {browserError  && <div className="dsm__browser-error">❌ {browserError}</div>}
-              {!browserLoading && !browserError && (
+              {!browser.initialLoading && !browserError && browser.hasData && (
                 browserFiles.length === 0 ? (
                   <div className="dsm__browser-empty">Nessun file trovato in questa cartella</div>
                 ) : (
@@ -491,14 +492,14 @@ export default function DataSourceManager() {
                 type="button"
                 className="dsm__btn dsm__btn--ghost"
                 onClick={() => setConfirmDelete(null)}
-                disabled={deletingId === confirmDelete.id}
+                disabled={busy.isBusy(`delete:${confirmDelete.id}`)}
               >Annulla</button>
               <button
                 type="button"
                 className="dsm__btn dsm__btn--danger"
                 onClick={() => handleDelete(confirmDelete.id)}
-                disabled={deletingId === confirmDelete.id}
-              >{deletingId === confirmDelete.id ? 'Eliminazione…' : 'Elimina'}</button>
+                disabled={busy.isBusy(`delete:${confirmDelete.id}`)}
+              >{busy.isBusy(`delete:${confirmDelete.id}`) ? 'Eliminazione…' : 'Elimina'}</button>
             </div>
           </div>
         </div>

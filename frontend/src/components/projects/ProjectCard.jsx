@@ -54,10 +54,12 @@ function ProjectCard({
 
   // Stato dell'ultima run (#11): preferisce `runStatus` dalla mappa log_runs
   // (status: success | failure | running), fallback al campo legacy del
-  // progetto. Nessuna run → "Mai eseguito".
+  // progetto. Nessuna run → "Mai eseguito". Stato non caricato (Fase 5 T2,
+  // R4.9) → "Stato non disponibile", mai "Mai eseguito".
   const status = runStatus?.status || project.last_status;
 
-  const statusLabel = status === 'success' ? 'Completato'
+  const statusLabel = runStatus?.status === 'unavailable' ? 'Stato non disponibile'
+    : status === 'success' ? 'Completato'
     : status === 'running' ? 'In esecuzione'
     : (status === 'failure' || status === 'error') ? 'Errore'
     : 'Mai eseguito';

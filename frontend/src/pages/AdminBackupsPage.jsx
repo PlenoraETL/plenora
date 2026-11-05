@@ -13,6 +13,8 @@
  * (vedi docstring di backend/scripts/backup_db.py).
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import { useResource } from '../hooks/useResource';
+import { ResourceError } from '../components/common/ListState';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
 import { can } from '../utils/permissions';
@@ -93,8 +95,21 @@ function StorageBadge({ cls }) {
     </span>
   );
 }
-function StatusCard({ status }) {
-  if (!status) return <div className="ab__card ab__card--status">Caricamento...</div>;
+// Fase 5 T2 (R4.15): ogni scheda mostra il SUO stato (caricamento, errore
+// con «Riprova», dati): mai "Caricamento..." per sempre.
+function CardState({ resource, className, title }) {
+  if (resource.status === 'error' && !resource.hasData) {
+    return (
+      <div className={`ab__card ${className}`}>
+        <ResourceError compact title={title} message={resource.error} onRetry={resource.reload} />
+      </div>
+    );
+  }
+  return <div className={`ab__card ${className}`}>Caricamento...</div>;
+}
+
+function StatusCard({ status, resource }) {
+  if (!status) return <CardState resource={resource} className="ab__card--status" title="Stato non caricato" />;
 
   const resultClasses = {
     success: 'ab__card--ok',
@@ -126,8 +141,8 @@ function StatusCard({ status }) {
     </div>
   );
 }
-function ScheduleCard({ schedule }) {
-  if (!schedule) return <div className="ab__card ab__card--schedule">Caricamento...</div>;
+function ScheduleCard({ schedule, resource }) {
+  if (!schedule) return <CardState resource={resource} className="ab__card--schedule" title="Pianificazione non caricata" />;
 
   return (
     <div className={`ab__card ${schedule.timer_active ? 'ab__card--ok' : 'ab__card--err'}`}>
@@ -147,105 +162,80 @@ export default function AdminBackupsPage() {
   const canTrigger = can.manageBackups(user);
   const confirmModal = useConfirmModal();
 
-  const [data, setData] = useState(null);
-  const [status, setStatus] = useState(null);
-  const [schedule, setSchedule] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Fase 5 T2 (R4.15): tre risorse dell'hook comune, ognuna con il suo
+  // stato. Credenziali AWS scadute: nessun aggiornamento automatico finche'
+  // l'operatore non clicca «Riprova». Dopo "Esegui backup ora" lo stato si
+  // segue (ogni 5 s) finche' il backup non e' finito; la lista si ricarica
+  // quando l'ultimo backup cambia (chiave della lista).
+  const [triggered, setTriggered] = useState(null); // { finishedAt } prima dell'avvio
+  const [triggerError, setTriggerError] = useState(null); // { code, text }
+  // Versione della lista: l'ultimo backup finito visto seguendo lo stato.
+  const [listVersion, setListVersion] = useState(null);
+  const statusResource = useResource(getBackupStatus, { key: 'backup-status' });
+  const status = statusResource.data || null;
+  const scheduleResource = useResource(getBackupSchedule, { key: 'backup-schedule' });
+  const schedule = scheduleResource.data || null;
+  const listResource = useResource(() => listBackups(), {
+    key: ['backup-list', listVersion],
+    keepPreviousData: true,
+  });
+  const listCode = listResource.rawError ? extractErrorCode(listResource.rawError) : null;
+  const listMessage = listResource.rawError ? extractErrorMessage(listResource.rawError) : null;
+  const errorCode = listCode || triggerError?.code || null;
+  const backupUnavailable = isObjectStorageDisabled(errorCode) ? (listMessage || triggerError?.text) : null;
+  const awsCredentialsError = errorCode === 'aws_credentials_expired' ? (listMessage || triggerError?.text) : null;
+  const [extra, setExtra] = useState(null); // pagine successive della lista
+  const base = backupUnavailable ? null : (listResource.data || null);
+  const data = base && extra && extra.after === base.next_cursor
+    ? { ...extra.page, items: [...(base.items || []), ...extra.items], count: (base.items?.length || 0) + extra.items.length }
+    : base;
+  const loading = listResource.loading || statusResource.loading || scheduleResource.loading;
   const [loadingMore, setLoadingMore] = useState(false);
   const [triggering, setTriggering] = useState(false);
-  const [backupUnavailable, setBackupUnavailable] = useState(null);
-  // RB.#10: stato dedicato per credenziali AWS scadute. Bloccato in
-  // banner persistente + nessun auto-refresh finche' l'operatore non
-  // clicca "Riprova" (dopo aver fatto `aws sso login` lato server).
-  const [awsCredentialsError, setAwsCredentialsError] = useState(null);
 
-  // Guard della rotta: /admin/backups e' protetta da <SuperadminRoute>
-  // in App.jsx che fa il redirect PRIMA del mount. Qui nessun check
-  // ridondante (il loadAll sotto non parte per utenti non superadmin).
-
-  const loadAll = useCallback(async () => {
-    setLoading(true);
-    // try/finally garantisce che setLoading(false) venga sempre eseguito
-    // anche se un helper sincrono successivo solleva (extractErrorCode/
-    // Message o isObjectStorageDisabled potrebbero throware in futuro).
-    // Pre-fix la UI restava in stato "Loading..." indefinito su throw.
-    try {
-      const [listResult, statusResult, scheduleResult] = await Promise.allSettled([
-        listBackups(),
-        getBackupStatus(),
-        getBackupSchedule(),
-      ]);
-
-      let handledStorageDisabled = false;
-      let handledAwsCredentials = false;
-      let genericError = null;
-
-      if (listResult.status === 'fulfilled') {
-        setData(listResult.value);
-        setBackupUnavailable(null);
-        setAwsCredentialsError(null);
-      } else {
-        const code = extractErrorCode(listResult.reason);
-        const message = extractErrorMessage(listResult.reason);
-        if (isObjectStorageDisabled(code)) {
-          handledStorageDisabled = true;
-          setBackupUnavailable(message);
-          setAwsCredentialsError(null);
-          setData(null);
-        } else if (code === 'aws_credentials_expired') {
-          handledAwsCredentials = true;
-          setAwsCredentialsError(message);
-          setBackupUnavailable(null);
-        } else {
-          genericError = message;
-        }
-      }
-
-      if (statusResult.status === 'fulfilled') {
-        setStatus(statusResult.value);
-      } else if (!handledStorageDisabled && !handledAwsCredentials) {
-        genericError = genericError || extractErrorMessage(statusResult.reason);
-      }
-
-      if (scheduleResult.status === 'fulfilled') {
-        setSchedule(scheduleResult.value);
-      } else if (!handledStorageDisabled && !handledAwsCredentials) {
-        genericError = genericError || extractErrorMessage(scheduleResult.reason);
-      }
-
-      if (genericError) {
-        toast.error(genericError);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
+  // Si segue il backup avviato finche' non c'e' un esito nuovo.
+  const following = Boolean(triggered) && !awsCredentialsError;
+  const running = status?.result === 'running';
+  const followStatus = useResource(getBackupStatus, {
+    key: 'backup-status-follow',
+    enabled: following || running,
+    refreshInterval: 5000,
+  });
+  const followed = followStatus.data;
   useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+    if (!followed) return;
+    statusResource.setData(followed);
+    if (followed.result === 'running') return;
+    if (followed.finished_at && followed.finished_at !== listVersion) setListVersion(followed.finished_at);
+    if (triggered && followed.finished_at !== triggered.finishedAt) setTriggered(null);
+  }, [followed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleRetryAws = useCallback(() => {
-    setAwsCredentialsError(null);
-    loadAll();
-  }, [loadAll]);
+  const loadAll = useCallback(() => {
+    setTriggerError(null);
+    setExtra(null);
+    listResource.reload();
+    statusResource.reload();
+    scheduleResource.reload();
+  }, [listResource, statusResource, scheduleResource]);
+
+  const handleRetryAws = loadAll;
 
   const handleLoadMore = useCallback(async () => {
-    if (!data?.next_cursor || loadingMore) return;
+    if (!data?.next_cursor || loadingMore || !base) return;
     setLoadingMore(true);
     try {
-      const page = await listBackups({ cursor: data.next_cursor });
-      setData(current => ({
-        ...page,
-        items: [...(current?.items || []), ...(page.items || [])],
-        count: (current?.items?.length || 0) + (page.items?.length || 0),
-      }));
+      const cursor = data.next_cursor;
+      const page = await listBackups({ cursor });
+      setExtra(cur => {
+        const prev = cur && cur.after === base.next_cursor ? cur : { after: base.next_cursor, items: [] };
+        return { after: prev.after, page, items: [...prev.items, ...(page.items || [])] };
+      });
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
       setLoadingMore(false);
     }
-  }, [data?.next_cursor, loadingMore, toast]);
+  }, [data?.next_cursor, loadingMore, toast, base]);
 
   const handleTrigger = async () => {
     if (!canTrigger) return;
@@ -268,25 +258,17 @@ export default function AdminBackupsPage() {
       const res = await triggerBackup();
       if (res.started) {
         toast.success(res.message);
-        // Ricarica lista tra 5 secondi (tempo tipico per pg_dump + upload).
-        // RB.#10: se siamo in stato AWS-credentials-expired, il refresh
-        // automatico sarebbe inutile (la list_backups continuera' a 503);
-        // l'utente riavvia manualmente con "Riprova" dopo `aws sso login`.
-        setTimeout(() => {
-          if (!awsCredentialsError) loadAll();
-        }, 5000);
+        // Si segue lo stato fino all'esito (followStatus); la lista si
+        // ricarica quando l'ultimo backup cambia.
+        setTriggered({ finishedAt: status?.finished_at || null });
       } else {
         toast.error(res.message || 'Trigger backup non avviato');
       }
     } catch (e) {
       const code = extractErrorCode(e);
       const message = extractErrorMessage(e);
-      if (isObjectStorageDisabled(code)) {
-        setBackupUnavailable(message);
-        setAwsCredentialsError(null);
-      } else if (code === 'aws_credentials_expired') {
-        setAwsCredentialsError(message);
-        setBackupUnavailable(null);
+      if (isObjectStorageDisabled(code) || code === 'aws_credentials_expired') {
+        setTriggerError({ code, text: message });
       } else {
         toast.error(message);
       }
@@ -333,7 +315,7 @@ export default function AdminBackupsPage() {
           <div className="ab__header-actions">
             <button
               className="ab__btn ab__btn--secondary"
-              onClick={loadAll}
+              onClick={() => loadAll()}
               disabled={loading}
             >
               {loading ? 'Aggiornamento...' : '↻ Aggiorna'}
@@ -365,20 +347,27 @@ export default function AdminBackupsPage() {
         )}
 
         <section className="ab__cards">
-          <StatusCard status={status} />
-          <ScheduleCard schedule={schedule} />
+          <StatusCard status={status} resource={statusResource} />
+          <ScheduleCard schedule={schedule} resource={scheduleResource} />
         </section>
 
         <section className="ab__list">
           <h2 className="ab__list-title">
             Backup su S3 {data && <span className="ab__count">({data.count})</span>}
           </h2>
-          {loading && !data ? (
+          {following && (
+            <p className="ab__subtitle" role="status">Backup avviato: lo stato si aggiorna fino alla fine.</p>
+          )}
+          {listResource.initialLoading ? (
             <div className="ab__loading">Caricamento...</div>
           ) : backupUnavailable ? (
             <div className="ab__empty ab__empty--disabled">
               Lista backup non disponibile in questo deployment.
             </div>
+          ) : listResource.status === 'error' && !data ? (
+            awsCredentialsError ? null : (
+              <ResourceError title="Lista dei backup non caricata" message={listResource.error} onRetry={listResource.reload} />
+            )
           ) : data?.items?.length > 0 ? (
             <>
             <table className="ab__table">

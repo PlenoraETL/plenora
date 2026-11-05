@@ -2,11 +2,11 @@
  * AdminRuntimeConfigPage.jsx - configurazione runtime read-only.
  * Route: /admin/runtime-config
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import AppSidebar from '../components/AppSidebar';
 import { getRuntimeConfig } from '../api/adminRuntimeConfig';
-import { useToast } from '../hooks/useToast';
-import { toastApiError } from '../utils/toastApiError';
+import { useResource } from '../hooks/useResource';
+import ListState from '../components/common/ListState';
 import '../styles/AdminRuntimeConfigPage.css';
 
 function fmtDate(iso) {
@@ -99,27 +99,15 @@ function Section({ section, query, showAdvanced }) {
 }
 
 export default function AdminRuntimeConfigPage() {
-  const toast = useToast();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Fase 5 T2 (R4.8): hook comune, errore come errore con «Riprova».
+  const resource = useResource(getRuntimeConfig, { key: 'runtime-config' });
+  const data = resource.data || null;
+  const loading = resource.loading;
+  const load = () => resource.reload();
   const [query, setQuery] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const topology = data?.runtime?._dev_topology;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setData(await getRuntimeConfig());
-    } catch (e) {
-      toastApiError(toast, e, 'Errore caricamento configurazione');
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   return (
     <div className="arc">
@@ -211,18 +199,21 @@ export default function AdminRuntimeConfigPage() {
           </button>
         </div>
 
-        {loading && !data ? (
-          <div className="arc__loading">Caricamento...</div>
-        ) : (
-          (data?.sections || []).map((section) => (
+        <ListState
+          resource={resource}
+          loading={<div className="arc__loading">Caricamento...</div>}
+          errorTitle="Configurazione non caricata"
+          empty="Nessuna configurazione."
+        >
+          {(data?.sections || []).map((section) => (
             <Section
               key={section.name}
               section={section}
               query={query}
               showAdvanced={showAdvanced}
             />
-          ))
-        )}
+          ))}
+        </ListState>
       </main>
     </div>
   );

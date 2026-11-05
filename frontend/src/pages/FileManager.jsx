@@ -3,7 +3,8 @@
  * Redesign Plenora: sidebar layout, hex bg, drop zone, card grid
  * Route: /files
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
+import { useResource } from '../hooks/useResource';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
@@ -57,9 +58,16 @@ const FileManager = () => {
   const fileInputRef = useRef(null);
   useHexCanvas(canvasRef);
 
-  const [files,   setFiles]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
+  // Fase 5 T2 (R4.3, R4.7): elenco dall'hook comune (spinner a pagina
+  // intera solo al primo caricamento, errore con «Riprova»).
+  const resource = useResource(async () => (await getFiles()).files || [], { key: 'files', errorMessage: humanizeErrorMessage });
+  const files = resource.data || [];
+  const loading = resource.initialLoading;
+  const error = resource.error;
+  const loadFiles = () => resource.reload();
+  // Id della scelta del file: anteprime e colonne di un file scelto prima
+  // non scrivono sul file scelto dopo.
+  const selectionRef = useRef(0);
   const [search,  setSearch]  = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [sharingFile, setSharingFile] = useState(null);  // file in sharing modal (solo super)
@@ -99,30 +107,13 @@ const FileManager = () => {
   const [layerColumns,      setLayerColumns]      = useState({});
   const [layerSelectedCols, setLayerSelectedCols] = useState({});
   const [activeLayerTab,    setActiveLayerTab]    = useState(null);
-  const [loadingLayerCols,  setLoadingLayerCols]  = useState(false);
+  // Lettura delle colonne PER layer (le schede non si contendono un flag).
+  const [loadingLayers,     setLoadingLayers]     = useState({});
 
   // Preview modal state
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewData,      setPreviewData]      = useState(null);
   const [previewFile,      setPreviewFile]      = useState(null);
-const loadFiles = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await getFiles();
-      setFiles(data.files || []);
-      setError(null);
-    } catch (err) {
-      // P1 (2026-05-26): propaga dettaglio server invece di message
-      // generico. Pre-fix nascondeva sempre `err.message` o
-      // `err.response.data.detail` rendendo impossibile distinguere
-      // 401/403/500/timeout dall'UI.
-      setError(humanizeErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadFiles(); }, [loadFiles]);
 const handleDrag = (e) => {
     e.preventDefault(); e.stopPropagation();
     setDragActive(e.type === 'dragenter' || e.type === 'dragover');
@@ -136,23 +127,32 @@ const handleDrag = (e) => {
     }
   };
   const handleFileSelect = (file) => {
+    // Un file nuovo: niente di quello di prima (layer, foglio, colonne).
+    selectionRef.current += 1;
     setUploadFile(file);
     setUploadName(file.name.replace(/\.[^/.]+$/, ''));
     setUploadError(null);
+    setUploadLayer(''); setUploadSheet(''); setUploadStep(1);
+    setAvailableColumns([]); setSelectedColumns([]); setDetectedSrid(null); setUserSrid(''); setHasGeometryColumn(false);
+    setIsMultiLayerFile(false); setMultiSourceKind(null); setCheckedLayers({}); setLayerColumns({}); setLayerSelectedCols({});
+    setActiveLayerTab(null); setAvailableLayers([]); setLoadingLayers({}); setLoadingColumns(false);
   };
 const _loadColumnsForLayer = async (file, layerName, currentCols, currentSelected, isSheet = false) => {
-    setLoadingLayerCols(true);
+    const token = selectionRef.current;
+    setLoadingLayers(prev => ({ ...prev, [layerName]: true }));
     try {
       const preview = await previewFileTemp(file, isSheet ? null : layerName, isSheet ? layerName : null);
+      if (token !== selectionRef.current) return;
       const cols = preview.columns || [];
       setLayerColumns(prev => ({ ...prev, [layerName]: cols }));
       if (!currentSelected[layerName] || currentSelected[layerName].length === 0) {
         setLayerSelectedCols(prev => ({ ...prev, [layerName]: cols.map(c => c.name) }));
       }
     } catch (e) {
-      console.error(`Errore colonne layer ${layerName}:`, e);
+      if (token !== selectionRef.current) return;
+      setUploadError(`Colonne di "${layerName}" non lette: ${humanizeErrorMessage(e)}`);
     } finally {
-      setLoadingLayerCols(false);
+      if (token === selectionRef.current) setLoadingLayers(prev => ({ ...prev, [layerName]: false }));
     }
   };
 
@@ -210,9 +210,12 @@ const handleMultiLayerUpload = async () => {
 const handleNextStep = async () => {
     if (!uploadFile_ || !uploadName.trim()) { setUploadError('Seleziona un file e inserisci un nome'); return; }
     setLoadingColumns(true); setUploadError(null);
+    const token = selectionRef.current;
     try {
       const ext = uploadFile_.name.split('.').pop().toLowerCase();
       const preview = await previewFileTemp(uploadFile_);
+      // Nel frattempo e' stato scelto un altro file: questa anteprima non vale.
+      if (token !== selectionRef.current) return;
       const { sourceKind, itemList } = resolveMultiSourcePreview(preview);
       if (itemList.length > 1) {
         const initChecked = {}, initCols = {}, initSelected = {};
@@ -256,8 +259,9 @@ const handleNextStep = async () => {
         }
       }
     } catch (err) {
+      if (token !== selectionRef.current) return;
       setUploadError(humanizeErrorMessage(err, 'Errore nella lettura del file'));
-    } finally { setLoadingColumns(false); }
+    } finally { if (token === selectionRef.current) setLoadingColumns(false); }
   };
 
   const handlePrevStep = () => {
@@ -351,6 +355,7 @@ const resetUploadModal = () => {
     setUploadLayer(''); setUploadSheet(''); setUploadError(null); setUploadStep(1);
     setAvailableColumns([]); setSelectedColumns([]); setDetectedSrid(null); setUserSrid(''); setHasGeometryColumn(false);
     setIsMultiLayerFile(false); setMultiSourceKind(null); setCheckedLayers({}); setLayerColumns({}); setLayerSelectedCols({}); setActiveLayerTab(null); setAvailableLayers([]);
+    setLoadingLayers({}); selectionRef.current += 1;
   };
   const resetLayerModal = () => { setShowLayerModal(false); setPendingFile(null); setAvailableLayers([]); setAvailableSheets([]); setSelectedLayer(''); setSelectedSheet(''); };
   const filteredFiles = files.filter(f => {
@@ -419,7 +424,9 @@ const resetUploadModal = () => {
           </div>
 
           {/* Error */}
-          {error && <div className="fm__error">⚠️ {error}</div>}
+          {error && (
+            <div className="fm__error" role="alert">⚠️ {error} <button type="button" className="fm__btn fm__btn--ghost" onClick={() => resource.reload()}>Riprova</button></div>
+          )}
 
           {/* Drop zone */}
           {can.uploadFile(user) && (
@@ -502,7 +509,7 @@ const resetUploadModal = () => {
           layerColumns={layerColumns}
           layerSelectedCols={layerSelectedCols}
           activeLayerTab={activeLayerTab}
-          loadingLayerCols={loadingLayerCols}
+          loadingLayerCols={Boolean(activeLayerTab && loadingLayers[activeLayerTab])}
           fileInputRef={fileInputRef}
           onClose={resetUploadModal}
           onDrag={handleDrag}

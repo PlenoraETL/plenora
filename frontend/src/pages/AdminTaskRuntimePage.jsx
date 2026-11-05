@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import AppSidebar from '../components/AppSidebar';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { useAuth } from '../context/AuthContext';
 import { can } from '../utils/permissions';
 import { getTaskRuntime, resolveUncertainCaricaRun } from '../api/adminTaskRuntime';
 import { humanizeErrorMessage } from '../utils/errorMessages';
+import { useResource } from '../hooks/useResource';
+import { useBusy } from '../hooks/useBusy';
 import '../styles/AdminTaskRuntimePage.css';
 
 
@@ -80,54 +82,33 @@ function StatusPill({ value }) {
 }
 
 export default function AdminTaskRuntimePage() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [resolvingRunId, setResolvingRunId] = useState('');
+  // Fase 5 T2 (R4.14, R9.10): dati dall'hook comune (aggiornamento ogni
+  // 5 s, un poll alla volta, fermo con la scheda nascosta); l'errore di
+  // caricamento e quello di una risoluzione sono distinti (il poll non
+  // cancella l'errore della risoluzione); risoluzioni per run (useBusy).
+  const resource = useResource(getTaskRuntime, { key: 'task-runtime', refreshInterval: REFRESH_MS });
+  const data = resource.data || null;
+  const loading = resource.loading;
+  const load = resource.reload;
+  const [actionError, setActionError] = useState('');
+  const busy = useBusy();
   const [resolveRequest, setResolveRequest] = useState(null); // { run, resolution }
   const { user } = useAuth();
   const canResolve = can.manageTaskRuntime(user);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setData(await getTaskRuntime());
-      setError('');
-    } catch (err) {
-      setError(humanizeErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   const resolveRun = useCallback(async (note) => {
     if (!resolveRequest) return;
     const { run, resolution } = resolveRequest;
-    setResolvingRunId(run.run_id);
+    setActionError('');
     try {
-      await resolveUncertainCaricaRun(run.run_id, resolution, note);
+      const r = await busy.run(run.run_id, () => resolveUncertainCaricaRun(run.run_id, resolution, note));
+      if (r.skipped) return;
       setResolveRequest(null);
       await load();
     } catch (err) {
-      setError(humanizeErrorMessage(err));
-    } finally {
-      setResolvingRunId('');
+      setActionError(humanizeErrorMessage(err));
     }
-  }, [load, resolveRequest]);
-
-  useEffect(() => {
-    let stopped = false;
-    let timer;
-    const poll = async () => {
-      await load();
-      if (!stopped) timer = setTimeout(poll, REFRESH_MS);
-    };
-    poll();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [load]);
+  }, [load, resolveRequest, busy]);
 
   const totals = data?.totals || {};
   const workQueues = (data?.queues || []).filter((item) => item.kind === 'work');
@@ -145,12 +126,13 @@ export default function AdminTaskRuntimePage() {
             </div>
             <p>Stato operativo di RabbitMQ, worker Dramatiq e task in esecuzione.</p>
           </div>
-          <button type="button" onClick={load} disabled={loading}>
+          <button type="button" onClick={() => load()} disabled={loading}>
             {loading ? 'Aggiornamento…' : 'Aggiorna'}
           </button>
         </header>
 
-        {error && <div className="task-runtime__error">{error}</div>}
+        {resource.error && <div className="task-runtime__error" role="alert">Caricamento non riuscito: {resource.error}</div>}
+        {actionError && <div className="task-runtime__error" role="alert">{actionError}</div>}
         {(data?.warnings || []).map((warning) => (
           <div className="task-runtime__warning" key={warning}>{warning}</div>
         ))}
@@ -191,8 +173,8 @@ export default function AdminTaskRuntimePage() {
                       <td>{new Date(run.timestamp).toLocaleString()}</td>
                       <td className="task-runtime__message" title={run.error_message || ''}>{run.error_message || '—'}</td>
                       <td className="task-runtime__actions">
-                        {canResolve && <button type="button" disabled={resolvingRunId === run.run_id} onClick={() => setResolveRequest({ run, resolution: 'confirm_completed' })}>Conferma completata</button>}
-                        {canResolve && <button type="button" disabled={resolvingRunId === run.run_id} onClick={() => setResolveRequest({ run, resolution: 'allow_retry' })}>Autorizza retry</button>}
+                        {canResolve && <button type="button" disabled={busy.isBusy(run.run_id)} onClick={() => setResolveRequest({ run, resolution: 'confirm_completed' })}>Conferma completata</button>}
+                        {canResolve && <button type="button" disabled={busy.isBusy(run.run_id)} onClick={() => setResolveRequest({ run, resolution: 'allow_retry' })}>Autorizza retry</button>}
                       </td>
                     </tr>
                   ))}
@@ -249,7 +231,7 @@ export default function AdminTaskRuntimePage() {
                     <td>{duration(worker.heartbeat_age_seconds)} fa</td>
                   </tr>
                 ))}
-                {!loading && !(data?.workers || []).length && (
+                {data && !(data.workers || []).length && (
                   <tr><td colSpan="5" className="task-runtime__empty">Nessun worker registrato</td></tr>
                 )}
               </tbody>
@@ -276,7 +258,7 @@ export default function AdminTaskRuntimePage() {
                     <td className="task-runtime__message" title={task.message || ''}>{task.message || '—'}</td>
                   </tr>
                 ))}
-                {!loading && !(data?.running_tasks || []).length && (
+                {data && !(data.running_tasks || []).length && (
                   <tr><td colSpan="7" className="task-runtime__empty">Nessun task in esecuzione</td></tr>
                 )}
               </tbody>
@@ -287,7 +269,7 @@ export default function AdminTaskRuntimePage() {
       {resolveRequest && (
         <ResolveRunDialog
           request={resolveRequest}
-          busy={resolvingRunId === resolveRequest.run.run_id}
+          busy={busy.isBusy(resolveRequest.run.run_id)}
           onCancel={() => setResolveRequest(null)}
           onConfirm={resolveRun}
         />

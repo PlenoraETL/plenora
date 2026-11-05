@@ -1,9 +1,11 @@
-import React, { memo, useEffect, useMemo, useState } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { acceptsInputKind } from '../../utils/runtimeInputKinds';
-import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
 import { loadSharedConnectionSets } from '../../utils/connectionSets';
+import { useTransformRegistry } from '../../hooks/useTransformRegistry';
+import { useResource } from '../../hooks/useResource';
+import { ResourceError } from '../common/ListState';
 import {
   getNodeBindableTargets,
   isParameterBindingEdge,
@@ -26,11 +28,7 @@ const normalizeKey = value => String(value || '')
 // condiviso (utils/transformRegistry, svuotato da resetSession) e i set di
 // connessioni sono la risorsa condivisa della sessione (utils/connectionSets:
 // una richiesta per N nodi, invalidata quando i set cambiano, svuotata da
-// resetSession).
-const loadRegistry = () => fetchTransformRegistry().then((value) => {
-  if (!value) throw new Error('elenco delle operazioni non disponibile');
-  return value;
-});
+// resetSession). Entrambi dagli hook comuni (Fase 5 T2): errore con «Riprova».
 
 function ProjectInputNode({ id, data }) {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
@@ -40,12 +38,12 @@ function ProjectInputNode({ id, data }) {
   const updateEdge = useCanvasStore(s => s.updateEdge);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const mode = useCanvasStore(s => s.mode);
-  const [registry, setRegistry] = useState(getCachedTransformRegistry);
-  const [registryStatus, setRegistryStatus] = useState(
-    getCachedTransformRegistry() ? 'ready' : 'idle',
-  );
-  const [connectionSets, setConnectionSets] = useState([]);
   const kind = data.input_kind || 'file';
+  const registryResource = useTransformRegistry({ enabled: kind !== 'file' });
+  const registry = registryResource.data || null;
+  const registryStatus = registry ? 'ready' : registryResource.status;
+  const setsResource = useResource(loadSharedConnectionSets, { key: 'connection-sets', enabled: kind === 'connection' });
+  const connectionSets = setsResource.data || [];
   const bindingEdges = useMemo(
     () => edges.filter(edge => isParameterBindingEdge(edge) && edge.source === id),
     [edges, id],
@@ -55,30 +53,6 @@ function ProjectInputNode({ id, data }) {
     [data.expected_columns],
   );
 
-  useEffect(() => {
-    if (kind === 'file' || registry) return undefined;
-    let active = true;
-    setRegistryStatus('loading');
-    loadRegistry()
-      .then(value => {
-        if (!active) return;
-        setRegistry(value);
-        setRegistryStatus('ready');
-      })
-      .catch(() => {
-        if (active) setRegistryStatus('error');
-      });
-    return () => { active = false; };
-  }, [kind, registry]);
-
-  useEffect(() => {
-    if (kind !== 'connection') return undefined;
-    let active = true;
-    loadSharedConnectionSets()
-      .then(items => { if (active) setConnectionSets(items); })
-      .catch(() => { if (active) setConnectionSets([]); });
-    return () => { active = false; };
-  }, [kind]);
 
   const update = changes => updateNodeData(id, changes);
   const updateBinding = (edgeId, targetField) => {
@@ -164,7 +138,7 @@ function ProjectInputNode({ id, data }) {
                 default_value: null,
               })}
             >
-              <option value="">Seleziona un set…</option>
+              <option value="">{setsResource.initialLoading ? 'Caricamento set…' : 'Seleziona un set…'}</option>
               {connectionSets.map(item => (
                 <option key={item.id} value={item.id}>
                   {item.name} ({item.members?.filter(member => member.active).length || 0})
@@ -190,6 +164,9 @@ function ProjectInputNode({ id, data }) {
                 ))}
             </select>
           </label>
+          {setsResource.status === 'error' && (
+            <ResourceError compact title="Set di connessioni non caricati" message={setsResource.error} onRetry={setsResource.reload} />
+          )}
           <p className="pin__binding-hint">
             Questo input seleziona la connessione dell’intero progetto Estrai.
           </p>
@@ -322,7 +299,8 @@ function ProjectInputNode({ id, data }) {
                   )}
                   {awaitingRegistry && registryStatus === 'error' && (
                     <p className="pin__binding-hint pin__binding-hint--error">
-                      Impossibile caricare l'elenco dei parametri.
+                      Impossibile caricare l'elenco dei parametri.{' '}
+                      <button type="button" className="nodrag list-state__retry" onClick={() => registryResource.reload()}>Riprova</button>
                     </p>
                   )}
                   {targetNode && !awaitingRegistry && options.length === 0 && (

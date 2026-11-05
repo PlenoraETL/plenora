@@ -1,21 +1,21 @@
 /**
- * useProjectListData.js — Hook che incapsula le 8 fetch parallele
- * della dashboard `ProjectList`.
+ * useProjectListData.js — i dati della dashboard `ProjectList`.
  *
- * Tutte le `list*` API girano in Promise.all per minimizzare il
- * round-trip totale. Le fetch non-critiche (files, schedules, arcgis,
- * eseguibili, datasources) hanno fallback inline `.catch(...)` per
- * non bloccare il render se una singola integrazione e' giu`.
- *
- * Ritorna:
- *  - lo state delle 8 collezioni + 2 indici (projectSources,
- *    projectFileSources per i progetti manipola)
- *  - `loading` flag (true solo durante la fetch iniziale o reload)
- *  - `reload()` per re-fetch (passato come `onCreated` ai modal di
- *    creazione, e come callback dei delete handlers)
+ * Fase 5 T2 (R4.7, R4.9, R9.13): sopra l'hook comune hooks/useResource.
+ *  - Tutte le `list*` girano in parallelo (allSettled): un servizio giu' non
+ *    toglie gli altri; quelli non caricati sono un avviso con «Riprova»
+ *    (`failures`), non liste vuote mute. Progetti non caricati = errore.
+ *  - Lo stato delle esecuzioni non caricato NON e' "Mai eseguito":
+ *    `runStatusUnavailable` e `runStatusFor(id)` -> { status: 'unavailable' }.
+ *  - `loading` solo al primo caricamento (lo skeleton non torna dopo
+ *    un'azione); `refreshing` per i reload.
+ *  - Modifiche ottimistiche per campo (`updateProjectOptimistic`): un errore
+ *    riporta il campo al valore CONFERMATO dal server solo se nel frattempo
+ *    non e' partita una modifica piu' recente dello stesso campo (mai
+ *    "torna A" mentre il server ha C).
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
   listProjects,
   listConnections,
@@ -27,170 +27,142 @@ import { getFiles } from '../../api/files';
 import { listSchedules } from '../../api/schedules';
 import { listDataSources } from '../../api/datasources';
 import { getLatestRunByProject } from '../../api/logRuns';
-import { useToast } from '../../hooks/useToast';
-import { useMountedRef } from '../../hooks/useMountedRef';
+import { useResource } from '../../hooks/useResource';
+
+const SERVICES = ['progetti', 'connessioni', 'API', 'file', 'schedule', 'ArcGIS', 'eseguibili', 'datasources', 'stato delle esecuzioni'];
+const UNAVAILABLE = Object.freeze({ status: 'unavailable' });
+
+async function loadDashboard() {
+  const results = await Promise.allSettled([
+    listProjects(),
+    listConnections(),
+    listApiConnections(),
+    getFiles(),
+    listSchedules(),
+    listFeatureConnections(),
+    listEseguibili(),
+    listDataSources(),
+    getLatestRunByProject(),
+  ]);
+  // Senza progetti la dashboard non ha senso: e' un errore, non "vuota".
+  if (results[0].status === 'rejected') throw results[0].reason;
+  const value = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
+  const projectsList = value(0, {}).projects || [];
+  const arcgisData = value(5, { connections: [] });
+  const eseguibiliData = value(6, []);
+  const sourcesMap = {};
+  const fileSourcesMap = {};
+  projectsList.forEach(p => {
+    if (p.project_type === 'manipola') {
+      if (p.source_project_ids) sourcesMap[p.id] = p.source_project_ids;
+      if (p.file_source_ids) fileSourcesMap[p.id] = p.file_source_ids;
+    }
+  });
+  return {
+    projects: projectsList,
+    connections: value(1, { connections: [] }).connections || [],
+    apiConnections: value(2, { api_connections: [] }).api_connections || [],
+    files: value(3, { files: [] }).files || [],
+    schedules: value(4, { schedules: [] }).schedules || [],
+    arcgisConnections: arcgisData.connections || arcgisData || [],
+    eseguibili: Array.isArray(eseguibiliData) ? eseguibiliData : (eseguibiliData?.items || []),
+    dataSources: value(7, {})?.datasources || [],
+    runStatusByProject: results[8].status === 'fulfilled' ? (results[8].value?.statuses || {}) : null,
+    failures: results.map((r, i) => (r.status === 'rejected' ? SERVICES[i] : null)).filter(Boolean),
+    projectSources: sourcesMap,
+    projectFileSources: fileSourcesMap,
+  };
+}
+
+const EMPTY = Object.freeze({});
+const NONE = Object.freeze([]);
 
 export function useProjectListData() {
-  const toast = useToast();
-  // P1 (2026-05-26): toast tramite ref invece che in deps di `reload`.
-  // Pre-fix: `toast` nelle deps di useCallback. Se il toast provider
-  // re-rendera (cambio variant, theme, ecc.) cambia l'identita' della
-  // reference; reload e' ricreato; useEffect([reload]) lo ri-triggera
-  // → potenziale loop di re-fetch su re-render del provider.
-  const toastRef = useRef(toast);
-  toastRef.current = toast;
-  const [projects, setProjects] = useState([]);
-  const [connections, setConnections] = useState([]);
-  const [arcgisConnections, setArcgisConnections] = useState([]);
-  const [apiConnections, setApiConnections] = useState([]);
-  const [files, setFiles] = useState([]);
-  const [schedules, setSchedules] = useState([]);
-  const [dataSources, setDataSources] = useState([]);
-  const [eseguibili, setEseguibili] = useState([]);
-  const [projectSources, setProjectSources] = useState({});
-  const [projectFileSources, setProjectFileSources] = useState({});
-  // #11: stato dell'ultima run per progetto { project_id: {status, ts_start} }.
-  const [runStatusByProject, setRunStatusByProject] = useState({});
-  const [loading, setLoading] = useState(true);
+  const resource = useResource(loadDashboard, { key: 'dashboard' });
+  const data = resource.data || EMPTY;
+  const { setData, reload } = resource;
 
-  // Guard contro reload concorrenti + setState post-unmount.
-  // `reloadIdRef`: la callback memorizza il proprio id; alla resolve si
-  // confronta con il ref. Se non combacia → reload piu' recente ha
-  // sovrascritto la nostra invocazione, scartiamo i risultati per
-  // evitare race "vecchia risposta arriva dopo nuova".
-  const mountedRef = useMountedRef();
-  const reloadIdRef = useRef(0);
+  // Valori confermati dal server e ultima modifica per (progetto, campo).
+  const confirmedRef = useRef(new Map());
+  const pendingRef = useRef(new Map());
 
-  const reload = useCallback(async () => {
-    const myId = reloadIdRef.current + 1;
-    reloadIdRef.current = myId;
-    try {
-      setLoading(true);
-      // Pre-fix (P1 contracts-flows): `Promise.all` + 3 fetch senza
-      // `.catch()` (listProjects/listConnections/listApiConnections) →
-      // se UNO dei 3 falliva, l'intero Promise.all rejected, scartando
-      // ANCHE i risultati degli altri 5 che avevano gia' completato.
-      // Tutto-o-niente fragile su failure transient di un singolo servizio.
-      // Post-fix: `Promise.allSettled` + handling per-servizio con
-      // fallback canonico. I dati available restano, partial-failure
-      // visibili via toast.warning aggregato.
-      const results = await Promise.allSettled([
-        listProjects(),
-        listConnections(),
-        listApiConnections(),
-        getFiles(),
-        listSchedules(),
-        listFeatureConnections(),
-        listEseguibili(),
-        listDataSources(),
-        getLatestRunByProject(),
-      ]);
+  const patchProject = useCallback((id, patch) => {
+    setData(cur => (cur ? { ...cur, projects: cur.projects.map(p => (p.id === id ? { ...p, ...patch } : p)) } : cur));
+  }, [setData]);
 
-      // Cancel guard: se nel frattempo un altro reload e' stato avviato
-      // (myId != reloadIdRef.current) OPPURE il componente e' smontato,
-      // i risultati di questa invocazione sono stale → scarta.
-      if (!mountedRef.current || reloadIdRef.current !== myId) return;
-
-      const [
-        projectsRes,
-        connectionsRes,
-        apiConnRes,
-        filesRes,
-        schedulesRes,
-        arcgisRes,
-        eseguibiliRes,
-        dataSourcesRes,
-        runStatusRes,
-      ] = results;
-
-      const projectsData = projectsRes.status === 'fulfilled' ? projectsRes.value : { projects: [] };
-      const connectionsData = connectionsRes.status === 'fulfilled' ? connectionsRes.value : { connections: [] };
-      const apiConnData = apiConnRes.status === 'fulfilled' ? apiConnRes.value : { api_connections: [] };
-      const filesData = filesRes.status === 'fulfilled' ? filesRes.value : { files: [] };
-      const schedulesData = schedulesRes.status === 'fulfilled' ? schedulesRes.value : { schedules: [], total: 0 };
-      const arcgisData = arcgisRes.status === 'fulfilled' ? arcgisRes.value : { connections: [] };
-      const eseguibiliData = eseguibiliRes.status === 'fulfilled' ? eseguibiliRes.value : [];
-      const dataSourcesData = dataSourcesRes.status === 'fulfilled' ? dataSourcesRes.value : [];
-      const runStatusData = runStatusRes.status === 'fulfilled' ? runStatusRes.value : { statuses: {} };
-
-      // Segnaliamo all'utente le fetch fallite (toast.warning aggregato).
-      // `stato run` è omesso di proposito: è un arricchimento non-critico per i
-      // filtri della dashboard, un suo fallimento non merita un warning.
-      const failedServices = results
-        .slice(0, 8)
-        .map((r, i) => r.status === 'rejected'
-          ? ['progetti', 'connessioni', 'API', 'file', 'schedule', 'ArcGIS', 'eseguibili', 'datasources'][i]
-          : null)
-        .filter(Boolean);
-      if (failedServices.length > 0) {
-        toastRef.current.warning(`Alcuni dati non caricati: ${failedServices.join(', ')}`);
-      }
-
-      const projectsList = projectsData.projects || [];
-      setProjects(projectsList);
-      setConnections(connectionsData.connections || []);
-      setArcgisConnections(arcgisData.connections || arcgisData || []);
-      setApiConnections(apiConnData.api_connections || []);
-      setFiles(filesData.files || []);
-      setSchedules(schedulesData.schedules || []);
-      setEseguibili(Array.isArray(eseguibiliData) ? eseguibiliData : (eseguibiliData?.items || []));
-      setDataSources(dataSourcesData?.datasources || []);
-      setRunStatusByProject(runStatusData?.statuses || {});
-
-      const sourcesMap = {};
-      const fileSourcesMap = {};
-      projectsList.forEach(p => {
-        if (p.project_type === 'manipola') {
-          if (p.source_project_ids)  sourcesMap[p.id]     = p.source_project_ids;
-          if (p.file_source_ids)     fileSourcesMap[p.id] = p.file_source_ids;
-        }
-      });
-      setProjectSources(sourcesMap);
-      setProjectFileSources(fileSourcesMap);
-    } catch (err) {
-      console.error('Errore caricamento dati:', err);
-      if (mountedRef.current && reloadIdRef.current === myId) {
-        toastRef.current.error('Errore caricamento dati');
-      }
-    } finally {
-      if (mountedRef.current && reloadIdRef.current === myId) {
-        setLoading(false);
-      }
-    }
-  }, [mountedRef]);
-
-  useEffect(() => { reload(); }, [reload]);
-
-  // #optimistic-delete (Epic C): rimozione locale immediata di un progetto
-  // dalla lista (source of truth) senza round-trip né flash di loading. Il
-  // chiamante ripristina con reload() se la DELETE fallisce.
+  // #optimistic-delete (Epic C): rimozione locale immediata; il chiamante
+  // ripristina con reload() se la DELETE fallisce.
   const removeProjectLocal = useCallback((id) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
-  }, []);
+    setData(cur => (cur ? { ...cur, projects: cur.projects.filter(p => p.id !== id) } : cur));
+  }, [setData]);
 
-  // Aggiornamento locale immediato di campi di un progetto (es. rename),
-  // senza round-trip né flash di loading. Rollback = ri-applicare il vecchio valore.
-  const updateProjectLocal = useCallback((id, patch) => {
-    setProjects(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
-  }, []);
+  const updateProjectLocal = patchProject;
 
-  return {
-    projects,
-    connections,
-    arcgisConnections,
-    apiConnections,
-    files,
-    schedules,
-    dataSources,
-    eseguibili,
-    projectSources,
-    projectFileSources,
+  const updateProjectOptimistic = useCallback(async (project, patch, request) => {
+    const token = {};
+    const keys = Object.keys(patch);
+    keys.forEach((k) => {
+      const key = `${project.id}:${k}`;
+      if (!confirmedRef.current.has(key)) confirmedRef.current.set(key, project[k]);
+      pendingRef.current.set(key, token);
+    });
+    patchProject(project.id, patch);
+    try {
+      const result = await request();
+      keys.forEach((k) => {
+        const key = `${project.id}:${k}`;
+        confirmedRef.current.set(key, patch[k]);
+        if (pendingRef.current.get(key) === token) pendingRef.current.delete(key);
+      });
+      return result;
+    } catch (err) {
+      const rollback = {};
+      keys.forEach((k) => {
+        const key = `${project.id}:${k}`;
+        if (pendingRef.current.get(key) !== token) return; // una modifica piu' recente decide
+        pendingRef.current.delete(key);
+        rollback[k] = confirmedRef.current.get(key);
+      });
+      if (Object.keys(rollback).length) patchProject(project.id, rollback);
+      throw err;
+    }
+  }, [patchProject]);
+
+  const reloadAll = useCallback(() => {
+    confirmedRef.current.clear();
+    return reload();
+  }, [reload]);
+
+  const runStatusUnavailable = resource.hasData && data.runStatusByProject === null;
+  const runStatusByProject = data.runStatusByProject || EMPTY;
+  const runStatusFor = useCallback(
+    (id) => (runStatusUnavailable ? UNAVAILABLE : runStatusByProject[id]),
+    [runStatusUnavailable, runStatusByProject],
+  );
+
+  return useMemo(() => ({
+    projects: data.projects || NONE,
+    connections: data.connections || NONE,
+    arcgisConnections: data.arcgisConnections || NONE,
+    apiConnections: data.apiConnections || NONE,
+    files: data.files || NONE,
+    schedules: data.schedules || NONE,
+    dataSources: data.dataSources || NONE,
+    eseguibili: data.eseguibili || NONE,
+    projectSources: data.projectSources || EMPTY,
+    projectFileSources: data.projectFileSources || EMPTY,
     runStatusByProject,
-    loading,
-    reload,
+    runStatusUnavailable,
+    runStatusFor,
+    failures: data.failures || NONE,
+    resource,
+    loading: resource.initialLoading,
+    refreshing: resource.refreshing,
+    reload: reloadAll,
     removeProjectLocal,
     updateProjectLocal,
-  };
+    updateProjectOptimistic,
+  }), [data, runStatusByProject, runStatusUnavailable, runStatusFor, resource, reloadAll, removeProjectLocal, updateProjectLocal, updateProjectOptimistic]);
 }
 
 export default useProjectListData;

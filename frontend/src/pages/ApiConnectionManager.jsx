@@ -12,6 +12,9 @@
  *  - dispatch del wizard via prop `seed` (new / edit / template).
  */
 import React, { useState, useEffect, useMemo } from 'react';
+import { useResource } from '../hooks/useResource';
+import { useBusy } from '../hooks/useBusy';
+import { ResourceError } from '../components/common/ListState';
 import { useToast } from '../hooks/useToast';
 import { toastApiError } from '../utils/toastApiError';
 import { useNavigate } from 'react-router-dom';
@@ -96,8 +99,14 @@ function ApiConnectionManager() {
   const canvasRef = React.useRef(null);
   useHexCanvas(canvasRef);
 
-  const [apiConnections, setApiConnections] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Fase 5 T2 (R4.8, R9.16): elenco dall'hook comune (errore con
+  // «Riprova», mai "Nessun connettore configurato"); quick test per
+  // connettore, non cliccabile due volte (useBusy).
+  const resource = useResource(async () => (await listApiConnections()).api_connections || [], { key: 'api-connections' });
+  const apiConnections = useMemo(() => resource.data || [], [resource.data]);
+  const loading = resource.initialLoading;
+  const loadApiConnections = () => resource.reload();
+  const testing = useBusy();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [showNewApiDropdown, setShowNewApiDropdown] = useState(false);
@@ -125,29 +134,12 @@ function ApiConnectionManager() {
   const quickTestResultDialog = useDialog({ isOpen: !!quickTestResult, onClose: () => setQuickTestResult(null) });
   const shareDialog           = useDialog({ isOpen: !!sharingApi,      onClose: () => setSharingApi(null) });
 
-  useEffect(() => { loadApiConnections(); }, []);
   useEffect(() => {
     const h = e => { if (showNewApiDropdown && !e.target.closest('.acm__new-wrapper')) setShowNewApiDropdown(false); };
     document.addEventListener('click', h);
     return () => document.removeEventListener('click', h);
   }, [showNewApiDropdown]);
 
-  const loadApiConnections = async () => {
-    // Pre-fix (P1 frontend-pages): catch ignorava l'errore con solo
-    // console.error → pagina vuota senza spiegazione per l'utente
-    // se il fetch falliva per auth/network.
-    try {
-      setLoading(true);
-      const d = await listApiConnections();
-      setApiConnections(d.api_connections || []);
-    } catch (e) {
-      console.error('[ApiConnectionManager] loadApiConnections fallito:', e);
-      const msg = requestErrorMessage(e, 'Errore caricamento API connections');
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filteredApis = useMemo(() => apiConnections.filter(api => {
     const ms = !searchQuery || api.name?.toLowerCase().includes(searchQuery.toLowerCase()) || api.description?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -222,8 +214,11 @@ const openWizardForNew = () => {
     if (mappable.length===0) runQuickTest(api, {}); else setQuickTestInput({api, params:{...(api.test_data||{})}});
   };
   const runQuickTest = async (api, extraParams) => {
-    try { const r=await testApiConnection(api.id,{test_params:{...(api.static_parameters||{}),...extraParams}}); setQuickTestInput(null); setQuickTestResult({api,result:r}); }
-    catch(e) { setQuickTestInput(null); setQuickTestResult({api,result:{success:false,error:requestErrorMessage(e)}}); }
+    try {
+      const r = await testing.run(api.id, () => testApiConnection(api.id, { test_params: { ...(api.static_parameters || {}), ...extraParams } }));
+      if (r.skipped) return;
+      setQuickTestInput(null); setQuickTestResult({ api, result: r.value });
+    } catch (e) { setQuickTestInput(null); setQuickTestResult({ api, result: { success: false, error: requestErrorMessage(e) } }); }
   };
 
   return (
@@ -311,6 +306,8 @@ const openWizardForNew = () => {
           <div className="acm__grid acm__layer-1">
             {loading ? (
               <div className="acm__loading">⬡ Caricamento connettori…</div>
+            ) : resource.status === 'error' && !resource.hasData ? (
+              <ResourceError title="Connettori non caricati" message={resource.error} onRetry={resource.reload} />
             ) : filteredApis.length === 0 ? (
               <div className="acm__empty">
                 <div className="acm__empty-icon">🔗</div>
@@ -334,6 +331,7 @@ const openWizardForNew = () => {
                     onEdit={openWizardForEdit}
                     onDelete={(a) => handleDelete(a.id, a.name)}
                     onQuickTest={handleQuickTest}
+                    testing={testing.isBusy(api.id)}
                     onShare={setSharingApi}
                   />
                 ))}
@@ -395,7 +393,7 @@ const openWizardForNew = () => {
             </div>
             <div className="acm__wizard-footer">
               <button type="button" className="acm__btn acm__btn--ghost" onClick={()=>setQuickTestInput(null)}>Annulla</button>
-              <button type="button" className="acm__btn acm__btn--primary" onClick={()=>runQuickTest(quickTestInput.api,quickTestInput.params)}>🚀 Esegui</button>
+              <button type="button" className="acm__btn acm__btn--primary" disabled={testing.isBusy(quickTestInput.api.id)} onClick={()=>runQuickTest(quickTestInput.api,quickTestInput.params)}>{testing.isBusy(quickTestInput.api.id) ? '⏳ Test in corso…' : '🚀 Esegui'}</button>
             </div>
           </div>
         </div>

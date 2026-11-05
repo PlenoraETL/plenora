@@ -17,6 +17,11 @@
  *  - Credenziali da migrare: nodi Carica REST con intestazioni segrete nel
  *    canvas (utils/restSecrets). Avvia spento finche' non si migra.
  *  - Opzioni dello staff (superadmin): intermediate_mode.
+ *
+ * Fase 5 T2 (BA2): la stessa finestra serve gli Eseguibili. Chi la apre puo'
+ * aggiungere input propri (`extra`: file da analizzare, formato di uscita)
+ * con il loro payload (`extraInputs`, nella stessa chiave della stima e
+ * nello stesso avvio) e la loro completezza (`extraComplete`).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
@@ -61,7 +66,22 @@ function InputField({ definition, value, onChange }) {
     const inputType = definition.input_kind === 'integer' || definition.input_kind === 'number' ? 'number'
       : definition.input_kind === 'datetime' ? 'datetime-local'
         : definition.input_kind || 'text';
-    control = <input id={id} className="before-run__field" type={inputType} value={value ?? ''} onChange={change} />;
+    const v = definition.validation || {};
+    control = (
+      <input
+        id={id}
+        className="before-run__field"
+        type={inputType}
+        value={value ?? ''}
+        onChange={change}
+        min={v.minimum}
+        max={v.maximum}
+        minLength={v.min_length}
+        maxLength={v.max_length}
+        pattern={v.pattern || undefined}
+        step={definition.input_kind === 'number' ? 'any' : definition.input_kind === 'integer' ? '1' : undefined}
+      />
+    );
   }
   return (
     <div className="before-run__row">
@@ -135,7 +155,10 @@ function EstimateSection({ state, nodeLabel, onRetry }) {
  * @param {() => void} onCancel
  * @param {(nodeId) => string} nodeLabel
  */
-export default function BeforeRunModal({ request, onPreflight, onLaunch, onCancel, nodeLabel = (id) => id }) {
+export default function BeforeRunModal({
+  request, onPreflight, onLaunch, onCancel, nodeLabel = (id) => id,
+  extra = null, extraInputs = null, extraComplete = true,
+}) {
   const definitions = request?.inputDefinitions || [];
   const migration = request?.migration || [];
   const withEstimate = Boolean(request) && migration.length === 0 && needsPreflight(request.mode) && typeof onPreflight === 'function';
@@ -158,9 +181,13 @@ export default function BeforeRunModal({ request, onPreflight, onLaunch, onCance
     });
   }, [request]);
 
-  const inputs = useMemo(() => runInputs(definitions, values), [definitions, values]);
+  const omitEmptyOptional = Boolean(request?.omitEmptyOptional);
+  const inputs = useMemo(
+    () => ({ ...runInputs(definitions, values, { omitEmptyOptional }), ...(extraInputs || {}) }),
+    [definitions, values, omitEmptyOptional, extraInputs],
+  );
   const key = inputsKey(inputs);
-  const complete = inputsComplete(definitions, values);
+  const complete = inputsComplete(definitions, values) && extraComplete;
 
   // UNA richiesta di stima (input cambiati o «Riprova»): l'ultima vince.
   const runEstimate = useCallback((forInputs, forKey) => {
@@ -212,7 +239,8 @@ export default function BeforeRunModal({ request, onPreflight, onLaunch, onCance
     <ModalWrapper
       isOpen
       onClose={onCancel}
-      title={term('before_run').name}
+      title={request.title || term('before_run').name}
+      subtitle={request.subtitle}
       icon={term('before_run').icon}
       size="md"
       variant={request.mode || 'default'}
@@ -253,6 +281,7 @@ export default function BeforeRunModal({ request, onPreflight, onLaunch, onCance
             ))}
           </section>
         )}
+        {extra}
         {withEstimate && (
           <section className="before-run__section" aria-label="Stima">
             <h3 className="before-run__heading">Stima delle chiamate API</h3>

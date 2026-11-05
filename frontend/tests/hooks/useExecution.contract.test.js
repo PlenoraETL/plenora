@@ -7,9 +7,9 @@
  * preparation_changed torna a chi ha avviato (niente esito di errore).
  *
  * Strategia mock:
- *  - useTaskPolling: stub via vi.mock -> espone startPolling spy che NON
- *    avvia un vero interval. I test invocano la callback registrata
- *    manualmente quando vogliono simulare lo status update.
+ *  - utils/taskPoller: stub via vi.mock -> pollTask spy che NON avvia un
+ *    vero polling; `emit(data)` simula una risposta di GET /tasks/{id} con
+ *    la regola vera (utils/taskOutcome) e la consegna a useTask (Fase 5 T2).
  *  - api: stub di executeProjectQuery / cancelTask / getTaskStatus /
  *    downloadTaskOutput / downloadProjectOutput.
  *  - useCanvasStore: stub di getState().setLastTaskResult per non
@@ -37,12 +37,8 @@ const {
   setLastTaskResultMock: vi.fn(),
 }));
 
-vi.mock('../../src/hooks/useTaskPolling', () => ({
-  useTaskPolling: () => ({
-    mountedRef: { current: true },
-    stopPolling: stopPollingMock,
-    startPolling: startPollingMock,
-  }),
+vi.mock('../../src/utils/taskPoller', () => ({
+  pollTask: (...args) => { startPollingMock(...args); return stopPollingMock; },
 }));
 
 vi.mock('../../src/api', () => ({
@@ -59,7 +55,18 @@ vi.mock('../../src/store/useCanvasStore', () => ({
   },
 }));
 
-import { useExecution } from '../../src/hooks/useExecution';
+import { useExecution, executionModalProps, executionToolbarProps } from '../../src/hooks/useExecution';
+import { taskOutcome } from '../../src/utils/taskOutcome';
+
+// Risposta di GET /tasks/{id} consegnata al poll registrato (l'ultimo, o il n-esimo).
+function emit(data, call = -1) {
+  const calls = startPollingMock.mock.calls;
+  const [, opts] = calls.at(call);
+  const o = data.phase ? data : taskOutcome(data, opts.outcome);
+  opts.onUpdate?.(o, data);
+  if (o.done) opts.onDone?.(o);
+  return o.done;
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -191,11 +198,9 @@ describe('useExecution — polling callback effects', () => {
 
     await act(async () => { await result.current.handleExecute({}); });
 
-    // Recupera la callback registrata nello startPolling
-    const onStatus = startPollingMock.mock.calls[0][1];
     let done;
     act(() => {
-      done = onStatus({
+      done = emit({
         status: 'success',
         progress: 100,
         message: 'done',
@@ -218,10 +223,9 @@ describe('useExecution — polling callback effects', () => {
     const { result } = renderHook(() => useExecution('proj-1'));
     await act(async () => { await result.current.handleExecute({}); });
 
-    const onStatus = startPollingMock.mock.calls[0][1];
     let done;
     act(() => {
-      done = onStatus({ status: 'failure', error: 'boom', progress: 50 });
+      done = emit({ status: 'failure', error: 'boom', progress: 50 });
     });
     expect(done).toBe(true);
     await waitFor(() => { expect(result.current.isExecuting).toBe(false); });
@@ -234,9 +238,8 @@ describe('useExecution — polling callback effects', () => {
     const { result } = renderHook(() => useExecution('proj-1'));
     await act(async () => { await result.current.handleExecute({}); });
 
-    const onStatus = startPollingMock.mock.calls[0][1];
     let done;
-    act(() => { done = onStatus({ status: 'revoked' }); });
+    act(() => { done = emit({ status: 'revoked' }); });
     expect(done).toBe(true);
     await waitFor(() => { expect(result.current.isExecuting).toBe(false); });
     expect(result.current.result?.message).toMatch(/annullata/i);
@@ -247,9 +250,8 @@ describe('useExecution — polling callback effects', () => {
     const { result } = renderHook(() => useExecution('proj-1'));
     await act(async () => { await result.current.handleExecute({}); });
 
-    const onStatus = startPollingMock.mock.calls[0][1];
     let done;
-    act(() => { done = onStatus({ status: 'progress', progress: 30, message: 'lavorando' }); });
+    act(() => { done = emit({ status: 'progress', progress: 30, message: 'lavorando' }); });
     expect(done).toBe(false);
     expect(result.current.progress).toBe(30);
     expect(result.current.progressMessage).toBe('lavorando');
@@ -295,11 +297,87 @@ describe('useExecution — closeModal / reset / cancelTask', () => {
     expect(result.current.taskStatus).toBe('pending');
     expect(result.current.isExecuting).toBe(true);
     expect(result.current.progressMessage).toMatch(/annullamento richiesto/i);
+    expect(result.current.cancelling).toBe(true);
 
-    const onStatus = startPollingMock.mock.calls[0][1];
-    act(() => { onStatus({ status: 'success', result: { rows_count: 1 } }); });
+    act(() => { emit({ status: 'success', result: { rows_count: 1 } }); });
     await waitFor(() => { expect(result.current.isExecuting).toBe(false); });
     expect(result.current.taskStatus).toBe('success');
     expect(result.current.result?.success).toBe(true);
+  });
+});
+
+
+// Fase 5 T2 (R4.6, R4.11, R4.12, R9.2, R9.4, R9.8, R9.14, N4): stesso ciclo
+// per i tre editor, esiti veri, finestra chiudibile e riapribile.
+describe('useExecution — Fase 5 T2', () => {
+  it('Annulla e progresso per ogni editor (non solo Arricchisci): le props della finestra sono uguali', async () => {
+    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 'tz1' });
+    const { result } = renderHook(() => useExecution('proj-1'));
+    await act(async () => { await result.current.handleExecute({}); });
+    act(() => { emit({ status: 'progress', progress: 40, message: 'passo 2' }); });
+    const props = executionModalProps(result.current);
+    expect(typeof props.onCancel).toBe('function');
+    expect(props.progress).toBe(40);
+    expect(props.progressMessage).toBe('passo 2');
+    expect(props.isExecuting).toBe(true);
+  });
+
+  it('task perso (404 ripetuti o errori del server): esito di errore, mai "completata"', async () => {
+    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 'tz2' });
+    const { result } = renderHook(() => useExecution('proj-1'));
+    await act(async () => { await result.current.handleExecute({}); });
+    act(() => { emit({ phase: 'lost', done: true, error: 'non più disponibile', code: 'task_not_found', result: null }); });
+    expect(result.current.isExecuting).toBe(false);
+    expect(result.current.result?.success).toBe(false);
+    expect(result.current.result?.message).toMatch(/non più disponibile/);
+    expect(result.current.taskStatus).toBe('failure');
+  });
+
+  it('permission_revoked: banner, nessun successo ne\' download', async () => {
+    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 'tz3' });
+    const { result } = renderHook(() => useExecution('proj-1'));
+    await act(async () => { await result.current.handleExecute({}); });
+    act(() => { emit({ status: 'success', result: { status: 'permission_revoked', success: false, message: 'Ruolo cambiato' } }); });
+    expect(result.current.result?.success).toBe(false);
+    expect(result.current.result?.permissionRevoked).toBe(true);
+    expect(setLastTaskResultMock).not.toHaveBeenCalled();
+  });
+
+  it('finestra chiusa durante l\'esecuzione: la barra la riapre; esito arrivato a finestra chiusa = "Vedi l\'esito"', async () => {
+    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 'tz4' });
+    const { result } = renderHook(() => useExecution('proj-1'));
+    await act(async () => { await result.current.handleExecute({}); });
+    // onClose riceve l'evento del clic: non azzera niente.
+    act(() => { result.current.closeModal({ type: 'click' }); });
+    expect(result.current.showModal).toBe(false);
+    expect(typeof executionToolbarProps(result.current).onShowExecution).toBe('function');
+    act(() => { emit({ status: 'success', result: { rows_count: 3 } }); });
+    expect(executionToolbarProps(result.current).executionUnseen).toBe(true);
+    act(() => { executionToolbarProps(result.current).onShowExecution(); });
+    expect(result.current.showModal).toBe(true);
+    expect(result.current.result?.rows_count).toBe(3);
+    expect(executionToolbarProps(result.current).onShowExecution).toBeNull();
+  });
+
+  it('cambio di progetto: il polling di A si ferma e niente di A resta su B', async () => {
+    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 'tz5' });
+    const { result, rerender } = renderHook(({ id }) => useExecution(id), { initialProps: { id: 'proj-A' } });
+    await act(async () => { await result.current.handleExecute({}); });
+    rerender({ id: 'proj-B' });
+    expect(stopPollingMock).toHaveBeenCalled();
+    expect(result.current.isExecuting).toBe(false);
+    expect(result.current.showModal).toBe(false);
+    expect(result.current.taskId).toBeNull();
+  });
+
+  it('download fallito (410 scaduto): il messaggio arriva alla finestra, nessuna promessa persa', async () => {
+    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 'tz6' });
+    downloadTaskOutputMock.mockRejectedValue(Object.assign(new Error("Il file di output non è più disponibile: scaduto per la policy di retention."), { status: 410 }));
+    const { result } = renderHook(() => useExecution('proj-1'));
+    await act(async () => { await result.current.handleExecute({}); });
+    act(() => { emit({ status: 'success', result: { output_file: 'x.csv' } }); });
+    await act(async () => { await result.current.downloadTaskResult(); });
+    expect(result.current.downloadError).toMatch(/non è più disponibile/i);
+    expect(result.current.downloading).toBe(false);
   });
 });

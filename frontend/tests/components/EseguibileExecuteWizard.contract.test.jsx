@@ -150,7 +150,6 @@ describe('EseguibileExecuteWizard contract', () => {
 
     await waitFor(() => {
       expect(getTaskStatusMock).toHaveBeenCalledWith('task-1');
-      expect(toastMock.success).toHaveBeenCalledWith('Esecuzione completata!');
     });
 
     expect(await screen.findByText(/esecuzione completata/i)).toBeInTheDocument();

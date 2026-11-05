@@ -16,7 +16,8 @@
  *   - onClose?:     function — callback opzionale chiamata dopo un save
  *                              riuscito (utile per chiudere il modal padre).
  */
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useResource } from '../../hooks/useResource';
 import { getShares, setShares } from '../../api/shares';
 import { listGroups } from '../../api/users';
 import { useAuth } from '../../context/AuthContext';
@@ -47,11 +48,9 @@ function AllowedGroupsSelectorPanel({
 }) {
   const toast = useToast();
 
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState(null);
+  const [actionError, setError] = useState(null);
 
-  const [allGroups, setAllGroups]             = useState([]);
   const [initialSelected, setInitialSelected] = useState([]); // snapshot da backend
   const [selected, setSelected]               = useState([]);   // stato corrente editabile
   const [allChecked, setAllChecked]           = useState(false);
@@ -59,12 +58,61 @@ function AllowedGroupsSelectorPanel({
   // Le condivisioni attuali devono essere note prima di poterle modificare:
   // se getShares fallisce, una selezione vuota salvata sostituirebbe quelle
   // esistenti (audit R10.6). Finche' false, il pannello e' in sola lettura.
-  const [sharesLoaded, setSharesLoaded]       = useState(false);
-
   // Gruppo proprietario della RISORSA, dal server (risposta delle
   // condivisioni): non il gruppo dell'utente, che per un superadmin e' un
   // altro (audit R10.7). Finche' non e' noto il pannello e' bloccato.
-  const [ownerGroupId, setOwnerGroupId]       = useState(null);
+  //
+  // Fase 5 T2: gruppi e condivisioni dall'hook comune (id di richiesta:
+  // la risposta di un'altra risorsa non scrive qui); lo stato modificabile
+  // parte dalla risposta della risorsa mostrata.
+  const resource = useResource(async () => {
+    // Promise.allSettled: gestiamo entrambi gli errori in modo coerente.
+    const [groupsRes, sharesRes] = await Promise.allSettled([
+      listGroups(),
+      getShares(resourceType, resourceId),
+    ]);
+    const out = { groups: [], ids: null, owner: null, errors: [] };
+    // Gruppi: se fallisce, mostriamo l'errore ma non blocchiamo la UI
+    if (groupsRes.status === 'fulfilled') {
+      out.groups = Array.isArray(groupsRes.value) ? groupsRes.value : [];
+    } else {
+      out.errors.push(`Caricamento gruppi fallito: ${humanizeError(groupsRes.reason).message}`);
+    }
+    // REGOLA (Fase 5, correzione dopo la conferma): il pannello si sblocca
+    // SOLO con le condivisioni attuali E il gruppo proprietario noto dal
+    // server. Il 404 del backend vuol dire "risorsa non trovata" (shares
+    // router), non "nessuna condivisione"; una risposta senza
+    // owner_group_id non dice quale gruppo escludere: in entrambi i casi il
+    // pannello resta bloccato con l'errore e «Riprova».
+    const ownerFromServer = sharesRes.status === 'fulfilled' ? (sharesRes.value?.owner_group_id || null) : null;
+    if (sharesRes.status === 'fulfilled' && ownerFromServer) {
+      out.ids = Array.isArray(sharesRes.value?.group_ids) ? sharesRes.value.group_ids : [];
+      out.owner = ownerFromServer;
+    } else if (sharesRes.status === 'fulfilled') {
+      out.errors.push('Gruppo proprietario della risorsa non noto: la condivisione resta bloccata.');
+    } else if (sharesRes.reason?.response?.status === 404) {
+      // Lo status HTTP e' l'unico segnale affidabile: l'interceptor
+      // riscrive `message` con il testo del backend.
+      out.errors.push('Risorsa non trovata: la condivisione resta bloccata.');
+    } else {
+      out.errors.push(`Caricamento condivisioni fallito: ${humanizeError(sharesRes.reason).message}`);
+    }
+    return out;
+  }, { key: [resourceType, resourceId], enabled: Boolean(resourceType && resourceId) });
+  const loaded = resource.data || null;
+  const allGroups = loaded?.groups || [];
+  const ownerGroupId = loaded?.owner || null;
+  const sharesLoaded = Boolean(loaded && loaded.ids && loaded.owner);
+  const loading = resource.loading;
+  const load = resource.reload;
+  const error = actionError || (loaded?.errors?.[0]) || resource.error || null;
+  // Selezione modificabile: parte dalle condivisioni della risorsa caricata.
+  useEffect(() => {
+    if (!loaded?.ids) return;
+    setAllChecked(loaded.ids.includes(MAGIC_ALL));
+    setSelected(loaded.ids.filter(id => id !== MAGIC_ALL));
+    setInitialSelected(loaded.ids);
+  }, [loaded]);
 
   const selectableGroups = useMemo(
     () => (allGroups || []).filter(g => g.group_id !== ownerGroupId && g.group_id !== MAGIC_ALL),
@@ -79,64 +127,6 @@ function AllowedGroupsSelectorPanel({
       (g.group_id || '').toLowerCase().includes(q)
     );
   }, [selectableGroups, search]);
-
-  const load = useCallback(async () => {
-    if (!resourceType || !resourceId) return;
-    setLoading(true);
-    setError(null);
-    setSharesLoaded(false);
-    try {
-      // Promise.allSettled: gestiamo entrambi gli errori in modo coerente.
-      // Prima il code path catch silenzioso su listGroups + throw su getShares
-      // produceva stati incoerenti (gruppi vuoti senza errore visibile, oppure
-      // errore globale che oscurava un fail parziale).
-      const [groupsRes, sharesRes] = await Promise.allSettled([
-        listGroups(),
-        getShares(resourceType, resourceId),
-      ]);
-
-      // Gruppi: se fallisce, mostriamo l'errore ma non blocchiamo la UI
-      if (groupsRes.status === 'fulfilled') {
-        setAllGroups(Array.isArray(groupsRes.value) ? groupsRes.value : []);
-      } else {
-        console.error('[AllowedGroupsSelector] listGroups fallita:', groupsRes.reason);
-        setAllGroups([]);
-        setError(`Caricamento gruppi fallito: ${humanizeError(groupsRes.reason).message}`);
-      }
-
-      // REGOLA (Fase 5, correzione dopo la conferma): il pannello si sblocca
-      // SOLO con le condivisioni attuali E il gruppo proprietario noto dal
-      // server. Il 404 del backend vuol dire "risorsa non trovata" (shares
-      // router), non "nessuna condivisione"; una risposta senza
-      // owner_group_id non dice quale gruppo escludere: in entrambi i casi il
-      // pannello resta bloccato con l'errore e «Riprova».
-      const ownerFromServer = sharesRes.status === 'fulfilled' ? (sharesRes.value?.owner_group_id || null) : null;
-      if (sharesRes.status === 'fulfilled' && ownerFromServer) {
-        const ids = Array.isArray(sharesRes.value?.group_ids) ? sharesRes.value.group_ids : [];
-        const hasAll = ids.includes(MAGIC_ALL);
-        setAllChecked(hasAll);
-        setSelected(ids.filter(id => id !== MAGIC_ALL));
-        setInitialSelected(ids);
-        setOwnerGroupId(ownerFromServer);
-        setSharesLoaded(true);
-      } else if (sharesRes.status === 'fulfilled') {
-        setOwnerGroupId(null);
-        setError(prev => prev || 'Gruppo proprietario della risorsa non noto: la condivisione resta bloccata.');
-      } else if (sharesRes.reason?.response?.status === 404) {
-        // Lo status HTTP e' l'unico segnale affidabile: l'interceptor
-        // riscrive `message` con il testo del backend.
-        setOwnerGroupId(null);
-        setError(prev => prev || 'Risorsa non trovata: la condivisione resta bloccata.');
-      } else {
-        console.error('[AllowedGroupsSelector] getShares fallita:', sharesRes.reason);
-        setError(prev => prev || `Caricamento condivisioni fallito: ${humanizeError(sharesRes.reason).message}`);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [resourceType, resourceId]);
-
-  useEffect(() => { load(); }, [load]);
 
   const locked = disabled || saving || !sharesLoaded;
 

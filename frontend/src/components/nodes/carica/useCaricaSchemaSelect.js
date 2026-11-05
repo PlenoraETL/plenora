@@ -1,63 +1,41 @@
-import { useEffect, useState } from 'react';
+/**
+ * useCaricaSchemaSelect — schemi e tabelle della destinazione DB del nodo
+ * Carica.
+ *
+ * Fase 5 T2 (R4.17): dall'hook comune hooks/useResource. Connessione o
+ * schema cambiati = nuova richiesta (la risposta di prima non scrive);
+ * un errore e' esposto (`schemasError`, `tablesError`, `reloadSchemas`,
+ * `reloadTables`) e la sezione lo mostra con «Riprova», non solo in console.
+ */
 import { getCaricaSchemas, getCaricaTables } from '../../../api/carica';
+import { useResource } from '../../../hooks/useResource';
+
+const NONE = [];
 
 export function useCaricaSchemaSelect({
   connectionId,
   destType,
   schemaName,
 }) {
-  const [schemas, setSchemas] = useState([]);
-  const [tables, setTables] = useState([]);
-  const [isLoadingSchemas, setIsLoadingSchemas] = useState(false);
-  const [isLoadingTables, setIsLoadingTables] = useState(false);
-
-  // Cancellation guard: rapid-click di connection diverse poteva lasciare
-  // la vecchia fetch sovrascrivere lo state DOPO che la nuova era partita.
-  useEffect(() => {
-    if (destType !== 'db' || !connectionId) {
-      setSchemas([]); setTables([]);
-      return undefined;
-    }
-    let cancelled = false;
-    setIsLoadingSchemas(true);
-    (async () => {
-      try {
-        const data = await getCaricaSchemas(connectionId);
-        if (!cancelled) setSchemas(data.schemas || []);
-      } catch (error) {
-        if (!cancelled) console.error('Errore caricamento schemas:', error);
-      } finally {
-        if (!cancelled) setIsLoadingSchemas(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [connectionId, destType]);
-
-  useEffect(() => {
-    if (destType !== 'db' || !connectionId || !schemaName) {
-      setTables([]);
-      return undefined;
-    }
-    let cancelled = false;
-    setIsLoadingTables(true);
-    (async () => {
-      try {
-        const data = await getCaricaTables(connectionId, schemaName);
-        if (!cancelled) setTables(data.tables || []);
-      } catch (error) {
-        if (!cancelled) console.error('Errore caricamento tables:', error);
-      } finally {
-        if (!cancelled) setIsLoadingTables(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [connectionId, schemaName, destType]);
+  const db = destType === 'db' && Boolean(connectionId);
+  const schemasResource = useResource(async () => (await getCaricaSchemas(connectionId)).schemas || [], {
+    key: ['carica-schemas', connectionId || null],
+    enabled: db,
+  });
+  const tablesResource = useResource(async () => (await getCaricaTables(connectionId, schemaName)).tables || [], {
+    key: ['carica-tables', connectionId || null, schemaName || null],
+    enabled: db && Boolean(schemaName),
+  });
 
   return {
-    schemas,
-    tables,
-    isLoadingSchemas,
-    isLoadingTables,
+    schemas: schemasResource.data || NONE,
+    tables: tablesResource.data || NONE,
+    isLoadingSchemas: schemasResource.loading,
+    isLoadingTables: tablesResource.loading,
+    schemasError: schemasResource.error,
+    tablesError: tablesResource.error,
+    reloadSchemas: schemasResource.reload,
+    reloadTables: tablesResource.reload,
   };
 }
 

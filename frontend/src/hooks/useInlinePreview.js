@@ -1,95 +1,43 @@
 /**
  * useInlinePreview.js — Anteprima compatta NON-modale (#5).
  *
- * Variante leggera di `usePreview`: avvia una preview asincrona (esecuzione
- * parziale con LIMIT piccolo) e fa polling fino al completamento, ma invece
- * di aprire `PreviewModal` espone lo stato così il `ResultNode` può mostrare
- * le prime righe INLINE dentro al nodo subito dopo un'esecuzione riuscita.
+ * Variante leggera di `usePreview` sopra lo stesso ciclo unico
+ * (hooks/useTask, Fase 5 T2): l'anteprima del passo B chiesta mentre quella
+ * del passo A e' in corso vince sempre (id di richiesta, audit R1-N2);
+ * annullata, permessi revocati e task perso hanno un esito (R4.12).
  *
  * Ritorna: { status, data, error, run, clear }
  *   status: 'idle' | 'loading' | 'success' | 'empty' | 'error'
  *   data:   { columns:[{name,type}], rows:[{col:val}], total_count, preview_count, truncated }
  */
-import { useState, useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { previewProject } from '../api';
-import { humanizeError } from '../utils/errorMessages';
-import { useTaskPolling } from './useTaskPolling';
-import { taskFailureMessage } from '../utils/taskFailureMessage';
+import { useTask } from './useTask';
+import { previewErrorOf } from './usePreview';
 
 const POLL_INTERVAL = 1000;
 
 export function useInlinePreview(projectId) {
-  const [status, setStatus] = useState('idle');
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-
-  const cancelledRef = useRef(false);
-  const { mountedRef, stopPolling, startPolling } = useTaskPolling({ interval: POLL_INTERVAL });
+  const task = useTask({ scope: projectId, interval: POLL_INTERVAL, outcome: { failureFallback: "Errore durante l'anteprima" } });
+  const { state, run: runTask, reset } = task;
 
   const run = useCallback(async (limit = 10, nodeId = null) => {
     if (!projectId) return;
-    setStatus('loading');
-    setError(null);
-    setData(null);
-    cancelledRef.current = false;
+    await runTask(() => previewProject(projectId, limit, nodeId));
+  }, [projectId, runTask]);
 
-    const settle = (result) => {
-      // Allinea la semantica a usePreview: distingui revoca permessi / fallimento
-      // applicativo dal successo con righe.
-      if (result.status === 'permission_revoked' || result.success === false) {
-        setError(result.message || 'Errore anteprima');
-        setStatus('error');
-        return;
-      }
-      setData(result);
-      setStatus((result.rows || []).length === 0 ? 'empty' : 'success');
-    };
+  let status = 'idle';
+  if (task.isActive) status = 'loading';
+  else if (state.phase === 'success') status = (state.result?.rows || []).length === 0 ? 'empty' : 'success';
+  else if (state.phase !== 'idle') status = 'error';
 
-    try {
-      const response = await previewProject(projectId, limit, nodeId);
-      if (!mountedRef.current) return;
-
-      if (response.async && response.task_id) {
-        // Il callback ritorna true quando il task è completato → stopPolling automatico
-        startPolling(response.task_id, (task) => {
-          if (cancelledRef.current) return true;
-          if (task.status === 'success') {
-            settle(task.result || {});
-            return true;
-          }
-          if (task.status === 'failure') {
-            const inner = task.result?.status;
-            setError(inner === 'permission_revoked'
-              ? (task.result?.message || 'Permessi revocati durante l\'anteprima')
-              : taskFailureMessage(task, 'Errore durante l\'anteprima'));
-            setStatus('error');
-            return true;
-          }
-          return false;
-        });
-      } else if (response.success) {
-        // fallback sincrono (non dovrebbe accadere)
-        settle(response);
-      } else {
-        setError(response.message || 'Errore anteprima');
-        setStatus('error');
-      }
-    } catch (err) {
-      console.error('[useInlinePreview] Errore:', err);
-      setError(humanizeError(err).message);
-      setStatus('error');
-    }
-  }, [projectId, startPolling, mountedRef]);
-
-  const clear = useCallback(() => {
-    cancelledRef.current = true;
-    stopPolling();
-    setStatus('idle');
-    setData(null);
-    setError(null);
-  }, [stopPolling]);
-
-  return { status, data, error, run, clear };
+  return {
+    status,
+    data: state.phase === 'success' ? (state.result || {}) : null,
+    error: status === 'error' ? previewErrorOf(state) : null,
+    run,
+    clear: reset,
+  };
 }
 
 export default useInlinePreview;

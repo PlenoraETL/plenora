@@ -5,7 +5,9 @@
  * - Admin: vede e gestisce utenti del proprio gruppo
  * - Superadmin: vede tutti gli utenti + gestisce i gruppi
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useResource } from '../hooks/useResource';
+import { ResourceError } from '../components/common/ListState';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
@@ -17,7 +19,6 @@ import ChangePasswordModal from '../components/ChangePasswordModal';
 import AppSidebar from '../components/AppSidebar';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
-import { toastApiError } from '../utils/toastApiError';
 import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 import { PASSWORD_MIN_LENGTH, passwordProblem } from '../utils/passwordRule';
 import '../styles/UserManager.css';
@@ -334,21 +335,14 @@ const groupReportText = (report) => {
 };
 
 function ConfirmDeleteGroupModal({ group, onClose, onConfirm }) {
-  const [summary, setSummary]   = useState(null);
-  const [status, setStatus]     = useState('loading'); // loading | ready | error
-  const [attempt, setAttempt]   = useState(0);
+  // Riepilogo d'impatto dall'hook comune: senza riepilogo non si conferma.
+  const summaryResource = useResource(() => getGroupSummary(group.group_id), { key: group.group_id });
+  const summary = summaryResource.data || null;
+  const status = summaryResource.status === 'error' ? 'error' : summaryResource.hasData ? 'ready' : 'loading';
   const [deleting, setDeleting] = useState(false);
   const [error, setError]       = useState('');
   const [typed, setTyped]       = useState('');
 
-  useEffect(() => {
-    let active = true;
-    setStatus('loading');
-    getGroupSummary(group.group_id)
-      .then((data) => { if (active) { setSummary(data); setStatus('ready'); } })
-      .catch((e) => { if (active) { setStatus('error'); setError(`Impossibile caricare il riepilogo del gruppo: ${requestErrorMessage(e)}`); } });
-    return () => { active = false; };
-  }, [group.group_id, attempt]);
 
   const expectedName = String(group.name || '').trim();
   const nameMatches = expectedName !== '' && typed.trim() === expectedName;
@@ -383,8 +377,8 @@ function ConfirmDeleteGroupModal({ group, onClose, onConfirm }) {
       {status === 'loading' && <div className="um__cdg-loading">Caricamento del riepilogo...</div>}
       {status === 'error' && (
         <div className="um__error">
-          Impossibile caricare il riepilogo del gruppo: senza sapere cosa verrà eliminato non si può confermare.{' '}
-          <button type="button" className="um__btn um__btn--sm" onClick={() => setAttempt(n => n + 1)}>Riprova</button>
+          Impossibile caricare il riepilogo del gruppo ({summaryResource.error}): senza sapere cosa verrà eliminato non si può confermare.{' '}
+          <button type="button" className="um__btn um__btn--sm" onClick={() => summaryResource.reload()}>Riprova</button>
         </div>
       )}
       {status === 'ready' && (
@@ -428,9 +422,6 @@ export default function UserManager() {
   const toast = useToast();
 
   const [tab,     setTab]     = useState('users');
-  const [users,   setUsers]   = useState([]);
-  const [groups,  setGroups]  = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search,  setSearch]  = useState('');
 
   const [modalUser,    setModalUser]    = useState(null);
@@ -444,24 +435,16 @@ export default function UserManager() {
   // Guard della rotta: /admin/users e' protetta da <AdminRoute> in App.jsx
   // che fa il redirect PRIMA del mount. Qui nessun check ridondante.
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [u, g] = await Promise.all([listUsers(), listGroups()]);
-      setUsers(Array.isArray(u) ? u : u.users || []);
-      setGroups(Array.isArray(g) ? g : []);
-    } catch (e) {
-      // Pre-fix (P2 frontend-pages): catch senza variabile ingoiava
-      // il dettaglio errore — non distinguibile 403 (utente non
-      // autorizzato, redirect mancante) da 500 (DB down). Post-fix:
-      // catturiamo `e` e mostriamo `e?.message` come fallback.
-      toastApiError(toast, e, 'Errore caricamento dati');
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  useEffect(() => { loadData(); }, [loadData]);
+  // Fase 5 T2 (R4.7, R4.8): utenti e gruppi dall'hook comune; spinner a
+  // pagina intera solo al primo caricamento, errore con «Riprova».
+  const resource = useResource(async () => {
+    const [u, g] = await Promise.all([listUsers(), listGroups()]);
+    return { users: Array.isArray(u) ? u : u.users || [], groups: Array.isArray(g) ? g : [] };
+  }, { key: 'users-groups' });
+  const users = resource.data?.users || [];
+  const groups = resource.data?.groups || [];
+  const loading = resource.initialLoading;
+  const loadData = () => resource.reload();
 
   const filteredUsers = users.filter(u =>
     !search ||
@@ -494,6 +477,9 @@ export default function UserManager() {
     <div className="um">
 <AppSidebar />
 <main className="um__main">
+        {resource.status === 'error' && (
+          <ResourceError title="Utenti e gruppi non caricati" message={resource.error} onRetry={resource.reload} />
+        )}
         <div className="um__topbar">
           {/* Tab switcher Utenti / Gruppi (sostituisce le voci nella sidebar) */}
           <div className="um__tabs">

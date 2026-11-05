@@ -37,7 +37,8 @@ export const fetchTransformRegistry = async () => {
       return registryCache;
     })
     .catch(err => {
-      console.error('[transformRegistry] Errore caricamento registry:', err);
+      // L'errore lo mostra chi usa il catalogo (hooks/useTransformRegistry).
+      console.warn('[transformRegistry] Errore caricamento registry:', err);
       registryCachePromise = null;
       return null;
     });
