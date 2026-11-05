@@ -79,3 +79,32 @@ def test_output_selection_with_duplicate_names_predicts_the_saved_file(selection
     ))
     predicted = [col["name"] for col in service.infer_node_schema_typed("p", "r").columns]
     assert predicted == saved
+
+
+
+@pytest.mark.parametrize("formula,expected", [
+    ("utente.str.slice(1, 4) + '_IS'", "112_IS"),
+    ("'IS_' + utente.str.slice(1, 4)", "IS_112"),
+])
+def test_formula_text_concat_valid_on_empty_frames(formula, expected):
+    """Collaudo dal vivo (Utente che esegue): su zero righe pandas non deduce il
+    tipo e la Formula che unisce testo falliva solo in Valida. Regola: un
+    rifiuto che sparisce su UNA riga di valori rappresentativi dello schema e'
+    un artefatto delle colonne vuote, la configurazione e' valida."""
+    config = {"formula": formula, "new_column": "istituto"}
+    rows = pd.DataFrame({"utente": ["E1121"]})
+    assert get_executor().execute_with_params("formula", [rows], config)["istituto"].tolist() == [expected]
+    upstream = InferredSchema(columns=[{"name": "utente", "type": "string"}])
+    node = Node.model_validate({"id": "f", "type": "transform", "position": {"x": 0, "y": 0},
+                                "transform_op": "formula", "config": config})
+    issues = ManipolaNodeValidator().validate_node(node, upstream=upstream, inputs=[upstream])
+    assert [i.message for i in issues if i.severity == "error"] == []
+
+
+def test_formula_unknown_column_still_rejected_after_one_row_retry():
+    config = {"formula": "assente.str.slice(1, 4) + '_IS'", "new_column": "istituto"}
+    upstream = InferredSchema(columns=[{"name": "utente", "type": "string"}])
+    node = Node.model_validate({"id": "f", "type": "transform", "position": {"x": 0, "y": 0},
+                                "transform_op": "formula", "config": config})
+    issues = ManipolaNodeValidator().validate_node(node, upstream=upstream, inputs=[upstream])
+    assert any(i.severity == "error" for i in issues)

@@ -39,7 +39,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from app.core.dataframes.geodata import empty_frame_from_schema, schema_crs
+from app.core.dataframes.geodata import empty_frame_from_schema, one_row_frame_from_schema, schema_crs
 from app.core.manipola.executor import ManipolaExecutor
 from app.core.manipola.plugin_executor import get_executor
 from app.core.manipola.types import JsonRows, StringMap
@@ -110,9 +110,12 @@ def _with_input_columns(node: Any, inputs: Sequence[Any]) -> Any:
 
 
 def _attempt(call: Any, inputs: Sequence[Any], *, relax_types: bool = False,
-             assumed_crs: str | None = None) -> tuple[Any, str | None]:
-    frames = [empty_frame_from_schema(schema.columns, relax_types=relax_types, assumed_crs=assumed_crs)
-              for schema in inputs]
+             assumed_crs: str | None = None, one_row: bool = False) -> tuple[Any, str | None]:
+    if one_row:
+        frames = [one_row_frame_from_schema(schema.columns, assumed_crs=assumed_crs) for schema in inputs]
+    else:
+        frames = [empty_frame_from_schema(schema.columns, relax_types=relax_types, assumed_crs=assumed_crs)
+                  for schema in inputs]
     try:
         return call(frames), None
     except Exception as error:  # broad intenzionale: qualunque rifiuto del percorso reale è l'esito di Valida
@@ -128,6 +131,16 @@ def dry_run(operation: str, inputs: Sequence[Any], call: Any) -> DryRunOutcome:
     result, message = _attempt(call, inputs)
     if message is None:
         return DryRunOutcome("verified", result=result)
+    # Rifiuto dovuto solo alle colonne VUOTE (es. Formula che unisce testo:
+    # su zero righe pandas non deduce il tipo e l'operazione fallisce, mentre
+    # con dati la calcola): la stessa configurazione su UNA riga di valori
+    # rappresentativi dello schema riesce -> la configurazione e' valida.
+    unknown_crs_once = any(is_geometry_type(col.get("type")) and not schema_crs(col.get("type"))
+                           for schema in inputs for col in schema.columns if isinstance(col, Mapping))
+    one_row_result, one_row_message = _attempt(
+        call, inputs, one_row=True, assumed_crs=ASSUMED_CRS if unknown_crs_once else None)
+    if one_row_message is None:
+        return DryRunOutcome("verified", result=one_row_result.iloc[:0] if hasattr(one_row_result, "iloc") else one_row_result)
     # Ciò che lo schema non garantisce e che può decidere un rifiuto.
     relax_types = any(getattr(schema, "types_status", None) == "indeterminate" for schema in inputs)
     unknown_crs = any(is_geometry_type(col.get("type")) and not schema_crs(col.get("type"))

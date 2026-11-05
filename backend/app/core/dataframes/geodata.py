@@ -10,7 +10,7 @@ from typing import Optional, Any
 import pandas as pd
 import geopandas as gpd
 import shapely
-from shapely.geometry import shape as _shapely_shape
+from shapely.geometry import Point as _Point, shape as _shapely_shape
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.schema import canvas_type_to_pandas_dtype
@@ -152,6 +152,39 @@ def empty_frame_from_schema(
     if names.count(active) != 1:
         return frame
     return gpd.GeoDataFrame(frame, geometry=active, crs=crs)
+
+
+# Valori rappresentativi non nulli per famiglia di tipo: servono alla prova
+# di UNA riga dell'esecuzione a vuoto (manipola.dry_run), quando una
+# configurazione valida fallisce solo perche' le colonne sono vuote (es. una
+# Formula che unisce testo: su zero righe pandas non deduce il tipo).
+_SAMPLE_BY_DTYPE = {
+    "int64": 0,
+    "float64": 0.0,
+    "bool": False,
+    "datetime64[ns]": pd.Timestamp("2000-01-01"),
+    "str": "a",
+    "object": "a",
+}
+
+
+def one_row_frame_from_schema(columns: Any, *, assumed_crs: Optional[str] = None) -> Any:
+    """Come ``empty_frame_from_schema`` ma con UNA riga di valori rappresentativi."""
+    empty = empty_frame_from_schema(columns, assumed_crs=assumed_crs)
+    values = {}
+    for index, name in enumerate(empty.columns):
+        series = empty.iloc[:, index]
+        if isinstance(series, gpd.GeoSeries) or str(series.dtype) == "geometry":
+            values[index] = gpd.GeoSeries([_Point(0, 0)], crs=series.crs)
+        else:
+            dtype = str(series.dtype)
+            sample = _SAMPLE_BY_DTYPE.get(dtype, "a")
+            values[index] = pd.Series([sample], dtype=series.dtype if dtype in _SAMPLE_BY_DTYPE else None)
+    frame = pd.DataFrame(values)
+    frame.columns = list(empty.columns)
+    if isinstance(empty, gpd.GeoDataFrame):
+        return gpd.GeoDataFrame(frame, geometry=empty.geometry.name, crs=empty.crs)
+    return frame
 
 
 def geodataframe_sjoin(
