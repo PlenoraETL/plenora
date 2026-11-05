@@ -11,13 +11,26 @@
  *  - WKB ed EWKB esadecimali (anche col prefisso `\x` di PostgreSQL): ordine
  *    dei byte per ogni sotto-geometria, codici ISO (1000/2000/3000) e flag
  *    EWKB Z/M/SRID;
- *  - GeoJSON (oggetto o testo), anche dentro una Feature.
+ *  - GeoJSON (oggetto o testo), anche dentro una Feature;
+ *  - geometrie Esri JSON di ArcGIS (oggetto o testo, senza `type`): point
+ *    `{x, y}`, multipoint `{points}`, polyline `{paths}`, polygon `{rings}`
+ *    (regole in `fromEsriJson`); le curve (`curvePaths`, `curveRings`) non
+ *    sono lette.
  * Z e M si scartano: la mappa disegna x e y. Una coordinata non finita, un
  * conteggio che eccede i byte, byte in coda o un tipo sconosciuto rendono il
  * valore non leggibile (mai una geometria parziale che rompa la mappa).
  *
+ * `geometryType` legge il solo tipo DICHIARATO (parola WKT, intestazione WKB,
+ * `type` GeoJSON, chiavi Esri) con le stesse funzioni di classificazione del
+ * lettore (`classify`, `wktTypeOf`, `wkbHeader`, `objectTypeOf`), senza
+ * leggere le coordinate: serve ai conteggi su molte righe (statistiche).
+ * Coincide con `geometryLabel` su ogni valore leggibile; un valore con
+ * intestazione valida e corpo rotto conta col suo tipo dichiarato (solo
+ * `geometryLabel`/`parseGeometry` leggono tutto).
+ *
  * Il corpus condiviso col backend (shapely) è in
- * backend/tests2/contracts/geometry_cases.json.
+ * backend/tests2/contracts/geometry_cases.json; i casi Esri JSON (che shapely
+ * non legge) sono scritti a mano in frontend/tests/shared/geometry.contract.test.js.
  */
 
 export const UNREADABLE_GEOMETRY = 'non leggibile';
@@ -43,6 +56,14 @@ const finite2 = (x, y) => {
 };
 
 // ------------------------------------------------------------------- WKT ---
+
+/** Parola WKT (maiuscola) -> tipo e suffisso attaccato (`POINTZ`). */
+function wktTypeOf(word) {
+  if (WKT_TYPE[word]) return { type: WKT_TYPE[word], suffix: '' };
+  const glued = /^(.*?)(ZM|Z|M)$/.exec(word);
+  if (glued && WKT_TYPE[glued[1]]) return { type: WKT_TYPE[glued[1]], suffix: glued[2] };
+  return fail(`tipo «${word}» non supportato`);
+}
 
 function tokenize(text) {
   const tokens = [];
@@ -105,12 +126,9 @@ function parseWkt(text) {
 
   const geometry = (depth) => {
     if (depth > MAX_NESTING) fail('collezione troppo annidata');
-    let word = take('word').value;
-    let suffix = '';
-    const glued = /^(.*?)(ZM|Z|M)$/.exec(word);
-    if (!WKT_TYPE[word] && glued && WKT_TYPE[glued[1]]) { word = glued[1]; suffix = glued[2]; }
-    const type = WKT_TYPE[word];
-    if (!type) fail(`tipo «${word}» non supportato`);
+    const head = wktTypeOf(take('word').value);
+    const { type } = head;
+    let { suffix } = head;
     if (!suffix && isNext('word') && ['Z', 'M', 'ZM'].includes(peek().value)) suffix = take('word').value;
     const dim = { n: suffix === 'ZM' ? 4 : suffix ? 3 : null };
 
@@ -152,6 +170,20 @@ const EWKB_Z = 0x80000000;
 const EWKB_M = 0x40000000;
 const EWKB_SRID = 0x20000000;
 
+/** Intero del tipo WKB/EWKB -> tipo, dimensioni e flag SRID. */
+function wkbHeader(raw) {
+  const code = raw & 0x1FFFFFFF;
+  const iso = Math.floor(code / 1000);
+  const type = WKB_TYPE[code % 1000];
+  if (!type || iso > 3) fail(`tipo WKB ${code} non supportato`);
+  return {
+    type,
+    hasZ: (raw & EWKB_Z) !== 0 || iso === 1 || iso === 3,
+    hasM: (raw & EWKB_M) !== 0 || iso === 2 || iso === 3,
+    hasSrid: (raw & EWKB_SRID) !== 0,
+  };
+}
+
 function parseWkb(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let pos = 0;
@@ -167,14 +199,8 @@ function parseWkb(bytes) {
     const u32 = () => { need(4); const v = view.getUint32(pos, le); pos += 4; return v; };
     const f64 = () => { need(8); const v = view.getFloat64(pos, le); pos += 8; return v; };
 
-    const raw = u32();
-    const code = raw & 0x1FFFFFFF;
-    const iso = Math.floor(code / 1000);
-    const type = WKB_TYPE[code % 1000];
-    if (!type || iso > 3) fail(`tipo WKB ${code} non supportato`);
-    const hasZ = (raw & EWKB_Z) !== 0 || iso === 1 || iso === 3;
-    const hasM = (raw & EWKB_M) !== 0 || iso === 2 || iso === 3;
-    if (raw & EWKB_SRID) u32();
+    const { type, hasZ, hasM, hasSrid } = wkbHeader(u32());
+    if (hasSrid) u32();
     const dims = 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
 
     const coord = () => {
@@ -216,23 +242,107 @@ function parseWkb(bytes) {
 
 const HEX = /^(?:\\x)?((?:0[01])(?:[0-9a-fA-F]{2})+)$/;
 
-function hexBytes(hex) {
-  const out = new Uint8Array(hex.length / 2);
+function hexBytes(hex, length = hex.length / 2) {
+  const out = new Uint8Array(length);
   for (let k = 0; k < out.length; k += 1) out[k] = parseInt(hex.substr(k * 2, 2), 16);
   return out;
 }
 
+/** Tipo dichiarato nell'intestazione WKB (ordine dei byte + intero del tipo). */
+function wkbTypeOf(hex) {
+  if (hex.length < 10) fail('WKB troncato');
+  const head = hexBytes(hex, 5);
+  return wkbHeader(new DataView(head.buffer).getUint32(1, head[0] === 1)).type;
+}
+
+// ------------------------------------------------------------- Esri JSON ---
+
+// Chiave di una geometria Esri JSON -> tipo dichiarato (prima regola che
+// combacia). Un oggetto con `type` è GeoJSON, mai Esri.
+const ESRI_RULES = [
+  { key: 'x', type: 'Point' },
+  { key: 'points', type: 'MultiPoint' },
+  { key: 'paths', type: 'MultiLineString' },
+  { key: 'rings', type: 'Polygon' },
+];
+const esriRule = (obj) => (obj.type === undefined ? ESRI_RULES.find(r => r.key in obj) : undefined);
+
+// Area con segno (formula del laccio): <= 0 senso orario, l'anello esterno
+// di un poligono Esri; > 0 antiorario, un buco.
+const signedArea = (ring) => {
+  let a = 0;
+  for (let k = 0; k < ring.length - 1; k += 1) a += ring[k][0] * ring[k + 1][1] - ring[k + 1][0] * ring[k][1];
+  return a / 2;
+};
+const insideRing = ([x, y], ring) => {
+  let inside = false;
+  for (let k = 0, j = ring.length - 1; k < ring.length; j = k, k += 1) {
+    const [xi, yi] = ring[k];
+    const [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+};
+
+/**
+ * Anelli Esri -> poligoni: ogni anello orario apre un poligono; un anello
+ * antiorario è il buco del primo poligono che contiene il suo primo vertice,
+ * altrimenti (dati scritti al contrario) è un poligono a sé. Le coordinate
+ * restano come scritte (l'orientamento non conta per la mappa).
+ */
+function esriPolygons(ringList) {
+  const polygons = [];
+  const holes = [];
+  for (const ring of ringList) {
+    if (signedArea(ring) <= 0) polygons.push([ring]);
+    else holes.push(ring);
+  }
+  for (const hole of holes) {
+    const owner = polygons.find(p => insideRing(hole[0], p[0]));
+    if (owner) owner.push(hole);
+    else polygons.push([hole]);
+  }
+  return polygons;
+}
+
+/**
+ * Geometria Esri JSON -> GeoJSON 2D. Point vuoto: `x` null o "NaN" (come lo
+ * scrive ArcGIS); polyline con un solo path -> LineString, altrimenti
+ * MultiLineString; polygon con un solo anello esterno -> Polygon, altrimenti
+ * MultiPolygon. z e m (anche nelle posizioni `[x, y, z, m]`) si scartano.
+ */
+function fromEsriJson(obj, type) {
+  const position = (p) => {
+    if (!Array.isArray(p) || p.length < 2 || p.length > 4) fail('posizione Esri non valida');
+    return finite2(p[0], p[1]);
+  };
+  const list = (value, what) => (Array.isArray(value) ? value : fail(`${what} Esri non validi`));
+  if (type === 'Point') {
+    if (obj.x == null || obj.x === 'NaN') return { type, coordinates: [] };
+    return { type, coordinates: finite2(obj.x, obj.y) };
+  }
+  if (type === 'MultiPoint') return { type, coordinates: list(obj.points, 'points').map(position) };
+  if (type === 'MultiLineString') {
+    const paths = list(obj.paths, 'paths').map(path => list(path, 'path').map(position));
+    return paths.length === 1 ? { type: 'LineString', coordinates: paths[0] } : { type, coordinates: paths };
+  }
+  const polygons = esriPolygons(rings(list(obj.rings, 'rings').map(ring => list(ring, 'ring').map(position))));
+  return polygons.length > 1 ? { type: 'MultiPolygon', coordinates: polygons } : { type, coordinates: polygons[0] || [] };
+}
+
 // --------------------------------------------------------------- GeoJSON ---
 
-function fromGeoJson(obj, depth = 0) {
+function fromObject(obj, depth = 0) {
   if (depth > MAX_NESTING) fail('collezione troppo annidata');
-  if (!obj || typeof obj !== 'object') fail('GeoJSON non valido');
-  if (obj.type === 'Feature') return fromGeoJson(obj.geometry, depth + 1);
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) fail('oggetto geometrico non valido');
+  if (obj.type === 'Feature') return fromObject(obj.geometry, depth + 1);
+  const esri = esriRule(obj);
+  if (esri) return fromEsriJson(obj, esri.type);
   const { type } = obj;
   if (!TYPES.includes(type)) fail(`tipo GeoJSON «${type}» non supportato`);
   if (type === 'GeometryCollection') {
     if (!Array.isArray(obj.geometries)) fail('GeometryCollection senza geometries');
-    return { type, geometries: obj.geometries.map(g => fromGeoJson(g, depth + 1)) };
+    return { type, geometries: obj.geometries.map(g => fromObject(g, depth + 1)) };
   }
   const position = (p) => {
     if (!Array.isArray(p) || p.length < 2 || p.length > 4) fail('posizione GeoJSON non valida');
@@ -252,32 +362,86 @@ function fromGeoJson(obj, depth = 0) {
   return { type, coordinates };
 }
 
+/**
+ * Tipo dichiarato di un oggetto (GeoJSON, Feature, Esri) senza leggere le
+ * coordinate. Unica eccezione: polyline e polygon Esri non dichiarano se sono
+ * semplici o multipli, quindi si legge l'oggetto intero.
+ */
+function objectTypeOf(obj, depth = 0) {
+  if (depth > MAX_NESTING) fail('collezione troppo annidata');
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) fail('oggetto geometrico non valido');
+  if (obj.type === 'Feature') return objectTypeOf(obj.geometry, depth + 1);
+  const esri = esriRule(obj);
+  if (esri) return esri.type === 'Point' || esri.type === 'MultiPoint' ? esri.type : fromEsriJson(obj, esri.type).type;
+  if (!TYPES.includes(obj.type)) fail(`tipo GeoJSON «${obj.type}» non supportato`);
+  return obj.type;
+}
+
 // -------------------------------------------------------------- pubblico ---
+
+/**
+ * Classificazione unica di un valore: quale lettore e su quale dato. La usano
+ * sia `parseGeometry` (lettura intera) sia `geometryType` (solo il tipo).
+ * @returns {null | { kind: 'object'|'wkb'|'wkt', data: unknown }}
+ */
+function classify(value) {
+  if (value == null) return null;
+  if (typeof value === 'object') return { kind: 'object', data: value };
+  const text = String(value).trim();
+  if (!text) return null;
+  if (text.startsWith('{')) return { kind: 'object', data: JSON.parse(text) };
+  const hex = HEX.exec(text);
+  if (hex) return { kind: 'wkb', data: hex[1] };
+  const srid = /^SRID=\d+;/i.exec(text);
+  return { kind: 'wkt', data: srid ? text.slice(srid[0].length) : text };
+}
+
+const READ = {
+  object: (obj) => fromObject(obj),
+  wkb: (hex) => parseWkb(hexBytes(hex)),
+  wkt: (text) => parseWkt(text),
+};
+
+const TYPE_OF = {
+  object: (obj) => objectTypeOf(obj),
+  wkb: wkbTypeOf,
+  wkt: (text) => {
+    const word = /^\s*([A-Za-z]+)/.exec(text);
+    return word ? wktTypeOf(word[1].toUpperCase()).type : fail('tipo WKT mancante');
+  },
+};
 
 /**
  * Legge un valore geometrico. Ritorna GeoJSON 2D o null (non leggibile).
  * @param {unknown} value
  */
 export function parseGeometry(value) {
-  if (value == null) return null;
   try {
-    if (typeof value === 'object') return fromGeoJson(value);
-    const text = String(value).trim();
-    if (!text) return null;
-    if (text.startsWith('{')) return fromGeoJson(JSON.parse(text));
-    const hex = HEX.exec(text);
-    if (hex) return parseWkb(hexBytes(hex[1]));
-    const srid = /^SRID=\d+;/i.exec(text);
-    return parseWkt(srid ? text.slice(srid[0].length) : text);
+    const c = classify(value);
+    return c ? READ[c.kind](c.data) : null;
   } catch {
     return null;
   }
 }
 
-/** Etichetta del tipo per tabella e statistiche: «MULTIPOINT», «non leggibile». */
+/** Etichetta del tipo per la tabella: «MULTIPOINT», «non leggibile» (lettura intera). */
 export function geometryLabel(value) {
   const geom = parseGeometry(value);
   return geom ? geom.type.toUpperCase() : UNREADABLE_GEOMETRY;
+}
+
+/**
+ * Etichetta del tipo DICHIARATO, senza leggere le coordinate (statistiche su
+ * molte righe): stessa classificazione di `parseGeometry`, stesso testo di
+ * `geometryLabel` su ogni valore leggibile.
+ */
+export function geometryType(value) {
+  try {
+    const c = classify(value);
+    return c ? TYPE_OF[c.kind](c.data).toUpperCase() : UNREADABLE_GEOMETRY;
+  } catch {
+    return UNREADABLE_GEOMETRY;
+  }
 }
 
 const hasCoordinates = (g) => (g.type === 'GeometryCollection' ? g.geometries.length > 0 : g.coordinates.length > 0);

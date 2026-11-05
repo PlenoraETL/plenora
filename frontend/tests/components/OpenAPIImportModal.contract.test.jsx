@@ -7,7 +7,7 @@
 import React from 'react';
 import fs from 'node:fs';
 import path from 'node:path';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -68,6 +68,34 @@ describe('OpenAPIImportModal', () => {
     expect(screen.getByRole('button', { name: /importa 1 endpoint/i })).toBeDisabled();
     await userEvent.type(screen.getByLabelText(/base url non rilevata/i), 'https://petstore3.swagger.io');
     expect(screen.getByRole('button', { name: /importa 1 endpoint/i })).toBeEnabled();
+  });
+
+  it('endpoint non importabili elencati con il motivo; avviso del tokenUrl; body_type nel payload', async () => {
+    const onImport = vi.fn();
+    const doc = fixture('oauth2.yaml').replace(/^paths:\r?\n/m, [
+      'paths:',
+      '  /ping:',
+      '    head:',
+      '      responses: {"200": {description: ok}}',
+      '  /cerca:',
+      '    post:',
+      '      requestBody: {content: {application/x-www-form-urlencoded: {schema: {type: object, properties: {q: {type: string}}}}}}',
+      '      responses: {"200": {description: ok}}',
+      '',
+    ].join('\n'));
+    render(<OpenAPIImportModal onClose={vi.fn()} onImport={onImport} />);
+    await userEvent.click(screen.getByRole('button', { name: /incolla json\/yaml/i }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: doc } });
+    await userEvent.click(screen.getByRole('button', { name: /analizza schema/i }));
+    const excluded = await screen.findByRole('list', { name: 'Endpoint non importabili' });
+    expect(within(excluded).getByText(/metodo HEAD non eseguito dai connettori/)).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Seleziona HEAD /ping' })).toBeNull();
+    const warnings = screen.getByRole('list', { name: 'Avvisi sulla specifica' });
+    expect(within(warnings).getByText(/tokenUrl «\/oauth\/token» di «oauth»: risolto in https:\/\/anagrafe\.example\.org\/oauth\/token/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Seleziona POST /cerca' }));
+    await userEvent.click(screen.getByRole('button', { name: /importa 1 endpoint/i }));
+    expect(onImport.mock.calls[0][0][0].request).toEqual({ body_type: 'form-urlencoded' });
   });
 
   it('errore del documento con la riga', async () => {

@@ -12,7 +12,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { normalizeOpenApi, buildConnectionPayloads, needsBaseUrl, IMPORT_AUTH_OPTIONS } from '../../src/utils/openapiImport';
+import {
+  normalizeOpenApi, buildConnectionPayloads, needsBaseUrl, IMPORT_AUTH_OPTIONS, IMPORTABLE_METHODS, IMPORT_LIMITS, PAYLOAD_FIELDS,
+} from '../../src/utils/openapiImport';
 import { sourceFiles, stripComments } from '../helpers/sourceScan.js';
 
 const DIR = path.resolve(import.meta.dirname, '../fixtures/openapi-import');
@@ -25,6 +27,7 @@ const summary = (spec) => ({
   auth: spec.auth,
   candidates: spec.authCandidates.map(c => `${c.name}:${c.auth ? c.auth.type : c.reason}`),
   warnings: spec.warnings,
+  excluded: spec.excluded.map(x => `${x.id}: ${x.reason}`),
   endpoints: spec.endpoints.map(e => ({
     id: e.id,
     server: e.server,
@@ -63,9 +66,13 @@ const PETSTORE_V2 = {
       fields: ['code>code:integer', 'type>type:string', 'message>message:string'] },
   ],
 };
+// Il corpo multipart con un file non e' rappresentabile dal connettore.
+PETSTORE_V2.endpoints.pop();
+PETSTORE_V2.excluded = ['POST /pet/{petId}/uploadImage: campo file «file» nel corpo: il connettore non invia file (usa un Processore File)'];
 
 const V3 = 'https://petstore3.swagger.io/api/v3';
 const PETSTORE_V3 = {
+  excluded: [],
   format: 'openapi-3.0',
   baseUrl: V3,
   auth: { type: 'api_key', key_name: 'api_key', key_value: '', location: 'header' },
@@ -93,6 +100,7 @@ const CAT = 'https://catalogo.example.com/api';
 const NODE_SCHEMA = 'paths./nodes/{nodeId}.get.responses.2XX.content.application/vnd.catalogo+json.schema';
 const BROKEN_SCHEMA = 'paths./broken.get.responses.200.content.application/json.schema';
 const NESTED_REFS = {
+  excluded: [],
   format: 'openapi-3.1',
   baseUrl: CAT,
   auth: { type: 'none' },
@@ -124,6 +132,7 @@ const NESTED_REFS = {
 };
 
 const SERVER_VARIABLES = {
+  excluded: [],
   format: 'openapi-3.0',
   baseUrl: 'https://api.meteo.example.com:8443/v2',
   auth: { type: 'none' },
@@ -141,6 +150,7 @@ const SERVER_VARIABLES = {
 };
 
 const APIKEY = {
+  excluded: [],
   format: 'openapi-3.0',
   baseUrl: 'https://geo.example.com/v1',
   // Il requisito globale `security` decide: chiave in query.
@@ -160,13 +170,17 @@ const APIKEY = {
 };
 
 const OAUTH2 = {
+  excluded: [],
   format: 'openapi-3.0',
   baseUrl: 'https://anagrafe.example.org/rest',
   // tokenUrl relativo risolto sul server; scope dal requisito dell'operazione.
   auth: { type: 'oauth2_client_credentials', token_url: 'https://anagrafe.example.org/oauth/token',
     client_id: '', client_secret: '', scope: 'persone.read persone.search' },
   candidates: ['oauth:oauth2_client_credentials', 'oidc:OpenID Connect non supportato'],
-  warnings: [],
+  // RFC 3986: «/oauth/token» sostituisce il percorso del server; l'avviso lo dice.
+  warnings: ['tokenUrl «/oauth/token» di «oauth»: risolto in https://anagrafe.example.org/oauth/token (RFC 3986), '
+    + 'senza il percorso «/rest» del server https://anagrafe.example.org/rest. '
+    + 'Se il token si chiede sotto il server, usa https://anagrafe.example.org/rest/oauth/token.'],
   endpoints: [
     { id: 'GET /persone', server: 'https://anagrafe.example.org/rest', params: ['query:cognome:string'], request: null,
       response: '200 application/json',
@@ -234,12 +248,14 @@ describe('corpus di specifiche', () => {
     }
   });
 
-  it('tutti i metodi HTTP, non solo get/post/put/delete', () => {
+  it('i metodi importabili sono quelli del backend; gli altri esclusi con il motivo', () => {
     const op = { responses: {} };
     const spec = normalizeOpenApi({ openapi: '3.0.0', paths: { '/x': {
       get: op, put: op, post: op, delete: op, patch: op, head: op, options: op, trace: op, parameters: [], summary: 's',
     } } });
-    expect(spec.endpoints.map(e => e.method)).toEqual(['GET', 'PUT', 'POST', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'TRACE']);
+    expect(spec.endpoints.map(e => e.method)).toEqual(['GET', 'PUT', 'POST', 'DELETE', 'PATCH']);
+    expect(spec.excluded.map(x => `${x.id}: ${x.reason}`)).toEqual(['HEAD', 'OPTIONS', 'TRACE'].map(m =>
+      `${m} /x: metodo ${m} non eseguito dai connettori (solo GET, POST, PUT, PATCH, DELETE)`));
   });
 
   it('colonne sempre univoche', () => {
@@ -295,6 +311,7 @@ describe('payload delle connessioni', () => {
       auth: { type: 'api_key', key_name: 'api_key', key_value: 'k', location: 'query' },
       parameters: [{ name: 'petId', type: 'number', required: true, mode: 'mapped', location: 'path' }],
       static_parameters: {},
+      request: { body_type: 'none' },
       schema_fields: spec.endpoints[2].outputFields.map(f => ({ path: f.path, name: f.column, type: f.type })),
       output_mapping: [
         { path: 'id', column: 'id', type: 'integer' },
@@ -310,6 +327,197 @@ describe('payload delle connessioni', () => {
     expect(a.url).toBe('https://api.meteo.example.com:8443/v2/forecast');
     expect(b.url).toBe('https://alerts.meteo.example.com/v1/alerts');
     expect(a.output_mapping.map(m => m.column)).toEqual(['temperature', 'speed', 'direction']);
+  });
+});
+
+// ------------------------------------------------- contratto col backend ---
+
+const BACKEND = path.resolve(import.meta.dirname, '../../../backend/app/core/arricchisci');
+const backendCode = (file) => fs.readFileSync(path.join(BACKEND, file), 'utf-8');
+const frozenset = (file, name) => {
+  const m = new RegExp(`${name} = frozenset\\(\\{([^}]*)\\}`).exec(backendCode(file));
+  return [...m[1].matchAll(/"([^"]+)"/g)].map(x => x[1]);
+};
+// Campi del payload che create_api_connection legge (data.get("x") / data["x"]).
+const createReads = () => {
+  const code = backendCode('api_connection_management.py');
+  const start = code.indexOf('def create_api_connection');
+  const body = code.slice(start, code.indexOf('\n    def ', start + 1));
+  return new Set([...body.matchAll(/data(?:\.get\(|\[)['"]([a-z_]+)['"]/g)].map(m => m[1]));
+};
+
+const opSpec = (method, op) => ({ openapi: '3.0.0', info: { title: 't' }, servers: [{ url: 'https://h.example/api/v1' }],
+  paths: { '/r': { [method]: { responses: { 200: { description: '' } }, ...op } } } });
+const withBody = (contentType, schema) => ({ requestBody: { content: { [contentType]: schema === undefined ? {} : { schema } } } });
+const OBJ = { type: 'object', properties: { a: { type: 'string' }, n: { type: 'integer' } } };
+const NOT_REPRESENTABLE = (ct) => `corpo «${ct}» non rappresentabile: il connettore invia JSON, form-urlencoded o multipart`;
+
+// Ogni forma di corpo: body_type del connettore o motivo dell'esclusione.
+const BODY_CASES = [
+  ['get', {}, 'none'],
+  ['delete', {}, 'none'],
+  ['post', withBody('application/json', OBJ), 'json'],
+  ['put', withBody('application/json; charset=utf-8', OBJ), 'json'],
+  ['patch', withBody('application/merge-patch+json', OBJ), 'json'],
+  ['post', withBody('*/*', OBJ), 'json'],
+  ['post', withBody('application/json'), 'json'],
+  ['post', withBody('application/x-www-form-urlencoded', OBJ), 'form-urlencoded'],
+  ['post', withBody('multipart/form-data', OBJ), 'multipart'],
+  ['post', withBody('multipart/form-data', { type: 'object', properties: { f: { type: 'string', format: 'binary' } } }),
+    'campo file «f» nel corpo: il connettore non invia file (usa un Processore File)'],
+  ['post', withBody('application/xml', OBJ), NOT_REPRESENTABLE('application/xml')],
+  ['post', withBody('text/plain', { type: 'string' }), NOT_REPRESENTABLE('text/plain')],
+  ['post', withBody('application/octet-stream', { type: 'string', format: 'binary' }), NOT_REPRESENTABLE('application/octet-stream')],
+  ['post', withBody('application/json', { type: 'array', items: { type: 'string' } }), 'corpo di tipo array: il connettore invia un oggetto con i parametri'],
+  ['get', withBody('application/json', OBJ), 'GET con corpo della richiesta: il connettore invia i parametri di una GET in query'],
+];
+
+describe('forma interna -> payload: campi letti dal backend', () => {
+  it('i metodi importabili sono esattamente SUPPORTED_HTTP_METHODS del backend', () => {
+    expect([...IMPORTABLE_METHODS].sort()).toEqual(frozenset('http_executor.py', 'SUPPORTED_HTTP_METHODS').sort());
+  });
+
+  it('ogni campo del payload è letto da create_api_connection (anche request -> body_type)', () => {
+    const reads = createReads();
+    expect(reads.has('request')).toBe(true);
+    expect(Object.keys(PAYLOAD_FIELDS).filter(k => !reads.has(k))).toEqual([]);
+    expect(backendCode('http_executor.py')).toMatch(/request_cfg\.get\("body_type", default\)/);
+  });
+
+  it.each(BODY_CASES.map(([m, op, out]) => [`${m.toUpperCase()} ${JSON.stringify(op.requestBody?.content ?? null)}`, m, op, out]))(
+    '%s', (_label, method, op, out) => {
+      const spec = normalizeOpenApi(opSpec(method, op));
+      const M = method.toUpperCase();
+      if (frozenset('http_executor.py', 'SUPPORTED_BODY_TYPES').includes(out)) {
+        expect(spec.excluded).toEqual([]);
+        const [payload] = buildConnectionPayloads(spec, { endpointIds: [spec.endpoints[0].id], auth: { type: 'none' } });
+        expect(payload.request).toEqual({ body_type: out });
+      } else {
+        expect(spec.endpoints).toEqual([]);
+        expect(spec.excluded).toEqual([{ id: `${M} /r`, method: M, path: '/r', summary: `${M} /r`, reason: out }]);
+        expect(spec.warnings).toContain('Nessuna operazione importabile: vedi gli endpoint esclusi.');
+      }
+    });
+
+  it('Swagger 2.0: formData senza file -> form-urlencoded, body oggetto -> json, consumes non JSON -> escluso', () => {
+    const sw = (parameters, consumes) => normalizeOpenApi({ swagger: '2.0', host: 'h', paths: { '/r': { post: { consumes, parameters, responses: {} } } } });
+    expect(sw([{ name: 'a', in: 'formData', type: 'string' }]).endpoints[0].bodyType).toBe('form-urlencoded');
+    expect(sw([{ name: 'b', in: 'body', schema: OBJ }]).endpoints[0].bodyType).toBe('json');
+    expect(sw([{ name: 'b', in: 'body', schema: OBJ }], ['application/xml']).excluded[0].reason).toBe(NOT_REPRESENTABLE('application/xml'));
+  });
+});
+
+describe('URL, risposte, YAML, riferimenti', () => {
+  const none = { type: 'none' };
+
+  it('il percorso «/» tiene lo slash finale; gli altri si uniscono al server', () => {
+    const spec = normalizeOpenApi({ openapi: '3.0.0', servers: [{ url: 'https://h.example/api/v1/' }],
+      paths: { '/': { get: { responses: {} } }, '/a/': { get: { responses: {} } }, b: { get: { responses: {} } } } });
+    const urls = buildConnectionPayloads(spec, { endpointIds: spec.endpoints.map(e => e.id), auth: none }).map(p => p.url);
+    expect(urls).toEqual(['https://h.example/api/v1/', 'https://h.example/api/v1/a/', 'https://h.example/api/v1/b']);
+    const rel = normalizeOpenApi({ openapi: '3.0.0', servers: [{ url: '/' }], paths: { '/': { get: { responses: {} } } } });
+    expect(buildConnectionPayloads(rel, { endpointIds: ['GET /'], auth: none, manualBaseUrl: 'https://m.example/x' })[0].url)
+      .toBe('https://m.example/x/');
+  });
+
+  it('risposta «default» solo senza 2xx, con un avviso', () => {
+    const resp = (props) => ({ description: '', content: { 'application/json': { schema: { type: 'object', properties: props } } } });
+    const only = normalizeOpenApi(opSpec('get', { responses: { default: resp({ code: { type: 'integer' } }), 404: resp({ e: {} }) } }));
+    expect(only.endpoints[0].response.status).toBe('default');
+    expect(only.endpoints[0].outputFields.map(f => f.path)).toEqual(['code']);
+    expect(only.warnings).toEqual(['Colonne prese dalla risposta «default» (nessuna risposta 2xx dichiarata): '
+      + 'controlla che sia la risposta di successo (in paths./r.get.responses.default).']);
+    const both = normalizeOpenApi(opSpec('get', { responses: { default: resp({ code: { type: 'integer' } }), 202: resp({ id: { type: 'string' } }) } }));
+    expect(both.endpoints[0].response.status).toBe('202');
+    expect(both.warnings).toEqual([]);
+  });
+
+  it('YAML: chiavi di unione «<<: *alias» (schema CORE + merge)', () => {
+    const spec = normalizeOpenApi([
+      'openapi: 3.0.0', 'info: {title: x}', 'servers: [{url: "https://h"}]',
+      'base: &b {summary: comune, responses: {"200": {description: ok, content: {application/json: {schema: {type: object, properties: {a: {type: string}}}}}}}}',
+      'paths:', '  /a:', '    get:', '      <<: *b', '      operationId: x', '  /d:', '    get: {<<: *b, summary: proprio}',
+      'data: 2020-01-01',
+    ].join('\n'));
+    expect(spec.endpoints.map(e => [e.summary, e.outputFields.map(f => f.path)])).toEqual([['comune', ['a']], ['proprio', ['a']]]);
+  });
+
+  it('$ref con «%» malformato: errore col percorso', () => {
+    const doc = opSpec('get', { responses: { 200: { description: '', content: { 'application/json': { schema: { $ref: '#/components/schemas/%E0%A4%A' } } } } } });
+    expect(() => normalizeOpenApi(doc)).toThrow('Riferimento «#/components/schemas/%E0%A4%A» non valido: codifica «%» malformata '
+      + '(percorso: paths./r.get.responses.200.content.application/json.schema).');
+    expect(() => normalizeOpenApi(doc)).toThrow(expect.objectContaining({ name: 'OpenApiImportError' }));
+  });
+
+  it('caratteri non decodificabili (U+FFFD) nel testo o nell\'oggetto: avviso', () => {
+    const msg = 'Il documento contiene caratteri non decodificabili (sostituiti con «\uFFFD»): controlla la codifica della specifica (attesa UTF-8).';
+    expect(normalizeOpenApi('openapi: 3.0.0\ninfo: {title: caf\uFFFD}\npaths: {}\n').warnings).toContain(msg);
+    expect(normalizeOpenApi({ openapi: '3.0.0', info: { title: 'caf\uFFFD' }, paths: {} }).warnings).toContain(msg);
+    expect(normalizeOpenApi({ openapi: '3.0.0', info: { title: 'caffè' }, paths: {} }).warnings).not.toContain(msg);
+  });
+
+  it('tokenUrl assoluto di percorso su un server con prefisso: RFC 3986 e avviso; senza prefisso nessun avviso', () => {
+    const doc = (url, tokenUrl = '/token') => ({ openapi: '3.0.0', servers: [{ url }], paths: {},
+      components: { securitySchemes: { o: { type: 'oauth2', flows: { password: { tokenUrl, scopes: {} } } } } } });
+    const withPrefix = normalizeOpenApi(doc('https://h.example/api'));
+    expect(withPrefix.auth.token_url).toBe('https://h.example/token');
+    const tokenWarnings = (spec) => spec.warnings.filter(w => w.startsWith('tokenUrl'));
+    expect(tokenWarnings(withPrefix)).toEqual(['tokenUrl «/token» di «o»: risolto in https://h.example/token (RFC 3986), senza il percorso «/api» '
+      + 'del server https://h.example/api. Se il token si chiede sotto il server, usa https://h.example/api/token.']);
+    expect(tokenWarnings(normalizeOpenApi(doc('https://h.example')))).toEqual([]);
+    const relative = normalizeOpenApi(doc('https://h.example/api', 'token'));
+    expect([relative.auth.token_url, tokenWarnings(relative)]).toEqual(['https://h.example/api/token', []]);
+  });
+});
+
+describe('budget di lavoro dell\'import', () => {
+  const timed = (fn) => { const t = performance.now(); const r = fn(); return [r, performance.now() - t]; };
+  const one = (schema, components = {}) => ({ openapi: '3.0.0', components,
+    paths: { '/a': { get: { responses: { 200: { description: '', content: { 'application/json': { schema } } } } } } } });
+
+  it.each([
+    // Alias YAML annidati: 866 byte che si espandono in 5^8 campi (prima 95 s).
+    ['alias YAML 5^8', () => {
+      let y = 'openapi: 3.0.0\ninfo: {title: x}\nx0: &a0 {type: string}\n';
+      for (let i = 1; i <= 8; i += 1) y += `x${i}: &a${i} {type: object, properties: {${Array.from({ length: 5 }, (_, k) => `p${k}: *a${i - 1}`).join(', ')}}}\n`;
+      return `${y}paths:\n  /a:\n    get:\n      responses:\n        "200":\n          description: ok\n          content:\n            application/json:\n              schema: *a8\n`;
+    }],
+    // $ref condivisi: 6 livelli x 6 proprietà (prima 10 s).
+    ['$ref condivisi 6^6', () => {
+      const schemas = {};
+      for (let l = 0; l < 6; l += 1) {
+        schemas[`L${l}`] = { type: 'object', properties: Object.fromEntries(Array.from({ length: 6 }, (_, w) => [`p${w}`, l === 5 ? { type: 'string' } : { $ref: `#/components/schemas/L${l + 1}` }])) };
+      }
+      return one({ $ref: '#/components/schemas/L0' }, { schemas });
+    }],
+    // allOf a ventaglio: 2^22 visite senza budget.
+    ['allOf 2^22', () => {
+      const schemas = {};
+      for (let l = 0; l < 22; l += 1) {
+        schemas[`A${l}`] = l === 21 ? { type: 'object', properties: { z: { type: 'string' } } }
+          : { allOf: [{ $ref: `#/components/schemas/A${l + 1}` }, { $ref: `#/components/schemas/A${l + 1}` }] };
+      }
+      return one({ $ref: '#/components/schemas/A0' }, { schemas });
+    }],
+  ])('%s: sotto 500 ms, con «schema troncato»', (_label, make) => {
+    const source = make();
+    const [spec, ms] = timed(() => normalizeOpenApi(source));
+    expect(ms).toBeLessThan(500);
+    const fields = spec.endpoints[0].outputFields;
+    expect(fields.length).toBeLessThanOrEqual(IMPORT_LIMITS.fieldsPerResponse);
+    expect(new Set(fields.map(f => f.column)).size).toBe(fields.length);
+    expect(spec.warnings.some(w => w.startsWith('Schema troncato:'))).toBe(true);
+  });
+
+  it('il budget dei nodi vale per tutto l\'import: tanti endpoint con lo stesso schema grande si fermano', () => {
+    const big = { type: 'object', properties: Object.fromEntries(Array.from({ length: 1500 }, (_, i) => [`f${i}`, { type: 'string' }])) };
+    const ok = { 200: { description: '', content: { 'application/json': { schema: { $ref: '#/components/schemas/Big' } } } } };
+    const paths = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`/e${i}`, { get: { responses: ok } }]));
+    const [spec, ms] = timed(() => normalizeOpenApi({ openapi: '3.0.0', components: { schemas: { Big: big } }, paths }));
+    expect(ms).toBeLessThan(1500);
+    expect(spec.endpoints[0].outputFields).toHaveLength(1500);
+    expect(spec.endpoints.at(-1).outputFields).toEqual([]);
+    expect(spec.warnings.filter(w => w.startsWith('Schema troncato: superato il limite di 100.000 nodi'))).toHaveLength(1);
   });
 });
 

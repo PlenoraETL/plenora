@@ -114,6 +114,11 @@
 }
 .oai__sel-all-btn:hover { background: var(--acm-surface-2, #111525); color: var(--acm-text, #DDE4F2); }
 .oai__endpoints-list { display: flex; flex-direction: column; gap: 5px; }
+/* Endpoint esclusi dall'import (metodo o corpo che il connettore non sa inviare) */
+.oai__excluded { display: flex; flex-direction: column; gap: 6px; opacity: .85; }
+.oai__excluded ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.oai__excluded-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px dashed var(--acm-border, rgba(255,255,255,.08)); border-radius: 8px; }
+.oai__excluded-reason { font-size: 11px; color: var(--acm-text-dim, #3F4D68); overflow-wrap: anywhere; }
 
 .oai__endpoint {
   background: var(--acm-surface-2, #111525);

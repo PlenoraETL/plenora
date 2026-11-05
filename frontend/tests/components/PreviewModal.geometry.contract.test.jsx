@@ -77,4 +77,32 @@ describe('PreviewModal — geometrie', () => {
     ]);
     expect(screen.getByText(/3 elementi · MultiPoint/)).toHaveTextContent('non leggibile: 1');
   });
+
+  it('statistiche: tipi dichiarati dal lettore unico (geometryType), Esri JSON compreso', async () => {
+    renderModal();
+    await userEvent.click(screen.getByRole('button', { name: /statistiche/i }));
+    // 'POINT (1)' ha un tipo dichiarato valido: conta come POINT (la tabella lo dice «non leggibile»).
+    expect(screen.getByText('MULTIPOINT, POINT, LINESTRING')).toBeInTheDocument();
+  });
+
+  it('Esri JSON (ArcGIS) letto come geometria: tabella e mappa', async () => {
+    const esri = [
+      { id: 1, geom: { x: 11.34, y: 44.49, spatialReference: { wkid: 4326 } } },
+      { id: 2, geom: { paths: [[[0, 0], [1, 1]]], spatialReference: { wkid: 4326 } } },
+      { id: 3, geom: '{"rings":[[[0,0],[0,1],[1,1],[0,0]]]}' },
+    ];
+    render(
+      <PreviewModal isOpen onClose={vi.fn()} loading={false} error={null} title="Esri" projectType="estrai" initialLimit={100}
+        data={{ columns: [{ name: 'id', type: 'int' }, { name: 'geom', type: 'geometry' }], rows: esri,
+          total_count: esri.length, preview_count: esri.length, truncated: false }} />,
+    );
+    const table = screen.getByRole('table');
+    expect(['POINT', 'LINESTRING', 'POLYGON'].map(t => within(table).getByText(t))).toHaveLength(3);
+    leaflet.geoJSON.mockClear();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await userEvent.click(screen.getByRole('button', { name: /mappa/i }));
+    await act(async () => { vi.advanceTimersByTime(500); });
+    vi.useRealTimers();
+    expect(leaflet.geoJSON.mock.calls[0][0].features.map(f => f.geometry.type)).toEqual(['Point', 'LineString', 'Polygon']);
+  });
 });

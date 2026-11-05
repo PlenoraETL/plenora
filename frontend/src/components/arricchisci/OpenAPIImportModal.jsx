@@ -299,6 +299,21 @@ function OpenAPIImportModal({ onClose, onImport }) {
                 })}
               </div>
 
+              {parsedSpec.excluded.length > 0 && (
+                <div className="oai__excluded">
+                  <div className="oai__section-title">⛔ Endpoint non importabili ({parsedSpec.excluded.length})</div>
+                  <ul aria-label="Endpoint non importabili">
+                    {parsedSpec.excluded.map(x => (
+                      <li key={x.id} className="oai__excluded-item">
+                        <span className={`oai__method ${METHOD_COLOR[x.method]||''}`}>{x.method}</span>
+                        <span className="oai__ep-path">{x.path}</span>
+                        <span className="oai__excluded-reason">{x.reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <button type="button" className="oai__back-btn" onClick={()=>{ setParsedSpec(null); setSelectedEndpoints([]); setSelectedFields({}); setManualBaseUrl(''); setAuthConfig(NO_AUTH); }}>
                 ← Torna indietro
               </button>

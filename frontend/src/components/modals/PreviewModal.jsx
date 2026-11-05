@@ -17,7 +17,7 @@ import { formatCellNumber } from '../../utils/previewFormat';
 import { formatNumber } from '../../utils/format';
 import './PreviewModal.css';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
-import { parseGeometry, drawableGeometry, geometryLabel, UNREADABLE_GEOMETRY } from '../../utils/geometry';
+import { parseGeometry, drawableGeometry, geometryLabel, geometryType, UNREADABLE_GEOMETRY } from '../../utils/geometry';
 import { TILE_URLS } from '../../config/mapTiles';
 
 /** Ritorna true se il tipo colonna è geometrico */
@@ -306,7 +306,9 @@ const StatsTab = memo(({ rows, columns }) => {
       const nonNull = vals.filter(v => v != null && v !== '');
 
       if (isGeoType(col.type)) {
-        const types = [...new Set(nonNull.map(v => geometryLabel(v)))];
+        // Solo il tipo dichiarato (intestazione WKT/WKB, type GeoJSON): niente
+        // lettura delle coordinate di ogni riga per un conteggio dei tipi.
+        const types = [...new Set(nonNull.map(geometryType))];
         return { col, nullCount, geomTypes: types };
       }
 

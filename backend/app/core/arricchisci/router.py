@@ -8,7 +8,9 @@ from app.core.projects.canvas_models import CanvasState
 from app.core.projects.router import PREPARATION_ERRORS, _prepare_canvas_for_owner, raise_preparation_failure
 from app.shared.execution.node_fields import node_field
 
+import codecs
 import json
+import re
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.core.auth.dependencies import (
@@ -158,6 +160,42 @@ _OPENAPI_ACCEPT = (
     "application/vnd.oai.openapi+json, application/vnd.oai.openapi, */*;q=0.5"
 )
 
+# Byte order mark -> codifica: un BOM decide sempre (vince sul charset).
+_SPEC_BOMS = (
+    (codecs.BOM_UTF32_LE, "utf-32"),
+    (codecs.BOM_UTF32_BE, "utf-32"),
+    (codecs.BOM_UTF8, "utf-8-sig"),
+    (codecs.BOM_UTF16_LE, "utf-16"),
+    (codecs.BOM_UTF16_BE, "utf-16"),
+)
+_CHARSET_RE = re.compile(r"""charset\s*=\s*["']?([^"';\s]+)""", re.IGNORECASE)
+
+
+def decode_spec_bytes(content: bytes, content_type: str | None) -> tuple[str, bool]:
+    """Testo di una specifica scaricata, decodificato dai BYTE.
+
+    Regola unica per ogni Content-Type (JSON, YAML, text/plain, octet-stream):
+    BOM se presente, altrimenti il charset dichiarato, altrimenti UTF-8 (la
+    codifica di JSON e YAML). Se la decodifica stretta fallisce si ripiega su
+    UTF-8 con i caratteri non validi sostituiti (U+FFFD) e il secondo valore
+    e' True: il frontend lo segnala come avviso. Mai ISO-8859-1 implicito
+    (il default di ``requests`` per ``text/*`` senza charset).
+    """
+    data = bytes(content or b"")
+    encoding = next((enc for bom, enc in _SPEC_BOMS if data.startswith(bom)), None)
+    if encoding is None:
+        match = _CHARSET_RE.search(content_type or "")
+        encoding = match.group(1) if match else "utf-8"
+        try:
+            codecs.lookup(encoding)
+        except LookupError:
+            encoding = "utf-8"
+    try:
+        return data.decode(encoding), False
+    except (UnicodeDecodeError, LookupError):
+        return data.decode("utf-8", errors="replace"), True
+
+
 def _validate_external_url(url: str) -> None:
     """Anti-SSRF: wrapper che converte ValueError in HTTPException."""
     try:
@@ -195,10 +233,27 @@ async def fetch_openapi_schema(body: FetchSchemaRequest, _user: CurrentUser = De
         )
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=f"HTTP {r.status_code}")
+        if 300 <= r.status_code < 400:
+            # request_pinned non segue i reindirizzamenti (anti-SSRF): un 3xx
+            # non e' una specifica vuota, e' un errore che indica l'URL finale.
+            location = r.headers.get("location") or "un altro indirizzo"
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": error_codes.EXTERNAL_SERVICE_UNREACHABLE,
+                    "message": (
+                        f"La specifica risponde con un reindirizzamento (HTTP {r.status_code}) "
+                        f"a {location}: usa l'URL finale."
+                    ),
+                },
+            )
+        text, replaced = decode_spec_bytes(r.content, r.headers.get("content-type"))
+        if replaced:
+            logger.warning("[GESTITO] Specifica OpenAPI non decodificabile: caratteri sostituiti")
         try:
-            return r.json()
+            return json.loads(text)
         except ValueError:
-            return r.text
+            return text
     except HTTPException:
         raise
     except Exception as e:
