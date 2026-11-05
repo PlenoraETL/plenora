@@ -9,6 +9,8 @@ import ModalWrapper from '../common/ModalWrapper';
 import { humanizeError } from '../../utils/errorMessages';
 import './TemplateLibraryModal.css';
 import { pressable } from '../../utils/pressable';
+import SearchField, { SearchEmpty } from '../common/SearchField';
+import { useSearch } from '../../hooks/useSearch';
 
 const CATEGORIES = {
   all:       { label: 'Tutti',      icon: '⊞' },
@@ -116,18 +118,12 @@ function TemplateLibraryModal({ onClose, onSelectTemplate }) {
   const templates = useMemo(() => resource.data || [], [resource.data]);
   const loading = resource.initialLoading;
   const error = resource.error;
-  const [searchQuery, setSearchQuery] = useState('');
+  const search = useSearch();
   const [selectedCategory, setSelectedCategory] = useState('all');
 
 
-  const filtered = useMemo(() => templates.filter(t => {
-    const q = searchQuery.toLowerCase();
-    const matchSearch = !q ||
-      t.display?.name?.toLowerCase().includes(q) ||
-      t.display?.short_description?.toLowerCase().includes(q);
-    const matchCat = selectedCategory === 'all' || t._meta?.category === selectedCategory;
-    return matchSearch && matchCat;
-  }), [templates, searchQuery, selectedCategory]);
+  const filtered = useMemo(() => search.filter(templates, t => [t.display?.name, t.display?.short_description])
+    .filter(t => selectedCategory === 'all' || t._meta?.category === selectedCategory), [templates, search.filter, selectedCategory]);
 
   return (
     <ModalWrapper
@@ -140,16 +136,7 @@ function TemplateLibraryModal({ onClose, onSelectTemplate }) {
     >
         {/* Toolbar */}
         <div className="tlm__toolbar">
-          <div className="tlm__search">
-            <span className="tlm__search-icon">🔍</span>
-            <input type="text" value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Cerca template…"
-              className="tlm__search-input" autoComplete="off" />
-            {searchQuery && (
-              <button type="button" className="tlm__search-clear" onClick={() => setSearchQuery('')}>✕</button>
-            )}
-          </div>
+          <SearchField search={search} label="Cerca template" className="tlm__search" shown={filtered.length} total={templates.length} />
           <div className="tlm__cats">
             {Object.entries(CATEGORIES).map(([id, cat]) => {
               const count = id === 'all' ? templates.length : templates.filter(t => t._meta?.category === id).length;
@@ -178,10 +165,12 @@ function TemplateLibraryModal({ onClose, onSelectTemplate }) {
               <div className="tlm__empty-icon">❌</div>
               <div>Errore: {error}</div>
             </div>
+          ) : filtered.length === 0 && search.active ? (
+            <SearchEmpty search={search} shown={0} />
           ) : filtered.length === 0 ? (
             <div className="tlm__empty">
               <div className="tlm__empty-icon">🔭</div>
-              <div>Nessun template trovato</div>
+              <div>Nessun template in questa categoria</div>
             </div>
           ) : (
             <div className="tlm__grid">

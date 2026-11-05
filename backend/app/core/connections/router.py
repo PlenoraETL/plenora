@@ -25,6 +25,11 @@ from app.shared import error_codes
 from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.shared.error_envelope import raise_credential_unavailable, raise_typed_http
 from app.observability.audit_action import audit_action
+from app.shared.connection_tests.results import (
+    attaches_connection_tests,
+    records_connection_test,
+    resets_connection_test,
+)
 from app.core.auth.visibility import visible_resource_ids
 from app.core.projects import usage as project_usage
 from .models import (
@@ -104,6 +109,7 @@ def create_connection(
 
 
 @router.get("/connections", response_model=ConnectionList)
+@attaches_connection_tests("connection", items_field="connections")
 def list_connections(
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -229,6 +235,7 @@ def delete_connection_set(
 
 @router.put("/connections/{connection_id}", response_model=DatabaseConnection)
 @audit_action(action="connection.update", target_param="connection_id")
+@resets_connection_test("connection", id_param="connection_id")
 def update_connection(
     connection_id: str,
     data: ConnectionUpdate,
@@ -269,6 +276,7 @@ def update_connection(
 
 @router.delete("/connections/{connection_id}", status_code=204)
 @audit_action(action="connection.delete", target_param="connection_id")
+@resets_connection_test("connection", id_param="connection_id")
 def delete_connection(
     connection_id: str,
     current_user: CurrentUser = Depends(require_admin),
@@ -363,6 +371,7 @@ def delete_connection(
 
 @router.post("/connections/{connection_id}/test", response_model=ConnectionTestResult)
 @audit_action(action="connection.test", target_param="connection_id")
+@records_connection_test("connection", id_param="connection_id")
 def test_connection(
     connection_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),

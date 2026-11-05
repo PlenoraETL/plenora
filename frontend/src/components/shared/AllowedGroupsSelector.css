@@ -197,25 +197,6 @@
 
 .ags__search {
   width: 100%;
-  background: var(--plen-surface, rgba(0, 0, 0, 0.20));
-  border: 1px solid var(--plen-border-hi, rgba(255, 255, 255, 0.12));
-  border-radius: 6px;
-  padding: 9px 13px;
-  font-size: 13.5px;
-  color: var(--plen-text, #DDE4F2);
-  outline: none;
-  transition: border-color 0.15s, background 0.15s;
-  font-family: inherit;
-}
-
-.ags__search::placeholder {
-  color: var(--plen-text-sub, #7D8BA8);
-  opacity: 0.7;
-}
-
-.ags__search:focus {
-  border-color: rgba(75, 139, 255, 0.65);
-  background: var(--plen-surface, rgba(0, 0, 0, 0.30));
 }
 
 /* ── Lista gruppi ───────────────────────────────────────────────────── */

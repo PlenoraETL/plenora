@@ -33,6 +33,8 @@ import useDialog from '../hooks/useDialog';
 import { toastApiError } from '../utils/toastApiError';
 import './EseguibiliList.css';
 import { pressable } from '../utils/pressable';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch } from '../hooks/useSearch';
 
 function EseguibiliList() {
   const toast = useToast();
@@ -65,7 +67,8 @@ function EseguibiliList() {
   }, { key: 'publishable-projects', enabled: showSelector });
   const projects = projectsResource.data || [];
   const loadingProjects = projectsResource.initialLoading;
-  const [projectSearch, setProjectSearch] = useState('');
+  const projectSearch = useSearch();
+  const shownProjects = projectSearch.filter(projects, p => [p.name, p.description]);
   const [selectedSourceProject, setSelectedSourceProject] = useState(null);
 
   const canCreate    = can.createEseguibile(user);
@@ -75,7 +78,7 @@ function EseguibiliList() {
   const shareDialog    = useDialog({ isOpen: !!sharingEseguibile, onClose: () => setSharingEseguibile(null) });
 
   const openSelector = () => {
-    setProjectSearch('');
+    projectSearch.clear();
     setShowSelector(true);
   };
 
@@ -252,12 +255,12 @@ function EseguibiliList() {
               <button type="button" className="esl__selector-close" {...selectorDialog.closeButtonProps}>×</button>
             </div>
             <div className="esl__selector-body">
-              <input
-                type="text"
+              <SearchField
+                search={projectSearch}
+                label="Cerca progetto"
                 className="esl__selector-search"
-                placeholder="Cerca progetto..."
-                value={projectSearch}
-                onChange={(e) => setProjectSearch(e.target.value)}
+                shown={shownProjects.length}
+                total={projects.length}
                 autoFocus
               />
               {loadingProjects ? (
@@ -273,8 +276,8 @@ function EseguibiliList() {
                 </div>
               ) : (
                 <div className="esl__selector-list">
-                  {projects
-                    .filter(p => !projectSearch || (p.name || '').toLowerCase().includes(projectSearch.toLowerCase()))
+                  <SearchEmpty search={projectSearch} shown={shownProjects.length} />
+                  {shownProjects
                     .map(p => (
                       <div key={p.id} className="esl__selector-item" {...pressable(() => {
                         setSelectedSourceProject(p);

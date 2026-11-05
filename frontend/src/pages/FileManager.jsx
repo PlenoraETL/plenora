@@ -42,6 +42,8 @@ import UploadModal from './FileManager/UploadModal';
 import LayerModal from './FileManager/LayerModal';
 import PreviewModal from './FileManager/PreviewModal';
 import { pressable } from '../utils/pressable';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch } from '../hooks/useSearch';
 
 // SRID dal convertitore unico (R8.23): "4326", "EPSG:4326" -> 4326.
 const SRID = sridCodec({ optional: true });
@@ -71,7 +73,7 @@ const FileManager = () => {
   // Id della scelta del file: anteprime e colonne di un file scelto prima
   // non scrivono sul file scelto dopo.
   const selectionRef = useRef(0);
-  const [search,  setSearch]  = useState('');
+  const search = useSearch();
   const [activeTab, setActiveTab] = useState('all');
   const [sharingFile, setSharingFile] = useState(null);  // file in sharing modal (solo super)
 
@@ -377,14 +379,11 @@ const resetUploadModal = () => {
     setShowLayerModal(false); setPendingFile(null); setAvailableLayers([]); setAvailableSheets([]); setSelectedLayer(''); setSelectedSheet('');
     if (uploaded) loadFiles();
   };
-  const filteredFiles = files.filter(f => {
-    const matchSearch = !search || f.name.toLowerCase().includes(search.toLowerCase()) || f.original_filename?.toLowerCase().includes(search.toLowerCase());
-    const matchTab =
-      activeTab === 'all'     ? true :
-      activeTab === 'spatial' ? SPATIAL_FORMATS.includes(f.format) :
-      f.format === activeTab;
-    return matchSearch && matchTab;
-  });
+  const filteredFiles = search.filter(files, f => [f.name, f.original_filename]).filter(f => (
+    activeTab === 'all'     ? true :
+    activeTab === 'spatial' ? SPATIAL_FORMATS.includes(f.format) :
+    f.format === activeTab
+  ));
 
   const totalSize = files.reduce((s, f) => s + (f.file_size || 0), 0);
 
@@ -410,17 +409,7 @@ const resetUploadModal = () => {
 
           {/* Toolbar */}
           <div className="fm__toolbar">
-            <div className="fm__search">
-              <span className="fm__search-icon">⌕</span>
-              <input
-                className="fm__search-input"
-                placeholder="Cerca file..."
-                aria-label="Cerca file"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-              {search && <button type="button" className="fm__search-clear" onClick={() => setSearch('')} aria-label="Pulisci ricerca">✕</button>}
-            </div>
+            <SearchField search={search} label="Cerca file" className="fm__search" shown={filteredFiles.length} total={files.length} />
             <div className="fm__filter-tabs">
               {FILTER_TABS.map(t => {
                 const count = t.key === 'all' ? files.length : t.key === 'spatial' ? files.filter(f => SPATIAL_FORMATS.includes(f.format)).length : files.filter(f => f.format === t.key).length;
@@ -472,16 +461,15 @@ const resetUploadModal = () => {
           )}
 
           {/* Empty state */}
-          {filteredFiles.length === 0 && !error && (
+          {!error && <SearchEmpty search={search} shown={filteredFiles.length} />}
+          {filteredFiles.length === 0 && !error && !search.active && (
             <EmptyState
               icon="📂"
-              title={search ? 'Nessun file trovato' : activeTab !== 'all' && files.length > 0 ? 'Nessun file di questo formato' : 'Nessun file caricato'}
-              text={search
-                ? `Nessun risultato per "${search}"`
-                : activeTab !== 'all' && files.length > 0
-                  ? 'Cambia scheda per vedere gli altri file.'
-                  : 'Carica file CSV, Excel, GeoJSON o altri formati per usarli nei tuoi progetti'}
-              action={!search && activeTab === 'all' && can.uploadFile(user) && (
+              title={activeTab !== 'all' && files.length > 0 ? 'Nessun file di questo formato' : 'Nessun file caricato'}
+              text={activeTab !== 'all' && files.length > 0
+                ? 'Cambia scheda per vedere gli altri file.'
+                : 'Carica file CSV, Excel, GeoJSON o altri formati per usarli nei tuoi progetti'}
+              action={activeTab === 'all' && can.uploadFile(user) && (
                 <button type="button" className="fm__btn fm__btn--primary" onClick={() => setShowUploadModal(true)}>
                   ↑ Carica il primo file
                 </button>

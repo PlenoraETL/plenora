@@ -98,11 +98,7 @@
 
 /* Toolbar */
 .acm__toolbar { display: flex; flex-direction: column; gap: 10px; background: var(--acm-surface); border: 1px solid var(--acm-border); border-radius: 10px; padding: 12px 16px; }
-.acm__search  { display: flex; align-items: center; gap: 8px; background: var(--acm-surface-2); border: 1px solid var(--acm-border-hi); border-radius: 8px; padding: 0 12px; }
-.acm__search-icon  { color: var(--acm-text-dim); font-size: 13px; }
-.acm__search-input { flex: 1; background: transparent; border: none; outline: none; padding: 8px 0; font-size: 12.5px; color: var(--acm-text); font-family: var(--acm-font-b); }
-.acm__search-input::placeholder { color: var(--acm-text-dim); }
-.acm__search-clear { background: none; border: none; color: var(--acm-text-dim); cursor: pointer; font-size: 16px; padding: 4px; }
+.acm__search  { flex: 1; min-width: 200px; }
 .acm__cats    { display: flex; gap: 5px; flex-wrap: wrap; }
 .acm__cat-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; background: transparent; border: 1px solid var(--acm-border-hi); border-radius: 20px; cursor: pointer; font-size: 11.5px; color: var(--acm-text-dim); font-family: var(--acm-font-b); transition: all .12s; }
 .acm__cat-btn:hover { background: var(--acm-surface-2); color: var(--acm-text); }

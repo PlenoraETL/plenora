@@ -19,6 +19,8 @@ import { useProjectNames } from '../hooks/useProjectNames';
 import { useHexCanvas } from '../utils/hexCanvas';
 import PageLayout from '../components/common/PageLayout';
 import EmptyState from '../components/common/EmptyState';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch, useSearchPage } from '../hooks/useSearch';
 import { useToast } from '../hooks/useToast';
 import { toastApiError } from '../utils/toastApiError';
 import { formatNumber } from '../utils/format';
@@ -59,9 +61,13 @@ function LogViewer() {
   const [filterLevel,  setFilterLevelRaw]  = useState('');
   const [filterModule, setFilterModuleRaw] = useState('');
   const [filterOp,     setFilterOpRaw]     = useState('');
-  const [searchText,   setSearchTextRaw]   = useState('');
-  const [searchInput,  setSearchInput]  = useState('');
-  const [offset,       setOffset]       = useState(0);
+  // Ricerca lato server (hooks/useSearch): la stessa pausa delle altre
+  // ricerche; la query applicata entra nella chiave di useResource, che
+  // tiene una richiesta alla volta. Una ricerca nuova riparte dalla prima
+  // pagina: la pagina e' legata alla ricerca per cui e' stata scelta.
+  const search = useSearch();
+  const searchText = search.query;
+  const [offset,       setOffset]       = useSearchPage(search, 0);
   const [autoRefresh,  setAutoRefresh]  = useState(false);
   const [expandedRow,  setExpandedRow]  = useState(null);
   const [mainTab,      setMainTab]      = useState('runs');
@@ -70,7 +76,6 @@ function LogViewer() {
   const setFilterLevel = resetting(setFilterLevelRaw);
   const setFilterModule = resetting(setFilterModuleRaw);
   const setFilterOp = resetting(setFilterOpRaw);
-  const setSearchText = resetting(setSearchTextRaw);
 
   // Se un utente non-admin ha per qualche motivo mainTab='logs', forziamo
   // 'runs' (l'unico tab che vede). Evita stati incoerenti.
@@ -105,7 +110,6 @@ function LogViewer() {
   // che aggiunge righe in testa non apre un'altra riga.
   const entryKey = (entry) => entry.id || `${entry.ts}|${entry.module}|${entry.op}|${entry.msg}`;
 
-  const handleSearch = e => { e.preventDefault(); setSearchText(searchInput); };
   // P21: l'export contiene TUTTE le righe del filtro corrente (pagine da
   // EXPORT_PAGE_SIZE fino a EXPORT_MAX_ROWS), non solo la pagina mostrata.
   const [exporting, setExporting] = useState(false);
@@ -134,7 +138,7 @@ function LogViewer() {
       setExporting(false);
     }
   };
-  const resetFilters = () => { setFilterLevel(''); setFilterModule(''); setFilterOp(''); setSearchText(''); setSearchInput(''); };
+  const resetFilters = () => { setFilterLevel(''); setFilterModule(''); setFilterOp(''); search.clear(); };
   const hasFilters = filterLevel || filterModule || filterOp || searchText;
 
   return (
@@ -230,13 +234,12 @@ function LogViewer() {
                 <option value="">Tutte le operazioni</option>
                 {OPS.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
-              <form className="lv__search" onSubmit={handleSearch}>
-                <input type="text" className="lv__search-input"
-                  placeholder="Cerca nel messaggio..."
-                  aria-label="Cerca nel messaggio"
-                  value={searchInput} onChange={e => setSearchInput(e.target.value)} />
-                <button type="submit" className="lv__search-btn">🔍</button>
-              </form>
+              <SearchField
+                search={search}
+                label="Cerca nel messaggio"
+                className="lv__search"
+                shown={logsResource.hasData ? total : null}
+              />
               {hasFilters && (
                 <button type="button" className="lv__btn lv__btn--ghost lv__btn--sm" onClick={resetFilters}>✕ Reset</button>
               )}
@@ -265,7 +268,9 @@ function LogViewer() {
               <tbody>
                 {logsResource.initialLoading ? (
                   <tr><td colSpan="6" className="lv__empty">Caricamento...</td></tr>
-                ) : logsResource.status === 'error' && !logsResource.hasData ? null : logs.length === 0 ? (
+                ) : logsResource.status === 'error' && !logsResource.hasData ? null : logs.length === 0 && search.active ? (
+                  <tr><td colSpan="6"><SearchEmpty search={search} shown={0} /></td></tr>
+                ) : logs.length === 0 ? (
                   <tr>
                     <td colSpan="6">
                       <EmptyState

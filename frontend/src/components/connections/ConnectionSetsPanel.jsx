@@ -15,6 +15,7 @@ import FieldInput, { FieldScope } from '../common/FieldInput';
 import { useFieldScope } from '../../hooks/useFieldBuffer';
 import * as codecs from '../../utils/fieldCodecs';
 import './ConnectionSetsPanel.css';
+import { describeConnectionTest } from '../../utils/connectionTestStatus';
 
 const emptyForm = () => ({
   name: '',
@@ -284,7 +285,7 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
                   <option value="">Seleziona connessione…</option>
                   {connections.map(connection => (
                     <option key={connection.id} value={connection.id}>
-                      {connection.name} · {connection.type}
+                      {connection.name} · {connection.type} · {describeConnectionTest(connection.last_test).label}
                     </option>
                   ))}
                 </select>

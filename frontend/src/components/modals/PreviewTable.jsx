@@ -3,7 +3,7 @@
  * Componente presentational puro: tutto lo stato vive nel parent (PreviewModal).
  *
  * Contract:
- *  - onSearchChange(value) responsabilita' parent: reset currentPage -> 1
+ *  - search (hooks/useSearch) del parent: una ricerca nuova riparte da pagina 1
  *  - onSort(colName) responsabilita' parent: toggle asc/desc, non resetta page
  *  - onPageChange(page) responsabilita' parent: clamp 1..totalPages
  *  - activeTab orchestration: esterno a questo componente
@@ -12,7 +12,7 @@ import React, { useMemo } from 'react';
 import { getColumnTypeIcon } from '../../utils/columnUtils';
 import { pressable } from '../../utils/pressable';
 import './PreviewModal.css';
-import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import SearchField, { SearchEmpty } from '../common/SearchField';
 
 /* Inferisce gruppi sorgente dal prefisso colonna. */
 
@@ -97,7 +97,8 @@ const PreviewTable = ({
   sortedRows,
   sortColumn,
   sortDirection,
-  searchTerm,
+  search,
+  totalRows,
   selectedLimit,
   currentPage,
   rowsPerPage,
@@ -109,7 +110,6 @@ const PreviewTable = ({
   initialLimit,
   limitOptions,
   onSort,
-  onSearchChange,
   onLimitChange,
   onPageChange,
   onToggleGroup,
@@ -148,20 +148,14 @@ const PreviewTable = ({
     <>
       {/* toolbar */}
       <div className="preview-modal__toolbar">
-        <div className="preview-modal__search">
-          <input {...READ_ONLY_SAFE}
-            type="text"
-            placeholder="⌕  Cerca nei dati…"
-            value={searchTerm}
-            onChange={e => onSearchChange(e.target.value)}
-            className="preview-modal__search-input"
-          />
-          {searchTerm && (
-            <button type="button" className="preview-modal__search-clear" onClick={() => onSearchChange('')}>
-              ×
-            </button>
-          )}
-        </div>
+        <SearchField
+          search={search}
+          label="Cerca nei dati"
+          className="preview-modal__search"
+          compact
+          shown={sortedRows.length}
+          total={totalRows}
+        />
 
         <div className="preview-modal__toolbar-right">
           <div className="preview-modal__limit-selector">
@@ -181,11 +175,6 @@ const PreviewTable = ({
               </button>
             )}
           </div>
-          {searchTerm && (
-            <span className="preview-modal__filter-info">
-              {sortedRows.length} risultati
-            </span>
-          )}
         </div>
       </div>
 
@@ -280,6 +269,7 @@ const PreviewTable = ({
             ))}
           </tbody>
         </table>
+        <SearchEmpty search={search} shown={sortedRows.length} />
       </div>
 
       {/* pagination */}

@@ -31,6 +31,8 @@ import { useResource } from '../hooks/useResource';
 import ListState from '../components/common/ListState';
 import './EsecutoreHome.css';
 import EmptyState from '../components/common/EmptyState';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch } from '../hooks/useSearch';
 function Logo() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
@@ -82,19 +84,12 @@ function EsecutoreHome() {
   const items = useMemo(() => resource.data || [], [resource.data]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showPwdModal, setShowPwdModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const search = useSearch();
 
   const canvasRef = useRef(null);
   useHexCanvas(canvasRef);
 
-  const filteredItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(it =>
-      (it.name || '').toLowerCase().includes(q) ||
-      (it.description || '').toLowerCase().includes(q)
-    );
-  }, [items, searchQuery]);
+  const filteredItems = useMemo(() => search.filter(items, it => [it.name, it.description]), [items, search.filter]);
 
   // Uscita volontaria: una sola via (hooks/useSignOut).
   const handleLogout = useSignOut();
@@ -177,28 +172,15 @@ function EsecutoreHome() {
           )}
         >
           <>
-            <div className="esh__search">
-              <span className="esh__search-icon" aria-hidden="true">🔍</span>
-              <input
-                type="text"
-                className="esh__search-input"
-                placeholder="Cerca per nome o descrizione…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="esh__search-clear"
-                  title="Cancella ricerca"
-                  onClick={() => setSearchQuery('')}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
+            <SearchField
+              search={search}
+              label="Cerca per nome o descrizione"
+              className="esh__search"
+              shown={filteredItems.length}
+              total={items.length}
+            />
             {filteredItems.length === 0 ? (
-              <EmptyState icon="🔎" title="Nessun risultato" text={`Nessuna azione corrisponde a "${searchQuery}".`} />
+              <SearchEmpty search={search} shown={0} />
             ) : (
               <div className="esh__grid">
                 {filteredItems.map(item => (

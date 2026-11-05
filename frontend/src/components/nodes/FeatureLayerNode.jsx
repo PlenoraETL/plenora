@@ -23,6 +23,8 @@ import { isColumnVisible } from '../../utils/columnUtils';
 import './FeatureLayerNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import SearchField, { SearchEmpty } from '../common/SearchField';
+import { useSearch } from '../../hooks/useSearch';
 import { formatNumber } from '../../utils/format';
 
 const FIELD_ICONS = {
@@ -61,7 +63,7 @@ function getGeomShortLabel(geomType) {
 const FeatureLayerNode = memo(({ data, id }) => {
   // State
   const [isExpanded, setIsExpanded] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const search = useSearch();
   // WHERE: il valore e' quello dello store; la bozza vive solo mentre
   // l'editor e' aperto (hooks/useStoreDraft, R1.9: un Ctrl+Z la scarta).
   const whereClause = data.where || '';
@@ -125,13 +127,10 @@ const FeatureLayerNode = memo(({ data, id }) => {
     }
   };
 
-  const filteredColumns = searchTerm
-    ? columns.map((col, idx) => ({ ...col, _origIndex: idx }))
-        .filter(col => col.name.toLowerCase().includes(searchTerm.toLowerCase()))
-    : columns.map((col, idx) => ({ ...col, _origIndex: idx }));
+  const filteredColumns = search.filter(columns.map((col, idx) => ({ ...col, _origIndex: idx })), col => col.name);
 
-  const displayColumns = (isExpanded || searchTerm) ? filteredColumns : filteredColumns.slice(0, 5);
-  const hasMoreColumns = !searchTerm && columns.length > 5;
+  const displayColumns = (isExpanded || search.active) ? filteredColumns : filteredColumns.slice(0, 5);
+  const hasMoreColumns = !search.active && columns.length > 5;
 
   const visibleCount = columns.filter(isColumnVisible).length;
   const allVisible = visibleCount === columns.length;
@@ -183,30 +182,16 @@ const FeatureLayerNode = memo(({ data, id }) => {
             {/* Toolbar ricerca + toggle all */}
             {columns.length > 3 && (
               <div className="fl-node__toolbar">
-                <div className="fl-node__search">
-                  {/* Ricerca e Mostra tutti: stato di VISTA locale, azioni
-                      di lettura (common/readOnlySafe). */}
-                  <input
-                    type="text"
-                    {...READ_ONLY_SAFE}
-                    aria-label="Cerca campi"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="🔍 Cerca campi..."
-                    className="fl-node__search-input"
-                  />
-                  {searchTerm && (
-                    <button
-                      type="button"
-                      {...READ_ONLY_SAFE}
-                      aria-label="Cancella ricerca"
-                      className="fl-node__search-clear"
-                      onClick={() => setSearchTerm('')}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
+                {/* Ricerca e Mostra tutti: stato di VISTA locale, azioni
+                    di lettura (SearchField e' READ_ONLY_SAFE). */}
+                <SearchField
+                  search={search}
+                  label="Cerca campi"
+                  className="fl-node__search"
+                  compact
+                  shown={filteredColumns.length}
+                  total={columns.length}
+                />
                 <div className="fl-node__toggle-all">
                   <label className="fl-node__toggle-all-label">
                     <input
@@ -223,13 +208,6 @@ const FeatureLayerNode = memo(({ data, id }) => {
               </div>
             )}
 
-            {/* Search results count */}
-            {searchTerm && (
-              <div className="fl-node__search-info">
-                {filteredColumns.length} di {columns.length} campi
-              </div>
-            )}
-
             {/* Lista campi */}
             {/* Errore sempre visibile, anche sopra i campi gia' noti. */}
             {schemaResource.status === 'error' && (
@@ -238,10 +216,10 @@ const FeatureLayerNode = memo(({ data, id }) => {
                 <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => schemaResource.reload()}>Riprova</button>
               </div>
             )}
-            {displayColumns.length === 0 && schemaResource.status === 'error' ? null : displayColumns.length === 0 ? (
-              <div className="fl-node__empty">
-                {searchTerm ? 'Nessun campo trovato' : 'Nessun campo'}
-              </div>
+            {displayColumns.length === 0 && schemaResource.status === 'error' ? null : displayColumns.length === 0 && search.active ? (
+              <SearchEmpty search={search} shown={0} />
+            ) : displayColumns.length === 0 ? (
+              <div className="fl-node__empty">Nessun campo</div>
             ) : (
               displayColumns.map((column) => (
                 <div

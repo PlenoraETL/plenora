@@ -19,6 +19,7 @@ import './PreviewModal.css';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 import { parseGeometry, drawableGeometry, geometryLabel, geometryType, UNREADABLE_GEOMETRY } from '../../utils/geometry';
 import { TILE_URLS } from '../../config/mapTiles';
+import { useSearch, useSearchPage } from '../../hooks/useSearch';
 
 /** Ritorna true se il tipo colonna è geometrico */
 const isGeoType = (type) =>
@@ -401,10 +402,13 @@ const PreviewModal = memo(({
   disableGrouping = false,
 }) => {
   const [activeTab, setActiveTab] = useState('table');
-  const [currentPage, setCurrentPage] = useState(1);
   const [sortColumn, setSortColumn] = useState(null);
   const [sortDirection, setSortDirection] = useState('asc');
-  const [searchTerm, setSearchTerm] = useState('');
+  // Ricerca nei dati (hooks/useSearch). La pagina e' legata alla ricerca
+  // per cui e' stata scelta: una ricerca nuova riparte dalla pagina 1.
+  const search = useSearch();
+  const clearSearch = search.clear;
+  const [currentPage, setCurrentPage] = useSearchPage(search, 1);
   const [selectedLimit, setSelectedLimit] = useState(initialLimit);
   const [collapsedGroups, setCollapsedGroups] = useState({});
 
@@ -425,19 +429,16 @@ const PreviewModal = memo(({
     setCurrentPage(1);
     setSortColumn(null);
     setSortDirection('asc');
-    setSearchTerm('');
+    clearSearch();
     setActiveTab('table');
     setCollapsedGroups({});
-  }, [data]);
+  }, [data, clearSearch, setCurrentPage]);
 
   // Filtraggio
-  const filteredRows = useMemo(() => {
-    if (!searchTerm.trim()) return rows;
-    const term = searchTerm.toLowerCase();
-    return rows.filter(row =>
-      Object.values(row).some(val => String(val).toLowerCase().includes(term))
-    );
-  }, [rows, searchTerm]);
+  const filteredRows = useMemo(
+    () => search.filter(rows, row => Object.values(row).map(val => String(val))),
+    [rows, search.filter],
+  );
 
   // Ordinamento
   const sortedRows = useMemo(() => {
@@ -468,12 +469,6 @@ const PreviewModal = memo(({
 
   const handlePageChange = (page) =>
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-
-  // Contract PreviewTable: search resetta currentPage -> 1 (coupling preservato post-split)
-  const handleSearchChange = (value) => {
-    setSearchTerm(value);
-    setCurrentPage(1);
-  };
 
   const handleToggleGroup = (prefix) =>
     setCollapsedGroups(prev => ({ ...prev, [prefix]: !prev[prefix] }));
@@ -602,7 +597,8 @@ const PreviewModal = memo(({
               sortedRows={sortedRows}
               sortColumn={sortColumn}
               sortDirection={sortDirection}
-              searchTerm={searchTerm}
+              search={search}
+              totalRows={rows.length}
               selectedLimit={selectedLimit}
               currentPage={currentPage}
               rowsPerPage={rowsPerPage}
@@ -614,7 +610,6 @@ const PreviewModal = memo(({
               initialLimit={initialLimit}
               limitOptions={limitOptions}
               onSort={handleSort}
-              onSearchChange={handleSearchChange}
               onLimitChange={setSelectedLimit}
               onPageChange={handlePageChange}
               onToggleGroup={handleToggleGroup}

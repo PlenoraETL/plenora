@@ -27,6 +27,8 @@ import ListState, { ResourceError } from '../components/common/ListState';
 import { can } from '../utils/permissions';
 import { getTicketsMeta, listTickets } from '../api/tickets';
 import '../styles/TicketsList.css';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch } from '../hooks/useSearch';
 import { formatDateTime as fmtDate, formatNumber, enumLabel, optionLabel } from '../utils/format';
 import { pressable } from '../utils/pressable';
 
@@ -77,6 +79,9 @@ export default function TicketsList() {
   const resource = useResource(() => listTickets(filters), { key: filters, keepPreviousData: true, enabled: !noStatus });
   const tickets = resource.data || [];
   const loading = resource.loading;
+  // Ricerca nei ticket caricati (titolo, categoria): hooks/useSearch.
+  const search = useSearch();
+  const shownTickets = search.filter(tickets, (t) => [t.title, optionLabel(meta?.categories, t.category)]);
 
   const toggleArr = (setter, arr, val) => {
     setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
@@ -105,6 +110,7 @@ export default function TicketsList() {
     >
 
         <section className="tk-filters">
+          <SearchField search={search} label="Cerca ticket" className="tk-filters__search" shown={shownTickets.length} total={tickets.length} />
           <label className="tk-filters__row">
             <span>Tipo:</span>
             <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
@@ -178,7 +184,7 @@ export default function TicketsList() {
               </tr>
             </thead>
             <tbody>
-              {tickets.map((t) => (
+              {shownTickets.map((t) => (
                 <tr
                   key={t.id}
                   className="tk-list__row"
@@ -194,6 +200,7 @@ export default function TicketsList() {
               ))}
             </tbody>
           </table>
+          <SearchEmpty search={search} shown={shownTickets.length} />
           </ListState>
         </section>
 

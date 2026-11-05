@@ -17,6 +17,11 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_credential_unavailable, raise_typed_http
 from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.observability.audit_action import audit_action
+from app.shared.connection_tests.results import (
+    attaches_connection_tests,
+    records_connection_test,
+    resets_connection_test,
+)
 from app.core.auth.dependencies import (
     require_not_esecutore,
     require_user_or_above,
@@ -113,6 +118,7 @@ def create_datasource(data: DataSourceCreate, current_user: CurrentUser = Depend
 
 
 @router.get("", response_model=DataSourceList)
+@attaches_connection_tests("datasource", items_field="datasources")
 def list_datasources(
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -158,6 +164,7 @@ def get_datasource(ds_id: str, current_user: CurrentUser = Depends(require_not_e
 
 @router.put("/{ds_id}", response_model=DataSource)
 @audit_action(action="datasource.update", target_param="ds_id")
+@resets_connection_test("datasource", id_param="ds_id")
 def update_datasource(ds_id: str, data: DataSourceUpdate, current_user: CurrentUser = Depends(require_admin)):
     """Aggiorna un Data Source esistente. Solo admin/superadmin del gruppo, e
     solo se non creato da un superadmin (hierarchical ownership)."""
@@ -171,6 +178,7 @@ def update_datasource(ds_id: str, data: DataSourceUpdate, current_user: CurrentU
 
 @router.delete("/{ds_id}", status_code=204)
 @audit_action(action="datasource.delete", target_param="ds_id")
+@resets_connection_test("datasource", id_param="ds_id")
 def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_admin)):
     """Elimina un Data Source e tutti i suoi dati. Solo admin/superadmin del gruppo,
     e solo se non creato da un superadmin (hierarchical ownership).
@@ -252,6 +260,7 @@ def _find_projects_using_datasource(
 
 @router.post("/{ds_id}/test", response_model=DataSourceTestResult)
 @audit_action(action="datasource.test", target_param="ds_id")
+@records_connection_test("datasource", id_param="ds_id")
 def test_connection(ds_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Testa la connessione di un Data Source. Read-only su risorsa visibile."""
     existing = _svc().get_datasource(ds_id)

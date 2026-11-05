@@ -107,43 +107,7 @@
   max-width: 280px;
 }
 
-.preview-modal__search-input {
-  width: 100%;
-  padding: 6px 28px 6px 10px;
-  background: var(--plen-surface-3, #171C2E);
-  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
-  border-radius: 6px;
-  color: var(--plen-text, #DDE4F2);
-  font-size: 12px;
-  font-family: var(--plen-font-body);
-  outline: none;
-  transition: border-color 0.15s;
-}
-[data-theme='light'] .preview-modal__search-input {
-  background: #FFFFFF;
-  border-color: rgba(0,0,0,0.10);
-  color: #0F1729;
-}
-.preview-modal__search-input::placeholder { color: var(--plen-text-dim, #3F4D68); }
-.preview-modal__search-input:focus { border-color: var(--plen-estrai, #34C17A); }
-
-.preview-modal__search-clear {
-  position: absolute;
-  right: 6px; top: 50%;
-  transform: translateY(-50%);
-  width: 18px; height: 18px;
-  border: none;
-  background: var(--plen-border-hi, rgba(255,255,255,0.11));
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--plen-text-dim, #3F4D68);
-  line-height: 1;
-  display: flex; align-items: center; justify-content: center;
-}
-[data-theme='light'] .preview-modal__search-clear { background: rgba(0,0,0,0.10); }
-.preview-modal__search-clear:hover { color: var(--plen-text, #DDE4F2); }
-[data-theme='light'] .preview-modal__search-clear:hover { color: #0F1729; }
+.preview-modal__search:focus-within { border-color: var(--plen-estrai, #34C17A); }
 
 .preview-modal__toolbar-right {
   display: flex;
@@ -195,16 +159,6 @@
   transition: all 0.12s;
 }
 .preview-modal__refresh-btn:hover { background: rgba(52,193,122,0.18); }
-
-.preview-modal__filter-info {
-  font-family: var(--plen-font-mono);
-  font-size: 10.5px;
-  color: var(--plen-warn, #FBBF24);
-  padding: 3px 8px;
-  background: rgba(251,191,36,0.07);
-  border: 1px solid rgba(251,191,36,0.18);
-  border-radius: 5px;
-}
 
 /* ── Table ──────────────────────────────────────────────────────── */
 .preview-modal__table-container {
@@ -715,7 +669,7 @@
 .modal-wrapper--manipola .pm-tab.active,
 .modal-wrapper--manipola .pm-geo-badge { border-bottom-color: var(--plen-manipola, #9B6DFF); color: var(--plen-manipola, #9B6DFF); }
 .modal-wrapper--manipola .pm-tab--map.active { border-bottom-color: var(--plen-manipola, #9B6DFF); }
-.modal-wrapper--manipola .preview-modal__search-input:focus { border-color: var(--plen-manipola, #9B6DFF); }
+.modal-wrapper--manipola .preview-modal__search:focus-within { border-color: var(--plen-manipola, #9B6DFF); }
 .modal-wrapper--manipola .preview-modal__limit-select:focus { border-color: var(--plen-manipola, #9B6DFF); }
 
 /* ── Variant: arricchisci ─────────────────────────────────────── */
@@ -726,7 +680,7 @@
   border: 1px solid rgba(245,166,35,0.25);
   color: #F5A623;
 }
-.modal-wrapper--arricchisci .preview-modal__search-input:focus { border-color: var(--plen-arricchisci, #F5A623); }
+.modal-wrapper--arricchisci .preview-modal__search:focus-within { border-color: var(--plen-arricchisci, #F5A623); }
 .modal-wrapper--arricchisci .preview-modal__limit-select:focus { border-color: var(--plen-arricchisci, #F5A623); }
 
 /* ═══════════════════════════════════════════════════════════════

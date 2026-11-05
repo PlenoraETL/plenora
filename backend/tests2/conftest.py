@@ -448,6 +448,37 @@ def _stub_audit_action_write(request, monkeypatch):
     yield
 
 
+class _NullConnectionTestStore:
+    """Esiti dei test connessione: nessuna scrittura, nessun esito salvato."""
+
+    def record(self, entry):
+        return None
+
+    def reset(self, kind, resource_id, at):
+        return None
+
+    def load(self, kind, resource_ids):
+        return []
+
+
+@pytest.fixture(autouse=True)
+def _stub_connection_test_store(request, monkeypatch):
+    """Stub dello store degli esiti dei test connessione nei test non integration.
+
+    Stesso motivo di `_stub_audit_action_write`: le route di test, lista,
+    modifica e cancellazione delle connessioni scrivono/leggono
+    `connection_test_results`; senza DB ogni chiamata aspetterebbe il pool.
+    I test che verificano la registrazione sostituiscono lo store dopo.
+    """
+    if request.node.get_closest_marker("integration") is not None:
+        yield
+        return
+    from app.shared.connection_tests import results as _results_mod
+
+    monkeypatch.setattr(_results_mod, "_store", _NullConnectionTestStore())
+    yield
+
+
 # DB-logger isolation for unit/contract tests
 #
 # Problema simmetrico ad audit_action: `PostgresLogHandler.emit` (definito

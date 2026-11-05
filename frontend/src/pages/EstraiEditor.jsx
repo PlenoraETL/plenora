@@ -60,6 +60,8 @@ import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry
 import useEditorActions from '../components/editor/useEditorActions';
 import { renderNodeType } from '../utils/nodeTypeRegistry';
 import { pressable } from '../utils/pressable';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch, useSearchPage } from '../hooks/useSearch';
 
 const nodeTypes = {
   tableNode: TableNode, resultNode: ResultNode, staticValues: StaticValuesNode,
@@ -98,18 +100,16 @@ function EstraiEditor() {
   } = useEditorData(projectId, { withCatalog: true });
   const TABLES_PAGE_SIZE = 15;
 
-  const [searchQuery, setSearchQuery]             = useState('');
-  const [viewSearchQuery, setViewSearchQuery]     = useState('');
+  const tableSearch = useSearch();
+  const viewSearch = useSearch();
   const [viewsCollapsed, setViewsCollapsed]       = useState(false);
   const [tablesCollapsed, setTablesCollapsed]     = useState(false);
   const [showVersions, setShowVersions]           = useState(false);
-  const [visibleTableCount, setVisibleTableCount] = useState(TABLES_PAGE_SIZE);
-  const [visibleViewCount,  setVisibleViewCount]  = useState(TABLES_PAGE_SIZE);
+  // Quante tabelle/viste si vedono: una ricerca nuova riparte dalla prima pagina.
+  const [visibleTableCount, setVisibleTableCount] = useSearchPage(tableSearch, TABLES_PAGE_SIZE);
+  const [visibleViewCount,  setVisibleViewCount]  = useSearchPage(viewSearch, TABLES_PAGE_SIZE);
   const { theme, setTheme: toggleTheme } = useTheme();
 
-  // Reset visible count when search changes
-  useEffect(() => { setVisibleTableCount(TABLES_PAGE_SIZE); }, [searchQuery]);
-  useEffect(() => { setVisibleViewCount(TABLES_PAGE_SIZE);  }, [viewSearchQuery]);
   const preview    = usePreview(projectId, beforePreview);
   const execution  = useExecution(projectId, { onBeforeExecute: saveForRun, tracksRunState: true });
   const { saving, handleSaveCanvas } = useCanvasSave(saveNow, {
@@ -374,12 +374,12 @@ function EstraiEditor() {
   useUnsavedChangesGuard();
   const signOut = useSignOut();
   const handleBack              = () => navigate('/');
-  const filteredTables          = Object.keys(catalog).filter(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredTables          = tableSearch.filter(Object.keys(catalog), t => t);
   const sourceNodes             = nodes.filter(n => n.type === 'tableNode' || n.type === 'source');
   const tablesInCanvas          = new Set(sourceNodes.map(n => n.data.table_name).filter(Boolean));
   const availableTables         = filteredTables.filter(t => !tablesInCanvas.has(t));
   const viewNames               = Object.keys(views);
-  const filteredViews           = viewNames.filter(v => v.toLowerCase().includes(viewSearchQuery.toLowerCase()));
+  const filteredViews           = viewSearch.filter(viewNames, v => v);
   const viewsInCanvas           = new Set(sourceNodes.map(n => n.data.table_name).filter(Boolean));
   const availableViews          = filteredViews.filter(v => !viewsInCanvas.has(v));
   const tableCount              = Object.keys(catalog).length;
@@ -438,14 +438,7 @@ function EstraiEditor() {
 
           {/* Search */}
           <div className="estrai-sidebar__search-wrap">
-            <div className="estrai-sidebar__search">
-              <span className="estrai-sidebar__search-icon">⌕</span>
-              <input
-                placeholder="Cerca tabelle…"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-              />
-            </div>
+            <SearchField search={tableSearch} label="Cerca tabelle" shown={filteredTables.length} total={tableCount} />
           </div>
 
           <div className="estrai-sidebar__body">
@@ -473,9 +466,11 @@ function EstraiEditor() {
                       <div className="estrai-sidebar__empty" role="status">Caricamento tabelle…</div>
                     ) : catalogError ? (
                       <ResourceError compact title="Tabelle non caricate" message={catalogError} onRetry={reloadCatalog} />
-                    ) : availableTables.length === 0
+                    ) : filteredTables.length === 0 && tableSearch.active
+                      ? <SearchEmpty search={tableSearch} shown={0} />
+                      : availableTables.length === 0
                       ? <div className="estrai-sidebar__empty">
-                          {filteredTables.length === 0 ? 'Nessuna tabella trovata' : 'Tutte nel canvas'}
+                          {filteredTables.length === 0 ? 'Nessuna tabella' : 'Tutte nel canvas'}
                         </div>
                       : <>
                           {availableTables.slice(0, visibleTableCount).map(t => (
@@ -527,18 +522,13 @@ function EstraiEditor() {
                     {!viewsCollapsed && (
                       <>
                         <div className="estrai-sidebar__search-wrap" style={{ paddingTop: 0 }}>
-                          <div className="estrai-sidebar__search">
-                            <span className="estrai-sidebar__search-icon">⌕</span>
-                            <input
-                              placeholder="Cerca viste…"
-                              value={viewSearchQuery}
-                              onChange={e => setViewSearchQuery(e.target.value)}
-                            />
-                          </div>
+                          <SearchField search={viewSearch} label="Cerca viste" shown={filteredViews.length} total={viewNames.length} />
                         </div>
                         <div className="estrai-sidebar__items">
-                          {availableViews.length === 0
-                            ? <div className="estrai-sidebar__empty">Nessuna vista trovata</div>
+                          {filteredViews.length === 0 && viewSearch.active
+                            ? <SearchEmpty search={viewSearch} shown={0} />
+                            : availableViews.length === 0
+                            ? <div className="estrai-sidebar__empty">{filteredViews.length === 0 ? 'Nessuna vista' : 'Tutte nel canvas'}</div>
                             : <>
                                 {availableViews.slice(0, visibleViewCount).map(v => (
                                   <div

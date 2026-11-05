@@ -25,6 +25,8 @@ import { useToast } from '../../hooks/useToast';
 import { can } from '../../utils/permissions';
 import { humanizeError, requestErrorMessage } from '../../utils/errorMessages';
 import './AllowedGroupsSelector.css';
+import SearchField, { SearchEmpty } from '../common/SearchField';
+import { useSearch } from '../../hooks/useSearch';
 
 const MAGIC_ALL = '*';
 
@@ -54,7 +56,7 @@ function AllowedGroupsSelectorPanel({
   const [initialSelected, setInitialSelected] = useState([]); // snapshot da backend
   const [selected, setSelected]               = useState([]);   // stato corrente editabile
   const [allChecked, setAllChecked]           = useState(false);
-  const [search, setSearch]                   = useState('');
+  const search = useSearch();
   // Le condivisioni attuali devono essere note prima di poterle modificare:
   // se getShares fallisce, una selezione vuota salvata sostituirebbe quelle
   // esistenti (audit R10.6). Finche' false, il pannello e' in sola lettura.
@@ -119,14 +121,10 @@ function AllowedGroupsSelectorPanel({
     [allGroups, ownerGroupId]
   );
 
-  const filteredGroups = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return selectableGroups;
-    return selectableGroups.filter(g =>
-      (g.name || '').toLowerCase().includes(q) ||
-      (g.group_id || '').toLowerCase().includes(q)
-    );
-  }, [selectableGroups, search]);
+  const filteredGroups = useMemo(
+    () => search.filter(selectableGroups, g => [g.name, g.group_id]),
+    [selectableGroups, search.filter],
+  );
 
   const locked = disabled || saving || !sharesLoaded;
 
@@ -277,12 +275,12 @@ function AllowedGroupsSelectorPanel({
 
             {/* Search */}
             {selectableGroups.length > 5 && (
-              <input
-                type="text"
+              <SearchField
+                search={search}
+                label="Cerca gruppo per nome"
                 className="ags__search"
-                placeholder="Cerca gruppo per nome…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                shown={filteredGroups.length}
+                total={selectableGroups.length}
                 disabled={locked || allChecked}
               />
             )}
@@ -294,9 +292,7 @@ function AllowedGroupsSelectorPanel({
                   Nessun altro gruppo disponibile.
                 </div>
               ) : filteredGroups.length === 0 ? (
-                <div className="ags__empty">
-                  Nessun gruppo corrisponde a "{search}".
-                </div>
+                <SearchEmpty search={search} shown={0} />
               ) : (
                 filteredGroups.map(g => {
                   const checked = selected.includes(g.group_id);

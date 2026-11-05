@@ -231,8 +231,9 @@ describe('ProjectList contract', () => {
     const search = screen.getByPlaceholderText(/cerca progetti/i);
     await userEvent.type(search, 'apple');
 
+    // P28: la ricerca si applica dopo la pausa unica (hooks/useSearch).
+    await waitFor(() => expect(screen.queryByText('Banana Pipeline')).not.toBeInTheDocument());
     expect(screen.getByText('Apple Pipeline')).toBeInTheDocument();
-    expect(screen.queryByText('Banana Pipeline')).not.toBeInTheDocument();
   });
   it('hides "+ Nuovo Progetto" and section "+ Nuovo" buttons for viewer role', async () => {
     authState.user = { role: 'viewer', username: 'v', group_id: 'grp-1' };

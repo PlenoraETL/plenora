@@ -12,6 +12,7 @@
  */
 import React from 'react';
 import { formatNumber } from '../../utils/format';
+import ConnectionTestStatus from '../connections/ConnectionTestStatus';
 
 const CATEGORY_ICONS = {
   geocoding:  '🌍',
@@ -124,6 +125,7 @@ export default function ApiConnectionCard({
         {api.usage?.quota_limit > 0 && (
           <div className="acm__quota-bar"><div className={`acm__quota-fill acm__quota-fill--${status}`} style={{width:`${Math.min(quotaPercent,100)}%`}}/></div>
         )}
+        <ConnectionTestStatus lastTest={api.last_test} />
         <div className="acm__card-footer">
           <button type="button" className="acm__btn acm__btn--ghost acm__btn--sm" disabled={testing} onClick={()=>onQuickTest?.(api)}>{testing ? '⏳ Test…' : '🧪 Test'}</button>
           <div className="acm__card-actions">

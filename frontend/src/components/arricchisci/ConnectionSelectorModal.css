@@ -17,40 +17,6 @@
 
 .connection-selector__search {
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--plen-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 10px 14px;
-}
-
-.connection-selector__search-icon {
-  font-size: 14px;
-  opacity: 0.5;
-}
-
-.connection-selector__search-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  font-size: 14px;
-}
-
-.connection-selector__search-clear {
-  background: none;
-  border: none;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  padding: 2px 6px;
-  font-size: 12px;
-}
-
-.connection-selector__count {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  white-space: nowrap;
 }
 
 /* Content */

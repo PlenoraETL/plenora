@@ -200,6 +200,16 @@
             "title": "Id",
             "type": "string"
           },
+          "last_test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionTestStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1794,6 +1804,52 @@
         "title": "ConnectionTestResult",
         "type": "object"
       },
+      "ConnectionTestStatus": {
+        "description": "Ultimo esito del test di una connessione salvata.",
+        "properties": {
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "tested_at": {
+            "format": "date-time",
+            "title": "Tested At",
+            "type": "string"
+          },
+          "tested_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tested By"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "tested_at",
+          "duration_ms",
+          "stale"
+        ],
+        "title": "ConnectionTestStatus",
+        "type": "object"
+      },
       "ConnectionUpdate": {
         "description": "Dati parziali per aggiornare una connessione esistente.",
         "properties": {
@@ -2198,6 +2254,16 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "last_test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionTestStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "name": {
             "title": "Name",
@@ -2870,6 +2936,16 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "last_test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionTestStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "mssql_tls_mode": {
             "default": "verify",

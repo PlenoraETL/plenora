@@ -708,3 +708,5 @@
   .tk-list__table th:nth-child(5),
   .tk-list__table td:nth-child(5) { display: none; }
 }
+
+.tk-filters__search { flex: 1 1 260px; max-width: 360px; }

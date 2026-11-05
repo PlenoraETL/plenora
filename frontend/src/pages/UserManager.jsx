@@ -22,6 +22,8 @@ import { can, role } from '../utils/permissions';
 import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 import { PASSWORD_MIN_LENGTH, passwordProblem } from '../utils/passwordRule';
 import '../styles/UserManager.css';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch } from '../hooks/useSearch';
 /**
  * Ruoli: UNA tabella per select, badge e regole del form (Fase 5 T5, R8.20).
  * `superOnly`: solo un superadmin li assegna (backend users_router:
@@ -463,7 +465,7 @@ export default function UserManager() {
   const toast = useToast();
 
   const [tab,     setTab]     = useState('users');
-  const [search,  setSearch]  = useState('');
+  const search = useSearch();
 
   const [modalUser,    setModalUser]    = useState(null);
   const [modalGroup,   setModalGroup]   = useState(false);
@@ -486,11 +488,7 @@ export default function UserManager() {
   const loading = resource.initialLoading;
   const loadData = () => resource.reload();
 
-  const filteredUsers = users.filter(u =>
-    !search ||
-    u.username?.toLowerCase().includes(search.toLowerCase()) ||
-    u.group_id?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredUsers = search.filter(users, u => [u.username, u.email, u.group_id]);
 
   const handleCreateUser  = async (data) => { await createUser(data); toast.success(`Utente "${data.username}" creato`); loadData(); };
   const handleUpdateUser  = async (id, data) => { await updateUser(id, data); toast.success('Utente aggiornato'); loadData(); };
@@ -546,10 +544,7 @@ export default function UserManager() {
             {tab === 'users' ? `${filteredUsers.length} utenti` : tab === 'groups' ? `${groups.length} gruppi` : ''}
           </span>
           {tab === 'users' && (
-            <div className="um__topbar-search">
-              <span className="um__topbar-search-icon">🔍</span>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca utente o gruppo..." />
-            </div>
+            <SearchField search={search} label="Cerca utente o gruppo" className="um__topbar-search" shown={filteredUsers.length} total={users.length} />
           )}
           {tab === 'users' && (
             <button className="um__btn um__btn--primary" onClick={() => setModalUser('new')}>+ Nuovo utente</button>
@@ -574,7 +569,9 @@ export default function UserManager() {
                 </thead>
                 <tbody>
                   {filteredUsers.length === 0 ? (
-                    <tr><td colSpan={isSuperadmin ? 5 : 4}><EmptyState icon="👥" title="Nessun utente trovato" /></td></tr>
+                    <tr><td colSpan={isSuperadmin ? 5 : 4}>{search.active
+                      ? <SearchEmpty search={search} shown={0} />
+                      : <EmptyState icon="👥" title="Nessun utente" />}</td></tr>
                   ) : filteredUsers.map(u => (
                     <tr key={u.id}>
                       <td>

@@ -7,6 +7,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.shared.contracts.connection_test_status import ConnectionTestStatus
+
 
 class ArcGISConnection(BaseModel):
     """
@@ -49,6 +51,7 @@ class ArcGISConnection(BaseModel):
     updated_at: datetime
     created_by: Optional[str] = None
     can_edit: Optional[bool] = None
+    last_test: Optional[ConnectionTestStatus] = None  # ultimo «Test connessione» (solo nelle liste)
 
 
 class ArcGISCreate(BaseModel):

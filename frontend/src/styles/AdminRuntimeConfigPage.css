@@ -120,17 +120,6 @@
 }
 .arc__search {
   width: min(520px, 100%);
-  padding: 9px 11px;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: #0C0F18;
-  color: #DDE4F2;
-  font-family: inherit;
-}
-[data-theme='light'] .arc__search {
-  border-color: rgba(0,0,0,0.12);
-  background: #FFFFFF;
-  color: #0B1120;
 }
 .arc__toggle {
   padding: 9px 12px;

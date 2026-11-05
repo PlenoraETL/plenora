@@ -142,8 +142,15 @@ describe('DataSourceManager contract', () => {
   });
 
 
-  it('renders the success badge inline after a successful test connection', async () => {
-    listDataSourcesMock.mockResolvedValueOnce({ datasources: [sampleDs] });
+  // S3: l'esito del test lo salva il backend e torna nella lista (last_test).
+  it("mostra l'esito salvato del test: «Mai verificata», poi «Verificata il ... da ...»", async () => {
+    const tested = {
+      ...sampleDs,
+      last_test: { success: true, message: 'Connessione OK', tested_at: '2026-11-05T10:00:00+00:00', tested_by: 'mario', duration_ms: 120, stale: false },
+    };
+    listDataSourcesMock
+      .mockResolvedValueOnce({ datasources: [sampleDs] })
+      .mockResolvedValue({ datasources: [tested] });
     testDataSourceMock.mockResolvedValueOnce({
       success: true,
       message: 'Connessione OK',
@@ -151,6 +158,7 @@ describe('DataSourceManager contract', () => {
 
     render(<DataSourceManager />);
     await screen.findByText('SharePoint ICSC');
+    expect(screen.getByText('Mai verificata')).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole('button', { name: /Testa connessione/i }),
@@ -159,7 +167,9 @@ describe('DataSourceManager contract', () => {
     await waitFor(() =>
       expect(testDataSourceMock).toHaveBeenCalledWith('ds-1'),
     );
-    expect(await screen.findByText(/✓ Connessione OK/)).toBeInTheDocument();
+    const status = await screen.findByText(/^Verificata il .* da mario$/);
+    expect(status).toHaveAttribute('title', expect.stringContaining('Connessione OK'));
+    expect(listDataSourcesMock).toHaveBeenCalledTimes(2);
   });
 
 

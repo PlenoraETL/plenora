@@ -148,10 +148,10 @@ describe('PreviewModal — contract (post split PreviewTable)', () => {
     expect(screen.getByText('3 / 5')).toBeInTheDocument();
 
     // Cambio search: deve resettare currentPage a 1 (coupling contract)
-    const searchInput = screen.getByPlaceholderText(/cerca nei dati/i);
+    const searchInput = screen.getByRole('searchbox', { name: 'Cerca nei dati' });
     await user.type(searchInput, 'row_7');
-    // row_7, row_70..79 matchano → filteredRows = 11, totalPages = 1
-    expect(screen.getByText(/risultati/i)).toBeInTheDocument();
+    // row_7, row_70..79 matchano → filteredRows = 11, totalPages = 1 (dopo la pausa della ricerca)
+    expect(await screen.findByText('11 di 100')).toBeInTheDocument();
     // Non e' a "3 / X" ma a "1 / X" o nessuna pagination (totalPages <=1)
     expect(screen.queryByText(/^3 \/ /)).toBeNull();
 
@@ -170,7 +170,7 @@ describe('PreviewModal — contract (post split PreviewTable)', () => {
     expect(tableTab.className).toMatch(/active/);
 
     // Clear search via × button
-    const clearBtn = screen.getByRole('button', { name: '×' });
+    const clearBtn = screen.getByRole('button', { name: 'Cancella ricerca' });
     fireEvent.click(clearBtn);
     expect(searchInput.value).toBe('');
     // Dopo clear, pagination torna visibile e siamo a pagina 1 (contract coupling)

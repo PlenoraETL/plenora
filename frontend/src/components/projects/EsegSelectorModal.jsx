@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import SearchField, { SearchEmpty } from '../common/SearchField';
+import { useSearch } from '../../hooks/useSearch';
 import { pressable } from '../../utils/pressable';
 
 /**
@@ -17,21 +19,18 @@ function EsegSelectorModal({
   onClose,
   onSelect,
 }) {
-  const [search, setSearch] = useState('');
+  const search = useSearch();
+  const clearSearch = search.clear;
 
   useEffect(() => {
-    if (isOpen) setSearch('');
-  }, [isOpen]);
+    if (isOpen) clearSearch();
+  }, [isOpen, clearSearch]);
 
   if (!isOpen) return null;
 
   const availableProjects = projects || arricchisciProjects;
 
-  const filtered = search
-    ? availableProjects.filter(p =>
-        (p.name || '').toLowerCase().includes(search.toLowerCase()),
-      )
-    : availableProjects;
+  const filtered = search.filter(availableProjects, p => [p.name, p.description]);
 
   return (
     <ModalWrapper
@@ -46,12 +45,11 @@ function EsegSelectorModal({
       }
     >
       <div className="pl__modal-field">
-        <input
-          type="text"
-          className="pl__modal-input"
-          placeholder="Cerca progetto..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+        <SearchField
+          search={search}
+          label="Cerca progetto"
+          shown={filtered.length}
+          total={availableProjects.length}
           autoFocus
         />
       </div>
@@ -61,6 +59,8 @@ function EsegSelectorModal({
           <div className="pl__modal-empty">
             Nessun progetto disponibile.
           </div>
+        ) : filtered.length === 0 ? (
+          <SearchEmpty search={search} shown={0} />
         ) : (
           filtered.map(p => (
             <div

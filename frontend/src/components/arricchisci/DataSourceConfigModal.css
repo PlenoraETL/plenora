@@ -147,11 +147,6 @@
 }
 .dsm__test-btn:hover { background: rgba(245,166,35,.22); }
 .dsm__test-btn:disabled { opacity: .45; cursor: not-allowed; }
-.dsm__test-result {
-  padding: 11px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 500;
-}
-.dsm__test-result--ok  { background: rgba(52,211,153,.07); border: 1px solid rgba(52,211,153,.2); color: #34D399; }
-.dsm__test-result--err { background: rgba(248,113,113,.07); border: 1px solid rgba(248,113,113,.2); color: #F87171; }
 .dsm__info-box {
   padding: 12px 14px;
   background: rgba(75,139,255,.06); border: 1px solid rgba(75,139,255,.15);

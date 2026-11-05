@@ -18,6 +18,8 @@ import './TableNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { pressable } from '../../utils/pressable';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import SearchField, { SearchEmpty } from '../common/SearchField';
+import { useSearch } from '../../hooks/useSearch';
 
 /**
  * Componente nodo tabella personalizzato
@@ -29,7 +31,7 @@ const TableNode = memo(({ data, id }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
   // State per ricerca colonne
-  const [searchTerm, setSearchTerm] = useState('');
+  const search = useSearch();
   
   // State per editing alias tabella
   // Bozze dei campi solo durante la modifica, derivate dallo store
@@ -57,14 +59,11 @@ const TableNode = memo(({ data, id }) => {
   const dbType = data.db_type || 'postgres';
   
   // Filtra colonne per ricerca
-  const filteredColumns = searchTerm
-    ? columns.map((col, idx) => ({ ...col, _origIndex: idx }))
-        .filter(col => col.name.toLowerCase().includes(searchTerm.toLowerCase()))
-    : columns.map((col, idx) => ({ ...col, _origIndex: idx }));
-  
+  const filteredColumns = search.filter(columns.map((col, idx) => ({ ...col, _origIndex: idx })), col => col.name);
+
   // Mostra max 5 colonne se collapsed (e nessuna ricerca attiva)
-  const displayColumns = (isExpanded || searchTerm) ? filteredColumns : filteredColumns.slice(0, 5);
-  const hasMoreColumns = !searchTerm && columns.length > 5;
+  const displayColumns = (isExpanded || search.active) ? filteredColumns : filteredColumns.slice(0, 5);
+  const hasMoreColumns = !search.active && columns.length > 5;
   
   // Conteggio colonne visibili
   const visibleCount = columns.filter(isColumnVisible).length;
@@ -173,30 +172,16 @@ const TableNode = memo(({ data, id }) => {
         {/* Toolbar: ricerca + seleziona/deseleziona tutto */}
         {columns.length > 3 && (
           <div className="table-node__toolbar">
-            <div className="table-node__search">
-              {/* Ricerca e Mostra tutte: stato di VISTA locale, azioni di
-                  lettura (attive in sola lettura, common/readOnlySafe). */}
-              <input
-                type="text"
-                {...READ_ONLY_SAFE}
-                aria-label="Cerca colonne"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="🔍 Cerca colonne..."
-                className="table-node__search-input"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  {...READ_ONLY_SAFE}
-                  aria-label="Cancella ricerca"
-                  className="table-node__search-clear"
-                  onClick={() => setSearchTerm('')}
-                >
-                  ×
-                </button>
-              )}
-            </div>
+            {/* Ricerca e Mostra tutte: stato di VISTA locale, azioni di
+                lettura (attive in sola lettura: SearchField e' READ_ONLY_SAFE). */}
+            <SearchField
+              search={search}
+              label="Cerca colonne"
+              className="table-node__search"
+              compact
+              shown={filteredColumns.length}
+              total={columns.length}
+            />
             <div className="table-node__toggle-all">
               <label className="table-node__toggle-all-label">
                 <input
@@ -214,17 +199,10 @@ const TableNode = memo(({ data, id }) => {
           </div>
         )}
 
-        {/* Risultati ricerca */}
-        {searchTerm && (
-          <div className="table-node__search-info">
-            {filteredColumns.length} di {columns.length} colonne
-          </div>
-        )}
-
-        {displayColumns.length === 0 ? (
-          <div className="table-node__empty-message">
-            {searchTerm ? 'Nessuna colonna trovata' : 'Nessuna colonna'}
-          </div>
+        {displayColumns.length === 0 && search.active ? (
+          <SearchEmpty search={search} shown={0} />
+        ) : displayColumns.length === 0 ? (
+          <div className="table-node__empty-message">Nessuna colonna</div>
         ) : (
           displayColumns.map((column) => (
             <div

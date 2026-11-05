@@ -89,11 +89,7 @@
 .lv__filters-row   { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .lv__select        { padding:7px 10px; border:1px solid var(--lv-border-hi); border-radius:7px; font-size:12px; background:var(--lv-surface-2); color:var(--lv-text-sub); font-family:var(--lv-font-b); outline:none; cursor:pointer; }
 .lv__select:focus  { border-color:var(--lv-blue); }
-.lv__search        { display:flex; flex:1; min-width:180px; }
-.lv__search-input  { flex:1; padding:7px 12px; border:1px solid var(--lv-border-hi); border-radius:7px 0 0 7px; font-size:12px; background:var(--lv-surface-2); color:var(--lv-text); outline:none; font-family:var(--lv-font-b); }
-.lv__search-input:focus { border-color:var(--lv-blue); }
-.lv__search-btn    { padding:7px 12px; border:1px solid var(--lv-border-hi); border-left:none; border-radius:0 7px 7px 0; background:var(--lv-surface-3); color:var(--lv-text-sub); cursor:pointer; font-size:13px; }
-.lv__search-btn:hover { background:var(--lv-surface-2); }
+.lv__search        { flex:1; min-width:180px; }
 .lv__filters-info  { font-size:11px; color:var(--lv-text-dim); font-family:var(--lv-font-m); margin-top:10px; display:flex; align-items:center; gap:8px; }
 .lv__live-badge    { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:rgba(52,211,153,0.1); border:1px solid rgba(52,211,153,0.25); color:var(--lv-ok); border-radius:20px; font-size:10px; font-weight:700; animation:lv-pulse 2s ease-in-out infinite; }
 @keyframes lv-pulse { 0%,100%{opacity:1} 50%{opacity:.6} }

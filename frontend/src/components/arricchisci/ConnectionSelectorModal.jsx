@@ -12,6 +12,8 @@ import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { humanizeError } from '../../utils/errorMessages';
 import './ConnectionSelectorModal.css';
 import { pressable } from '../../utils/pressable';
+import SearchField, { SearchEmpty } from '../common/SearchField';
+import { useSearch } from '../../hooks/useSearch';
 
 /**
  * ConnectionSelectorModal - REFACTORED with ModalWrapper
@@ -37,29 +39,24 @@ function ConnectionSelectorModal({
   const connections = resource.data || [];
   const loading = resource.initialLoading;
   const error = resource.error;
-  const [searchQuery, setSearchQuery] = useState('');
+  const search = useSearch();
+  const clearSearch = search.clear;
   const [selectedId, setSelectedId] = useState(null);
 
 
   // Reset quando si chiude
   useEffect(() => {
     if (!isOpen) {
-      setSearchQuery('');
+      clearSearch();
       setSelectedId(null);
     }
-  }, [isOpen]);
+  }, [isOpen, clearSearch]);
 
   // Filtra connessioni
-  const filteredConnections = useMemo(() => {
-    if (!searchQuery.trim()) return connections;
-    
-    const query = searchQuery.toLowerCase();
-    return connections.filter(c => 
-      c.name?.toLowerCase().includes(query) ||
-      c.description?.toLowerCase().includes(query) ||
-      c.endpoint?.url?.toLowerCase().includes(query)
-    );
-  }, [connections, searchQuery]);
+  const filteredConnections = useMemo(
+    () => search.filter(connections, c => [c.name, c.description, c.endpoint?.url]),
+    [connections, search.filter],
+  );
 
   // Seleziona e conferma
   const handleConfirm = () => {
@@ -116,27 +113,13 @@ function ConnectionSelectorModal({
     >
       {/* Search */}
       <div className="connection-selector__toolbar">
-        <div className="connection-selector__search">
-          <span className="connection-selector__search-icon">🔍</span>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Cerca per nome, descrizione o URL..."
-            className="connection-selector__search-input"
-          />
-          {searchQuery && (
-            <button type="button" 
-              className="connection-selector__search-clear"
-              onClick={() => setSearchQuery('')}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-        <div className="connection-selector__count">
-          {filteredConnections.length} / {connections.length}
-        </div>
+        <SearchField
+          search={search}
+          label="Cerca per nome, descrizione o URL"
+          className="connection-selector__search"
+          shown={filteredConnections.length}
+          total={connections.length}
+        />
       </div>
 
       {/* Content */}
@@ -152,16 +135,16 @@ function ConnectionSelectorModal({
               🔄 Riprova
             </button>
           </div>
+        ) : filteredConnections.length === 0 && search.active ? (
+          <SearchEmpty search={search} shown={0} />
         ) : filteredConnections.length === 0 ? (
           <div className="connection-selector__empty">
             <span className="connection-selector__empty-icon">🔭</span>
-            <p className="connection-selector__empty-message">
-              {searchQuery ? `Nessun risultato per "${searchQuery}"` : emptyMessage}
-            </p>
-            {!searchQuery && emptyHint && (
+            <p className="connection-selector__empty-message">{emptyMessage}</p>
+            {emptyHint && (
               <p className="connection-selector__empty-hint">{emptyHint}</p>
             )}
-            {!searchQuery && createLink && (
+            {createLink && (
               <a href={createLink} className="connection-selector__create-link">
                 ➕ Crea nuova connessione
               </a>

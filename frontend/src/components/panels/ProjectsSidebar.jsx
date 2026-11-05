@@ -4,6 +4,8 @@
  */
 import './SourcesSidebar.css';
 import React, { useState, useMemo } from 'react';
+import SearchField, { SearchEmpty } from '../common/SearchField';
+import { useSearch, useSearchPage } from '../../hooks/useSearch';
 
 const PAGE_SIZE = 10;
 
@@ -19,21 +21,16 @@ function ProjectsSidebar({
   showSearch = false,
   className = ''
 }) {
-  const [searchQuery, setSearchQuery] = useState('');
+  const search = useSearch();
   const [collapsed, setCollapsed] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  // Paginazione legata alla ricerca: una ricerca nuova riparte da PAGE_SIZE.
+  const [visibleCount, setVisibleCount] = useSearchPage(search, PAGE_SIZE);
+  const showMore = () => setVisibleCount(c => c + PAGE_SIZE);
 
-  // Reset paginazione al cambio ricerca
-  const handleSearch = (val) => { setSearchQuery(val); setVisibleCount(PAGE_SIZE); };
-
-  const filteredProjects = useMemo(() => {
-    let result = projects;
-    if (filterTypes?.length > 0)
-      result = result.filter(p => filterTypes.includes(p.project_type || 'estrai'));
-    if (searchQuery.trim())
-      result = result.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    return result;
-  }, [projects, filterTypes, searchQuery]);
+  const typedProjects = useMemo(() => (filterTypes?.length > 0
+    ? projects.filter(p => filterTypes.includes(p.project_type || 'estrai'))
+    : projects), [projects, filterTypes]);
+  const filteredProjects = useMemo(() => search.filter(typedProjects, p => [p.name]), [typedProjects, search.filter]);
 
   const getProjectIcon = (t) => ({ manipola:'🔄', arricchisci:'🔗' }[t] || '📊');
   const getProjectBadge = (t) => ({ manipola:'MANIPOLA', arricchisci:'ARRICCHISCI' }[t] || 'SQL');
@@ -67,23 +64,21 @@ function ProjectsSidebar({
         <>
           {/* Search */}
           {showSearch && (
-            <div className="sources-sidebar__search">
-              <input
-                type="text"
-                placeholder="Cerca progetto…"
-                value={searchQuery}
-                onChange={e => handleSearch(e.target.value)}
-                className="sources-sidebar__search-input"
-              />
-              {searchQuery && (
-                <button type="button" className="sources-sidebar__search-clear" onClick={() => handleSearch('')}>×</button>
-              )}
-            </div>
+            <SearchField
+              search={search}
+              label="Cerca progetto"
+              className="sources-sidebar__search"
+              compact
+              shown={filteredProjects.length}
+              total={typedProjects.length}
+            />
           )}
 
           {/* Lista */}
           <div className="sources-sidebar__list">
-            {filteredProjects.length === 0 ? (
+            {filteredProjects.length === 0 && search.active ? (
+              <SearchEmpty search={search} shown={0} />
+            ) : filteredProjects.length === 0 ? (
               <div className="sources-sidebar__empty">
                 {emptyMessage}
                 {emptyHint && <><br /><span className="sources-sidebar__empty-hint">{emptyHint}</span></>}
@@ -109,7 +104,7 @@ function ProjectsSidebar({
                   <button
                     type="button"
                     className="ss-load-more"
-                    onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
+                    onClick={showMore}
                   >
                     ▼ Mostra altri {nextChunk} di {remaining} rimasti
                   </button>

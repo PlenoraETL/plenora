@@ -43,6 +43,9 @@ import '../styles/ApiConnectionManager.css';
 import '../components/panels/ResponseConfigBuilder.css';
 import { requestErrorMessage } from '../utils/errorMessages';
 import { formatNumber } from '../utils/format';
+import { lastTestFromResult, withLastTest } from '../utils/connectionTestStatus';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch } from '../hooks/useSearch';
 const CATEGORIES = [
   { id:'all',        label:'Tutte',       icon:'🔗' },
   { id:'geocoding',  label:'Geocoding',   icon:'🌍' },
@@ -105,7 +108,7 @@ function ApiConnectionManager() {
   const loading = resource.initialLoading;
   const loadApiConnections = () => resource.reload();
   const testing = useBusy();
-  const [searchQuery, setSearchQuery] = useState('');
+  const search = useSearch();
   const [activeCategory, setActiveCategory] = useState('all');
   const [showNewApiDropdown, setShowNewApiDropdown] = useState(false);
 
@@ -139,11 +142,8 @@ function ApiConnectionManager() {
   }, [showNewApiDropdown]);
 
 
-  const filteredApis = useMemo(() => apiConnections.filter(api => {
-    const ms = !searchQuery || api.name?.toLowerCase().includes(searchQuery.toLowerCase()) || api.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const mc = activeCategory === 'all' || api.category === activeCategory;
-    return ms && mc;
-  }), [apiConnections, searchQuery, activeCategory]);
+  const filteredApis = useMemo(() => search.filter(apiConnections, api => [api.name, api.description])
+    .filter(api => activeCategory === 'all' || api.category === activeCategory), [apiConnections, search.filter, activeCategory]);
 
   const globalStats = useMemo(() => ({
     total: apiConnections.length,
@@ -216,6 +216,9 @@ const openWizardForNew = () => {
       const r = await testing.run(api.id, () => testApiConnection(api.id, { test_params: { ...(api.static_parameters || {}), ...extraParams } }));
       if (r.skipped) return;
       setQuickTestInput(null); setQuickTestResult({ api, result: r.value });
+      // S3: l'esito lo salva il backend (`last_test` nella lista).
+      resource.setData(list => withLastTest(list, api.id, lastTestFromResult(r.value, user?.username)));
+      resource.reload();
     } catch (e) { setQuickTestInput(null); setQuickTestResult({ api, result: { success: false, error: requestErrorMessage(e) } }); }
   };
 
@@ -280,11 +283,7 @@ const openWizardForNew = () => {
 
           {/* Toolbar */}
           <div className="acm__toolbar acm__layer-1">
-            <div className="acm__search">
-              <span className="acm__search-icon">🔍</span>
-              <input type="text" className="acm__search-input" placeholder="Cerca connettore…" aria-label="Cerca connettore" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} />
-              {searchQuery && <button type="button" className="acm__search-clear" onClick={()=>setSearchQuery('')} aria-label="Pulisci ricerca">×</button>}
-            </div>
+            <SearchField search={search} label="Cerca connettore" className="acm__search" shown={filteredApis.length} total={apiConnections.length} />
             <div className="acm__cats">
               {CATEGORIES.map(cat=>(
                 <button type="button" key={cat.id}
@@ -302,7 +301,9 @@ const openWizardForNew = () => {
           <div className="acm__grid acm__layer-1">
             {loading ? (
               <div className="acm__loading">⬡ Caricamento connettori…</div>
-            ) : resource.status === 'error' && !resource.hasData ? null : filteredApis.length === 0 ? (
+            ) : resource.status === 'error' && !resource.hasData ? null : filteredApis.length === 0 && search.active ? (
+              <SearchEmpty search={search} shown={0} />
+            ) : filteredApis.length === 0 ? (
               <EmptyState
                 icon="🔗"
                 title={apiConnections.length===0?'Nessun connettore configurato':'Nessun risultato'}

@@ -154,15 +154,15 @@ describe('LogViewer contract', () => {
     expect(errStat.classList.contains('lv__stat--active')).toBe(true);
   });
 
-  it('search form submit propagates the input as `search` param', async () => {
+  // P28: ricerca lato server con la pausa unica (SearchField), niente Invio obbligatorio.
+  it('la ricerca dopo la pausa passa il testo come parametro `search`', async () => {
     render(<LogViewer />);
     await userEvent.click(
       await screen.findByRole('button', { name: /Log Tecnici/i }),
     );
 
-    const input = await screen.findByPlaceholderText(/Cerca nel messaggio/i);
+    const input = await screen.findByRole('searchbox', { name: 'Cerca nel messaggio' });
     await userEvent.type(input, 'connection refused');
-    await userEvent.click(screen.getByRole('button', { name: '🔍' }));
 
     await waitFor(() => {
       expect(lastLogsParams().search).toBe('connection refused');

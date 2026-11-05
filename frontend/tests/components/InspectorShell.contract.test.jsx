@@ -454,7 +454,13 @@ describe('Sola lettura: le azioni di vista restano attive (dati realistici)', ()
       ];
       seen += hits.length;
       for (const t of hits) if (!t.attrs.includes('{...READ_ONLY_SAFE}')) offenders.push(`${path.basename(file)}: ${t.attrs.slice(0, 90)}`);
+      // P28: le ricerche usano il componente unico SearchField, azione di
+      // lettura per costruzione (il suo input e la sua × sono READ_ONLY_SAFE).
+      seen += tags(text, 'SearchField').length;
     }
+    const searchField = fs.readFileSync(path.join(src, 'common/SearchField.jsx'), 'utf-8');
+    expect(tags(searchField, 'input').every(t => t.attrs.includes('{...READ_ONLY_SAFE}'))).toBe(true);
+    expect(tags(searchField, 'button').every(t => t.attrs.includes('{...READ_ONLY_SAFE}'))).toBe(true);
     expect(seen).toBeGreaterThanOrEqual(13);
     expect(offenders).toEqual([]);
   });

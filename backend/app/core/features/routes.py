@@ -37,6 +37,11 @@ from app.core.features.arcgis_json_types import ArcGISJsonObject
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
+from app.shared.connection_tests.results import (
+    attaches_connection_tests,
+    records_connection_test,
+    resets_connection_test,
+)
 from app.core.auth.resource_access import assert_project_visible
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef
@@ -122,6 +127,7 @@ def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depends(re
 
 
 @router.get("/connections", response_model=ArcGISList)
+@attaches_connection_tests("arcgis_connection", items_field="connections")
 def list_connections(
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -159,6 +165,7 @@ def list_connections(
 
 @router.put("/connections/{connection_id}", response_model=ArcGISConnection)
 @audit_action(action="arcgis.connection.update", target_param="connection_id")
+@resets_connection_test("arcgis_connection", id_param="connection_id")
 def update_connection(connection_id: str, data: ArcGISUpdate, current_user: CurrentUser = Depends(require_admin)):
     """Aggiorna una connessione ArcGIS esistente. Solo admin/superadmin del gruppo,
     e solo se non creata da un superadmin (hierarchical ownership)."""
@@ -172,6 +179,7 @@ def update_connection(connection_id: str, data: ArcGISUpdate, current_user: Curr
 
 @router.delete("/connections/{connection_id}", status_code=204)
 @audit_action(action="arcgis.connection.delete", target_param="connection_id")
+@resets_connection_test("arcgis_connection", id_param="connection_id")
 def delete_connection(connection_id: str, current_user: CurrentUser = Depends(require_admin)):
     """Elimina una connessione ArcGIS. Solo admin/superadmin del gruppo,
     e solo se non creata da un superadmin (hierarchical ownership)."""
@@ -184,6 +192,7 @@ def delete_connection(connection_id: str, current_user: CurrentUser = Depends(re
 
 @router.post("/connections/{connection_id}/test", response_model=ArcGISTestResult)
 @audit_action(action="arcgis.connection.test", target_param="connection_id")
+@records_connection_test("arcgis_connection", id_param="connection_id")
 def test_connection(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Testa una connessione ArcGIS. Qualsiasi utente del gruppo."""
     _check_arcgis_access(connection_id, current_user)

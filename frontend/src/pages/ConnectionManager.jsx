@@ -30,6 +30,10 @@ import { useBusy } from '../hooks/useBusy';
 import { ResourceError } from '../components/common/ListState';
 import '../styles/ConnectionManager.css';
 import { requestErrorMessage } from '../utils/errorMessages';
+import ConnectionTestStatus from '../components/connections/ConnectionTestStatus';
+import { lastTestFromResult } from '../utils/connectionTestStatus';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch } from '../hooks/useSearch';
 import FieldInput, { FieldScope } from '../components/common/FieldInput';
 import { useFieldScope } from '../hooks/useFieldBuffer';
 import { integer } from '../utils/fieldCodecs';
@@ -67,8 +71,8 @@ function ConnectionManager() {
   const testing = useBusy();
   const [saving,            setSaving]            = useState(false);
   const fields = useFieldScope();
-  const [testResults,       setTestResults]       = useState({});
   const [activeTab,         setActiveTab]         = useState('all');
+  const search = useSearch();
   const [sharingConnection, setSharingConnection] = useState(null);  // conn in sharing modal (solo super)
 
   const isSuperadmin    = role.isSuperadmin(user);
@@ -180,12 +184,21 @@ function ConnectionManager() {
     }
   };
 
+  // S3: l'esito lo salva il backend e torna nella lista (`last_test`);
+  // qui si mostra subito quello ricevuto e poi si ricarica la lista. Un
+  // test rifiutato (rete, permessi) non e' un esito: avviso e basta.
   const handleTest = async (conn) => {
     try {
       const r = await testing.run(conn.id, () => (conn._category === 'arcgis' ? testFeatureConnection(conn.id) : testConnection(conn.id)));
-      if (!r.skipped) setTestResults(prev => ({ ...prev, [conn.id]: r.value }));
+      if (r.skipped) return;
+      const lastTest = lastTestFromResult(r.value, user?.username);
+      resource.setData(d => (d ? {
+        ...d,
+        connections: d.connections.map(c => (c.id === conn.id && c._category === conn._category ? { ...c, last_test: lastTest } : c)),
+      } : d));
+      resource.reload();
     } catch (err) {
-      setTestResults(prev => ({ ...prev, [conn.id]: { success: false, message: requestErrorMessage(err) } }));
+      toastApiError(toast, err, `Test di «${conn.name}» non eseguito`);
     }
   };
 
@@ -194,8 +207,11 @@ function ConnectionManager() {
 
   const dbConns  = allConnections.filter(c => c._category === 'database');
   const arcConns = allConnections.filter(c => c._category === 'arcgis');
-  const visibleDb  = ['arcgis', 'sets'].includes(activeTab) ? [] : dbConns;
-  const visibleArc = ['database', 'sets'].includes(activeTab) ? [] : arcConns;
+  const searchValues = c => [c.name, c.description, c.host, c.database, c.server_url, c._typeInfo?.label];
+  const tabDb  = ['arcgis', 'sets'].includes(activeTab) ? [] : dbConns;
+  const tabArc = ['database', 'sets'].includes(activeTab) ? [] : arcConns;
+  const visibleDb  = search.filter(tabDb, searchValues);
+  const visibleArc = search.filter(tabArc, searchValues);
 
   if (resource.initialLoading) return (
     <PageLayout className="cm" title="Connessioni">
@@ -229,6 +245,17 @@ function ConnectionManager() {
             ))}
           </div>
 
+          {activeTab !== 'sets' && allConnections.length > 0 && (
+            <SearchField
+              search={search}
+              label="Cerca connessione"
+              className="cm__search"
+              shown={visibleDb.length + visibleArc.length}
+              total={tabDb.length + tabArc.length}
+            />
+          )}
+          {activeTab !== 'sets' && <SearchEmpty search={search} shown={visibleDb.length + visibleArc.length} className="cm__search-empty" />}
+
           {resource.status === 'error' && (
             <ResourceError resource={resource} title="Connessioni non caricate" />
           )}
@@ -247,7 +274,6 @@ function ConnectionManager() {
                   title="Connessioni Database"
                   subtitle="PostgreSQL, MS SQL Server, Oracle, MySQL, SQLite"
                   connections={visibleDb}
-                  testResults={testResults}
                   isTesting={testing.isBusy}
                   onTest={handleTest}
                   onEdit={handleOpenModal}
@@ -263,7 +289,6 @@ function ConnectionManager() {
                   title="Connessioni ArcGIS"
                   subtitle="Feature Server e Map Service"
                   connections={visibleArc}
-                  testResults={testResults}
                   isTesting={testing.isBusy}
                   onTest={handleTest}
                   onEdit={handleOpenModal}
@@ -285,17 +310,6 @@ function ConnectionManager() {
                   confirm={confirmModal.confirm}
                 />
               )}
-              {/* Test errors */}
-              {Object.entries(testResults).map(([id, result]) => {
-                if (!result || result.success) return null;
-                const conn = allConnections.find(c => c.id === id);
-                if (!conn) return null;
-                return (
-                  <div key={id} className="cm__test-error">
-                    <strong>✗ {conn.name}:</strong> {result.message}
-                  </div>
-                );
-              })}
             </>
           )}
         </div>
@@ -483,7 +497,7 @@ function NoConnections({ onNew, canCreate = true }) {
     />
   );
 }
-function ConnTable({ title, subtitle, connections, testResults, isTesting: isTestingOf, onTest, onEdit, onDelete, onShare, canEditOf, canShare, arcgis }) {
+function ConnTable({ title, subtitle, connections, isTesting: isTestingOf, onTest, onEdit, onDelete, onShare, canEditOf, canShare, arcgis }) {
   return (
     <div className="cm__section">
       <div className="cm__section-header">
@@ -505,7 +519,6 @@ function ConnTable({ title, subtitle, connections, testResults, isTesting: isTes
           <tbody>
             {connections.map(conn => {
               const info       = conn._typeInfo;
-              const testResult = testResults[conn.id];
               const isTesting  = isTestingOf(conn.id);
               const canEdit    = canEditOf(conn);
               return (
@@ -545,13 +558,7 @@ function ConnTable({ title, subtitle, connections, testResults, isTesting: isTes
                     </span>
                   </td>
                   <td>
-                    {testResult ? (
-                      <span className={`cm__status-dot ${testResult.success ? 'cm__status-ok' : 'cm__status-err'}`}>
-                        {testResult.success ? 'OK' : 'Errore'}
-                      </span>
-                    ) : (
-                      <span className="cm__status-dot cm__status-none" title="L'esito del test non viene salvato: premi «Testa» per verificarla ora">Da verificare</span>
-                    )}
+                    <ConnectionTestStatus lastTest={conn.last_test} />
                   </td>
                   <td>
                     <div className="cm__actions">

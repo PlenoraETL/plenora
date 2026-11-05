@@ -183,19 +183,7 @@
 }
 
 .esl__selector-search {
-  width: 100%;
-  padding: 10px 14px;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid var(--plen-border-hi);
-  border-radius: 8px;
-  color: var(--plen-text);
-  font-size: 14px;
   margin-bottom: 16px;
-  box-sizing: border-box;
-}
-.esl__selector-search:focus {
-  outline: none;
-  border-color: rgba(124,58,237,0.5);
 }
 
 .esl__selector-loading,

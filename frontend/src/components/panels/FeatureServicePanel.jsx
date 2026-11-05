@@ -27,6 +27,8 @@ import './FeatureServicePanel.css';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 import { formatNumber } from '../../utils/format';
 import { pressable } from '../../utils/pressable';
+import SearchField, { SearchEmpty } from '../common/SearchField';
+import { useSearch } from '../../hooks/useSearch';
 
 const GEOM_ICONS = {
   'geometry:point': '📍',
@@ -65,7 +67,8 @@ function FeatureServicePanel({ layersInCanvas = new Set(), lockedConnection = nu
   const [selectedService, setSelectedService] = useState(null);
   
   // Search
-  const [searchQuery, setSearchQuery] = useState('');
+  const search = useSearch();
+  const clearSearch = search.clear;
   
   // Modal nuova connessione
   const [showNewConn, setShowNewConn] = useState(false);
@@ -108,13 +111,13 @@ function FeatureServicePanel({ layersInCanvas = new Set(), lockedConnection = nu
   const handleSelectConnection = (conn) => {
     setSelectedConnection(conn);
     setView('services');
-    setSearchQuery('');
+    clearSearch();
   };
 
   const handleSelectService = (service) => {
     setSelectedService(service);
     setView('layers');
-    setSearchQuery('');
+    clearSearch();
   };
 
 
@@ -154,7 +157,7 @@ function FeatureServicePanel({ layersInCanvas = new Set(), lockedConnection = nu
   };
 
   const handleBack = () => {
-    setSearchQuery('');
+    clearSearch();
     if (view === 'layers') {
       setView('services');
       setSelectedService(null);
@@ -164,13 +167,10 @@ function FeatureServicePanel({ layersInCanvas = new Set(), lockedConnection = nu
     }
   };
 
-  const filterItems = (items, nameKey = 'name') => {
-    if (!searchQuery) return items;
-    const q = searchQuery.toLowerCase();
-    return items.filter(item => 
-      (item[nameKey] || '').toLowerCase().includes(q)
-    );
-  };
+  const filterItems = (items) => search.filter(items, item => [item.name]);
+  // Elenco della vista corrente: conteggio della ricerca e stato vuoto.
+  const viewItems = view === 'layers' ? layers : view === 'services' ? services : connections;
+  const shownCount = filterItems(viewItems || []).length;
 
   return (
     <div className="fs-panel">
@@ -231,16 +231,12 @@ function FeatureServicePanel({ layersInCanvas = new Set(), lockedConnection = nu
 
       {/* Search + action */}
       <div className="fs-panel__toolbar">
-        <input
-          type="text"
+        <SearchField
+          search={search}
+          label={view === 'connections' ? 'Cerca connessione' : view === 'services' ? 'Cerca servizio' : 'Cerca layer'}
           className="fs-panel__search"
-          placeholder={
-            view === 'connections' ? '🔍 Cerca connessione...' :
-            view === 'services' ? '🔍 Cerca servizio...' :
-            '🔍 Cerca layer...'
-          }
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          shown={shownCount}
+          total={(viewItems || []).length}
         />
         {view === 'connections' && canCreateConnection && (
           <button type="button" 
@@ -262,6 +258,7 @@ function FeatureServicePanel({ layersInCanvas = new Set(), lockedConnection = nu
 
       {/* Contenuto */}
       <div className="fs-panel__list">
+        {(viewItems || []).length > 0 && <SearchEmpty search={search} shown={shownCount} />}
         {view === 'connections' && (
           loadingConnections ? (
             <div className="fs-panel__loading">Caricamento connessioni...</div>

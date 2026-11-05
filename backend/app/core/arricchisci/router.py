@@ -25,13 +25,18 @@ from app.core.auth.ownership import (
     compute_can_edit,
 )
 from pydantic import BaseModel, Field
-from typing import Annotated, List, Literal, Optional
+from typing import Annotated, Any, List, Literal, Mapping, Optional
 
 from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
 from app.shared import error_codes
 from app.shared.error_envelope import raise_credential_unavailable, raise_typed_http
 from app.observability.audit_action import audit_action
+from app.shared.connection_tests.results import (
+    attaches_connection_tests,
+    records_connection_test,
+    resets_connection_test,
+)
 from app.core.auth.resource_access import assert_file_source_access, assert_project_visible
 from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.core.arricchisci.api_connector import api_connection_service
@@ -437,6 +442,7 @@ def estimate_enrichment(
 # ENDPOINT: API CONNECTIONS CRUD
 
 @api_connections_router.get("/api-connections")
+@attaches_connection_tests("api_connection", items_field="api_connections")
 def list_api_connections(
     category: str = None,
     connection_type: str = None,
@@ -521,6 +527,7 @@ def create_api_connection(data: JsonObject, current_user: CurrentUser = Depends(
 
 @api_connections_router.put("/api-connections/{api_id}")
 @audit_action(action="api_connection.update", target_param="api_id")
+@resets_connection_test("api_connection", id_param="api_id")
 def update_api_connection(
     api_id: str,
     data: JsonObject,
@@ -568,6 +575,7 @@ def update_api_connection(
 
 @api_connections_router.delete("/api-connections/{api_id}", status_code=204)
 @audit_action(action="api_connection.delete", target_param="api_id")
+@resets_connection_test("api_connection", id_param="api_id")
 def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(require_admin)):
     """Elimina una API connection, con check se è in uso in qualche canvas. Solo admin/superadmin."""
     # Ownership check PRIMA di qualunque altra cosa: 404/403 se non sei
@@ -741,8 +749,20 @@ def test_api_config(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
+def _tests_saved_api_configuration(kwargs: Mapping[str, Any]) -> bool:
+    """Il test descrive la connessione SALVATA solo senza `config_overrides`
+    (il wizard di modifica testa le modifiche non ancora salvate)."""
+    body = kwargs.get("body")
+    return not (isinstance(body, Mapping) and isinstance(body.get("config_overrides"), Mapping))
+
+
 @api_connections_router.post("/api-connections/{api_id}/test")
 @audit_action(action="api_connection.test", target_param="api_id")
+@records_connection_test(
+    "api_connection",
+    id_param="api_id",
+    when=_tests_saved_api_configuration,
+)
 def test_api_connection(
     api_id: str,
     body: Optional[JsonObject] = None,

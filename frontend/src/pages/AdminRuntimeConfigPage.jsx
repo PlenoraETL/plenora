@@ -9,6 +9,8 @@ import { useResource } from '../hooks/useResource';
 import ListState from '../components/common/ListState';
 import '../styles/AdminRuntimeConfigPage.css';
 import { formatDateTime } from '../utils/format';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch } from '../hooks/useSearch';
 
 
 function formatValue(value) {
@@ -49,20 +51,14 @@ function ConfigRow({ item }) {
   );
 }
 
-function Section({ section, query, showAdvanced }) {
-  const items = useMemo(() => {
-    const baseItems = showAdvanced
-      ? (section.items || [])
-      : (section.items || []).filter((item) => item.essential === true);
-    if (!query.trim()) return baseItems;
-    const q = query.trim().toLowerCase();
-    return baseItems.filter((item) => {
-      return item.key.toLowerCase().includes(q)
-        || formatValue(item.value).toLowerCase().includes(q)
-        || String(item.source || '').toLowerCase().includes(q);
-    });
-  }, [section.items, query, showAdvanced]);
+// Voci della sezione nella vista (avanzate o essenziali).
+const baseItemsOf = (section, showAdvanced) => (showAdvanced
+  ? (section.items || [])
+  : (section.items || []).filter((item) => item.essential === true));
+// Ricerca: chiave, valore o sorgente (hooks/useSearch).
+const searchValuesOf = (item) => [item.key, formatValue(item.value), item.source];
 
+function Section({ section, items }) {
   if (items.length === 0) return null;
 
   return (
@@ -94,8 +90,14 @@ export default function AdminRuntimeConfigPage() {
   const data = resource.data || null;
   const loading = resource.loading;
   const load = () => resource.reload();
-  const [query, setQuery] = useState('');
+  const search = useSearch();
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const sections = useMemo(() => (data?.sections || []).map((section) => {
+    const base = baseItemsOf(section, showAdvanced);
+    return { section, base, items: search.filter(base, searchValuesOf) };
+  }), [data, showAdvanced, search.filter]);
+  const searchTotal = sections.reduce((n, s) => n + s.base.length, 0);
+  const searchShown = sections.reduce((n, s) => n + s.items.length, 0);
   const topology = data?.runtime?._dev_topology;
 
 
@@ -170,11 +172,12 @@ export default function AdminRuntimeConfigPage() {
         )}
 
         <div className="arc__toolbar">
-          <input
+          <SearchField
+            search={search}
+            label="Cerca chiave, valore o sorgente"
             className="arc__search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filtra chiave, valore o sorgente..."
+            shown={searchShown}
+            total={searchTotal}
           />
           <button
             className={showAdvanced ? 'arc__toggle arc__toggle--active' : 'arc__toggle'}
@@ -191,12 +194,12 @@ export default function AdminRuntimeConfigPage() {
           errorTitle="Configurazione non caricata"
           empty="Nessuna configurazione."
         >
-          {(data?.sections || []).map((section) => (
+          <SearchEmpty search={search} shown={searchShown} />
+          {sections.map(({ section, items }) => (
             <Section
               key={section.name}
               section={section}
-              query={query}
-              showAdvanced={showAdvanced}
+              items={items}
             />
           ))}
         </ListState>

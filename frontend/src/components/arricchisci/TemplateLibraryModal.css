@@ -16,27 +16,8 @@
   background: var(--acm-surface-2, #111525);
 }
 
-/* Search */
-.tlm__search {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--acm-surface, #0C0F18);
-  border: 1px solid var(--acm-border-hi, rgba(255,255,255,0.11));
-  border-radius: 9px; padding: 8px 12px;
-  transition: border-color .15s;
-}
+/* Search (components/common/SearchField) */
 .tlm__search:focus-within { border-color: var(--acm-blue, #4B8BFF); }
-.tlm__search-icon  { font-size: 13px; opacity: .4; flex-shrink: 0; }
-.tlm__search-input {
-  flex: 1; border: none; outline: none; font-size: 13px;
-  background: transparent; color: var(--acm-text, #DDE4F2);
-  font-family: var(--plen-font-body);
-}
-.tlm__search-input::placeholder { color: var(--acm-text-dim, #3F4D68); }
-.tlm__search-clear {
-  background: none; border: none; cursor: pointer;
-  color: var(--acm-text-dim, #3F4D68); font-size: 11px; padding: 0 2px;
-}
-.tlm__search-clear:hover { color: #F87171; }
 
 /* Category pills */
 .tlm__cats { display: flex; gap: 5px; flex-wrap: wrap; }
@@ -208,7 +189,6 @@
 
 /* ══ Light theme overrides ════════════════════════════════════════════════ */
 [data-theme='light'] .tlm__toolbar  { background: #F0F4FF; }
-[data-theme='light'] .tlm__search   { background: #FFFFFF; }
 [data-theme='light'] .tlm__hint     { background: #F0F4FF; }
 [data-theme='light'] .tlm__cat      { background: #EEF2FF; }
 [data-theme='light'] .tlc           { background: #F8FAFF; }

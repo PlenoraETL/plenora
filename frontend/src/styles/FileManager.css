@@ -92,12 +92,7 @@
 
 /* Toolbar */
 .fm__toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-.fm__search { display: flex; align-items: center; gap: 8px; background: var(--fm-surface); border: 1px solid var(--fm-border); border-radius: 8px; padding: 6px 12px; width: 220px; }
-.fm__search:focus-within { border-color: var(--fm-blue); }
-.fm__search-icon  { color: var(--fm-text-dim); flex-shrink: 0; }
-.fm__search-input { background: transparent; border: none; outline: none; color: var(--fm-text); font-size: 12px; width: 100%; font-family: var(--fm-font-b); }
-.fm__search-input::placeholder { color: var(--fm-text-dim); }
-.fm__search-clear { background: transparent; border: none; color: var(--fm-text-dim); cursor: pointer; font-size: 11px; padding: 0; flex-shrink: 0; }
+.fm__search { width: 240px; }
 
 .fm__filter-tabs { display: flex; gap: 4px; background: var(--fm-surface-2); border: 1px solid var(--fm-border); border-radius: 10px; padding: 4px; }
 .fm__ftab { padding: 5px 12px; border-radius: 7px; font-size: 11px; font-weight: 600; font-family: var(--fm-font-m); color: var(--fm-text-sub); cursor: pointer; border: none; background: transparent; display: flex; align-items: center; gap: 5px; }

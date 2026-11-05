@@ -9,6 +9,7 @@ from typing import List, Optional, Literal
 from datetime import datetime
 
 from app.shared.connections.mssql_tls import MssqlTlsMode
+from app.shared.contracts.connection_test_status import ConnectionTestStatus
 
 
 class DatabaseConnection(BaseModel):
@@ -29,6 +30,7 @@ class DatabaseConnection(BaseModel):
     updated_at: datetime
     created_by: Optional[str] = None
     can_edit: Optional[bool] = None  # calcolato per l'utente corrente
+    last_test: Optional[ConnectionTestStatus] = None  # ultimo «Test connessione» (solo nelle liste)
 
 
 class ConnectionCreate(BaseModel):

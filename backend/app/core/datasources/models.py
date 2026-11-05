@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from typing import List, Optional, Literal
 from datetime import datetime
 
+from app.shared.contracts.connection_test_status import ConnectionTestStatus
+
 
 class DataSourceCreate(BaseModel):
     """Dati per creare un nuovo Data Source."""
@@ -94,6 +96,7 @@ class DataSource(BaseModel):
     updated_at: datetime
     created_by: Optional[str] = None
     can_edit: Optional[bool] = None
+    last_test: Optional[ConnectionTestStatus] = None  # ultimo «Test connessione» (solo nelle liste)
 
 
 class DataSourceList(BaseModel):

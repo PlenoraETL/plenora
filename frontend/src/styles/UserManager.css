@@ -78,10 +78,7 @@
   display: flex; align-items: center; padding: 0 20px; gap: 12px;
 }
 .um__topbar-badge { font-size: 10px; font-family: var(--um-font-m); color: var(--um-text-dim); background: var(--um-surface-2); border: 1px solid var(--um-border); border-radius: 4px; padding: 2px 7px; }
-.um__topbar-search { display: flex; align-items: center; gap: 7px; background: var(--um-surface-2); border: 1px solid var(--um-border); border-radius: 7px; padding: 6px 11px; min-width: 200px; }
-.um__topbar-search input { background: none; border: none; outline: none; color: var(--um-text); font-size: 12.5px; width: 100%; }
-.um__topbar-search input::placeholder { color: var(--um-text-dim); }
-.um__topbar-search-icon { color: var(--um-text-dim); font-size: 13px; }
+.um__topbar-search { min-width: 220px; }
 .um__btn { display: flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 7px; border: none; cursor: pointer; font-size: 12.5px; font-weight: 600; font-family: var(--um-font-b); transition: all 0.15s; }
 .um__btn--primary { background: var(--um-blue); color: white; }
 .um__btn--primary:hover { background: var(--um-blue-mid); }

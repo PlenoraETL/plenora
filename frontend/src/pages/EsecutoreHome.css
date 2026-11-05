@@ -131,61 +131,11 @@
 /* ── BARRA DI RICERCA ──────────────────────────────────────────────── */
 
 .esh__search {
-  position: relative;
-  display: flex;
-  align-items: center;
   margin-bottom: 20px;
 }
-
-.esh__search-icon {
-  position: absolute;
-  left: 14px;
-  font-size: 16px;
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.esh__search-input {
-  flex: 1;
-  padding: 12px 40px 12px 40px;
+.esh__search .search-field__input {
+  padding: 12px 0;
   font-size: 14px;
-  color: var(--plen-text, #DDE4F2);
-  background: var(--plen-surface);
-  border: 1px solid var(--plen-border, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
-  outline: none;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.esh__search-input::placeholder {
-  color: var(--plen-text-sub, #7D8BA8);
-}
-
-.esh__search-input:focus {
-  border-color: #4B8BFF;
-  background: var(--plen-surface-2);
-}
-
-.esh__search-clear {
-  position: absolute;
-  right: 10px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--plen-text-sub, #7D8BA8);
-  font-size: 14px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.esh__search-clear:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--plen-text, #DDE4F2);
 }
 
 /* ── GRID di card eseguibili ──────────────────────────────────────── */

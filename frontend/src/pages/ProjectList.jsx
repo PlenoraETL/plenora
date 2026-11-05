@@ -33,8 +33,13 @@ import { ResourceError } from '../components/common/ListState';
 import '../styles/ProjectList.css';
 import { projectEditorPath } from '../utils/projectRoutes';
 import { formatDateTime } from '../utils/format';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch } from '../hooks/useSearch';
 // Sezioni della dashboard raggiungibili dalla sidebar (hash dell'URL).
 const DASHBOARD_SECTIONS = { estrai: 'Estrai', manipola: 'Manipola', arricchisci: 'Arricchisci' };
+
+// Ricerca della dashboard: nome, descrizione e tag (hooks/useSearch).
+const searchValues = (p) => [p.name, p.description, p.tags];
 
 function ProjectList() {
   const toast    = useToast();
@@ -73,7 +78,7 @@ function ProjectList() {
   const [publishProject, setPublishProject] = useState(null); // progetto da pubblicare come eseguibile
   const [executeEseguibileId, setExecuteEseguibileId] = useState(null); // id eseguibile da lanciare nel wizard
   const [showEsegSelector, setShowEsegSelector] = useState(false);      // selettore progetto sorgente per nuovo eseguibile
-  const [search,            setSearch]            = useState('');
+  const search = useSearch();
   // #11 filtri smart: stato ultima run + ordinamento.
   const [statusFilter,      setStatusFilter]      = useState('all');   // all|success|failure|running|never
   const [tagFilter,         setTagFilter]         = useState('all');   // all|<tag>
@@ -230,10 +235,7 @@ function ProjectList() {
   }, [projects]);
 
   // Search testuale (usata anche dalla sezione Eseguibili, che non ha run/stato).
-  const filterBySearch = (list) =>
-    search.trim()
-      ? list.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
-      : list;
+  const filterBySearch = (list) => search.filter(list, searchValues);
 
   // #11: search + filtro stato ultima run + ordinamento. Applicato alle 3
   // sezioni progetto. Lo stato run viene da `runStatusByProject` (log_runs):
@@ -243,11 +245,7 @@ function ProjectList() {
     return Number.isNaN(d) ? 0 : d;
   };
   const applyFilters = useCallback((list) => {
-    let out = list;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      out = out.filter(p => p.name.toLowerCase().includes(q));
-    }
+    let out = search.filter(list, searchValues);
     // Stato delle esecuzioni non caricato: il filtro per stato non si
     // applica (non si sa), lo dice l'avviso sopra le sezioni.
     if (statusFilter !== 'all' && !runStatusUnavailable) {
@@ -264,18 +262,27 @@ function ProjectList() {
     else if (sortBy === 'oldest') sorted.sort((a, b) => ts(a) - ts(b));
     else                          sorted.sort((a, b) => ts(b) - ts(a)); // recent
     return sorted;
-  }, [search, statusFilter, tagFilter, sortBy, runStatusFor, runStatusUnavailable]);
+  }, [search.filter, statusFilter, tagFilter, sortBy, runStatusFor, runStatusUnavailable]);
 
   // Filtri non-default attivi? (per badge "azzera").
   const filtersActive = statusFilter !== 'all' || tagFilter !== 'all' || sortBy !== 'recent';
   // Lista vuota per un filtro o per la ricerca (P18): il testo lo dice.
-  const narrowed = Boolean(search.trim()) || statusFilter !== 'all' || tagFilter !== 'all';
+  const narrowed = search.active || statusFilter !== 'all' || tagFilter !== 'all';
 
   // perf-6: i filtri si applicano UNA volta per sezione (prima due volte a
   // render: per lo stato vuoto e per le card).
   const shownEstrai = useMemo(() => applyFilters(estraiProjects), [applyFilters, estraiProjects]);
   const shownManipola = useMemo(() => applyFilters(manipolaProjects), [applyFilters, manipolaProjects]);
   const shownArricchisci = useMemo(() => applyFilters(arricchisciProjects), [applyFilters, arricchisciProjects]);
+  const shownEseguibili = section ? [] : filterBySearch(eseguibili);
+  // Conteggio della ricerca: le sezioni visibili (tutte, o quella della sidebar).
+  const visibleSections = [
+    ['estrai', shownEstrai, estraiProjects],
+    ['manipola', shownManipola, manipolaProjects],
+    ['arricchisci', shownArricchisci, arricchisciProjects],
+  ].filter(([key]) => showSection(key));
+  const searchShown = visibleSections.reduce((n, [, shown]) => n + shown.length, shownEseguibili.length);
+  const searchTotal = visibleSections.reduce((n, [, , all]) => n + all.length, section ? 0 : eseguibili.length);
   const fileNameById = useMemo(() => new Map(files.map(f => [f.id, f.name])), [files]);
   const emptyFor = (what, firstText) => (narrowed
     ? { title: `Nessun progetto ${what} con questi filtri`, text: 'Cambia o azzera la ricerca e i filtri.' }
@@ -294,15 +301,13 @@ function ProjectList() {
       subtitle={section ? 'Progetti di questa sezione — «Dashboard» nella barra laterale per tutti' : null}
       actions={(
         <>
-            <div className="pl__search-box">
-              <span className="pl__search-icon">⌕</span>
-              <input
-                placeholder="Cerca progetti..."
-                aria-label="Cerca progetti"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
+            <SearchField
+              search={search}
+              label="Cerca progetti"
+              className="pl__search"
+              shown={searchShown}
+              total={searchTotal}
+            />
             {/* #11 filtri smart: stato ultima run + ordinamento */}
             <select
               className={`pl__filter-select${statusFilter !== 'all' ? ' pl__filter-select--active' : ''}`}
@@ -363,6 +368,7 @@ function ProjectList() {
           {failures.length > 0 && (
             <ResourceError compact title="Alcuni dati non caricati" message={failures.join(', ')} onRetry={resource.reload} />
           )}
+          <SearchEmpty search={search} shown={searchShown} />
 
           {/* KPI (DB2, G2): solo per ciò che esiste; ognuno porta alla sua
               pagina o sezione (pulsanti veri, a11y-1). */}
@@ -516,8 +522,8 @@ function ProjectList() {
           {/* P17: la sezione Eseguibili c'è anche senza progetti. */}
           {!section && (eseguibili.length > 0 || projects.length > 0) && (
           <EseguibiliSection
-            items={filterBySearch(eseguibili)}
-            filtered={Boolean(search.trim())}
+            items={shownEseguibili}
+            filtered={search.active}
             canCreate={can.createEseguibile(user)}
             canDelete={(item) => can.manageEseguibile(user, item)}
             onNew={openEsegSelector}

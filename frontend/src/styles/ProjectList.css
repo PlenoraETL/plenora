@@ -92,22 +92,8 @@
 
 /* ── Topbar ── */
 
-/* ── Search ── */
-.pl__search-box {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--pl-surface);
-  border: 1px solid var(--pl-border);
-  border-radius: 8px;
-  padding: 6px 12px;
-  width: 210px;
-}
-.pl__search-box:focus-within { border-color: var(--pl-blue); }
-.pl__search-icon { color: var(--pl-text-dim); font-size: 13px; }
-.pl__search-box input {
-  background: transparent; border: none; outline: none;
-  color: var(--pl-text); font-size: 12px; font-family: var(--pl-font-b); width: 100%;
-}
-.pl__search-box input::placeholder { color: var(--pl-text-dim); }
+/* ── Search (components/common/SearchField) ── */
+.pl__search { width: 240px; }
 
 /* ── Theme toggle ── */
 

@@ -17,7 +17,8 @@ import React, { useMemo, useState } from 'react';
 import useDraftList from './useDraftList';
 import { gridError, prettyName, stripJoinSuffix } from './panelConfig';
 import './panels.css';
-import { READ_ONLY_SAFE } from '../../common/readOnlySafe';
+import SearchField, { SearchEmpty } from '../../common/SearchField';
+import { useSearch } from '../../../hooks/useSearch';
 
 const sourceName = (r) => (r.display ? r.display.split('.').pop() : r.name);
 // Confronto delle righe senza i campi solo di presentazione.
@@ -37,13 +38,11 @@ export default function ColumnsGrid({
     update(next);
     if (!gridError(next, { identifier })) onChange(next);
   };
-  const [query, setQuery] = useState('');
+  const search = useSearch();
   const [dragName, setDragName] = useState(null);
-  const q = query.trim().toLowerCase();
-  const visible = useMemo(
-    () => rows.filter(r => !q || (r.display || r.name).toLowerCase().includes(q) || (r.label || '').toLowerCase().includes(q)),
-    [rows, q],
-  );
+  // Con una ricerca (anche in pausa) l'ordine non si cambia: le righe nascoste non si vedono.
+  const q = Boolean(search.text.trim()) || search.active;
+  const visible = useMemo(() => search.filter(rows, r => [r.display || r.name, r.label]), [rows, search.filter]);
   const kept = rows.filter(r => r.keep && !r.missing).length;
   const total = rows.filter(r => !r.missing).length;
 
@@ -68,13 +67,7 @@ export default function ColumnsGrid({
         <span className="ppanel__label">Colonne in uscita · {kept} di {total}</span>
       </div>
       <div className="pgrid__tools">
-        <input
-          {...READ_ONLY_SAFE} className="ppanel__input pgrid__search"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Cerca colonna…"
-          aria-label="Cerca colonna"
-        />
+        <SearchField search={search} label="Cerca colonna" className="pgrid__search" compact shown={visible.length} total={rows.length} />
         <button type="button" className="ppanel__btn" disabled={disabled} onClick={() => setAll(r => ({ ...r, keep: true }))}>Tutte</button>
         <button type="button" className="ppanel__btn" disabled={disabled} onClick={() => setAll(r => ({ ...r, keep: false }))}>Nessuna</button>
         {!identifier && (
@@ -124,16 +117,17 @@ export default function ColumnsGrid({
                     onClick={() => change(rows.filter(x => x !== r))}>×</button>
                 : allowReorder && (
                   <span className="pgrid__move">
-                    <button type="button" className="ppanel__mini" disabled={disabled || index === 0 || Boolean(q)}
+                    <button type="button" className="ppanel__mini" disabled={disabled || index === 0 || q}
                       onClick={() => move(r.name, index - 1)} aria-label={`Sposta su ${r.name}`}>↑</button>
-                    <button type="button" className="ppanel__mini" disabled={disabled || index === rows.length - 1 || Boolean(q)}
+                    <button type="button" className="ppanel__mini" disabled={disabled || index === rows.length - 1 || q}
                       onClick={() => move(r.name, index + 1)} aria-label={`Sposta giù ${r.name}`}>↓</button>
                   </span>
                 )}
             </div>
           );
         })}
-        {visible.length === 0 && <div className="ppanel__note">Nessuna colonna{q ? ' trovata' : ' a monte: collega un passo in ingresso'}.</div>}
+        <SearchEmpty search={search} shown={visible.length} />
+        {visible.length === 0 && !search.active && <div className="ppanel__note">Nessuna colonna a monte: collega un passo in ingresso.</div>}
       </div>
       {error && <div className="ppanel__error" role="alert">{error}. Le modifiche non sono salvate finché non è risolto.</div>}
       {!error && savedError && (

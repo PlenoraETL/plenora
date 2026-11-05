@@ -142,26 +142,33 @@ describe('ConnectionManager contract', () => {
     // Reload non triggered dopo cascade 409.
     expect(listConnectionsMock).toHaveBeenCalledTimes(1);
   });
-  it('shows the OK status badge after a successful test connection', async () => {
+  // S3: l'esito del test lo salva il backend e torna nella lista (last_test).
+  it("mostra l'esito salvato dopo un test riuscito", async () => {
     testConnectionMock.mockResolvedValueOnce({ success: true, message: 'ok' });
+    listConnectionsMock
+      .mockResolvedValueOnce({ connections: [sampleConn] })
+      .mockResolvedValue({ connections: [{ ...sampleConn, last_test: { success: true, message: 'ok', tested_at: '2026-11-05T10:00:00Z', tested_by: 'sa', duration_ms: 40, stale: false } }] });
 
     render(<ConnectionManager />);
     await screen.findByText('Warehouse DB');
-    expect(screen.getByText('Da verificare')).toBeInTheDocument();
+    expect(screen.getByText('Mai verificata')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /🔌 Test/i }));
 
     await waitFor(() =>
       expect(testConnectionMock).toHaveBeenCalledWith('conn-1'),
     );
-    expect(await screen.findByText('OK')).toBeInTheDocument();
-    expect(screen.queryByText('Da verificare')).not.toBeInTheDocument();
+    expect(await screen.findByText(/^Verificata il .* da sa$/)).toBeInTheDocument();
+    expect(screen.queryByText('Mai verificata')).not.toBeInTheDocument();
   });
-  it('shows the error badge and inline error banner when test fails', async () => {
+  it('mostra «Ultimo test fallito: motivo» quando il test fallisce', async () => {
     testConnectionMock.mockResolvedValueOnce({
       success: false,
       message: 'Connection refused: 5432',
     });
+    listConnectionsMock
+      .mockResolvedValueOnce({ connections: [sampleConn] })
+      .mockResolvedValue({ connections: [{ ...sampleConn, last_test: { success: false, message: 'Connection refused: 5432', tested_at: '2026-11-05T10:00:00Z', tested_by: 'sa', duration_ms: 40, stale: false } }] });
 
     render(<ConnectionManager />);
     await screen.findByText('Warehouse DB');
@@ -171,10 +178,14 @@ describe('ConnectionManager contract', () => {
     await waitFor(() =>
       expect(testConnectionMock).toHaveBeenCalledWith('conn-1'),
     );
-    expect(await screen.findByText('Errore')).toBeInTheDocument();
     expect(
-      await screen.findByText(/Connection refused: 5432/),
+      await screen.findByText('Ultimo test fallito: Connection refused: 5432'),
     ).toBeInTheDocument();
+  });
+  it('esito scaduto: «Da riverificare»', async () => {
+    listConnectionsMock.mockResolvedValue({ connections: [{ ...sampleConn, last_test: { success: true, message: 'ok', tested_at: '2026-01-01T10:00:00Z', tested_by: 'sa', duration_ms: 40, stale: true } }] });
+    render(<ConnectionManager />);
+    expect(await screen.findByText('Da riverificare')).toHaveAttribute('title', expect.stringMatching(/^Ultimo test il .* da sa, riuscito$/));
   });
   it('blocks createConnection when the name is empty and warns the user', async () => {
     render(<ConnectionManager />);

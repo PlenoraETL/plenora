@@ -27,6 +27,10 @@ import { formErrors, formPayload, initialValues } from '../utils/formSchema';
 import { DS_FIELDS, DS_STATE_FIELDS, DEFAULT_PORTS } from '../utils/dataSourceForm';
 import { formatBytes as formatSize, formatDateTime as formatDate } from '../utils/format';
 import { pressable } from '../utils/pressable';
+import ConnectionTestStatus from '../components/connections/ConnectionTestStatus';
+import { lastTestFromResult, withLastTest } from '../utils/connectionTestStatus';
+import SearchField, { SearchEmpty } from '../components/common/SearchField';
+import { useSearch } from '../hooks/useSearch';
 const DS_TYPES = [
   { value:'local',      label:'Cartella locale',   icon:'📂', color:'#94A3B8', rgb:'148,163,184', desc:'Disco locale o percorso UNC' },
   { value:'ftp',        label:'FTP',               icon:'📁', color:'#60A5FA', rgb:'96,165,250',  desc:'File Transfer Protocol (FTPS)' },
@@ -46,7 +50,9 @@ export default function DataSourceManager() {
   // di richiesta: la cartella mostrata e' sempre l'ultima chiesta), test ed
   // eliminazioni per Data Source (useBusy).
   const resource = useResource(async () => (await listDataSources()).datasources || [], { key: 'datasources', errorMessage: (e) => humanizeError(e).message });
-  const datasources = resource.data || [];
+  const allDatasources = resource.data || [];
+  const search = useSearch();
+  const datasources = search.filter(allDatasources, ds => [ds.name, ds.description, ds.host, ds.site_url, ds.root_path, TYPE_INFO[ds.type]?.label]);
   const loading = resource.initialLoading;
   const error = resource.error;
   const load = () => resource.reload();
@@ -57,7 +63,6 @@ export default function DataSourceManager() {
   const [fieldErrors,   setFieldErrors]   = useState({});
   const [saving,        setSaving]        = useState(false);
   const [formError,     setFormError]     = useState(null);
-  const [testResults,   setTestResults]   = useState({});
   const [browserDs,     setBrowserDs]     = useState(null);
   const [browserPath,   setBrowserPath]   = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -121,13 +126,16 @@ export default function DataSourceManager() {
     finally { setSaving(false); }
   };
 
+  // S3: l'esito lo salva il backend e torna nella lista (`last_test`);
+  // qui si mostra subito quello ricevuto e poi si ricarica la lista.
   const handleTest = async id => {
     if (busy.isBusy(`test:${id}`)) return;
-    setTestResults(prev => ({ ...prev, [id]: null }));
     try {
       const r = await busy.run(`test:${id}`, () => testDataSource(id));
-      if (!r.skipped) setTestResults(prev => ({ ...prev, [id]: r.value }));
-    } catch (e) { setTestResults(prev => ({ ...prev, [id]: { success:false, message:requestErrorMessage(e) } })); }
+      if (r.skipped) return;
+      resource.setData(list => withLastTest(list, id, lastTestFromResult(r.value, user?.username)));
+      resource.reload();
+    } catch (e) { toastApiError(toast, e, 'Test del Data Source non eseguito'); }
   };
 
   // Pre-fix (P1 frontend-pages): handleDelete async senza disabling
@@ -179,9 +187,14 @@ export default function DataSourceManager() {
             <div className="dsm__error-banner" role="alert">⚠️ {error} <button type="button" onClick={load}>Riprova</button></div>
           )}
 
+          {allDatasources.length > 0 && (
+            <SearchField search={search} label="Cerca Data Source" className="dsm__search" shown={datasources.length} total={allDatasources.length} />
+          )}
           {loading ? (
             <div className="dsm__loading"><div className="dsm__loading-icon">⬡</div>Caricamento Data Source...</div>
-          ) : error && !resource.hasData ? null : datasources.length === 0 ? (
+          ) : error && !resource.hasData ? null : datasources.length === 0 && search.active ? (
+            <SearchEmpty search={search} shown={0} className="dsm__search-empty" />
+          ) : datasources.length === 0 ? (
             <EmptyState
               icon="🗄️"
               title="Nessun Data Source configurato"
@@ -194,7 +207,6 @@ export default function DataSourceManager() {
             <div className="dsm__grid">
               {datasources.map(ds => {
                 const ti = TYPE_INFO[ds.type] || {};
-                const testResult = testResults[ds.id];
                 const isTesting  = busy.isBusy(`test:${ds.id}`);
                 const canEdit    = can.editDataSource(user, ds);
                 return (
@@ -240,11 +252,7 @@ export default function DataSourceManager() {
                           onClick={() => handleTest(ds.id)} disabled={isTesting}>
                           {isTesting ? '⏳ Test in corso...' : '🔌 Testa connessione'}
                         </button>
-                        {testResult && (
-                          <div className={`dsm__test-result${testResult.success?' dsm__test-result--ok':' dsm__test-result--err'}`}>
-                            {testResult.success ? '✓' : '✗'} {testResult.message}
-                          </div>
-                        )}
+                        <ConnectionTestStatus lastTest={ds.last_test} />
                       </div>
                     </div>
                   </div>

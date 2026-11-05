@@ -122,8 +122,9 @@ describe('FileManager contract', () => {
     const search = screen.getByPlaceholderText(/cerca file/i);
     await userEvent.type(search, 'order');
 
+    // P28: la ricerca si applica dopo la pausa unica (hooks/useSearch).
+    await waitFor(() => expect(screen.queryByText('Cities')).not.toBeInTheDocument());
     expect(screen.getByText('Orders')).toBeInTheDocument();
-    expect(screen.queryByText('Cities')).not.toBeInTheDocument();
   });
   it('shows only CSV files when the CSV filter tab is active', async () => {
     getFilesMock.mockResolvedValueOnce({ files: [sampleCsv, sampleXlsx] });
