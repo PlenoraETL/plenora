@@ -13,7 +13,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
-import { humanizeError } from '../../utils/errorMessages';
+import { humanizeError, requestErrorMessage } from '../../utils/errorMessages';
 import {
   listFeatureConnections,
   createFeatureConnection,
@@ -181,7 +181,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
       setShowNewConn(false);
       setNewConnForm({ name: '', server_url: '', username: '', password: '', auth_type: 'public' });
     } catch (err) {
-      setNewConnError(err.message);
+      setNewConnError(requestErrorMessage(err));
     } finally {
       setNewConnTesting(false);
     }

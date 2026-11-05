@@ -203,7 +203,7 @@ const handleMultiLayerUpload = async () => {
       await loadFiles();
       resetUploadModal();
     } catch (err) {
-      setUploadError(err.message || "Errore durante l'upload");
+      setUploadError(humanizeErrorMessage(err, "Errore durante l'upload"));
     } finally { setUploading(false); }
   };
 const handleNextStep = async () => {
@@ -249,13 +249,13 @@ const handleNextStep = async () => {
           try {
             await uploadFile(uploadFile_, uploadName, uploadDescription, null, null, null, null);
             await loadFiles(); resetUploadModal();
-          } catch (e) { setUploadError(e.message || "Errore upload"); } finally { setUploading(false); }
+          } catch (e) { setUploadError(humanizeErrorMessage(e, "Errore upload")); } finally { setUploading(false); }
         } else {
           setUploadError('Impossibile leggere le colonne del file');
         }
       }
     } catch (err) {
-      setUploadError(err.message || 'Errore nella lettura del file');
+      setUploadError(humanizeErrorMessage(err, 'Errore nella lettura del file'));
     } finally { setLoadingColumns(false); }
   };
 
@@ -283,7 +283,7 @@ const handleUpload = async () => {
       }
       await loadFiles(); resetUploadModal();
     } catch (err) {
-      setUploadError(err.message || "Errore durante l'upload");
+      setUploadError(humanizeErrorMessage(err, "Errore durante l'upload"));
     } finally { setUploading(false); }
   };
 
@@ -297,8 +297,7 @@ const handleUpload = async () => {
       await loadFiles();
       resetLayerModal();
     } catch (err) {
-      const detail = err?.response?.data?.detail;
-      toast.error(typeof detail === 'string' ? detail : humanizeErrorMessage(err));
+      toast.error(humanizeErrorMessage(err));
     }
   };
 const handlePreview = async (file) => {

@@ -1,16 +1,24 @@
 /**
- * errorMessages.js — Traduzione errori → messaggi umani azionabili (Epic A).
+ * errorMessages.js — L'UNICA normalizzazione degli errori verso l'utente.
  *
- * Il backend espone un catalogo di ~70 codici strutturati (vedi
- * `app/shared/error_codes.py`) propagati nell'envelope come `{error: "<code>"}`.
- * L'interceptor axios (`api/http.js`) li attacca a `err.code`. Finora il FE li
- * ignorava e mostrava `err.message` grezzo (spesso stack/SDK/"Request failed
- * with status code 500"). Qui li mappiamo a messaggi italiani comprensibili.
+ * Regola (T3, una sola per tutto il frontend):
+ *   1. messaggio del backend, se c'e' (envelope `message`, `detail` stringa,
+ *      `detail.message`, oppure l'elenco dei campi di un 422 Pydantic);
+ *   2. altrimenti il testo curato del codice di dominio (`{error: "<code>"}`,
+ *      vedi `app/shared/error_codes.py`);
+ *   3. altrimenti un testo italiano per famiglia: rete, timeout, 401, 403,
+ *      404, 409, 413, 422, 429, 5xx, altri 4xx;
+ *   4. un errore locale lanciato dall'app (`new Error('...')`) mostra il suo
+ *      testo; un errore di programma (TypeError, ReferenceError, ...) mai.
  *
- * `humanizeError(err)` è la funzione-chiave: dato un AxiosError (o una stringa,
- * o un errore JS), ritorna { title, message } SEMPRE umano — mai uno stack.
- * Strategia: codice mappato → famiglia HTTP → rete/timeout → messaggio backend
- * (se umano) → generico. Non espone mai dettagli tecnici grezzi.
+ * Mai il testo grezzo di axios ("Network Error", "timeout of 30000ms
+ * exceeded", "Request failed with status code 500").
+ *
+ * L'interceptor (`api/http.js`) scrive questo stesso testo in `err.message`;
+ * le pagine pero' usano sempre `requestErrorMessage(err)` / `humanizeError(err)`
+ * / `toastApiError(...)`: lo vieta il test
+ * `tests/shared/errorMessages.contract.test.js` (niente `err.message` grezzo
+ * in toast, banner e setError).
  */
 
 // Mappa codice backend → { title, message }. Copre i codici con valore di
@@ -103,13 +111,15 @@ export const ERROR_MESSAGES = {
   aws_credentials_expired: { title: 'Credenziali scadute', message: 'Le credenziali AWS sono scadute. Contatta l’amministratore.' },
 };
 
+
 const GENERIC = { title: 'Errore', message: 'Si è verificato un errore. Riprova; se persiste, contatta l’amministratore.' };
 const NETWORK = { title: 'Connessione assente', message: 'Impossibile contattare il server. Controlla la connessione di rete e riprova.' };
 const TIMEOUT = { title: 'Timeout', message: 'Il server non ha risposto in tempo. Riprova tra poco.' };
+const CANCELED = { title: 'Richiesta annullata', message: 'La richiesta è stata annullata.' };
 
-// Messaggi generici per famiglia HTTP — usati quando il codice non è mappato e
-// il backend non fornisce un messaggio umano.
-function statusFamilyMessage(status) {
+// Testo italiano per famiglia HTTP — quando il backend non da' un messaggio e
+// il codice non e' mappato.
+export function statusFamilyMessage(status) {
   if (status == null) return null;
   if (status === 401) return { title: 'Sessione scaduta', message: 'Devi effettuare di nuovo l’accesso.' };
   if (status === 403) return { title: 'Accesso negato', message: 'Non hai i permessi per questa operazione.' };
@@ -125,7 +135,8 @@ function statusFamilyMessage(status) {
 
 function titleForStatus(status) {
   if (status >= 500) return 'Errore del server';
-  if (status === 403 || status === 401) return 'Accesso negato';
+  if (status === 401) return 'Sessione scaduta';
+  if (status === 403) return 'Accesso negato';
   return 'Operazione non riuscita';
 }
 
@@ -139,67 +150,95 @@ export function getErrorCode(err) {
   return null;
 }
 
-// Messaggio umano fornito dal backend nell'envelope (mai l'`err.message` di
-// axios, che può essere "Request failed with status code 500").
-function pickBackendMessage(data) {
-  if (!data || typeof data !== 'object') return null;
-  if (typeof data.message === 'string' && data.message.trim()) return data.message;
-  if (typeof data.detail === 'string' && data.detail.trim()) return data.detail;
-  if (data.detail && typeof data.detail.message === 'string' && data.detail.message.trim()) return data.detail.message;
-  return null;
+// Elenco dei campi di un 422 Pydantic (`detail: [{loc, msg, type}, ...]`).
+function formatValidationList(list) {
+  const parts = list
+    .map((d) => {
+      if (typeof d === 'string') return d;
+      if (!d || typeof d !== 'object') return null;
+      const loc = Array.isArray(d.loc) ? d.loc.join('.') : d.loc;
+      const msg = typeof d.msg === 'string' && d.msg ? d.msg : 'valore non valido';
+      return loc ? `${loc}: ${msg}` : msg;
+    })
+    .filter(Boolean);
+  return parts.length ? parts.join('; ') : null;
 }
 
+const nonEmpty = (v) => (typeof v === 'string' && v.trim() ? v : null);
+
 /**
- * Traduce un errore in { title, message } sempre umano.
+ * Messaggio fornito dal backend nel corpo dell'errore, o null.
+ * Precedenza: envelope `message` → `detail` stringa → elenco 422 →
+ * `detail.message` → `details.message`.
+ */
+export function backendMessage(data) {
+  if (!data || typeof data !== 'object') return null;
+  const detail = data.detail;
+  return nonEmpty(data.message)
+    || nonEmpty(detail)
+    || (Array.isArray(detail) ? formatValidationList(detail) : null)
+    || (detail && typeof detail === 'object' ? nonEmpty(detail.message) : null)
+    || (data.details && typeof data.details === 'object' ? nonEmpty(data.details.message) : null);
+}
+
+const PROGRAM_ERRORS = new Set(['TypeError', 'ReferenceError', 'SyntaxError', 'RangeError', 'URIError', 'EvalError']);
+
+/**
+ * Traduce un errore in { title, message } sempre umano (regola in testa al file).
  * @param {unknown} err - AxiosError, Error JS, stringa, o oggetto risultato.
  * @returns {{title: string, message: string}}
  */
 export function humanizeError(err) {
   if (err == null) return GENERIC;
-  if (typeof err === 'string') return { title: 'Errore', message: err };
+  if (typeof err === 'string') return err.trim() ? { title: 'Errore', message: err } : GENERIC;
   if (typeof err !== 'object') return GENERIC;
 
-  // 1) Codice di dominio mappato → messaggio curato.
-  const code = getErrorCode(err);
-  if (code && ERROR_MESSAGES[code]) return ERROR_MESSAGES[code];
-
   const resp = err.response;
-  const status = resp?.status ?? err.status;
+  const status = resp?.status ?? (typeof err.status === 'number' ? err.status : null);
+  const code = getErrorCode(err);
+  const curated = code ? ERROR_MESSAGES[code] : null;
 
-  // 2) Nessuna response HTTP → rete / timeout / errore JS locale.
+  // 1) Messaggio del backend.
+  const fromBackend = backendMessage(resp?.data);
+  if (fromBackend) {
+    return { title: curated?.title || titleForStatus(status), message: fromBackend };
+  }
+  // 2) Codice di dominio mappato.
+  if (curated) return curated;
+
+  // 3) Nessuna risposta HTTP: rete, timeout, annullata, oppure errore locale.
   if (!resp && status == null) {
     const axiosCode = err.code;
-    if (axiosCode === 'ECONNABORTED') return TIMEOUT;
-    if (axiosCode === 'ERR_NETWORK') return NETWORK;
-    if (typeof err.message === 'string' && err.message.trim()) {
-      return { title: 'Errore', message: err.message };
-    }
-    return GENERIC;
+    if (axiosCode === 'ECONNABORTED' || axiosCode === 'ETIMEDOUT') return TIMEOUT;
+    if (axiosCode === 'ERR_CANCELED' || err.name === 'CanceledError') return CANCELED;
+    if (axiosCode === 'ERR_NETWORK' || err.isAxiosError) return NETWORK;
+    if (PROGRAM_ERRORS.has(err.name)) return GENERIC;
+    const local = nonEmpty(err.message);
+    return local ? { title: 'Errore', message: local } : GENERIC;
   }
 
-  // 3) C'è uno status: preferisci il messaggio umano del backend, poi il
-  //    generico per famiglia. Mai l'err.message grezzo di axios.
-  const backendMsg = pickBackendMessage(resp?.data);
-  if (backendMsg) return { title: titleForStatus(status), message: backendMsg };
-  const fam = statusFamilyMessage(status);
-  if (fam) return fam;
-  return GENERIC;
-}
-
-/** Comodità: solo il testo del messaggio. */
-export function humanizeErrorMessage(err) {
-  return humanizeError(err).message;
+  // 4) Famiglia HTTP.
+  return statusFamilyMessage(status) || GENERIC;
 }
 
 /**
- * Messaggio di un errore di una richiesta il cui esito specifico conta
- * (stima prima di avviare, valori della colonna, avvio): il messaggio umano
- * del backend se c'e' (anche con un codice generico come validation_error),
- * altrimenti humanizeError (rete, timeout, famiglia HTTP). Mai il testo
- * grezzo di axios ("Network Error", "Request failed with status code ...").
+ * Il testo da mostrare per un errore (toast, banner, campo di errore).
+ * E' `humanizeError(err).message`: una sola regola per tutte le pagine.
+ * `fallback` (facoltativo) sostituisce solo il testo generico finale, quando
+ * l'errore non dice nulla di piu' (per esempio "cURL non valido").
  */
-export function requestErrorMessage(err) {
-  return pickBackendMessage(err?.response?.data) || humanizeError(err).message;
+export function requestErrorMessage(err, fallback) {
+  const h = humanizeError(err);
+  return h === GENERIC && fallback ? fallback : h.message;
 }
+
+/** Il testo come frase chiusa (per comporlo con altre frasi). */
+export function asSentence(text) {
+  const t = String(text ?? '').trim();
+  return !t || /[.!?…]$/.test(t) ? t : `${t}.`;
+}
+
+/** Stesso testo di requestErrorMessage (nome storico usato dalle pagine admin). */
+export const humanizeErrorMessage = requestErrorMessage;
 
 export default humanizeError;

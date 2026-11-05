@@ -39,6 +39,7 @@ import { createDataSource } from '../api/datasources';
 import { can, role } from '../utils/permissions';
 import '../styles/ApiConnectionManager.css';
 import '../components/panels/ResponseConfigBuilder.css';
+import { requestErrorMessage } from '../utils/errorMessages';
 const CATEGORIES = [
   { id:'all',        label:'Tutte',       icon:'🔗' },
   { id:'geocoding',  label:'Geocoding',   icon:'🌍' },
@@ -144,7 +145,7 @@ function ApiConnectionManager() {
       setApiConnections(d.api_connections || []);
     } catch (e) {
       console.error('[ApiConnectionManager] loadApiConnections fallito:', e);
-      const msg = e?.response?.data?.message || e?.message || 'Errore caricamento API connections';
+      const msg = requestErrorMessage(e, 'Errore caricamento API connections');
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -225,7 +226,7 @@ const openWizardForNew = () => {
   };
   const runQuickTest = async (api, extraParams) => {
     try { const r=await testApiConnection(api.id,{test_params:{...(api.static_parameters||{}),...extraParams}}); setQuickTestInput(null); setQuickTestResult({api,result:r}); }
-    catch(e) { setQuickTestInput(null); setQuickTestResult({api,result:{success:false,error:e.message}}); }
+    catch(e) { setQuickTestInput(null); setQuickTestResult({api,result:{success:false,error:requestErrorMessage(e)}}); }
   };
 
   return (

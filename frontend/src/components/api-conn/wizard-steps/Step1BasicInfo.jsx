@@ -7,6 +7,7 @@
  * Presentational.
  */
 import React, { useState } from 'react';
+import { requestErrorMessage } from '../../../utils/errorMessages';
 
 export default function Step1BasicInfo({ formData, setFormData, onImportCurl }) {
   const [curlText, setCurlText] = useState('');
@@ -20,7 +21,7 @@ export default function Step1BasicInfo({ formData, setFormData, onImportCurl }) 
         : '';
       setCurlStatus({ type: 'ok', message: `cURL importato${suffix}` });
     } catch (err) {
-      setCurlStatus({ type: 'err', message: err.message || 'cURL non valido' });
+      setCurlStatus({ type: 'err', message: requestErrorMessage(err, 'cURL non valido') });
     }
   };
 

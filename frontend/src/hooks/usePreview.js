@@ -8,7 +8,7 @@
  */
 import { useState, useCallback, useRef } from 'react';
 import { previewProject } from '../api';
-import { humanizeError } from '../utils/errorMessages';
+import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 import { useTaskPolling } from './useTaskPolling';
 import { PREVIEW_ROW_LIMIT } from '../utils/previewFormat';
 import { taskFailureMessage } from '../utils/taskFailureMessage';
@@ -46,7 +46,7 @@ export function usePreview(projectId, onBeforePreview = null) {
         setShowModal(true);
         setLoading(false);
         setData(null);
-        setError(`Salvataggio non riuscito: ${humanizeError(err).message || err?.message || 'errore'}`);
+        setError(`Salvataggio non riuscito: ${requestErrorMessage(err)}`);
         return;
       }
     }

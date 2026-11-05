@@ -50,7 +50,7 @@ import {
 import useRuntimeInputDefinitions from '../../hooks/useRuntimeInputDefinitions';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import useCanvasStore from '../../store/useCanvasStore';
-import { requestErrorMessage } from '../../utils/errorMessages';
+import { requestErrorMessage, backendMessage } from '../../utils/errorMessages';
 
 const OUTPUT_TYPES = new Set(['result', 'resultNode']);
 const outputId = (nodes) => (nodes || []).find(n => OUTPUT_TYPES.has(n.type))?.id || null;
@@ -176,7 +176,7 @@ export default function PipelineRunner({ user = null }) {
         values: { ...initialInputValues(definitions), ...(inputs || {}) },
         preflightKey: inputsKey(runInputs(definitions, { ...initialInputValues(definitions), ...(inputs || {}) })),
         ...estimate,
-        changedMessage: e?.message || 'La preparazione è cambiata dalla stima.',
+        changedMessage: backendMessage(e?.response?.data) || 'La preparazione è cambiata dalla stima.',
       });
       return true;
     }

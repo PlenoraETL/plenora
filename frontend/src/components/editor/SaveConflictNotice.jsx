@@ -12,6 +12,7 @@
 import React, { useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { overwriteServer, reloadServerVersion } from '../../utils/serverActions';
+import { requestErrorMessage, asSentence } from '../../utils/errorMessages';
 
 const hhmm = (iso) => {
   const t = iso ? Date.parse(iso) : NaN;
@@ -38,7 +39,7 @@ export default function SaveConflictNotice() {
     try {
       await overwriteServer();
     } catch (e) {
-      setProblem(`Sovrascrittura non riuscita: ${e?.message || 'errore di comunicazione col server'}.`);
+      setProblem(`Sovrascrittura non riuscita: ${asSentence(requestErrorMessage(e))}`);
     } finally {
       setBusy(false);
     }

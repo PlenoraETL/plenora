@@ -19,6 +19,7 @@ import {
   collectScalarFields,
   extractRowsFromConfig,
 } from './response-config/responseConfigEngine';
+import { requestErrorMessage } from '../../utils/errorMessages';
 
 /**
  * ResponseConfigBuilder - Componente visuale per configurare l'estrazione
@@ -191,7 +192,7 @@ function ResponseConfigBuilder({
       
       setPreviewData(rows.slice(0, 10)); // Max 10 righe preview
     } catch (err) {
-      setPreviewError(err.message);
+      setPreviewError(requestErrorMessage(err, 'Anteprima non disponibile: controlla percorso e mappature.'));
       setPreviewData(null);
     }
   }, [sampleData, rootPath, iterateOn, mappings, transforms]);

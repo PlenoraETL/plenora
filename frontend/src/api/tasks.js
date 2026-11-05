@@ -17,6 +17,7 @@
 
 import http from './http';
 import { downloadBlob } from '../utils/downloadBlob';
+import { requestErrorMessage } from '../utils/errorMessages';
 
 /**
  * Restituisce lo stato corrente di un task asincrono.
@@ -127,7 +128,7 @@ export const cleanupTaskCompletely = async (taskId) => {
     return {
       partialCleanup: true,
       networkError: true,
-      errorMessage: e?.message || String(e),
+      errorMessage: requestErrorMessage(e),
     };
   }
 };

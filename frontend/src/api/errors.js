@@ -7,6 +7,8 @@
  * Questo modulo è l'unico posto che la interpreta lato FE.
  */
 
+import { backendMessage } from '../utils/errorMessages';
+
 /**
  * Riconosce un AxiosError 409 cascade-delete e ritorna i campi normalizzati,
  * o null se non è un 409 cascade riconosciuto.
@@ -43,7 +45,7 @@ export function handleCascade409(err) {
   );
   return {
     error: errorCode,
-    message: err.message || data?.message || (typeof source.message === 'string' ? source.message : ''),
+    message: backendMessage(data) || (typeof source.message === 'string' ? source.message : ''),
     dependencies: source.dependencies,
     hiddenCount,
   };

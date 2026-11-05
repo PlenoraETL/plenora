@@ -22,7 +22,7 @@ import { listGroups } from '../../api/users';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../hooks/useToast';
 import { can } from '../../utils/permissions';
-import { humanizeError } from '../../utils/errorMessages';
+import { humanizeError, requestErrorMessage } from '../../utils/errorMessages';
 import './AllowedGroupsSelector.css';
 
 const MAGIC_ALL = '*';
@@ -172,7 +172,7 @@ function AllowedGroupsSelectorPanel({
       toast.success('Condivisione aggiornata');
       if (onClose) onClose();
     } catch (e) {
-      const msg = e.message || 'Errore salvataggio condivisione';
+      const msg = requestErrorMessage(e, 'Errore salvataggio condivisione');
       setError(msg);
       toast.error(msg);
     } finally {

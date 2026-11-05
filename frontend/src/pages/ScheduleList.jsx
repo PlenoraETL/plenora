@@ -21,6 +21,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { toastApiError } from '../utils/toastApiError';
 import '../styles/ScheduleList.css';
+import { requestErrorMessage, backendMessage } from '../utils/errorMessages';
 const formatDate = (s) => {
   if (!s) return '—';
   return new Date(s).toLocaleDateString('it-IT', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
@@ -207,7 +208,7 @@ function ScheduleList() {
       // vedeva la pagina vuota senza spiegazione se listSchedules
       // falliva (auth, network, DB transient).
       console.error('[ScheduleList] load fallito:', err);
-      const msg = err?.response?.data?.message || err?.message || 'Errore caricamento schedules';
+      const msg = requestErrorMessage(err, 'Errore caricamento schedules');
       toast.error(msg);
     } finally {
       loadedOnceRef.current = true;
@@ -259,11 +260,11 @@ function ScheduleList() {
         return;
       }
       if (status === 409) {
-        const detail = e?.response?.data?.message || 'esecuzione in corso o dipendenza attiva';
+        const detail = backendMessage(e?.response?.data) || 'esecuzione in corso o dipendenza attiva';
         toast.error(`Impossibile eliminare: ${detail}`);
         return;
       }
-      const msg = e?.response?.data?.message || e.message || 'errore sconosciuto';
+      const msg = requestErrorMessage(e);
       toast.error(`Errore eliminazione: ${msg}`);
     }
   };

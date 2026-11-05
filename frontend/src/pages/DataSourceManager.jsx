@@ -17,7 +17,7 @@ import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { toastApiError } from '../utils/toastApiError';
-import { humanizeError } from '../utils/errorMessages';
+import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 import useDialogFocus from '../hooks/useDialogFocus';
 import { can, role } from '../utils/permissions';
 import '../styles/DataSourceManager.css';
@@ -126,7 +126,7 @@ export default function DataSourceManager() {
   const handleTest = async id => {
     setTestingId(id); setTestResults(prev => ({ ...prev, [id]: null }));
     try { const r = await testDataSource(id); setTestResults(prev => ({ ...prev, [id]: r })); }
-    catch (e) { setTestResults(prev => ({ ...prev, [id]: { success:false, message:e.message } })); }
+    catch (e) { setTestResults(prev => ({ ...prev, [id]: { success:false, message:requestErrorMessage(e) } })); }
     finally { setTestingId(null); }
   };
 
@@ -161,7 +161,7 @@ export default function DataSourceManager() {
   const browseFiles = async (dsId, path) => {
     setBrowserLoading(true); setBrowserError(null); setBrowserPath(path);
     try { const files = await listFiles(dsId, { path }); setBrowserFiles(files); }
-    catch (e) { setBrowserError(e.message); }
+    catch (e) { setBrowserError(requestErrorMessage(e)); }
     finally { setBrowserLoading(false); }
   };
   const closeBrowser = () => { setBrowserDs(null); setBrowserFiles([]); setBrowserPath(''); };

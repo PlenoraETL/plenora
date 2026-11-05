@@ -73,7 +73,7 @@ function InputField({ definition, value, onChange }) {
 
 const nodeProblems = (node) => [
   node?.message,
-  ...(Array.isArray(node?.errors) ? node.errors.map(e => (typeof e === 'string' ? e : e?.message)) : []),
+  ...(Array.isArray(node?.errors) ? node.errors.map(item => (typeof item === 'string' ? item : item?.message)) : []),
 ].filter(Boolean);
 
 function EstimateSection({ state, nodeLabel, onRetry }) {

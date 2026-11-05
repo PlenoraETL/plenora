@@ -7,6 +7,7 @@ const { navigateMock, httpMock, emitLogoutMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   httpMock: {
     post: vi.fn(),
+    get: vi.fn(() => Promise.reject(new Error('non usato'))),
   },
   emitLogoutMock: vi.fn(),
 }));
@@ -232,5 +233,76 @@ describe('AuthContext contract', () => {
     expect(httpMock.post).not.toHaveBeenCalled();
     // Il clear locale e' no-op ma emitLogout parte lo stesso (cache in-memory).
     expect(emitLogoutMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// T3 / R5.3 + R5.9
+describe('AuthContext: profilo dal server e value stabile', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+  });
+
+  it('R5.3: alla ripresa della sessione ruolo e gruppo vengono da GET /auth/me', async () => {
+    sessionStorage.setItem('urby_token', 'jwt-1');
+    sessionStorage.setItem('urby_user', JSON.stringify({ user_id: 'u1', username: 'alice', group_id: 'g1', role: 'admin' }));
+    httpMock.get.mockResolvedValueOnce({ data: { id: 'u1', username: 'alice', group_id: 'g2', role: 'user' } });
+
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <AuthProbe />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('role')).toHaveTextContent('admin');
+    await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('user'));
+    expect(httpMock.get).toHaveBeenCalledWith('/auth/me');
+    expect(JSON.parse(sessionStorage.getItem('urby_user'))).toEqual({
+      user_id: 'u1', username: 'alice', group_id: 'g2', role: 'user',
+    });
+  });
+
+  it('R5.3: senza sessione non chiama /auth/me', async () => {
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <AuthProbe />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    expect(httpMock.get).not.toHaveBeenCalled();
+  });
+
+  it('R5.9: un re-render del provider non cambia il value (i consumer non si ri-renderizzano)', () => {
+    sessionStorage.setItem('urby_token', 'jwt-1');
+    sessionStorage.setItem('urby_user', JSON.stringify({ user_id: 'u1', username: 'alice', role: 'user' }));
+    const seen = [];
+    function Capture() {
+      seen.push(useAuth());
+      return null;
+    }
+    const MemoCapture = React.memo(Capture);
+    const parseSpy = vi.spyOn(JSON, 'parse');
+    const tree = (n) => (
+      <MemoryRouter>
+        <AuthProvider>
+          <span>{n}</span>
+          <MemoCapture />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+    const { rerender } = render(tree(1));
+    const parsesAfterMount = parseSpy.mock.calls.length;
+    rerender(tree(2));
+    rerender(tree(3));
+    const parsesAfterRerender = parseSpy.mock.calls.length;
+    parseSpy.mockRestore();
+
+    expect(seen).toHaveLength(1);
+    // Lo storage si legge solo al primo render.
+    expect(parsesAfterMount).toBeGreaterThan(0);
+    expect(parsesAfterRerender).toBe(parsesAfterMount);
   });
 });

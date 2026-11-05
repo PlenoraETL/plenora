@@ -15,6 +15,7 @@ import React, { useState } from 'react';
 import { changeMyPassword } from '../api/users';
 import ModalWrapper, { ModalButton } from './common/ModalWrapper';
 import './ChangePasswordModal.css';
+import { requestErrorMessage } from '../utils/errorMessages';
 
 export default function ChangePasswordModal({ onClose }) {
   const [oldPwd, setOldPwd] = useState('');
@@ -40,7 +41,7 @@ export default function ChangePasswordModal({ onClose }) {
       setSuccess(true);
       setTimeout(() => onClose(), 1500);
     } catch (e) {
-      const msg = e?.message || 'Errore durante il cambio password';
+      const msg = requestErrorMessage(e, 'Errore durante il cambio password');
       setError(msg);
     } finally {
       setLoading(false);

@@ -124,7 +124,7 @@ function ProjectList() {
       const detail = err?.response?.data?.detail;
       const errorCode = err?.code || (detail && typeof detail === 'object' ? detail.error : null);
       if (err?.response?.status === 500 && errorCode === 'project_cleanup_partial') {
-        const cleanupMsg = (detail && typeof detail === 'object' ? detail.message : null) || err.message || 'cleanup parziale';
+        const cleanupMsg = humanizeErrorMessage(err, 'cleanup parziale');
         toast.error(
           `Impossibile eliminare "${name}": ${cleanupMsg}. Ritenta o contatta admin.`,
           10000

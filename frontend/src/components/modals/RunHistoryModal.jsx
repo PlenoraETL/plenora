@@ -16,6 +16,8 @@ import ModalWrapper from '../common/ModalWrapper';
 import { listRuns, getNodeData, compareRunsL1, compareRunsL2, pinRun } from '../../api/runs';
 import './RunHistoryModal.css';
 import { term } from '../../utils/glossary';
+import { requestErrorMessage, backendMessage } from '../../utils/errorMessages';
+import { errorReason } from '../../api/errors';
 
 /**
  * Mappa un errore di /compare/l2 al messaggio user-facing in base al
@@ -108,7 +110,7 @@ const loadRuns = useCallback(async () => {
         setSelectedA(data[0]);
       }
     } catch (e) {
-      setRunsError('Errore nel caricamento delle esecuzioni');
+      setRunsError(`Errore nel caricamento delle esecuzioni: ${requestErrorMessage(e)}`);
     } finally {
       setRunsLoading(false);
     }
@@ -138,7 +140,7 @@ const [nodeDataError, setNodeDataError] = useState(null);
         // Prima: catch silenzioso → l'utente vedeva area dati vuota senza spiegazione.
         console.error('[RunHistoryModal] errore caricamento dati nodo:', err);
         setNodeData(null);
-        setNodeDataError(err?.message || 'Errore nel caricamento dei dati del passo');
+        setNodeDataError(requestErrorMessage(err, 'Errore nel caricamento dei dati del passo'));
       })
       .finally(() => setNodeDataLoading(false));
   }, [selectedA, nodeId]);
@@ -161,10 +163,9 @@ useEffect(() => {
       .catch((err) => {
         // PR-A UX Tier 1: backend (intermediate/router.py) ritorna 422
         // con details.reason (new envelope) o detail.reason (legacy).
-        const details = err?.response?.data?.details;
-        const detail = err?.response?.data?.detail;
-        const reason = details?.reason || detail?.reason;
-        const msg = details?.message || detail?.message || err?.message;
+        const reason = errorReason(err);
+        const msg = backendMessage(err?.response?.data)
+          || (reason ? null : requestErrorMessage(err, 'Errore durante il confronto'));
         setCompareError(mapCompareErrorReason(reason, msg));
       })
       .finally(() => setCompareLoading(false));

@@ -22,6 +22,21 @@ const subscribers = new Set();
 let initialized = false;
 let currentTheme = DEFAULT_THEME;
 
+// R5.10: con lo storage bloccato (criteri aziendali, cookie disattivati)
+// getItem/setItem lanciano. Il tema funziona lo stesso, solo non si ricorda.
+const readStoredTheme = () => {
+  try {
+    const v = window.localStorage.getItem(STORAGE_KEY);
+    return v === 'light' || v === 'dark' ? v : null;
+  } catch {
+    return null;
+  }
+};
+
+const storeTheme = (t) => {
+  try { window.localStorage.setItem(STORAGE_KEY, t); } catch { /* non persistito */ }
+};
+
 const applyTheme = (t) => {
   document.documentElement.setAttribute('data-theme', t);
 };
@@ -29,7 +44,7 @@ const applyTheme = (t) => {
 const ensureInit = () => {
   if (!initialized) {
     initialized = true;
-    currentTheme = localStorage.getItem(STORAGE_KEY) || DEFAULT_THEME;
+    currentTheme = readStoredTheme() || DEFAULT_THEME;
     applyTheme(currentTheme);
   }
   return currentTheme;
@@ -42,7 +57,7 @@ const broadcast = (t) => {
 
 const writeTheme = (t) => {
   applyTheme(t);
-  localStorage.setItem(STORAGE_KEY, t);
+  storeTheme(t);
   broadcast(t);
 };
 

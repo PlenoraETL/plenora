@@ -23,6 +23,8 @@
  * costante esposta. Override in test via spy/mock import diretto.
  */
 
+import { backendMessage } from '../utils/errorMessages';
+
 /** Cap massimo upload in byte. Allineato a `settings.MAX_FILE_SIZE`
  * backend (`app/config.py:139`, default 100MB). */
 export const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024;
@@ -84,10 +86,8 @@ export function assertFileSize(file, opts = {}) {
 export function extract413Message(error) {
   if (!error || error.response?.status !== 413) return null;
   const data = error.response.data;
-  if (typeof data === 'string') return data;
-  if (data && typeof data.detail === 'string') return data.detail;
-  if (data && typeof data.message === 'string') return data.message;
-  return 'File troppo grande: rifiutato dal server.';
+  if (typeof data === 'string' && data.trim()) return data;
+  return backendMessage(data) || 'File troppo grande: rifiutato dal server.';
 }
 
 /**

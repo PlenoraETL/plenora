@@ -27,6 +27,7 @@ import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { can, role } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
 import '../styles/ConnectionManager.css';
+import { requestErrorMessage } from '../utils/errorMessages';
 
 const ALL_TYPES = [
   { value: 'postgres', label: '🐘 PostgreSQL',   color: '#4B8BFF', colorRgb: '75,139,255',  defaultPort: 5432, defaultSchema: 'public', category: 'database' },
@@ -94,15 +95,11 @@ function ConnectionManager() {
 
       // Segnaliamo all'utente quale partial-failure e' avvenuta
       if (dbResult.status === 'rejected') {
-        const msg = dbResult.reason?.response?.data?.message
-          || dbResult.reason?.message
-          || 'Errore caricamento connessioni DB';
+        const msg = requestErrorMessage(dbResult.reason, 'Errore caricamento connessioni DB');
         toast.warning(`Connessioni database non caricate: ${msg}`);
       }
       if (arcResult.status === 'rejected') {
-        const msg = arcResult.reason?.response?.data?.message
-          || arcResult.reason?.message
-          || 'Errore caricamento connessioni ArcGIS';
+        const msg = requestErrorMessage(arcResult.reason, 'Errore caricamento connessioni ArcGIS');
         toast.warning(`Connessioni ArcGIS non caricate: ${msg}`);
       }
     } catch (err) {

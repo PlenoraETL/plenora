@@ -24,6 +24,7 @@ import { bindingListResolution, isParameterBindingEdge, uniqueDataEdges } from '
 import { EDITOR_ACTION_NAMES } from '../components/editor/editorActions';
 import { hasUnsavedChanges } from './saveState';
 import { derivedColumnsForSave } from './useColumnStore';
+import { requestErrorMessage } from '../utils/errorMessages';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
@@ -136,7 +137,7 @@ export const createCanvasStore = () => create(
             } catch (err) {
               // Dopo un errore niente risalvataggi automatici: decide l'utente.
               saveRequested = false;
-              if (sameProject()) set({ saveStatus: 'error', saveError: err?.message || 'Salvataggio non riuscito' }, false, 'save:error');
+              if (sameProject()) set({ saveStatus: 'error', saveError: requestErrorMessage(err, 'Salvataggio non riuscito') }, false, 'save:error');
               throw err;
             }
 

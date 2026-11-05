@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import AppSidebar from '../components/AppSidebar';
 import { getSystemStatus } from '../api/adminSystemStatus';
 import '../styles/AdminSystemStatusPage.css';
+import { requestErrorMessage } from '../utils/errorMessages';
 const STATUS_LABELS = { ok: 'OK', warn: 'WARN', error: 'ERRORE', unknown: 'N/D' };
 const STATUS_ICONS = { ok: '✓', warn: '⚠', error: '✗', unknown: '?' };
 
@@ -336,7 +337,7 @@ export default function AdminSystemStatusPage() {
       setRefreshedAt(new Date());
       setLastError(null);
     } catch (e) {
-      setLastError(e.message || 'Errore caricamento');
+      setLastError(requestErrorMessage(e, 'Errore caricamento'));
     } finally {
       setLoading(false);
     }

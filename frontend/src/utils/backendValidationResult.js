@@ -9,6 +9,7 @@
  */
 
 import { buildResult, createIssue } from './canvasValidationContract';
+import { requestErrorMessage, asSentence } from './errorMessages';
 
 /**
  * Mappa un singolo issue backend nel ValidationIssue FE.
@@ -71,7 +72,7 @@ export function saveFailedResult(err) {
   return buildResult([createIssue({
     id: 'SAVE_FAILED',
     severity: 'error',
-    message: `Salvataggio non riuscito: ${err?.message || 'errore di comunicazione col server'}. Niente è stato validato o eseguito.`,
+    message: `Salvataggio non riuscito: ${asSentence(requestErrorMessage(err))} Niente è stato validato o eseguito.`,
     source: 'frontend',
   })]);
 }

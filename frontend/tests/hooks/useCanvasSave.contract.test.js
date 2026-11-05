@@ -50,7 +50,8 @@ describe('useCanvasSave', () => {
       });
 
       expect(save).toHaveBeenCalledTimes(1);
-      expect(toastMock.error).toHaveBeenCalledWith('Errore durante il salvataggio');
+      // T3: il motivo arriva dalla normalizzazione unica (qui un errore locale).
+      expect(toastMock.error).toHaveBeenCalledWith('Errore durante il salvataggio: boom');
       expect(toastMock.success).not.toHaveBeenCalled();
       expect(result.current.saving).toBe(false);
     } finally {

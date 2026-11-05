@@ -17,6 +17,7 @@ import { useTaskPolling } from './useTaskPolling';
 import useCanvasStore from '../store/useCanvasStore';
 import { taskFailureMessage } from '../utils/taskFailureMessage';
 import { isPreparationChanged } from '../utils/beforeRun';
+import { requestErrorMessage } from '../utils/errorMessages';
 
 export function useExecution(projectId, options = {}) {
   const {
@@ -267,7 +268,7 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
       }
       setProgress(0);
       setTaskStatus('failure');
-      setResult({ success: false, message: error.message || 'Errore' });
+      setResult({ success: false, message: requestErrorMessage(error) });
     }
   }, [projectId, onBeforeExecute, executeFunction, startMainPolling, startCaricaTasksPolling, stopAllCaricaPolling, mountedRef]);
 

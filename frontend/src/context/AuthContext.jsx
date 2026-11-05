@@ -8,10 +8,11 @@
  * Uso: const { user, token, login, logout } = useAuth();
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authBus } from '../utils/authBus';
 import { login as apiLogin, logout as apiLogout } from '../api/auth';
+import { getMe } from '../api/users';
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = 'urby_token';
@@ -29,9 +30,9 @@ function loadFromStorage() {
 }
 
 export function AuthProvider({ children }) {
-  const { token: savedToken, user: savedUser } = loadFromStorage();
-  const [token, setToken] = useState(savedToken);
-  const [user,  setUser]  = useState(savedUser);
+  // R5.9: lo storage si legge una volta sola, al primo render.
+  const [token, setToken] = useState(() => loadFromStorage().token);
+  const [user,  setUser]  = useState(() => loadFromStorage().user);
   const navigate = useNavigate();
 
   const logout = useCallback(() => {
@@ -95,8 +96,45 @@ export function AuthProvider({ children }) {
     return userData;
   }, []);
 
+  // R5.3: ruolo e gruppo vengono dal server (GET /auth/me), non solo dalla
+  // copia in sessionStorage: alla ripresa della scheda (ricarica, ritorno sulla
+  // finestra) il profilo si riallinea, quindi un admin declassato perde le
+  // rotte /admin senza aspettare la scadenza del token. Un 401 qui chiude la
+  // sessione nell'interceptor come per ogni altra richiesta.
+  useEffect(() => {
+    const refresh = () => {
+      const sent = sessionStorage.getItem(TOKEN_KEY);
+      if (!sent) return;
+      Promise.resolve()
+        .then(() => getMe())
+        .then((me) => {
+          // Risposta di una sessione che non c'e' piu': si ignora.
+          if (!me || sessionStorage.getItem(TOKEN_KEY) !== sent) return;
+          setUser((prev) => {
+            if (!prev) return prev;
+            const next = { ...prev, username: me.username ?? prev.username, group_id: me.group_id ?? prev.group_id, role: me.role ?? prev.role };
+            if (next.username === prev.username && next.group_id === prev.group_id && next.role === prev.role) return prev;
+            sessionStorage.setItem(USER_KEY, JSON.stringify(next));
+            return next;
+          });
+        })
+        .catch(() => { /* rete o 401: gestiti altrove, il profilo resta */ });
+    };
+    refresh();
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
+  // R5.9: il value cambia solo quando cambia la sessione.
+  const value = useMemo(() => ({ user, token, login, logout }), [user, token, login, logout]);
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

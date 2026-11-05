@@ -7,6 +7,7 @@ import DbAdvancedOptions from './DbAdvancedOptions';
 import ConflictModal from './ConflictModal';
 import { dataFlowEdges } from '../../../utils/runtimeBindingEdges';
 import useCanvasStore from '../../../store/useCanvasStore';
+import { requestErrorMessage } from '../../../utils/errorMessages';
 
 // Labels e descrizioni sono UX, restano locali. I `value` arrivano da
 // `canvasTypes.WRITE_MODES` (single source of truth allineata col BE);
@@ -155,7 +156,7 @@ function DbDestinationSection({
       setConflictReport(result);
       setShowConflictModal(true);
     } catch (err) {
-      setConflictError(err?.message || 'Errore durante il controllo dei conflitti');
+      setConflictError(requestErrorMessage(err, 'Errore durante il controllo dei conflitti'));
       setShowConflictModal(true);
     } finally {
       setIsCheckingConflicts(false);

@@ -75,7 +75,7 @@ const parseOpenAPISchema = (schema) => {
         });
       });
       return { baseUrl, apiName, apiDescription, endpoints, securitySchemes: spec.components?.securitySchemes||{} };
-    } catch (e) { throw new Error(`Errore parsing OpenAPI: ${e.message}`); }
+    } catch (e) { throw new Error('Errore parsing OpenAPI: lo schema non è un documento OpenAPI leggibile.', { cause: e }); }
   };
 
   const autoDetectAuth = (schemes, baseUrl) => {

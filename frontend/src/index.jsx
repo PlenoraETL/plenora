@@ -9,6 +9,7 @@ import App from './App';
 import { FRONTEND_ENV } from './config/runtimeEnv';
 import { installChunkReload } from './utils/chunkReload';
 import { installDraftHousekeeping } from './utils/localDrafts';
+import { setErrorReporter } from './utils/errorReporting';
 import './styles/App.css';
 
 // Dopo un deploy: un editor della build vecchia non si trova piu' -> si
@@ -32,6 +33,8 @@ if (SENTRY_DSN) {
         tracesSampleRate: FRONTEND_ENV.sentryTracesSampleRate,
         sendDefaultPii: false,
       });
+      // Gli Error Boundary inviano a Sentry gli errori che catturano (R5.7).
+      setErrorReporter(Sentry);
     })
     .catch(() => { /* tracking non bloccante: se Sentry non carica, l'app prosegue */ });
 }

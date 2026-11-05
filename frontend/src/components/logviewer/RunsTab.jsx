@@ -9,6 +9,7 @@ import { getLogRuns } from '../../api/logRuns';
 import { fmtDuration, fmtRows, formatTime, truncateProjectId } from '../../utils/logViewerHelpers.jsx';
 import { useToast } from '../../hooks/useToast';
 import RunDetail from './RunDetail';
+import { requestErrorMessage } from '../../utils/errorMessages';
 
 const MODULE_COLORS = {
   estrai: '#34C17A', manipola: '#9B6DFF', arricchisci: '#F5A623', carica: '#4B8BFF',
@@ -54,7 +55,7 @@ export default function RunsTab({ refreshTick = 0 }) {
       // Prima: catch{} silenzioso → l'utente vedeva tabella vuota senza spiegazione.
       // Ora: log + toast + stato di errore visibile inline.
       console.error('[RunsTab] errore caricamento runs:', err);
-      const msg = err?.message || 'Errore sconosciuto';
+      const msg = requestErrorMessage(err);
       setLoadError(msg);
       toast.error(`Errore caricamento esecuzioni: ${msg}`);
       setRuns([]);

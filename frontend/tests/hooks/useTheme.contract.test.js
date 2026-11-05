@@ -96,3 +96,23 @@ describe('useTheme', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
 });
+
+// T3 / R5.10: storage bloccato (criteri aziendali, cookie disattivati).
+describe('useTheme con localStorage bloccato', () => {
+  it('non lancia: tema di default, e il cambio di tema funziona senza ricordarlo', async () => {
+    const useTheme = await importFreshHook();
+    const blocked = () => { throw new DOMException('blocked', 'SecurityError'); };
+    const getSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(blocked);
+    const setSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(blocked);
+    try {
+      const { result } = renderHook(() => useTheme());
+      expect(result.current.theme).toBe('dark');
+      act(() => { result.current.setTheme('light'); });
+      expect(result.current.theme).toBe('light');
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    } finally {
+      getSpy.mockRestore();
+      setSpy.mockRestore();
+    }
+  });
+});

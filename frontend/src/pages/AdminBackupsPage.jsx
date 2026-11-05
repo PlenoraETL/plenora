@@ -21,6 +21,7 @@ import AppSidebar from '../components/AppSidebar';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import '../styles/AdminBackupsPage.css';
+import { requestErrorMessage } from '../utils/errorMessages';
 //
 // RB.#9: il backend (RB.2 / admin_backups.router) ora ritorna 503 con
 //        body strutturato `{detail: {error, message}}` quando le credenziali
@@ -34,15 +35,8 @@ import '../styles/AdminBackupsPage.css';
 //         un toast effimero che scompare e lascia l'utente nel buio.
 
 function extractErrorMessage(err) {
-  // Preferisce err.message (gia' normalizzato dall'interceptor http.js).
-  // Fallback a detail per shape legacy non ancora migrata.
-  if (typeof err?.message === 'string' && err.message.trim()) return err.message;
-  const detail = err?.response?.data?.detail;
-  if (typeof detail === 'string' && detail.trim()) return detail;
-  if (detail && typeof detail === 'object') {
-    if (typeof detail.message === 'string' && detail.message.trim()) return detail.message;
-  }
-  return 'Errore generico';
+  // Una sola normalizzazione: utils/errorMessages.
+  return requestErrorMessage(err, 'Errore generico');
 }
 
 function extractErrorCode(err) {

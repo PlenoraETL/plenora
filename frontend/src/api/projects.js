@@ -8,6 +8,7 @@ import http from './http';
 import { fetchAllOffsetPages } from './pagination';
 import { API_ENDPOINT } from './config';
 import { downloadBlob } from '../utils/downloadBlob';
+import { requestErrorMessage } from '../utils/errorMessages';
 
 /**
  * Crea un nuovo progetto.
@@ -52,7 +53,7 @@ export const createProject = async (name, description = '', type = 'estrai', con
         ' inizializzato al primo accesso editor.'
       );
       response.data.canvasInitFailed = true;
-      response.data.canvasInitError = canvasErr?.message || String(canvasErr);
+      response.data.canvasInitError = requestErrorMessage(canvasErr);
     }
   }
 

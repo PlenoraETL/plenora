@@ -29,6 +29,8 @@ import Step3Auth from './wizard-steps/Step3Auth';
 import Step4Batch from './wizard-steps/Step4Batch';
 import Step5TestSave from './wizard-steps/Step5TestSave';
 import { parseCurlCommand } from '../../utils/curlImport';
+import { requestErrorMessage } from '../../utils/errorMessages';
+import { toastApiError } from '../../utils/toastApiError';
 
 export const EMPTY_FORM = {
   name:'', description:'', api_type:'enricher', category:'custom', connection_type:'manual',
@@ -361,7 +363,8 @@ const getCustomHeadersObject = () => {
       onSaved?.();
       onClose?.();
     } catch (e) {
-      toast.error('Errore salvataggio');
+      // N5: il motivo del backend (nome duplicato, auth non valida, 422).
+      toastApiError(toast, e, 'Salvataggio non riuscito');
     }
   };
 
@@ -449,7 +452,7 @@ const getCustomHeadersObject = () => {
       if (result.raw_response) setTestRawResponse(result.raw_response);
       applyTestSampling(result);
     } catch (e) {
-      setTestResult({ success: false, error: e.message });
+      setTestResult({ success: false, error: requestErrorMessage(e) });
     } finally {
       setTesting(false);
     }

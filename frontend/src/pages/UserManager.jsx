@@ -18,7 +18,7 @@ import AppSidebar from '../components/AppSidebar';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
-import { humanizeError } from '../utils/errorMessages';
+import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 import '../styles/UserManager.css';
 function RoleBadge({ role }) {
   const labels = {
@@ -271,7 +271,7 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
       // Pre-fix il catch ingoiava l'errore senza feedback: lo spinner
       // spariva e l'utente non sapeva perche' l'eliminazione fosse
       // fallita. Mostra il messaggio (axios error o nativo) inline.
-      const msg = (e && e.message) ? String(e.message) : 'Eliminazione fallita';
+      const msg = requestErrorMessage(e, 'Eliminazione fallita');
       setErrorMsg(msg);
       setLoading(false);
     }
@@ -311,7 +311,7 @@ function ConfirmDeleteGroupModal({ group, onClose, onConfirm }) {
   useEffect(() => {
     getGroupSummary(group.group_id)
       .then(setSummary)
-      .catch(() => setError('Impossibile caricare il riepilogo del gruppo.'))
+      .catch((e) => setError(`Impossibile caricare il riepilogo del gruppo: ${requestErrorMessage(e)}`))
       .finally(() => setLoading(false));
   }, [group.group_id]);
 

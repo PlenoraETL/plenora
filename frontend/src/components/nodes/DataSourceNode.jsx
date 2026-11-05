@@ -16,6 +16,7 @@ import useDialogFocus from '../../hooks/useDialogFocus';
 import ModalWrapper from '../common/ModalWrapper';
 import './DataSourceNode.css';
 import NodeHandle from '../canvas/NodeHandle';
+import { requestErrorMessage } from '../../utils/errorMessages';
 
 /**
  * DataSourceNode — nodo canvas ESTRAI
@@ -109,7 +110,7 @@ const openBrowser = useCallback(async (path = '') => {
       const files = await listFiles(dsId, { path });
       setBrowserFiles(files);
     } catch (e) {
-      setBrowserError(e.message);
+      setBrowserError(requestErrorMessage(e));
     } finally {
       setBrowserLoading(false);
     }

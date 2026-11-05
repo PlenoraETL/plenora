@@ -13,7 +13,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { AppErrorBoundary } from './components/common/ErrorBoundary';
+import { AppErrorBoundary, RouteErrorBoundary } from './components/common/ErrorBoundary';
 import { ToastProvider } from './context/ToastContext';
 import CommandPalette from './components/common/CommandPalette';
 import KeyboardShortcutsHelp from './components/common/KeyboardShortcutsHelp';
@@ -108,6 +108,8 @@ function SuperadminRoute({ children }) {
 
 function AppRoutes() {
   return (
+    // R5.7: un boundary per pagina, dentro il Router (si azzera cambiando rotta).
+    <RouteErrorBoundary>
     <React.Suspense fallback={
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#6b7280', fontSize: 16 }}>
         Caricamento...
@@ -146,6 +148,7 @@ function AppRoutes() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </React.Suspense>
+    </RouteErrorBoundary>
   );
 }
 
