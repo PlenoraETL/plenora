@@ -13,7 +13,7 @@ from app.core.arricchisci.enrichment_service import build_enrichment_executor
 from app.core.arricchisci.canvas_orchestrator import _merge_node_data
 from app.core.arricchisci.parallel import get_execute_mask
 from app.core.eseguibili.manifest import compile_manifest
-from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
+from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs, apply_test_run_inputs
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.projects.canvas_models import CanvasState
 from app.core.projects.schema_execution_sources import prepare_canvas_data
@@ -23,9 +23,18 @@ from app.shared.execution.runtime_bound_fields import with_runtime_static_parame
 
 
 def prepare_contract(contract: PipelineExecutionContract, inputs: JsonObject, *,
-                     identity: RuntimeIdentity) -> tuple[PipelineExecutionContract, Any]:
+                     identity: RuntimeIdentity | None = None, test_run: bool = False,
+                     ) -> tuple[PipelineExecutionContract, Any]:
+    """Contratto risolto della stima. ``test_run``: «Esegui di prova»
+    (runtime_identity, regola H) con la STESSA funzione dell'avvio
+    (``apply_test_run_inputs``: identita' di prova dal canvas salvato e
+    soggetto ``test_run``), cosi' l'impronta della stima e' quella dell'avvio."""
     manifest = compile_manifest(for_project=True, source_project_id=contract.project_id, project_type=contract.project_type,
                                 canvas=contract.canvas, default_connection_id=contract.runtime_context.get("default_connection_id"))
+    if test_run:
+        return apply_test_run_inputs(contract, inputs), manifest
+    if identity is None:
+        raise ValueError("Identita' della stima non dichiarata")
     return apply_project_runtime_inputs(contract, inputs, identity=identity), manifest
 
 
@@ -33,6 +42,10 @@ def preparation_fingerprint(contract: PipelineExecutionContract, connections: Js
                             force_recalculate: bool = False) -> str:
     content = {"canvas": contract.canvas, "context": contract.runtime_context, "group_id": contract.group_id,
                "connections": connections, "revision": revision, "force_recalculate": force_recalculate}
+    if contract.execution_subject:
+        # Prova ed esecuzione normale non si scambiano l'impronta; senza
+        # soggetto il contenuto (e l'impronta) e' quello di prima.
+        content["subject"] = contract.execution_subject
     return hashlib.sha256(json.dumps(content, sort_keys=True, ensure_ascii=False, default=str, separators=(",", ":")).encode()).hexdigest()
 
 

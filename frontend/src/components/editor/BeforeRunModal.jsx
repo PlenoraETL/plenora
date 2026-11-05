@@ -10,6 +10,10 @@
  *    «Utente che esegue» (tipo impostato dal server) e' una riga in sola
  *    lettura con lo username di chi e' collegato: non si compila e non si
  *    invia, lo mette il server (utils/beforeRun).
+ *  - Esecuzione di prova (`request.testRun`, regola H del backend): sezione
+ *    in cima con l'utente di prova (quello della stima del server, se c'e'),
+ *    dove finisce il risultato e cosa non fa; senza username di prova o con
+ *    due diversi, Avvia spento.
  *  - Stima (Arricchisci): per ogni nodo API righe in ingresso (esatte,
  *    stimate o non conoscibili, campionate), chiamate stimate e motivi. La
  *    stima usa GLI STESSI input dell'avvio: cambiare un input la rifa'.
@@ -125,8 +129,8 @@ function useSignedInUsername() {
 }
 
 // «Utente che esegue»: sola lettura, nessun valore inviato (il server usa
-// l'utente autenticato che avvia).
-function IdentityField({ definition, username }) {
+// l'utente autenticato che avvia, o nella prova lo username di prova salvato).
+function IdentityField({ definition, username, testRun = false }) {
   const id = `before-run-input-${definition.input_key}`;
   return (
     <div className="before-run__row">
@@ -135,11 +139,36 @@ function IdentityField({ definition, username }) {
       </label>
       <input id={id} className="before-run__field" type="text" value={username || ''} readOnly aria-readonly="true" />
       <span className="before-run__hint">
-        {inputKindLabel('current_user')}: lo imposta il server con l'utente che avvia l'esecuzione
-        {username ? '' : ' (utente non disponibile in questa finestra)'}; non si può cambiare.
+        {testRun
+          ? `${inputKindLabel('current_user')}: nell'esecuzione di prova il server usa il nome utente di prova salvato nell'input; non si può cambiare qui.`
+          : `${inputKindLabel('current_user')}: lo imposta il server con l'utente che avvia l'esecuzione${username ? '' : ' (utente non disponibile in questa finestra)'}; non si può cambiare.`}
       </span>
       {definition.description && <span className="before-run__hint">{definition.description}</span>}
     </div>
+  );
+}
+
+const TEST_RUN_PROBLEMS = Object.freeze({
+  missing: "Indica un nome utente di prova nell'input «Utente che esegue» e salva il progetto: senza, l'esecuzione di prova non parte.",
+  conflict: 'Gli input «Utente che esegue» hanno nomi utente di prova diversi: usane uno solo.',
+});
+
+// «Esegui di prova» (regola H del backend): con chi, dove finisce il risultato.
+function TestRunNotice({ username, problem }) {
+  return (
+    <section className="before-run__section" aria-label="Esecuzione di prova">
+      <h3 className="before-run__heading">Esecuzione di prova</h3>
+      {problem ? (
+        <div className="before-run__notice before-run__notice--error" role="alert">{TEST_RUN_PROBLEMS[problem]}</div>
+      ) : (
+        <div className="before-run__notice" role="status">
+          Il progetto viene eseguito come se lo avviasse l&apos;utente di prova <strong>{username}</strong>.
+          {' '}Il risultato si scarica una volta dalla finestra di esecuzione: non diventa l&apos;Output del
+          progetto, non aggiorna chi lo usa come sorgente e non avvia Carica. Pianificazioni e catene restano
+          bloccate: per gli utenti veri pubblica il progetto come Eseguibile.
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -211,7 +240,9 @@ export default function BeforeRunModal({
   const definitions = request?.inputDefinitions || [];
   const username = useSignedInUsername();
   const migration = request?.migration || [];
-  const withEstimate = Boolean(request) && migration.length === 0 && needsPreflight(request.mode) && typeof onPreflight === 'function';
+  // Esecuzione di prova senza un utente di prova valido: nessuna stima (si blocca prima).
+  const withEstimate = Boolean(request) && migration.length === 0 && needsPreflight(request.mode) && typeof onPreflight === 'function'
+    && !request.testRun?.problem;
   const [values, setValues] = useState({});
   const [intermediateMode, setIntermediateMode] = useState('');
   const [touched, setTouched] = useState({});
@@ -274,7 +305,11 @@ export default function BeforeRunModal({
   const estimateReady = !withEstimate || (
     estimate.key === key && !estimate.loading && !estimate.error && estimate.data && !preflightBlocks(estimate.data)
   );
-  const canLaunch = complete && estimateReady && migration.length === 0;
+  // Esecuzione di prova: l'utente che il SERVER usera' (la stima di
+  // Arricchisci lo dice; altrimenti la stessa regola sul canvas salvato).
+  const testRun = request.testRun || null;
+  const testUsername = testRun ? (estimate.data?.test_run?.username || testRun.username) : null;
+  const canLaunch = complete && estimateReady && migration.length === 0 && !testRun?.problem;
   const isSuper = role.isSuperadmin(request.user);
   const run = term('run');
 
@@ -291,7 +326,9 @@ export default function BeforeRunModal({
     <div className="before-run__actions">
       <ModalButton variant="secondary" onClick={onCancel}>Annulla</ModalButton>
       <ModalButton variant="primary" onClick={launch} disabled={!canLaunch}>
-        {run.icon} {withEstimate ? 'Conferma e avvia' : "Avvia l'esecuzione"}
+        {run.icon} {testRun
+          ? (withEstimate ? 'Conferma e avvia la prova' : "Avvia l'esecuzione di prova")
+          : (withEstimate ? 'Conferma e avvia' : "Avvia l'esecuzione")}
       </ModalButton>
     </div>
   );
@@ -301,13 +338,14 @@ export default function BeforeRunModal({
       isOpen
       onClose={onCancel}
       title={request.title || term('before_run').name}
-      subtitle={request.subtitle}
+      subtitle={request.subtitle || (testRun && testUsername ? `Esecuzione di prova (utente: ${testUsername})` : undefined)}
       icon={term('before_run').icon}
       size="md"
       variant={request.mode || 'default'}
       footer={footer}
     >
       <div className="before-run">
+        {testRun && <TestRunNotice username={testUsername} problem={testRun.problem} />}
         {notice}
         {migration.length > 0 && (
           <section className="before-run__section" aria-label="Credenziali da migrare">
@@ -334,7 +372,7 @@ export default function BeforeRunModal({
           <section className="before-run__section" aria-label="Input">
             <h3 className="before-run__heading">Input</h3>
             {definitions.map(d => (isServerInjectedKind(d.input_kind) ? (
-              <IdentityField key={d.input_key} definition={d} username={username} />
+              <IdentityField key={d.input_key} definition={d} username={testRun ? testUsername : username} testRun={Boolean(testRun)} />
             ) : (
               <InputField
                 key={d.input_key}
@@ -358,7 +396,7 @@ export default function BeforeRunModal({
             />
           </section>
         )}
-        {isSuper && (
+        {isSuper && !testRun && (
           <section className="before-run__section" aria-label="Opzioni dello staff">
             <div className="before-run__row">
               <label htmlFor="before-run-intermediate-mode" className="before-run__label">🔧 intermediate_mode (staff)</label>

@@ -16,6 +16,7 @@ from pydantic import (
 
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.runtime_bound_fields import RUNTIME_BOUND_REGISTRY, retain_registered
+from app.shared.execution.runtime_identity import TEST_RUN_SUBJECT_KIND
 
 
 SUPPORTED_PIPELINE_EXECUTION_CONTRACT_VERSIONS = frozenset({1, 2})
@@ -171,6 +172,31 @@ class PipelineExecutionContract(BaseModel):
         if subject and subject.get("kind") == "eseguibile":
             return dict(subject)
         return None
+
+    @property
+    def test_run_subject(self) -> Optional[JsonObject]:
+        """Esecuzione di prova dall'editor (``runtime_identity``, regola H):
+        risultato isolato nello spazio dell'attivita', mai nel progetto."""
+        subject = self.execution_subject
+        if subject and subject.get("kind") == TEST_RUN_SUBJECT_KIND:
+            return dict(subject)
+        return None
+
+    @property
+    def isolated_output(self) -> bool:
+        """Il risultato va nello spazio dell'attivita' (``output_task_id``) e
+        non tocca i risultati del progetto, il suo ``output_contract``, le
+        run intermedie, Carica: Eseguibili ed esecuzioni di prova."""
+        return self.executable_subject is not None or self.test_run_subject is not None
+
+    @field_validator("execution_subject")
+    @classmethod
+    def _test_run_has_username(cls, value: Optional[JsonObject]) -> Optional[JsonObject]:
+        if value and value.get("kind") == TEST_RUN_SUBJECT_KIND:
+            username = value.get("username")
+            if not isinstance(username, str) or not username.strip():
+                raise ValueError("execution_contract.execution_subject test_run senza username")
+        return value
 
 
 class CaricaExecutionContract(BaseModel):

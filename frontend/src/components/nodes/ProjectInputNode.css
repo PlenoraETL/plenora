@@ -27,3 +27,12 @@
 /* Fase 5 T5 (N11): contenitore dei controlli, spento in sola lettura. */
 .pin__fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .pin__fieldset input:disabled, .pin__fieldset select:disabled, .pin__fieldset button:disabled { cursor: not-allowed; opacity: .7; }
+
+/* «Come si usa» dell'input «Utente che esegue» (guida completa: common/GuideModal). */
+.pin__help { margin: 8px 8px 0; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, .35); background: rgba(56, 189, 248, .08); font-size: 11px; line-height: 1.4; color: var(--plen-text-sub); }
+.pin__help-title { margin: 0 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #38bdf8; }
+.pin__help p { margin: 4px 0 0; }
+.pin__help ul { margin: 4px 0 0; padding-left: 16px; }
+.pin__help code { font-family: var(--plen-font-mono); font-size: 10.5px; color: var(--plen-text); }
+.pin__help-warning { color: #fbbf24; }
+.pin__help-link { margin-top: 6px; border: 0; padding: 0; background: transparent; color: #38bdf8; cursor: pointer; font-size: 11px; text-decoration: underline; }

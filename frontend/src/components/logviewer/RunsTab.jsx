@@ -18,6 +18,7 @@ import { useResource } from '../../hooks/useResource';
 import { ResourceError } from '../common/ListState';
 import EmptyState from '../common/EmptyState';
 import { pressable } from '../../utils/pressable';
+import { runTriggerLabel } from '../../utils/runtimeInputKinds';
 
 export const LIVE_REFRESH_MS = 5000;
 
@@ -194,7 +195,7 @@ export default function RunsTab({ live = false, projectNames = null }) {
                       {formatNumber(run.rows_out)}
                     </td>
                     <td className="lv__td">
-                      <span className="lv__op-tag">{run.triggered_by || '—'}</span>
+                      <span className="lv__op-tag">{runTriggerLabel(run.triggered_by)}</span>
                     </td>
                   </tr>
 

@@ -242,7 +242,12 @@ describe('ProjectInputNode (R8.1, N4, N11)', () => {
   it.each(['file', 'text', 'integer', 'select', 'connection', 'current_user'])('sola lettura (%s): ogni controllo e\' spento (N11)', (kind) => {
     loadInput({ ...FILE, input_kind: kind, validation: kind === 'select' ? { options: ['a'] } : {} }, { readOnly: true });
     const { container } = render(<ProjectInputNode id="in1" data={nodeData()} />);
-    const controls = [...container.querySelectorAll('input, select, textarea, button')];
+    // Le azioni di vista dichiarate (READ_ONLY_SAFE: «Guida completa» di
+    // «Utente che esegue») restano attive; tutto il resto e' spento.
+    const all = [...container.querySelectorAll('input, select, textarea, button')];
+    const controls = all.filter(el => !el.hasAttribute('data-readonly-safe'));
+    expect(all.filter(el => el.hasAttribute('data-readonly-safe')).map(el => el.textContent.trim()))
+      .toEqual(kind === 'current_user' ? ['📘 Guida completa'] : []);
     expect(controls.length).toBeGreaterThan(2);
     controls.forEach(el => expect(el.matches(':disabled'), el.outerHTML.slice(0, 80)).toBe(true));
   });

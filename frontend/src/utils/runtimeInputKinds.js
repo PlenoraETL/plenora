@@ -24,8 +24,12 @@
  *  - i valori scalari del client valgono ovunque;
  *  - la connessione solo in Estrai;
  *  - il file usa quello gia' nel canvas (il caricamento vale negli Eseguibili);
- *  - un tipo 'server' blocca: dall'editor non c'e' un utente che esegue
- *    (si pubblica come Eseguibile; anteprima e Valida usano lo username di prova).
+ *  - un tipo 'server' non ha un utente che esegue: «Esegui» diventa
+ *    «Esegui di prova» (regola H del backend, shared/execution/runtime_identity):
+ *    solo per chi puo' modificare il progetto (can.testRunProject), con lo
+ *    username di prova SALVATO nell'input (testRunIdentity, stessa regola
+ *    del backend), risultato isolato (non e' l'output del progetto, niente
+ *    Carica). Pianificazioni e catene restano bloccate.
  */
 import * as codecs from './fieldCodecs';
 
@@ -92,16 +96,51 @@ export const acceptsInputKind = (mode, value) => {
   return !allowed || allowed.includes(String(value || 'file').toLowerCase());
 };
 
-/** Motivo per cui un input blocca «Esegui» del progetto ('mode' | 'server' | null). */
+/**
+ * Motivo per cui un input cambia «Esegui» del progetto: 'mode' (tipo che
+ * questa modalita' non esegue: blocca sempre), 'server' («Utente che
+ * esegue»: solo «Esegui di prova»), null.
+ */
 export const projectRunBlockReason = (mode, value) => {
   if (!acceptsInputKind(mode, value)) return 'mode';
   if (isServerInjectedKind(value)) return 'server';
   return null;
 };
 
-/** Nodi project_input che bloccano «Esegui» del progetto in questa modalita'. */
+/** Nodi project_input che bloccano l'esecuzione dall'editor (anche di prova). */
 export const unsupportedInputNodes = (nodes, mode) => (nodes || []).filter(n =>
-  n?.type === 'project_input' && projectRunBlockReason(mode, n.data?.input_kind) !== null);
+  n?.type === 'project_input' && projectRunBlockReason(mode, n.data?.input_kind) === 'mode');
+
+/** Nodi «Utente che esegue»: dall'editor solo l'esecuzione di prova. */
+export const serverInputNodes = (nodes) => (nodes || []).filter(n =>
+  n?.type === 'project_input' && isServerInjectedKind(n.data?.input_kind));
+
+/**
+ * Username dell'esecuzione di prova: la regola del backend
+ * (RuntimeIdentity.test_run) sui nodi del canvas SALVATO. Il server la
+ * riapplica sul suo canvas: questo e' solo cio' che la finestra mostra.
+ * @returns {{ username: string|null, problem: null|'missing'|'conflict' }}
+ */
+export function testRunIdentity(nodes) {
+  const names = [...new Set(serverInputNodes(nodes)
+    .map(n => String(n.data?.preview_username ?? '').trim())
+    .filter(Boolean))];
+  if (names.length > 1) return { username: null, problem: 'conflict' };
+  if (!names.length) return { username: null, problem: 'missing' };
+  return { username: names[0], problem: null };
+}
+
+/** Prefisso di log_runs.triggered_by delle prove (backend TEST_RUN_TRIGGER_PREFIX). */
+const TEST_RUN_TRIGGER_PREFIX = 'test_run:';
+
+/** Come si mostra chi ha avviato una run nella cronologia. */
+export function runTriggerLabel(triggeredBy) {
+  const value = String(triggeredBy ?? '');
+  if (value.startsWith(TEST_RUN_TRIGGER_PREFIX)) {
+    return `Esecuzione di prova (utente: ${value.slice(TEST_RUN_TRIGGER_PREFIX.length)})`;
+  }
+  return value || '—';
+}
 
 /**
  * Convertitore del valore di un input runtime (Fase 5 T5, R8.10): la stessa

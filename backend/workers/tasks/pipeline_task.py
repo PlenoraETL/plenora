@@ -23,6 +23,7 @@ from app.core.projects import runtime_context as project_runtime_context
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.utils import debug_payload_builder as debug_payload_builder_module
+from app.shared.execution.runtime_identity import trigger_for_test_run
 
 logger = get_logger("workers.pipeline_task")
 
@@ -136,6 +137,14 @@ def _executable_subject(
     if not contract:
         return None
     return contract.executable_subject
+
+
+def _test_run_mark(test_run: JsonObject | None) -> JsonObject:
+    """Segno dell'esecuzione di prova nel risultato del task (finestra di
+    esecuzione e download): l'utente di prova che il server ha usato."""
+    if test_run is None:
+        return {}
+    return {"test_run": {"username": str(test_run.get("username") or "")}}
 
 
 def _cleanup_executable_inputs(
@@ -294,6 +303,14 @@ def execute_pipeline_task(
         expected_project_id=project_id,
     )
     subject = _executable_subject(contract)
+    # Esecuzione di prova dall'editor (runtime_identity, regola H): riga di
+    # cronologia marcata, risultato isolato come un Eseguibile, nessuna run
+    # intermedia, nessun Carica, output del progetto intatto.
+    test_run = contract.test_run_subject if contract is not None else None
+    isolated = contract is not None and contract.isolated_output
+    # Run intermedie (cronologia dei nodi, idempotenza, retention): solo le
+    # esecuzioni che pubblicano l'output del progetto.
+    intermediate_run = not isolated
     has_external_run_id = run_id is not None
 
     if run_id is None:
@@ -417,7 +434,7 @@ def execute_pipeline_task(
         if contract is not None
         else (project_info or {}).get("retention_n")
     )
-    if retention_n is None and subject is None:
+    if retention_n is None and intermediate_run:
         retention_n = _resolve_intermediate_retention_n(project_id)
 
     log_run_opened = False
@@ -428,20 +445,24 @@ def execute_pipeline_task(
                 project_id=project_id,
                 group_id=group_id,
                 module=module,
-                triggered_by=triggered_by,
+                triggered_by=(
+                    trigger_for_test_run(str(test_run["username"]))
+                    if test_run is not None else triggered_by
+                ),
                 user_id=user_id,
             )
             log_run_opened = True
             set_run_context(run_id=run_id, project_id=project_id)
-
-            # L'apertura intermediate e' parte del contratto idempotente per
-            # i progetti. Gli eseguibili usano ``eseguibile_runs``.
-            run_lifecycle_module.create_run(
-                run_id=run_id,
-                canvas_id=project_id,
-                group_id=group_id,
-                user_id=user_id,
-            )
+            if intermediate_run:
+                # L'apertura intermediate e' parte del contratto idempotente
+                # per i progetti. Gli eseguibili usano ``eseguibile_runs``;
+                # le prove non scrivono run intermedie.
+                run_lifecycle_module.create_run(
+                    run_id=run_id,
+                    canvas_id=project_id,
+                    group_id=group_id,
+                    user_id=user_id,
+                )
         else:
             # Evita di ereditare il contesto di una precedente run sullo
             # stesso thread worker senza creare log_runs per ``exec_*``.
@@ -465,18 +486,18 @@ def execute_pipeline_task(
     try:
         _update_progress(self, 5, "Caricamento configurazione...")
         orchestrator = _build_orchestrator()
-        executor_run_id = None if subject is not None else run_id
+        executor_run_id = run_id if intermediate_run else None
 
         _update_progress(self, 10, "Esecuzione pipeline...")
         if contract is not None:
             result = orchestrator.execute_pipeline_from_contract(
                 contract=contract,
                 force_recalculate=force_recalculate,
-                skip_carica=subject is not None,
+                skip_carica=isolated,
                 run_id=executor_run_id,
                 user_id=user_id,
                 intermediate_mode_override=intermediate_mode_override,
-                output_task_id=task_id if subject is not None else None,
+                output_task_id=task_id if isolated else None,
             )
         else:
             result = orchestrator.execute_pipeline(
@@ -595,6 +616,7 @@ def execute_pipeline_task(
                 "project_id": project_id,
                 "run_id": run_id,
                 "task_id": task_id,
+                **_test_run_mark(test_run),
             }
 
         rows_out = result.rows_count or 0
@@ -609,8 +631,12 @@ def execute_pipeline_task(
             check_revocation=False,
         )
         executable_output = None
-        if subject is not None and contract is not None:
+        if isolated and contract is not None:
             direct_storage_key = result.get("storage_key")
+            if test_run is not None and (result.get("result_id") or not direct_storage_key):
+                # Una prova che ha scritto fuori dallo spazio dell'attivita'
+                # non si dichiara riuscita (regola H: mai l'output del progetto).
+                raise RuntimeError("Esecuzione di prova senza output isolato")
             if direct_storage_key:
                 output_name = _Path(result.output_path or str(direct_storage_key)).name
                 executable_output = {
@@ -627,6 +653,7 @@ def execute_pipeline_task(
                     task_id=task_id,
                     group_id=str(group_id),
                 )
+        if subject is not None:
             try:
                 eseguibili_service.complete_eseguibile_run(
                     str(subject.get("run_id") or ""),
@@ -649,6 +676,7 @@ def execute_pipeline_task(
                 steps=get_steps(),
             )
 
+        if intermediate_run:
             # Barriera idempotente sincrona per le run dei progetti.
             run_lifecycle_module.close_run(
                 run_id=run_id, input_hash="", output_hash="",
@@ -659,7 +687,14 @@ def execute_pipeline_task(
         output_path = result.output_path
         output_file = _Path(output_path).name if output_path else None
         extra = {"output_file": output_file} if output_file else {}
-        if executable_output is not None:
+        if test_run is not None:
+            # Scaricabile una volta da chi l'ha lanciata (/tasks/{id}/download).
+            extra.update({
+                "output_file": (executable_output or {}).get("filename") or output_file,
+                "result_id": None,
+                **_test_run_mark(test_run),
+            })
+        elif executable_output is not None:
             extra.update(
                 {
                     "output_file": executable_output["filename"],
@@ -704,6 +739,7 @@ def execute_pipeline_task(
                     "close_run log fallito post-revoke: "
                     f"{type(close_exc).__name__}: {close_exc}"
                 )
+        if intermediate_run:
             try:
                 run_lifecycle_module.close_run(
                     run_id=run_id,
@@ -771,6 +807,7 @@ def execute_pipeline_task(
                 debug_payload=debug_payload,
             )
 
+        if intermediate_run:
             # Chiudi run intermediate storage tramite boundary di lifecycle.
             try:
                 run_lifecycle_module.close_run(

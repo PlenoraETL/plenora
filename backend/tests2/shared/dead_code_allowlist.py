@@ -115,7 +115,7 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # Public task-scoped blob cleanup contract (source-bound contract coverage).
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+eseguibili[\\/]storage\.py:\d+: unused function 'delete_by_task' "),
     # Pydantic validators are invoked from model metadata rather than by name.
-    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/]execution_contract\.py:\d+: unused method '(_canonicalize_tenant|_required_text|_supported_schema_version)' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/]execution_contract\.py:\d+: unused method '(_canonicalize_tenant|_required_text|_supported_schema_version|_test_run_has_username)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+dataframes[\\/]geodata\.py:\d+: unused function 'geoseries_first_value' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+results[\\/]streaming_blob_writer\.py:\d+: unused method '(readable|writable|seekable)' "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+resources[\\/]metadata\.py:\d+: unused method "),

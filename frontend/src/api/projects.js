@@ -216,6 +216,32 @@ export const executeProjectQuery = async (projectId, options = null) => {
 };
 
 /**
+ * «Esegui di prova» di un progetto con «Utente che esegue» (regola H del
+ * backend, shared/execution/runtime_identity). Il server usa il canvas
+ * SALVATO e il suo nome utente di prova: nessun canvas né utente nel corpo.
+ * Il risultato resta nell'attività (si scarica una volta da chi l'ha
+ * lanciata), non diventa l'output del progetto e non avvia Carica.
+ * Arricchisci ha la sua prova (stessa stima: preflightEnrichment con
+ * `test_run`).
+ * @param {string} projectId
+ * @param {{mode: string, inputs?: Object, force_recalculate?: boolean,
+ *          preparation_fingerprint?: string|null, format?: string}} options
+ * @returns {Promise<Object>} { task_id, async, test_run: { username } }
+ */
+export const executeTestRun = async (projectId, options = {}) => {
+  const { mode, inputs = {}, force_recalculate = false, preparation_fingerprint = null, format = null } = options;
+  const body = { inputs: inputs || {}, force_recalculate: Boolean(force_recalculate) };
+  if (mode === 'arricchisci') {
+    if (preparation_fingerprint) body.preparation_fingerprint = preparation_fingerprint;
+    if (format) body.format = format;
+    const response = await http.post(`/projects/${projectId}/test-run/enrich`, body);
+    return response.data;
+  }
+  const response = await http.post(`/projects/${projectId}/test-run`, body);
+  return response.data;
+};
+
+/**
  * Ottiene una preview dei dati del progetto (asincrona, task worker).
  * @param {string} projectId
  * @param {number} limit      - Numero massimo di righe (default 100)

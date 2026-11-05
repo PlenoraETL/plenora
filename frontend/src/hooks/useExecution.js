@@ -19,7 +19,7 @@
  * Un rifiuto 409 `preparation_changed` (Arricchisci) torna a chi ha avviato.
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { executeProjectQuery, downloadTaskOutput, downloadProjectOutput } from '../api';
+import { executeProjectQuery, executeTestRun, downloadTaskOutput, downloadProjectOutput } from '../api';
 import { useTask } from './useTask';
 import { useDownload } from './useDownload';
 import useCanvasStore from '../store/useCanvasStore';
@@ -33,7 +33,9 @@ export function executionResult(outcome, taskId) {
   if (outcome.phase === 'permission_revoked') {
     return { success: false, permissionRevoked: true, status: 'permission_revoked', message: outcome.error };
   }
-  return { success: false, message: outcome.error, code: outcome.code || undefined };
+  // L'esecuzione di prova resta riconoscibile anche quando fallisce.
+  const testRun = outcome.result?.test_run;
+  return { success: false, message: outcome.error, code: outcome.code || undefined, ...(testRun ? { test_run: testRun } : {}) };
 }
 
 // Stato mostrato dalla finestra (colori, "annullata").
@@ -173,7 +175,9 @@ export function useExecution(projectId, options = {}) {
     let preparationChanged = null;
     const outcome = await runTask(async () => {
       if (onBeforeExecute) await onBeforeExecute();
-      const executeFn = executeFunction || executeProjectQuery;
+      // Esecuzione di prova (PipelineRunner, regola H): una sola funzione
+      // per i tre editor, che sceglie l'endpoint dalla modalita'.
+      const executeFn = executeOptions.test_run ? executeTestRun : (executeFunction || executeProjectQuery);
       return executeFn(projectId, executeOptions);
     }, {
       onDone: settle,

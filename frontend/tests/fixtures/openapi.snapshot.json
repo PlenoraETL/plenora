@@ -3316,6 +3316,58 @@
         "title": "EnrichPreflightRequest",
         "type": "object"
       },
+      "EnrichTestRunPreflightRequest": {
+        "additionalProperties": false,
+        "description": "Stima dell'«Esegui di prova»: nessun canvas (si usa quello SALVATO).",
+        "properties": {
+          "force_recalculate": {
+            "default": false,
+            "title": "Force Recalculate",
+            "type": "boolean"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          }
+        },
+        "title": "EnrichTestRunPreflightRequest",
+        "type": "object"
+      },
+      "EnrichTestRunRequest": {
+        "additionalProperties": false,
+        "description": "«Esegui di prova» di Arricchisci: canvas SALVATO, niente intermediate_mode.",
+        "properties": {
+          "force_recalculate": {
+            "default": false,
+            "title": "Force Recalculate",
+            "type": "boolean"
+          },
+          "format": {
+            "default": "csv",
+            "title": "Format",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "preparation_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preparation Fingerprint"
+          }
+        },
+        "title": "EnrichTestRunRequest",
+        "type": "object"
+      },
       "EseguibileCreate": {
         "description": "Payload per pubblicare un progetto come eseguibile.",
         "properties": {
@@ -7342,6 +7394,25 @@
           }
         },
         "title": "ProjectDetailsUpdate",
+        "type": "object"
+      },
+      "ProjectTestRunRequest": {
+        "additionalProperties": false,
+        "description": "«Esegui di prova»: nessun canvas (si usa quello SALVATO), nessun\nintermediate_mode (la prova non scrive run intermedie).",
+        "properties": {
+          "force_recalculate": {
+            "default": false,
+            "title": "Force Recalculate",
+            "type": "boolean"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Inputs",
+            "type": "object"
+          }
+        },
+        "title": "ProjectTestRunRequest",
         "type": "object"
       },
       "QueueStatus": {
@@ -17040,6 +17111,180 @@
         "summary": "Get Node Schema",
         "tags": [
           "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/test-run": {
+      "post": {
+        "description": "«Esegui di prova» di Estrai e Manipola (``runtime_identity``, regola H).\n\nSolo chi puo' modificare il progetto (come il salvataggio del canvas);\nl'utente e' lo username di prova del canvas SALVATO; il risultato resta\nnello spazio dell'attivita' (scaricabile una volta da chi l'ha lanciata),\nnon diventa l'output del progetto e non avvia Carica. Arricchisci ha la\nsua prova (``/test-run/enrich``).",
+        "operationId": "launch_project_test_run_api_projects__project_id__test_run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectTestRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Launch Project Test Run Api Projects  Project Id  Test Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Launch Project Test Run",
+        "tags": [
+          "orchestrator"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/test-run/enrich": {
+      "post": {
+        "description": "«Esegui di prova» di Arricchisci (runtime_identity, regola H): solo chi\npuo' modificare il progetto, utente di prova del canvas salvato,\nrisultato isolato (nessun output del progetto, nessun Carica).",
+        "operationId": "launch_enrichment_test_run_api_projects__project_id__test_run_enrich_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichTestRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Launch Enrichment Test Run",
+        "tags": [
+          "arricchisci"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/test-run/preflight": {
+      "post": {
+        "description": "Stima prima dell'«Esegui di prova» (runtime_identity, regola H): stessa\npreparazione dell'avvio di prova (identita' di prova del canvas salvato),\nstessa impronta. Solo chi puo' modificare il progetto.",
+        "operationId": "preflight_enrichment_test_run_api_projects__project_id__test_run_preflight_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichTestRunPreflightRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preflight Enrichment Test Run Api Projects  Project Id  Test Run Preflight Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Preflight Enrichment Test Run",
+        "tags": [
+          "arricchisci"
         ]
       }
     },

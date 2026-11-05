@@ -197,6 +197,13 @@ function ExecutionModal({
             || result.result?.status === 'permission_revoked') && (
             <PermissionRevokedBanner message={result.message || result.result?.message} />
           )}
+          {result.test_run && (
+            <div className="execution-modal__test-run" role="status">
+              <strong>Esecuzione di prova (utente: {result.test_run.username})</strong>
+              {' '}— il risultato non è l&apos;Output del progetto, non aggiorna chi lo usa come sorgente e non
+              ha avviato Carica. Il file si scarica una volta.
+            </div>
+          )}
           {result.success ? (
             <div>
               {/* Success Message */}

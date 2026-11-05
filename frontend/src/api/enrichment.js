@@ -14,10 +14,14 @@ import http from './http';
  * (nessun `canvas` nel corpo). Per ogni nodo API: righe in ingresso
  * (esatte, stimate o non conoscibili, campionate), chiamate stimate, motivo.
  * `preparation_fingerprint` va passata all'avvio (executeEnrichmentAsync).
- * @returns {Promise<{valid, manifest, preparation_fingerprint, nodes: Array, checks}>}
+ * `test_run`: stima dell'«Esegui di prova» (POST /test-run/preflight, stessa
+ * preparazione e impronta dell'avvio di prova; la risposta porta
+ * `test_run.username`, l'utente di prova che il server userà).
+ * @returns {Promise<{valid, manifest, preparation_fingerprint, nodes: Array, checks, test_run?}>}
  */
-export const preflightEnrichment = async (projectId, { inputs = {}, force_recalculate = false } = {}) => {
-  const response = await http.post(`/projects/${projectId}/preflight`, { inputs: inputs || {}, force_recalculate: Boolean(force_recalculate) });
+export const preflightEnrichment = async (projectId, { inputs = {}, force_recalculate = false, test_run = false } = {}) => {
+  const url = test_run ? `/projects/${projectId}/test-run/preflight` : `/projects/${projectId}/preflight`;
+  const response = await http.post(url, { inputs: inputs || {}, force_recalculate: Boolean(force_recalculate) });
   return response.data;
 };
 

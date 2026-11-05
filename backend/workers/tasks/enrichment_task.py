@@ -119,6 +119,8 @@ def execute_enrichment_task(
     """
     task_id = self.request.id
     parsed_contract: PipelineExecutionContract | None = None
+    # Esecuzione di prova dall'editor (runtime_identity, regola H).
+    test_run: Optional[Mapping[str, Any]] = None
     if execution_contract is not None:
         parsed_contract = PipelineExecutionContract.from_payload(
             execution_contract,
@@ -135,9 +137,10 @@ def execute_enrichment_task(
                 "execution_contract privo di execution_subject eseguibile"
             )
         is_eseguibile = contract_is_eseguibile
+        test_run = parsed_contract.test_run_subject
         canvas = dict(parsed_contract.canvas)
         runtime_context = parsed_contract.build_runtime_context(
-            output_task_id=task_id if is_eseguibile else None,
+            output_task_id=task_id if parsed_contract.isolated_output else None,
         )
         if subject is not None:
             runtime_context.update(
@@ -173,7 +176,7 @@ def execute_enrichment_task(
 
     # #28-B: la run-mode incapsula le divergenze standard vs eseguibile
     # (auth recheck, logger project_id, group_id + intermediate run).
-    run_mode = enrichment_run_mode.for_task(is_eseguibile)
+    run_mode = enrichment_run_mode.for_task(is_eseguibile, test_run)
 
     def complete_executable_run(
         *,
@@ -344,7 +347,7 @@ def execute_enrichment_task(
                 project_id=project_id,
                 group_id=_group_id,
                 module="arricchisci",
-                triggered_by="manual",
+                triggered_by=run_mode.triggered_by(),
                 user_id=user_id,
             )
             log_run_opened = True
@@ -440,7 +443,7 @@ def execute_enrichment_task(
                 _group_id if _group_id and _group_id != 'unknown' else None
             ),
             preview_limit=None,  # task celery non e' preview
-            output_task_id=task_id if run_mode.is_eseguibile else None,
+            output_task_id=task_id if run_mode.isolated_output else None,
         )
 
         nodes = canvas.get("nodes", [])
@@ -657,7 +660,7 @@ def execute_enrichment_task(
                 )
                 if error_report_bytes:
                     error_report_file = f"enrichment_errors_{task_id}.csv"
-                    if run_mode.is_eseguibile:
+                    if run_mode.isolated_output:
                         internal_name = eseg_storage.internal_artifact_filename(
                             "error-report",
                             api_id,
@@ -891,7 +894,7 @@ def execute_enrichment_task(
             # Routing finale: eseguibili (S3) vs arricchisci (DB result_blob).
             result_id: Optional[str] = None
 
-            if run_mode.is_eseguibile:
+            if run_mode.isolated_output:
                 # Upload su object storage (S3 via cloud_backends). Niente FS
                 # locale persistente: backend+worker multi-host safe. Il
                 # frontend scarica via GET /api/eseguibili/{id}/download/{task_id}
@@ -1107,7 +1110,7 @@ def execute_enrichment_task(
                 output_format=final_format,
                 user_id=user_id,
                 group_id=_group_id,
-            )
+            ) if run_mode.triggers_carica_after_dataframe() else None
             if carica_info:
                 # Il frontend legge result.carica.tasks per fare polling sui task carica
                 result["carica"] = carica_info

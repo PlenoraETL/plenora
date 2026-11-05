@@ -85,6 +85,7 @@ const UNGATED = {
   restoreCanvasVersion: 'ripristino del canvas: stessa sola lettura dello store',
   executeProjectQuery: 'esecuzione del progetto aperto: non distruttiva, regola del backend',
   executeEnrichmentAsync: 'esecuzione del progetto aperto: non distruttiva, regola del backend',
+  executeTestRun: 'esecuzione di prova: la offre solo il percorso unico (PipelineRunner) con can.testRunProject; il backend la vieta a viewer ed esecutore',
   previewProject: 'anteprima: sola lettura',
   previewProjectQuery: 'anteprima della query di Estrai sul canvas corrente: sola lettura, non salva (T6, R3.13)',
   pinRun: 'segnalibro su una run, non distruttivo',

@@ -29,6 +29,13 @@ history preserves that context.
 - [Product overview](product/overview.md)
 - [Release 1.0 readiness](product/release-1.0.md)
 
+## Guide d'uso (per gli utenti)
+
+Le stesse guide si aprono nell'app («Guida completa»); il file si rigenera dal
+contenuto dell'app (`frontend/src/utils/guides/`).
+
+- [Input «Utente che esegue»](guide/input-utente-che-esegue.md)
+
 ## Architecture
 
 - [Architecture overview](architecture/overview.md)

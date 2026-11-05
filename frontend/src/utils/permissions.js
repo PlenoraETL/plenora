@@ -77,6 +77,9 @@ export const can = {
   // Rinomina e tag: PATCH /projects/{id} = user del gruppo (non solo owner).
   editProjectMeta:   (u) => isUserOrAbove(u),
   deleteProject:     (u, project) => ownsOrAdmin(u, project),
+  // «Esegui di prova» con «Utente che esegue»: chi puo' modificare il
+  // progetto (come il salvataggio del canvas), mai viewer ed esecutore.
+  testRunProject:    isUserOrAbove,
 
   // ── File ─────────────────────────────────────────────────────────────
   uploadFile:        isUserOrAbove,
@@ -148,6 +151,7 @@ export const CAPABILITY_BACKEND = Object.freeze({
   createProject: { file: 'projects/router.py', fns: ['create_project', 'clone_project'], depends: 'require_user_or_above', rule: 'role' },
   editProjectMeta: { file: 'projects/router.py', fns: ['update_project_details'], depends: 'require_user_or_above', rule: 'role' },
   deleteProject: { file: 'projects/router.py', fns: ['delete_project'], depends: 'require_project_owner', rule: 'owner' },
+  testRunProject: { file: 'orchestrator/router.py', fns: ['launch_project_test_run'], depends: 'require_user_or_above', rule: 'role' },
   uploadFile: { file: 'files/router.py', fns: ['upload_file', 'upload_multi_layer'], depends: 'require_user_or_above', rule: 'role' },
   editFile: { file: 'files/router.py', fns: ['update_file', 'delete_file'], depends: 'require_file_owner', rule: 'owner', serverFlag: 'exact' },
   createConnection: { file: 'connections/router.py', fns: ['create_connection', 'create_connection_set'], depends: 'require_admin', rule: 'role' },

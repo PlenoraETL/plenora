@@ -19,6 +19,8 @@
  * |            | preparation_changed): stima rifatta, motivo mostrato        |
  * | migrate    | un nodo Carica REST ha credenziali nel canvas da migrare    |
  * |            | (utils/restSecrets): Avvia spento finche' non si migra      |
+ * | test_run   | «Esegui di prova» (input «Utente che esegue»): la finestra  |
+ * |            | si apre SEMPRE e mostra l'utente di prova                   |
  *
  * La stima di Arricchisci e' il preflight del server (POST /preflight) con
  * GLI STESSI input dell'esecuzione sul canvas salvato; l'impronta
@@ -26,15 +28,17 @@
  *
  * Input impostati dal server («Utente che esegue», utils/runtimeInputKinds
  * source 'server'): la finestra li mostra in sola lettura con lo username di
- * chi e' collegato, ma non hanno valore, errore ne' payload: il browser non
- * li invia MAI (il server li rifiuterebbe), li mette il server.
+ * chi e' collegato (Eseguibili) o con lo username di PROVA salvato
+ * nell'input (esecuzione di prova dell'editor), ma non hanno valore, errore
+ * ne' payload: il browser non li invia MAI (il server li rifiuterebbe), li
+ * mette il server.
  */
 import { errorReason } from '../api/errors';
 import { role } from './permissions';
 import { isServerInjectedKind, runtimeInputCodec } from './runtimeInputKinds';
 import { formatNumber } from './format';
 
-export const BEFORE_RUN_REASONS = Object.freeze(['inputs', 'staff', 'estimate', 'blocking', 'changed', 'migrate']);
+export const BEFORE_RUN_REASONS = Object.freeze(['test_run', 'inputs', 'staff', 'estimate', 'blocking', 'changed', 'migrate']);
 
 const PREPARATION_CHANGED = 'preparation_changed';
 
@@ -62,8 +66,10 @@ export const preflightBlocks = (preflight) =>
  */
 export function beforeRunReasons({
   inputDefinitions = [], user = null, preflight = null, preflightError = null, changedMessage = null, migration = [],
+  testRun = null,
 } = {}) {
   const on = {
+    test_run: Boolean(testRun),
     migrate: (migration || []).length > 0,
     inputs: (inputDefinitions || []).length > 0,
     staff: role.isSuperadmin(user),

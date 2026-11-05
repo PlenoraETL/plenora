@@ -82,7 +82,8 @@ export function saveFailedResult(err) {
 /**
  * Input runtime che bloccano «Esegui» del progetto (utils/runtimeInputKinds,
  * projectRunBlockReason): un tipo che questa modalita' non esegue, oppure un
- * tipo impostato dal server («Utente che esegue», nessun utente dall'editor).
+ * tipo impostato dal server («Utente che esegue») per chi non puo' fare
+ * l'esecuzione di prova (viewer: can.testRunProject falso).
  */
 export function unsupportedInputsResult(nodes, mode) {
   return buildResult((nodes || []).map((n) => {
@@ -92,7 +93,7 @@ export function unsupportedInputsResult(nodes, mode) {
       id: server ? 'RUNTIME_IDENTITY_REQUIRED' : 'RUNTIME_INPUT_KIND_UNSUPPORTED',
       severity: 'error',
       message: server
-        ? `L'input «${name}» è «${inputKindLabel('current_user')}»: prende il nome dell'utente che avvia un Eseguibile, quindi il progetto non si esegue dall'editor. Pubblicalo come Eseguibile; per Anteprima e Valida indica un nome utente di prova nell'input.`
+        ? `L'input «${name}» è «${inputKindLabel('current_user')}»: prende il nome dell'utente che avvia un Eseguibile. Dall'editor si può fare solo un'esecuzione di prova, riservata a chi può modificare il progetto. Per eseguirlo con il tuo utente aprilo come Eseguibile.`
         : `L'input «${name}» è di tipo connessione: questo tipo è disponibile solo nei progetti Estrai. Cambialo o rimuovilo.`,
       nodeId: n.id,
       source: 'frontend',

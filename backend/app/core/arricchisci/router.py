@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from app.core.auth.dependencies import (
     require_not_esecutore,
     require_admin,
+    require_user_or_above,
 )
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import (
@@ -45,7 +46,12 @@ from app.core.arricchisci.models import EnrichmentOptions
 from app.core.arricchisci.types import StringMap
 from app.core.projects.exceptions import CanvasCorruptedError
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
-from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
+from app.core.orchestrator.runtime_inputs import (
+    ProjectTestRunNotApplicable,
+    apply_project_runtime_inputs,
+    apply_test_run_inputs,
+    register_test_run_owner,
+)
 from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError
 from app.core.artifacts import (
     LatestProjectArtifactRef,
@@ -927,12 +933,40 @@ def preflight_enrichment(project_id: str, request: EnrichPreflightRequest,
     return _preflight_enrichment(project_id, request, current_user, identity=RuntimeIdentity.project_run())
 
 
+class EnrichTestRunPreflightRequest(BaseModel):
+    """Stima dell'«Esegui di prova»: nessun canvas (si usa quello SALVATO)."""
+
+    model_config = {"extra": "forbid"}
+
+    inputs: JsonObject = Field(default_factory=dict)
+    force_recalculate: bool = False
+
+
+@enrich_router.post("/{project_id}/test-run/preflight")
+def preflight_enrichment_test_run(project_id: str, request: EnrichTestRunPreflightRequest,
+                                  current_user: CurrentUser = Depends(require_user_or_above)) -> JsonObject:
+    """Stima prima dell'«Esegui di prova» (runtime_identity, regola H): stessa
+    preparazione dell'avvio di prova (identita' di prova del canvas salvato),
+    stessa impronta. Solo chi puo' modificare il progetto."""
+    response = _preflight_enrichment(
+        project_id,
+        EnrichPreflightRequest(inputs=request.inputs, force_recalculate=request.force_recalculate),
+        current_user,
+        test_run=True,
+    )
+    return response
+
+
 def _preflight_enrichment(project_id: str, request: EnrichPreflightRequest, current_user: CurrentUser, *,
-                          identity: RuntimeIdentity) -> JsonObject:
+                          identity: RuntimeIdentity | None = None, test_run: bool = False) -> JsonObject:
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
     if metadata.project_type != "arricchisci":
         raise HTTPException(400, "Preflight disponibile per Arricchisci")
+    if test_run and request.canvas is not None:
+        # Lo username di prova viene SOLO dal canvas salvato (regola H).
+        raise_typed_http(error_codes.VALIDATION_ERROR, status_code=400,
+                         message="L'esecuzione di prova usa il canvas salvato: non si invia un canvas.")
     try:
         canvas = CanvasState(**request.canvas) if request.canvas is not None else _project_service.get_project_canvas(project_id)
         if canvas is None:
@@ -940,16 +974,20 @@ def _preflight_enrichment(project_id: str, request: EnrichPreflightRequest, curr
         canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False)
         contract, manifest = prepare_contract(PipelineExecutionContract(project_id=project_id,
             project_type=metadata.project_type, group_id=metadata.group_id, canvas=canvas.model_dump()), request.inputs,
-            identity=identity)
+            identity=identity, test_run=test_run)
         connections = _preflight_connections(contract.canvas, current_user)
         nodes = estimate_canvas(contract, connections)
     except RuntimeIdentityError as exc:
         raise_typed_http(exc.code, status_code=400, message=exc.message)
     except PREPARATION_ERRORS as exc:
         raise_preparation_failure(exc)
-    return {"valid": all(node["valid"] for node in nodes), "manifest": manifest.model_dump(), "nodes": nodes,
+    response = {"valid": all(node["valid"] for node in nodes), "manifest": manifest.model_dump(), "nodes": nodes,
             "preparation_fingerprint": preparation_fingerprint(contract, connections, revision=_project_service.get_canvas_version(project_id), force_recalculate=request.force_recalculate),
             "checks": {"runtime_inputs": "verified", "external_dependencies": "not_guaranteed", "resources": "not_guaranteed"}}
+    if contract.test_run_subject is not None:
+        # La finestra «Prima di avviare» mostra l'utente che il SERVER usera'.
+        response["test_run"] = {"username": contract.test_run_subject["username"]}
+    return response
 
 
 @enrich_router.post("/{project_id}/enrich-async")
@@ -981,6 +1019,44 @@ def execute_enrichment_async(
     audit run-specific. Dual-auth: require_not_esecutore PER il base-flow
     + check superadmin SOLO se override richiesto.
     """
+    return _launch_enrichment(project_id, request, intermediate_mode, current_user, test_run=False)
+
+
+class EnrichTestRunRequest(BaseModel):
+    """«Esegui di prova» di Arricchisci: canvas SALVATO, niente intermediate_mode."""
+
+    model_config = {"extra": "forbid"}
+
+    inputs: JsonObject = Field(default_factory=dict)
+    format: str = "csv"
+    force_recalculate: bool = False
+    preparation_fingerprint: str | None = None
+
+
+@enrich_router.post("/{project_id}/test-run/enrich")
+@audit_action(action="enrich.test_run", target_param="project_id")
+def launch_enrichment_test_run(
+    project_id: str,
+    request: EnrichTestRunRequest = None,
+    current_user: CurrentUser = Depends(require_user_or_above),
+) -> JsonObject:
+    """«Esegui di prova» di Arricchisci (runtime_identity, regola H): solo chi
+    puo' modificare il progetto, utente di prova del canvas salvato,
+    risultato isolato (nessun output del progetto, nessun Carica)."""
+    request = request or EnrichTestRunRequest()
+    return _launch_enrichment(
+        project_id, EnrichAsyncRequest(**request.model_dump()), None, current_user, test_run=True,
+    )
+
+
+def _launch_enrichment(
+    project_id: str,
+    request: EnrichAsyncRequest | None,
+    intermediate_mode: Optional[str],
+    current_user: CurrentUser,
+    *,
+    test_run: bool,
+) -> JsonObject:
     require_service(_project_service, "ProjectService")
     require_service(_api_connection_service, "ApiConnectionService")
     # Auth + ownership: stesso ragionamento di /enrich sincrono
@@ -1055,18 +1131,25 @@ def execute_enrichment_async(
         try:
             if request.preparation_fingerprint is not None:
                 canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False)
-            execution_contract = apply_project_runtime_inputs(
-                PipelineExecutionContract(
-                    project_id=project_id,
-                    project_type=metadata.project_type,
-                    group_id=metadata.group_id,
-                    canvas=canvas.model_dump(),
-                ),
-                request.inputs,
-                identity=RuntimeIdentity.project_run(),
+            base_contract = PipelineExecutionContract(
+                project_id=project_id,
+                project_type=metadata.project_type,
+                group_id=metadata.group_id,
+                canvas=canvas.model_dump(),
             )
+            if test_run:
+                # «Esegui di prova»: utente di prova del canvas SALVATO.
+                execution_contract = apply_test_run_inputs(base_contract, request.inputs)
+            else:
+                execution_contract = apply_project_runtime_inputs(
+                    base_contract,
+                    request.inputs,
+                    identity=RuntimeIdentity.project_run(),
+                )
         except RuntimeIdentityError as exc:
             raise_typed_http(exc.code, status_code=400, message=exc.message)
+        except ProjectTestRunNotApplicable as exc:
+            raise_typed_http(error_codes.VALIDATION_ERROR, status_code=400, message=str(exc))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1078,6 +1161,16 @@ def execute_enrichment_async(
                 raise HTTPException(409, detail={"error": error_codes.VALIDATION_ERROR, "reason": "preparation_changed",
                     "message": "Preparazione cambiata: canvas, input, connessioni o opzioni diversi dal preflight"})
 
+        reserved_task_id = None
+        if test_run:
+            # Il risultato isolato e' di chi ha lanciato la prova.
+            reserved_task_id = task_service.reserve_task_id()
+            register_test_run_owner(
+                reserved_task_id,
+                project_id=project_id,
+                user_id=current_user.user_id,
+                group_id=execution_contract.group_id,
+            )
         task_info = task_service.create_enrichment_task(
             project_id=project_id,
             canvas=execution_contract.canvas,
@@ -1086,14 +1179,18 @@ def execute_enrichment_async(
             force_recalculate=request.force_recalculate,
             user_id=current_user.user_id,
             intermediate_mode_override=intermediate_mode,
+            **({"task_id": reserved_task_id} if reserved_task_id else {}),
         )
-        
-        return {
+
+        response = {
             "success": True, "async": True,
             "task_id": task_info.task_id,
             "status": task_info.status.value,
             "message": "Task avviato. Usa GET /api/tasks/{task_id} per monitorare il progress."
         }
+        if test_run:
+            response["test_run"] = {"username": execution_contract.test_run_subject["username"]}
+        return response
         
     except HTTPException:
         raise

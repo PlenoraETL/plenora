@@ -19,8 +19,9 @@ from app.shared.contracts.auth import CurrentUser
 from app.core.logs.repository import fetchone as _fetchone, fetchall as _fetchall
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
+from app.shared.execution.runtime_identity import TEST_RUN_TRIGGER_PREFIX
 
-router = APIRouter(prefix="/pipeline-runs", tags=["runs"])
+router =APIRouter(prefix="/pipeline-runs", tags=["runs"])
 
 
 # Valori canonici della colonna `log_runs.status` (text). Centralizzati
@@ -143,8 +144,11 @@ def get_latest_run_by_project(
     proprio gruppo). Risposta compatta `{project_id: {status, ts_start}}` —
     pensata per costruire una mappa client-side senza paginare le run.
     """
-    conditions = ["project_id IS NOT NULL", "project_id <> ''"]
-    params: list[Any] = []
+    # Un'esecuzione di prova (runtime_identity, regola H) non e' lo stato del
+    # progetto: non conta come «ultima esecuzione».
+    conditions = ["project_id IS NOT NULL", "project_id <> ''",
+                  "COALESCE(triggered_by, '') NOT LIKE %s"]
+    params: list[Any] = [TEST_RUN_TRIGGER_PREFIX.replace("_", "\\_") + "%"]
     if current_user.role != "superadmin":
         conditions.append("group_id = %s")
         params.append(current_user.group_id)

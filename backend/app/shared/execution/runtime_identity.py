@@ -20,6 +20,10 @@ esecuzione/stima/Valida del progetto) e dall'impronta degli Eseguibili.
   progetto: «Esegui», stima     ``project_run()`` -> SI BLOCCA (nessun utente:
   di Arricchisci, enrich-async  dall'editor non si salva un risultato filtrato
                                 con un utente di prova)
+  progetto: «Esegui di prova»   ``test_run(canvas SALVATO)``: lo username di
+  (``/test-run``: stima e       PROVA del nodo; vuoto -> si blocca. Solo chi
+  avvio)                        puo' modificare il progetto; risultato
+                                ISOLATO (sezione «Esecuzione di prova»).
   anteprima, Valida con input,  ``preview_of(canvas)``: lo username di PROVA
   stima del nodo API, valori    scritto nel nodo (``preview_username``); vuoto
   distinti                      -> si blocca. Mai per un'esecuzione che salva
@@ -31,6 +35,27 @@ esecuzione/stima/Valida del progetto) e dall'impronta degli Eseguibili.
 
 Senza utente la catena si blocca con ``runtime_identity_required`` e un
 messaggio che dice cosa fare.
+
+ESECUZIONE DI PROVA (regola H, 05/11/2026)
+------------------------------------------
+Un progetto con «Utente che esegue» si prova dall'editor SOLO cosi':
+
+- chi: chi puo' modificare il progetto (``require_user_or_above`` + gruppo
+  del progetto, come il salvataggio del canvas); esecutore e viewer -> 403;
+- con chi: lo username di prova del nodo (``preview_username``) letto dal
+  canvas SALVATO sul server, mai dal client e mai l'utente che lancia
+  (nessun ripiego silenzioso su un'altra identita'); senza -> si blocca;
+- dove finisce: il contratto porta ``execution_subject`` ``test_run`` e il
+  risultato va nello spazio dell'attivita' (come un Eseguibile: oggetto per
+  ``task_id``, scaricabile una volta solo da chi l'ha lanciata), MAI nei
+  risultati del progetto: nessun ``output_contract`` aggiornato, nessuna riga
+  ``results`` (nessuna sorgente «progetto» a valle cambia), nessuna run
+  intermedia (cronologia dei nodi e retention invariate), nessun Carica;
+- cronologia: la riga di ``log_runs`` ha ``triggered_by`` =
+  ``test_run:<username>`` (:func:`trigger_for_test_run`), mostrata come
+  «Esecuzione di prova (utente: X)» ed esclusa dallo stato «ultima
+  esecuzione» del progetto;
+- Schedule e catene non passano mai di qui: restano bloccati.
 
 Due usi dello stesso valore (``runtime_input_kinds.project_input_role``):
 parametro (binding ``node_field``: filtro di Estrai, parametro di un passo,
@@ -54,20 +79,30 @@ from app.shared.execution.runtime_input_kinds import (
     node_value,
 )
 
-IdentityOrigin = Literal["authenticated", "preview", "absent"]
-AbsentReason = Literal["project_run", "unattended", "preview_missing", "preview_conflict", "username_invalid"]
+IdentityOrigin = Literal["authenticated", "preview", "test_run", "absent"]
+AbsentReason = Literal[
+    "project_run", "unattended", "preview_missing", "preview_conflict", "username_invalid", "test_run_missing",
+]
 
 PREVIEW_USERNAME_FIELD = "preview_username"
 KIND_LABEL = "Utente che esegue"
+# Esecuzione di prova dall'editor (regola H): tipo del soggetto del contratto
+# e prefisso di ``log_runs.triggered_by``.
+TEST_RUN_SUBJECT_KIND = "test_run"
+TEST_RUN_TRIGGER_PREFIX = "test_run:"
 # Sorgente «Utente che esegue» (Manipola): una riga, una colonna di testo.
 DEFAULT_SOURCE_COLUMN = "utente"
 
 _MISSING_MESSAGES: dict[str, str] = {
     "project_run": (
         "L'input «{label}» ({kind}) ha un valore solo quando la catena e' avviata "
-        "come Eseguibile da un utente autenticato: il progetto non si esegue "
-        "dall'editor. Pubblicalo come Eseguibile; per anteprima e Valida indica "
-        "un nome utente di prova nell'input."
+        "come Eseguibile da un utente autenticato: «Esegui» del progetto non ha "
+        "un utente. Pubblicalo come Eseguibile, oppure usa «Esegui di prova» "
+        "con un nome utente di prova nell'input."
+    ),
+    "test_run_missing": (
+        "L'input «{label}» ({kind}): per l'esecuzione di prova indica un nome "
+        "utente di prova nell'input e salva il progetto."
     ),
     "unattended": (
         "L'input «{label}» ({kind}) non ha un utente: la catena e' partita senza "
@@ -138,6 +173,18 @@ class RuntimeIdentity:
     @classmethod
     def preview_of(cls, canvas: Any) -> "RuntimeIdentity":
         """Username di prova scritto nei nodi «Utente che esegue» del canvas."""
+        return cls._test_username(canvas, origin="preview", missing="preview_missing")
+
+    @classmethod
+    def test_run(cls, saved_canvas: Any) -> "RuntimeIdentity":
+        """«Esegui di prova» dall'editor (regola H): lo username di prova del
+        canvas SALVATO (chi chiama passa quello letto dal server). Stessa
+        regola di :meth:`preview_of`, origine distinta: contratto e impronta
+        sanno che e' una prova."""
+        return cls._test_username(saved_canvas, origin="test_run", missing="test_run_missing")
+
+    @classmethod
+    def _test_username(cls, canvas: Any, *, origin: IdentityOrigin, missing: AbsentReason) -> "RuntimeIdentity":
         names = {
             str(node_value(node, PREVIEW_USERNAME_FIELD) or "").strip()
             for node in identity_input_nodes(canvas)
@@ -146,8 +193,8 @@ class RuntimeIdentity:
         if len(names) > 1:
             return cls("absent", None, "preview_conflict")
         if not names:
-            return cls("absent", None, "preview_missing")
-        return cls("preview", names.pop())
+            return cls("absent", None, missing)
+        return cls(origin, names.pop())
 
 
 def _canvas_nodes(canvas: Any) -> list[Any]:
@@ -230,6 +277,18 @@ def resolve_identity_inputs(
     return {item.key: identity.username for item in targets}
 
 
+def subject_for_test_run(identity: RuntimeIdentity) -> dict[str, str]:
+    """Soggetto ``test_run`` del contratto di un'esecuzione di prova."""
+    if identity.origin != "test_run" or not identity.username:
+        raise ValueError("Soggetto di prova senza un'identita' di prova")
+    return {"kind": TEST_RUN_SUBJECT_KIND, "username": identity.username}
+
+
+def trigger_for_test_run(username: str) -> str:
+    """``log_runs.triggered_by`` di un'esecuzione di prova."""
+    return f"{TEST_RUN_TRIGGER_PREFIX}{username}"
+
+
 def assert_identity_resolved(canvas: Any) -> None:
     """Ultima difesa agli executor: un nodo «Utente che esegue» ancora nel
     canvas vuol dire che nessuno ha risolto l'utente (Schedule, catene,
@@ -243,6 +302,8 @@ __all__ = [
     "DEFAULT_SOURCE_COLUMN",
     "KIND_LABEL",
     "PREVIEW_USERNAME_FIELD",
+    "TEST_RUN_SUBJECT_KIND",
+    "TEST_RUN_TRIGGER_PREFIX",
     "RuntimeIdentity",
     "RuntimeIdentityError",
     "assert_identity_resolved",
@@ -251,4 +312,6 @@ __all__ = [
     "identity_source_fields",
     "missing_identity_error",
     "resolve_identity_inputs",
+    "subject_for_test_run",
+    "trigger_for_test_run",
 ]

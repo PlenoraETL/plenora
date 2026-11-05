@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useRef } from 'react';
+import React, { memo, useMemo, useRef, useState } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import {
@@ -23,6 +23,8 @@ import { useNodesContent } from '../../hooks/useColumns';
 import { useConfirmOrDeny } from '../../context/ConfirmContext';
 import { requestCanvasDeletion } from '../../utils/canvasDeletion';
 import { READ_ONLY_SAFE, useReadOnlyLock } from '../common/readOnlySafe';
+import GuideModal from '../common/GuideModal';
+import { IDENTITY_EXAMPLE, UTENTE_CHE_ESEGUE_GUIDE } from '../../utils/guides/utenteCheEsegue';
 
 const INPUT_TYPES = Object.entries(INPUT_KIND_LABELS);
 
@@ -54,6 +56,48 @@ const DEFAULT_SOURCE_COLUMN = 'utente';
 export function mergeExpectedColumns(previous, names) {
   const byName = new Map((previous || []).map(column => [column.name, column]));
   return names.map(name => byName.get(name) || { name, type: 'str', required: true });
+}
+
+/**
+ * «Come si usa» dell'input «Utente che esegue» (guida G): i due modi, un
+ * esempio concreto e l'avvertenza sulla forma del nome utente; la guida
+ * completa (utils/guides/utenteCheEsegue) si apre da qui. Il pulsante e'
+ * un'azione di vista: attivo anche in sola lettura.
+ */
+function IdentityHelp({ sourceAllowed, onOpenGuide }) {
+  return (
+    <div className="pin__help" role="note" aria-label="Come si usa">
+      <p className="pin__help-title">Come si usa</p>
+      <p>
+        Prende il nome utente di accesso di chi avvia l’Eseguibile. Lo imposta solo il server: nessuno
+        può scriverlo o cambiarlo.
+      </p>
+      <ul>
+        <li><strong>Collegato a un parametro</strong>: il valore di un filtro, di un passo o di una chiamata API.</li>
+        <li>
+          <strong>Sorgente</strong>
+          {sourceAllowed ? '' : ' (solo nei progetti Manipola)'}
+          : una tabella di una riga con la colonna <code>utente</code>, da trasformare con i passi.
+        </li>
+      </ul>
+      <p>
+        Esempio: Utente che esegue → Formula <code>{IDENTITY_EXAMPLE.formula}</code> → Join interno con i dati.
+        {' '}Il nome <code>{IDENTITY_EXAMPLE.username}</code> diventa <code>{IDENTITY_EXAMPLE.value}</code> e restano
+        solo le righe di quell’istituto.
+      </p>
+      <p className="pin__help-warning">
+        Il nome utente, dopo i passi, deve avere esattamente la forma dei dati (maiuscole comprese): se non
+        corrisponde il risultato è vuoto.
+      </p>
+      <p>
+        Pianificazioni e catene si bloccano (nessun utente). Dall’editor «Esegui» diventa un’esecuzione di
+        prova con il nome utente di prova.
+      </p>
+      <button type="button" {...READ_ONLY_SAFE} className="nodrag pin__help-link" onClick={onOpenGuide}>
+        📘 Guida completa
+      </button>
+    </div>
+  );
 }
 
 // Nessuna cache di modulo (audit R5.4, R1-N4, R5-N3): il registry e' quello
@@ -181,6 +225,8 @@ function ProjectInputNode({ id, data }) {
   // di modifica, attivi i «Riprova».
   const lockRef = useRef(null);
   useReadOnlyLock(lockRef, isReadOnly);
+  // Guida completa dell'«Utente che esegue» (vista: anche in sola lettura).
+  const [guideOpen, setGuideOpen] = useState(false);
 
   return (
     <div className="pin">
@@ -306,12 +352,8 @@ function ProjectInputNode({ id, data }) {
         <>
           {serverKind ? (
             <>
-              <p className="pin__binding-hint">
-                Prende il nome utente di accesso di chi avvia l’Eseguibile: collegalo a un filtro o a un
-                parametro per vedere solo i dati di quell’utente. Il valore lo imposta il server, non si
-                può scrivere né cambiare in «Prima di avviare». Senza un utente (Pianificazione, catene,
-                «Esegui» dall’editor) l’esecuzione si blocca.
-              </p>
+              <IdentityHelp sourceAllowed={sourceAllowed} onOpenGuide={() => setGuideOpen(true)} />
+              <GuideModal guide={UTENTE_CHE_ESEGUE_GUIDE} isOpen={guideOpen} onClose={() => setGuideOpen(false)} />
               {sourceAllowed && (
                 <label className="pin__field">
                   <span>Come entra nella catena</span>
@@ -345,7 +387,7 @@ function ProjectInputNode({ id, data }) {
                 </>
               )}
               <label className="pin__field">
-                <span>Nome utente di prova (solo Anteprima e Valida)</span>
+                <span>Nome utente di prova (Anteprima, Valida, Esegui di prova)</span>
                 <FieldInput
                   className="nodrag"
                   codec={PREVIEW_USERNAME}
@@ -355,7 +397,8 @@ function ProjectInputNode({ id, data }) {
                 />
               </label>
               <p className="pin__binding-hint">
-                Usato solo nell’editor per Anteprima e Valida; mai in un’esecuzione che salva risultati.
+                Usato solo nell’editor: Anteprima, Valida ed esecuzione di prova (il risultato della prova
+                non diventa l’Output del progetto). Non entra nell’Eseguibile.
               </p>
             </>
           ) : (

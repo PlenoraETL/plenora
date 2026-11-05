@@ -3,13 +3,15 @@
 import copy
 from collections.abc import Mapping
 
+from app.config import settings
+from app.core.eseguibili import output_store as _output_store
 from app.core.eseguibili.manifest import compile_manifest
 from app.core.eseguibili.models import ExecutableManifest
 from app.core.eseguibili.runtime import resolve_runtime_inputs
 from app.core.eseguibili.service import resolve_runtime_connection_id
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.shared.execution.runtime_bound_fields import RUNTIME_BOUND_REGISTRY, runtime_bound_context
-from app.shared.execution.runtime_identity import RuntimeIdentity, identity_input_nodes
+from app.shared.execution.runtime_identity import RuntimeIdentity, identity_input_nodes, subject_for_test_run
 from app.shared.execution.runtime_input_kinds import node_value, project_input_role
 
 
@@ -165,3 +167,41 @@ def apply_identity_inputs(
     context.pop(RUNTIME_BOUND_REGISTRY, None)
     context.update(runtime_bound_context(resolved_canvas))
     return execution_contract.model_copy(update={"canvas": resolved_canvas, "runtime_context": context})
+
+
+def register_test_run_owner(task_id: str, *, project_id: str, user_id: str, group_id: str) -> None:
+    """Chi ha lanciato la prova possiede il suo risultato (stesso sidecar
+    degli Eseguibili, nello spazio dell'attivita'): solo lui lo scarica."""
+    _output_store.save_task_owner(
+        task_id, project_id, user_id, group_id=group_id, outputs_dir=settings.ESEGUIBILI_OUTPUTS_DIR,
+    )
+
+
+class ProjectTestRunNotApplicable(ValueError):
+    """«Esegui di prova» su un progetto senza input «Utente che esegue»."""
+
+
+
+def apply_test_run_inputs(
+    execution_contract: PipelineExecutionContract,
+    raw_inputs: Mapping[str, object],
+) -> PipelineExecutionContract:
+    """«Esegui di prova» dall'editor (``runtime_identity``, regola H).
+
+    ``execution_contract`` e' costruito dal canvas SALVATO (chi chiama lo
+    legge dal server): lo username di prova viene da li', mai dal client.
+    Gli input si risolvono come in «Esegui» (stessa funzione, stessi errori)
+    con l'identita' di prova; il contratto porta il soggetto ``test_run``,
+    che isola il risultato (``PipelineExecutionContract.isolated_output``).
+    Un progetto senza input «Utente che esegue» non ha nulla da provare: si
+    esegue con «Esegui».
+    """
+
+    if not identity_input_nodes(execution_contract.canvas):
+        raise ProjectTestRunNotApplicable(
+            "L'esecuzione di prova serve ai progetti con un input «Utente che esegue»: "
+            "questo progetto si esegue con «Esegui»."
+        )
+    identity = RuntimeIdentity.test_run(execution_contract.canvas)
+    resolved = apply_project_runtime_inputs(execution_contract, raw_inputs, identity=identity)
+    return resolved.model_copy(update={"execution_subject": subject_for_test_run(identity)})

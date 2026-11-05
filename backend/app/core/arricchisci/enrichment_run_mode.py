@@ -26,6 +26,7 @@ from app.core.projects import service as project_service_module
 from app.core.results import pipeline_result as pipeline_result_module
 from app.utils.logger import get_logger
 from app.shared.contracts.payloads import JsonRows
+from app.shared.execution.runtime_identity import trigger_for_test_run
 
 logger = get_logger("app.core.arricchisci.enrichment_run_mode")
 
@@ -43,20 +44,33 @@ class EnrichmentRunMode:
     """Base: standard (progetto) vs eseguibile (pipeline pubblicata on-demand)."""
 
     is_eseguibile: bool = False
+    # Output nello spazio dell'attivita' (object storage per task_id), mai
+    # nei risultati del progetto ne' nel suo output_contract: Eseguibili ed
+    # esecuzioni di prova (runtime_identity, regola H).
+    isolated_output: bool = False
 
-    # Predicati di policy (derivano da is_eseguibile): incapsulano le branch
-    # "standard sì / eseguibile no" del task senza spostarne il meccanismo.
+    # Predicati di policy: incapsulano le branch "standard sì / isolato no"
+    # del task senza spostarne il meccanismo.
     def logs_run(self) -> bool:
-        """True se la run va tracciata su DB (intermediate run + log_runs)."""
+        """True se la run va tracciata su log_runs (cronologia)."""
         return not self.is_eseguibile
 
     def triggers_downstream_carica(self) -> bool:
-        """True se a fine run vanno lanciati i nodi CARICA collegati."""
-        return not self.is_eseguibile
+        """True se a fine run (output file) vanno lanciati i nodi CARICA collegati."""
+        return not self.isolated_output
+
+    def triggers_carica_after_dataframe(self) -> bool:
+        """Come sopra per l'output tabellare. Eseguibile: invariato rispetto
+        a prima (il lancio non era condizionato); la prova non lancia mai."""
+        return True
 
     def needs_full_bytes(self) -> bool:
-        """True se serve sempre il fetch dei bytes completi (eseguibile→upload S3)."""
-        return self.is_eseguibile
+        """True se serve sempre il fetch dei bytes completi (output isolato→upload S3)."""
+        return self.isolated_output
+
+    def triggered_by(self) -> str:
+        """``log_runs.triggered_by`` della run."""
+        return "manual"
 
     def should_recheck_auth(self) -> bool:
         raise NotImplementedError
@@ -179,6 +193,7 @@ class StandardRunMode(EnrichmentRunMode):
 
 class EseguibileRunMode(EnrichmentRunMode):
     is_eseguibile = True
+    isolated_output = True
 
     def should_recheck_auth(self) -> bool:
         # Gli eseguibili hanno flusso di auth separato (token eseguibile).
@@ -236,9 +251,75 @@ class EseguibileRunMode(EnrichmentRunMode):
         result["is_eseguibile"] = True
 
 
-def for_task(is_eseguibile: bool) -> EnrichmentRunMode:
+class ProjectTestRunMode(EnrichmentRunMode):
+    """«Esegui di prova» dall'editor (runtime_identity, regola H): permessi e
+    cronologia del progetto (riga marcata ``test_run:<username>``), output
+    isolato come un Eseguibile, nessuna run intermedia, nessun Carica,
+    nessun output_contract."""
+
+    is_eseguibile = False
+    isolated_output = True
+
+    def __init__(self, username: str) -> None:
+        self.username = username
+
+    def should_recheck_auth(self) -> bool:
+        return True
+
+    def log_project_id(self, project_id: str) -> str:
+        return project_id
+
+    def triggers_carica_after_dataframe(self) -> bool:
+        return False
+
+    def triggered_by(self) -> str:
+        return trigger_for_test_run(self.username)
+
+    def begin_run(
+        self,
+        *,
+        project_id: str,
+        user_id: Optional[str],
+        task_id: str,
+        run_id: Optional[str] = None,
+        canonical_group_id: Optional[str] = None,
+    ) -> RunContext:
+        # Nessuna run intermedia (cronologia dei nodi e retention del
+        # progetto invariate): il tenant e' quello del contratto.
+        group_id = str(canonical_group_id or "").strip()
+        if not group_id:
+            raise RuntimeError("group_id mancante durante setup dell'esecuzione di prova")
+        return RunContext(run_id=None, group_id=group_id, retention_n=None)
+
+    def persist_dataframe_result(
+        self, *, project_id: str, task_id: str, final_df: Any, final_format: str, output_filename: str,
+        final_filename: str, group_id: str, source_names: Optional[Mapping[str, str]] = None,
+        column_plan: Optional[JsonRows] = None,
+    ) -> Tuple[Optional[str], Path]:
+        saved = ExecutableOutputPersistence(
+            task_id=task_id,
+            group_id=group_id,
+        ).persist_dataframe_output(
+            df=final_df,
+            output_format=final_format,
+            filename_stem=Path(final_filename).stem,
+        )
+        logger.info(f"[Task {task_id}] Output dell'esecuzione di prova su storage: {saved.storage_key}")
+        return None, Path(saved.output_filename)
+
+    def decorate_result(self, result: MutableMapping[str, Any], *, project_id: str, task_id: str) -> None:
+        # Download da /api/tasks/{task_id}/download (proprietario del task).
+        result["result_id"] = None
+        result["test_run"] = {"username": self.username}
+
+
+def for_task(is_eseguibile: bool, test_run: Optional[Mapping[str, Any]] = None) -> EnrichmentRunMode:
     """Factory: la run-mode appropriata per il task."""
-    return EseguibileRunMode() if is_eseguibile else StandardRunMode()
+    if is_eseguibile:
+        return EseguibileRunMode()
+    if test_run is not None:
+        return ProjectTestRunMode(str(test_run.get("username") or ""))
+    return StandardRunMode()
 
 
 __all__ = [
@@ -246,5 +327,6 @@ __all__ = [
     "EnrichmentRunMode",
     "StandardRunMode",
     "EseguibileRunMode",
+    "ProjectTestRunMode",
     "for_task",
 ]

@@ -46,7 +46,7 @@ from app.core.results import cleanup as results_cleanup
 from app.core.results import blob as results_blob
 from app.utils.router_utils import require_service
 from app.observability.audit_action import audit_action
-from app.core.auth.dependencies import get_current_user, require_not_esecutore
+from app.core.auth.dependencies import get_current_user, require_not_esecutore, require_user_or_above
 from app.shared.contracts.auth import CurrentUser
 from app.shared.contracts.payloads import JsonObject
 from app.core.auth import resource_access as resource_access_module
@@ -64,7 +64,12 @@ from app.core.io.http_streaming import (
 )
 from app.core.results import output_file_cleanup
 from app.core.projects.canvas_preview_scope import preview_canvas
-from app.core.orchestrator.runtime_inputs import apply_identity_inputs, apply_project_runtime_inputs
+from app.core.orchestrator.runtime_inputs import (
+    apply_identity_inputs,
+    apply_project_runtime_inputs,
+    apply_test_run_inputs,
+    register_test_run_owner,
+)
 from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError
 
 def _mime_for_filename(filename: str) -> str:
@@ -244,6 +249,79 @@ def execute_project_pipeline(
             status_code=500,
             message="Errore interno del server",
         )
+
+
+class ProjectTestRunRequest(BaseModel):
+    """«Esegui di prova»: nessun canvas (si usa quello SALVATO), nessun
+    intermediate_mode (la prova non scrive run intermedie)."""
+
+    model_config = {"extra": "forbid"}
+
+    inputs: JsonObject = {}
+    force_recalculate: bool = False
+
+
+@pipeline_router.post("/{project_id}/test-run")
+@audit_action(action="project.test_run", target_param="project_id")
+def launch_project_test_run(
+    project_id: str,
+    request: ProjectTestRunRequest = None,
+    current_user: CurrentUser = Depends(require_user_or_above),
+) -> Mapping[str, object]:
+    """«Esegui di prova» di Estrai e Manipola (``runtime_identity``, regola H).
+
+    Solo chi puo' modificare il progetto (come il salvataggio del canvas);
+    l'utente e' lo username di prova del canvas SALVATO; il risultato resta
+    nello spazio dell'attivita' (scaricabile una volta da chi l'ha lanciata),
+    non diventa l'output del progetto e non avvia Carica. Arricchisci ha la
+    sua prova (``/test-run/enrich``).
+    """
+    require_service(_orchestrator, "OrchestratorService")
+    _assert_project_group(project_id, current_user)
+    request = request or ProjectTestRunRequest()
+    project_service = _project_service()
+    # Errori inattesi: il gestore globale risponde 500 tipizzato (nessun
+    # broad-catch nuovo qui).
+    _gate_meta = project_service.get_project_metadata(project_id)
+    if _gate_meta is not None and canvas_validation_gate_blocks(
+        getattr(_gate_meta, "canvas_validated", False)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Canvas non validato: apri il progetto e premi Valida prima di eseguire.",
+        )
+    try:
+        execution_contract = build_pipeline_execution_contract(
+            project_id=project_id,
+            project_service=project_service,
+        )
+        if execution_contract.project_type.lower() == "arricchisci":
+            raise ValueError("Per Arricchisci l'esecuzione di prova e' /test-run/enrich.")
+        execution_contract = apply_test_run_inputs(execution_contract, request.inputs)
+    except RuntimeIdentityError as exc:
+        raise_typed_http(exc.code, status_code=400, message=exc.message)
+    except LookupError:
+        raise_typed_http(error_codes.PROJECT_NOT_FOUND, status_code=404, message="Progetto non trovato")
+    except ValueError as exc:
+        raise_typed_http(error_codes.VALIDATION_ERROR, status_code=400, message=str(exc))
+    task_id = task_service_module.task_service.reserve_task_id()
+    register_test_run_owner(
+        task_id,
+        project_id=project_id,
+        user_id=current_user.user_id,
+        group_id=execution_contract.group_id,
+    )
+    task_info = task_service_module.task_service.create_pipeline_task(
+        project_id=project_id,
+        force_recalculate=request.force_recalculate,
+        user_id=current_user.user_id,
+        execution_contract=execution_contract.to_payload(),
+        task_id=task_id,
+    )
+    result = dict(_task_info_to_dict(task_info))
+    result["async"] = True
+    result["test_run"] = {"username": execution_contract.test_run_subject["username"]}
+    return result
 
 
 @pipeline_router.get("/{project_id}/preview")
@@ -826,10 +904,19 @@ def download_task_result(
         eseguibile_record = _task_eseguibile_record(
             project_id, eseguibile_payload,
         )
+        # Output nello spazio dell'attivita': Eseguibili ed esecuzioni di
+        # prova dell'editor (runtime_identity, regola H). Stessa regola:
+        # solo chi ha lanciato, una volta, mai i risultati del progetto.
+        task_scoped_group_id: str | None = None
         if safe_task_id == task_id and eseguibile_record is not None:
-            eseguibile_group_id = str(
-                eseguibile_record.get("group_id") or ""
-            )
+            task_scoped_group_id = str(eseguibile_record.get("group_id") or "")
+        elif safe_task_id == task_id and isinstance(eseguibile_payload.get("test_run"), Mapping):
+            test_run_meta = _project_service().get_project_metadata(str(project_id or ""))
+            task_scoped_group_id = str(getattr(test_run_meta, "group_id", "") or "")
+            if not task_scoped_group_id:
+                raise HTTPException(status_code=404, detail="Tenant output non determinabile")
+        if task_scoped_group_id is not None:
+            eseguibile_group_id = task_scoped_group_id
             _assert_eseguibile_task_owner(
                 safe_task_id,
                 current_user,

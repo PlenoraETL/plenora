@@ -20,7 +20,8 @@ vi.mock('../../src/context/AuthContext', () => ({
 
 import BeforeRunModal from '../../src/components/editor/BeforeRunModal';
 import {
-  RUNTIME_INPUT_KINDS, RUNTIME_INPUT_KINDS_BY_MODE, isServerInjectedKind, projectRunBlockReason, unsupportedInputNodes,
+  RUNTIME_INPUT_KINDS, RUNTIME_INPUT_KINDS_BY_MODE, isServerInjectedKind, projectRunBlockReason, serverInputNodes,
+  unsupportedInputNodes,
 } from '../../src/utils/runtimeInputKinds';
 import {
   beforeRunReasons, initialInputValues, inputsComplete, runInputErrors, runInputs,
@@ -68,14 +69,16 @@ describe('«Utente che esegue» as a one-row source (Manipola only)', () => {
   });
 });
 
-describe('project run from the editor blocks with a clear message', () => {
+describe('project run from the editor: only a test run, with a clear message for who cannot', () => {
   it.each(['estrai', 'manipola', 'arricchisci'])('%s', (mode) => {
     const nodes = [n('u', { input_kind: 'current_user', label: 'Utente' }), n('t', { input_kind: 'text' })];
     expect(projectRunBlockReason(mode, 'current_user')).toBe('server');
-    expect(unsupportedInputNodes(nodes, mode).map(x => x.id)).toEqual(['u']);
-    const [issue] = unsupportedInputsResult(unsupportedInputNodes(nodes, mode), mode).issues;
+    // Non blocca piu' da solo: diventa l'esecuzione di prova (serverInputNodes).
+    expect(unsupportedInputNodes(nodes, mode)).toEqual([]);
+    expect(serverInputNodes(nodes).map(x => x.id)).toEqual(['u']);
+    const [issue] = unsupportedInputsResult(serverInputNodes(nodes), mode).issues;
     expect(issue.id).toBe('RUNTIME_IDENTITY_REQUIRED');
-    expect(issue.message).toMatch(/«Utente».*Utente che esegue.*Eseguibile.*nome utente di prova/);
+    expect(issue.message).toMatch(/«Utente».*Utente che esegue.*esecuzione di prova.*modificare il progetto.*Eseguibile/);
   });
 });
 

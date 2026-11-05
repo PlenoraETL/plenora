@@ -31,6 +31,12 @@
  * chiama. Gli errori mostrati (stima, avvio) passano da requestErrorMessage.
  * Valida e Anteprima leggono la versione salvata: con modifiche non salvate
  * chiedono prima "Salva e continua".
+ *
+ * «Utente che esegue» nel canvas (regola H del backend): Esegui diventa
+ * l'esecuzione di prova. Solo con can.testRunProject (altrimenti il blocco
+ * spiega perche'); la finestra «Prima di avviare» si apre sempre e mostra
+ * l'utente di prova (testRunIdentity sul canvas salvato; per Arricchisci
+ * quello della stima di prova del server); l'avvio va a executeTestRun.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ValidationModal from '../modals/ValidationModal';
@@ -42,7 +48,8 @@ import {
   unsupportedInputsResult, validationRequestFailedResult,
 } from '../../utils/backendValidationResult';
 import { describeAccessDeniedNodes } from '../../utils/canvasAccessControl';
-import { unsupportedInputNodes } from '../../utils/runtimeInputKinds';
+import { serverInputNodes, testRunIdentity, unsupportedInputNodes } from '../../utils/runtimeInputKinds';
+import { can } from '../../utils/permissions';
 import { saveBeforeServerRead, saveForRun } from '../../utils/serverActions';
 import {
   beforeRunReasons, initialInputValues, inputsKey, isPreparationChanged, needsPreflight, runInputs,
@@ -85,15 +92,20 @@ function broadcastHighlights(result) {
   });
 }
 
-/** Controlli prima di salvare: risorse non accessibili, tipi di input. */
-function runBlockedResult(nodes, mode) {
+/**
+ * Controlli prima di salvare: risorse non accessibili, tipi di input, e
+ * «Utente che esegue» per chi non puo' fare l'esecuzione di prova.
+ */
+function runBlockedResult(nodes, mode, user) {
   const denied = describeAccessDeniedNodes(nodes);
   if (denied) {
     console.warn(`[run-blocked] access_denied nodes:\n${denied.summary}`);
     return accessDeniedResult(denied);
   }
   const unsupported = unsupportedInputNodes(nodes, mode);
-  return unsupported.length ? unsupportedInputsResult(unsupported, mode) : null;
+  if (unsupported.length) return unsupportedInputsResult(unsupported, mode);
+  const server = serverInputNodes(nodes);
+  return server.length && !can.testRunProject(user) ? unsupportedInputsResult(server, mode) : null;
 }
 
 // Input runtime del canvas: si ricalcolano solo quando cambiano i nodi di input.
@@ -111,11 +123,14 @@ const nodeLabel = (id) => {
   return node ? nodeTitle(node.type, node.data) : id;
 };
 
-/** Stima di Arricchisci con gli input dell'avvio: { preflight, preflightError }. */
-async function preflightFor(inputs, runOptions) {
+/**
+ * Stima di Arricchisci con gli input dell'avvio: { preflight, preflightError }.
+ * `testRun`: la stima dell'esecuzione di prova (stessa impronta del suo avvio).
+ */
+async function preflightFor(inputs, runOptions, testRun = null) {
   try {
     const preflight = await preflightEnrichment(useCanvasStore.getState().projectId, {
-      inputs, force_recalculate: Boolean(runOptions?.force_recalculate),
+      inputs, force_recalculate: Boolean(runOptions?.force_recalculate), ...(testRun ? { test_run: true } : {}),
     });
     return { preflight, preflightError: null };
   } catch (e) {
@@ -164,11 +179,17 @@ export default function PipelineRunner({ user = null }) {
 
   // Avvio vero: le scelte della finestra (o nessuna) vanno a onExecute.
   // 409 preparation_changed: stima rifatta e finestra riaperta col motivo.
-  const launch = useCallback(async ({ inputs = {}, intermediateMode = null, fingerprint = null } = {}, runOptions) => {
+  // `testRun` (regola H): l'avvio va a «Esegui di prova» (useExecution ->
+  // api executeTestRun), senza intermediate_mode (la prova non ne scrive).
+  const launch = useCallback(async ({ inputs = {}, intermediateMode = null, fingerprint = null } = {}, runOptions, testRun = null) => {
     const opts = { ...runOptions };
     if (inputs && Object.keys(inputs).length) opts.inputs = inputs;
-    if (intermediateMode) opts.intermediate_mode = intermediateMode;
+    if (intermediateMode && !testRun) opts.intermediate_mode = intermediateMode;
     if (fingerprint) opts.preparation_fingerprint = fingerprint;
+    if (testRun) {
+      opts.test_run = true;
+      opts.mode = useCanvasStore.getState().mode;
+    }
     const onExecute = useCanvasStore.getState().getEditorAction('onExecute');
     if (!onExecute) return false;
     try {
@@ -180,9 +201,9 @@ export default function PipelineRunner({ user = null }) {
       beginPreparation();
       const st = useCanvasStore.getState();
       const definitions = definitionsRef.current;
-      const estimate = await preflightFor(inputs || {}, runOptions);
+      const estimate = await preflightFor(inputs || {}, runOptions, testRun);
       openWindow({
-        id: Date.now(), mode: st.mode, inputDefinitions: definitions, user, runOptions,
+        id: Date.now(), mode: st.mode, inputDefinitions: definitions, user, runOptions, testRun,
         values: { ...initialInputValues(definitions), ...(inputs || {}) },
         preflightKey: inputsKey(runInputs(definitions, { ...initialInputValues(definitions), ...(inputs || {}) })),
         ...estimate,
@@ -206,8 +227,10 @@ export default function PipelineRunner({ user = null }) {
       });
       return;
     }
-    const blocked = runBlockedResult(store.nodes, store.mode);
+    const blocked = runBlockedResult(store.nodes, store.mode, user);
     if (blocked) { showResult(blocked); return; }
+    // «Utente che esegue» nel canvas: dall'editor solo l'esecuzione di prova.
+    const isTestRun = serverInputNodes(store.nodes).length > 0;
     beginPreparation();
     // true = la finestra «Prima di avviare» resta aperta: lo stato resta
     // 'starting' finche' l'utente avvia o annulla.
@@ -220,18 +243,21 @@ export default function PipelineRunner({ user = null }) {
       const st = useCanvasStore.getState();
       const definitions = definitionsRef.current;
       const values = initialInputValues(definitions);
+      // Esecuzione di prova: lo username di prova del canvas appena SALVATO
+      // (il server lo rilegge dal suo canvas: questo e' cio' che si mostra).
+      const testRun = isTestRun ? testRunIdentity(st.nodes) : null;
       // Senza input da chiedere la stima si fa subito (con input, la fa la
       // finestra con i valori scelti).
       const estimate = needsPreflight(st.mode) && definitions.length === 0
-        ? { ...(await preflightFor({}, runOptions)), preflightKey: inputsKey({}) }
+        ? { ...(await preflightFor({}, runOptions, testRun)), preflightKey: inputsKey({}) }
         : { preflight: null, preflightError: null, preflightKey: null };
-      const reasons = beforeRunReasons({ inputDefinitions: definitions, user, ...estimate });
+      const reasons = beforeRunReasons({ inputDefinitions: definitions, user, testRun, ...estimate });
       if (!reasons.length) {
         windowOpen = await launch({ fingerprint: estimate.preflight?.preparation_fingerprint || null }, runOptions);
         return;
       }
       windowOpen = true;
-      openWindow({ id: Date.now(), mode: st.mode, inputDefinitions: definitions, user, runOptions, values, ...estimate, changedMessage: null });
+      openWindow({ id: Date.now(), mode: st.mode, inputDefinitions: definitions, user, runOptions, testRun, values, ...estimate, changedMessage: null });
     } catch (e) {
       console.error('Avvio esecuzione fallito:', e);
       showResult(validationRequestFailedResult(`Avvio non riuscito: ${requestErrorMessage(e)}`));
@@ -247,7 +273,7 @@ export default function PipelineRunner({ user = null }) {
     setRequest(null);
     let windowOpen = false;
     try {
-      windowOpen = await launch(choice, runOptions);
+      windowOpen = await launch(choice, runOptions, request?.testRun || null);
     } catch (e) {
       console.error('Avvio esecuzione fallito:', e);
       showResult(validationRequestFailedResult(`Avvio non riuscito: ${requestErrorMessage(e)}`));
@@ -257,7 +283,7 @@ export default function PipelineRunner({ user = null }) {
   }, [request, launch, showResult]);
   const cancelWindow = useCallback(() => { setRequest(null); setIdleIfStarting(); }, []);
   const preflightFromWindow = useCallback(async (inputs) => {
-    const res = await preflightFor(inputs, request?.runOptions);
+    const res = await preflightFor(inputs, request?.runOptions, request?.testRun || null);
     if (res.preflightError) throw new Error(res.preflightError);
     return res.preflight;
   }, [request]);

@@ -35,6 +35,7 @@ export {
   updateCanvas,
   deleteProject,
   executeProjectQuery,
+  executeTestRun,
   previewProject,
   downloadProjectOutput,
 } from './projects';
