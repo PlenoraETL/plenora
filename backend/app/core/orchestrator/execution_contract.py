@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from app.shared.contracts.payloads import JsonObject
+from app.shared.execution.runtime_bound_fields import RUNTIME_BOUND_REGISTRY, retain_registered
 
 
 SUPPORTED_PIPELINE_EXECUTION_CONTRACT_VERSIONS = frozenset({1, 2})
@@ -73,6 +74,12 @@ class PipelineExecutionContract(BaseModel):
             )
         values["group_id"] = group_id
         values["runtime_context"] = context
+        # Campi scritti dalla risoluzione degli input runtime: restano solo
+        # le chiavi del registro che la risoluzione ha messo nel contesto
+        # (shared.execution.runtime_bound_fields, regola del lettore).
+        canvas = values.get("canvas")
+        if isinstance(canvas, Mapping):
+            values["canvas"] = retain_registered(canvas, context.get(RUNTIME_BOUND_REGISTRY))
         return values
 
     @field_validator("project_id", "project_type", "group_id")

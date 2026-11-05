@@ -51,6 +51,7 @@ from app.shared.contracts.auth import CurrentUser
 from app.shared.contracts.payloads import JsonObject
 from app.core.auth import resource_access as resource_access_module
 from app.shared.execution.canvas_graph import CanvasGraph
+from app.shared.execution.runtime_bound_fields import strip_runtime_bound_fields
 from app.shared.execution.output_contract_types_enricher import (
     enrich_canvas_types_from_output_contract,
 )
@@ -415,6 +416,9 @@ def create_task(
     # che referenziano file_source/project_source di altri tenant
     # Validare qui significa che il task Celery riceve un canvas gia'
     # verificato lato HTTP
+    # I campi scritti solo dalla risoluzione degli input runtime non arrivano
+    # mai dal client (shared.execution.runtime_bound_fields).
+    strip_runtime_bound_fields(request.canvas)
     canvas_graph = CanvasGraph.from_canvas(request.canvas)
     resource_access_module.assert_canvas_resources_access(
         {"nodes": canvas_graph.raw_nodes, "edges": canvas_graph.edges},

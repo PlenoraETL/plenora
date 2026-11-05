@@ -27,6 +27,7 @@ from app.core.arricchisci.canvas_preflight import estimate_canvas
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.node_fields import node_field
+from app.shared.execution.runtime_bound_fields import runtime_bound_context
 from app.shared.execution.runtime_identity import RuntimeIdentity, resolve_identity_inputs
 
 from . import db as eseguibili_db
@@ -152,7 +153,7 @@ def preflight_versioned(
             group_id=eseguibile.group_id,
             canvas=canvas,
             artifact_refs={},
-            runtime_context={"default_connection_id": runtime_connection_id},
+            runtime_context={"default_connection_id": runtime_connection_id, **runtime_bound_context(canvas)},
         )
         nodes = estimate_canvas(contract, connections)
     finally:

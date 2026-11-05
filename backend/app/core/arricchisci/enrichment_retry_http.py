@@ -32,7 +32,11 @@ from app.core.arricchisci.success_evaluator import (
 )
 from app.shared.security.outbound_url import validate_external_url
 from app.core.arricchisci.types import JsonObject
-from app.core.arricchisci.url_path_params import substitute_path_params
+from app.core.arricchisci.url_path_params import (
+    runtime_path_keys,
+    substitute_row_path_params,
+)
+from app.shared.execution.runtime_bound_fields import RUNTIME_STATIC_PARAMETERS
 from app.observability.log_sanitization import (
     sanitize_for_log,
     sanitize_url_for_log,
@@ -70,9 +74,12 @@ class EnrichmentRetryHttpMixin:
         last_error = None
 
         try:
-            # Parametri di percorso: regola unica (url_path_params), un valore
-            # non cambia il percorso dell'endpoint.
-            call_url, call_params_base = substitute_path_params(self.url, params)
+            # Parametri di percorso (url_path_params): codifica di HEAD
+            # 5ea2d748; regola stretta solo per i valori degli input runtime.
+            runtime_values = (getattr(self, "api_config", {}) or {}).get(RUNTIME_STATIC_PARAMETERS)
+            call_url, call_params_base = substitute_row_path_params(
+                self.url, params, runtime_keys=runtime_path_keys(params, runtime_values),
+            )
             validate_external_url(call_url)
         except ValueError as e:
             return None, RowError(

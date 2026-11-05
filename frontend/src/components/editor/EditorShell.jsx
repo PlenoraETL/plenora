@@ -14,10 +14,11 @@
  *     (sidebar | canvas) > afterCanvas (dentro canvas) > modals.
  *   - Impaginazione: classi STATICHE del guscio (`editor-shell`,
  *     `__main`, `__canvas`, `__hex`, `__error`, `__error-message`,
- *     `__error-btn`) con le regole in EditorShell.css, uguali per i tre
- *     editor: il layout non dipende da nomi composti col prefisso. L'unica
- *     classe col prefisso è `${prefix}-canvas`, per i ritocchi del singolo
- *     editor (colori degli archi, controlli) nel suo CSS.
+ *     `__error-btn`) con le regole comuni in EditorShell.css: il layout non
+ *     dipende da nomi composti col prefisso. Accanto, tre classi col
+ *     prefisso per le varianti del singolo editor nel suo CSS (aspetto di
+ *     12e33b9d): `${prefix}-editor` (radice: Estrai 13px), `${prefix}-canvas`
+ *     (archi, controlli) e `${prefix}-error` (schermata d'errore).
  *
  * Cosa NON gestisce (responsabilita' del consumer):
  *   - Hook applicativi (useEditorData / useCanvasCore / usePreview / ...).
@@ -100,7 +101,7 @@ const EMPTY_OBJ = {};
  * e focus iniziale sul primo bottone azione per dare un punto di
  * tastiera immediato.
  */
-function ErrorBanner({ message, children }) {
+function ErrorBanner({ prefix, message, children }) {
   const firstBtnRef = useRef(null);
   useEffect(() => {
     firstBtnRef.current?.focus();
@@ -116,7 +117,7 @@ function ErrorBanner({ message, children }) {
     return child;
   });
   return (
-    <div className="editor-shell__error" role="alert" aria-live="assertive">
+    <div className={`editor-shell__error ${prefix}-error`} role="alert" aria-live="assertive">
       <p className="editor-shell__error-message">{message}</p>
       {enhanced}
     </div>
@@ -345,7 +346,7 @@ canvasConfig = EMPTY_OBJ,
 
   if (loadError) {
     return (
-      <ErrorBanner message={`Errore caricamento: ${loadError}`}>
+      <ErrorBanner prefix={prefix} message={`Errore caricamento: ${loadError}`}>
         {reload && (
           <button type="button" className="editor-shell__error-btn" onClick={reload}>
             Riprova
@@ -362,7 +363,7 @@ canvasConfig = EMPTY_OBJ,
 
   if (!project) {
     return (
-      <ErrorBanner message="Progetto non trovato">
+      <ErrorBanner prefix={prefix} message="Progetto non trovato">
         {onBack && (
           <button type="button" className="editor-shell__error-btn" onClick={onBack}>
             Torna alla lista
@@ -375,7 +376,7 @@ canvasConfig = EMPTY_OBJ,
   const canvasClassName = `editor-shell__canvas ${prefix}-canvas${isReadOnly ? ' canvas-readonly' : ''}`;
 
   return (
-    <div className="editor-shell">
+    <div className={`editor-shell ${prefix}-editor`}>
       {toolbar
         ? <EditorToolbar {...toolbar} onAddStep={palette && !isReadOnly ? openPaletteFromSelection : null} />
         : topbar}

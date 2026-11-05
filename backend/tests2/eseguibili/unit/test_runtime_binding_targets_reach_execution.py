@@ -29,7 +29,7 @@ import app.core.arricchisci.enrichment_retry_http as retry_mod
 from app.core.arricchisci import canvas_orchestrator
 from app.core.arricchisci.canvas_orchestrator import _merge_node_data
 from app.core.arricchisci.enrichment_service import build_enrichment_executor
-from app.core.arricchisci.url_path_params import encode_path_param, substitute_path_params
+from app.core.arricchisci.url_path_params import encode_runtime_path_param, substitute_row_path_params
 from app.core.eseguibili import runtime as executable_runtime
 from app.core.eseguibili.binding_capabilities import (
     NODE_TARGET_FAMILIES,
@@ -403,7 +403,14 @@ def test_worker_sends_the_username(monkeypatch):
     canvas = {"nodes": [{"id": "src1", "type": "project_source", "data": {"project_id": "test-proj"}}, node,
                         {"id": "res1", "type": "result", "data": {"format": "csv", "fileName": "output"}}],
               "edges": [{"source": "src1", "target": "api"}, {"source": "api", "target": "res1"}]}
-    invoke_enrichment_task(project_id="test-proj", canvas=canvas)
+    # Il canvas risolto arriva al worker nel contratto, con il registro dei
+    # campi scritti dalla risoluzione (regola del lettore).
+    from app.core.orchestrator.execution_contract import PipelineExecutionContract
+    from app.shared.execution.runtime_bound_fields import runtime_bound_context
+
+    contract = PipelineExecutionContract(project_id="test-proj", project_type="arricchisci", group_id="g",
+                                         canvas=canvas, runtime_context=runtime_bound_context(canvas))
+    invoke_enrichment_task(project_id="test-proj", canvas=canvas, execution_contract=contract.to_payload())
     assert specs, "il worker non ha inviato la richiesta"
     assert specs[0].params["utente"] == "mario.rossi"
 
@@ -415,24 +422,24 @@ def test_worker_sends_the_username(monkeypatch):
     ("/..", "%2F.."), ("%2F", "%252F"), ("?", "%3F"), ("#", "%23"), ("a/b", "a%2Fb"), ("45.4,9.2", "45.4%2C9.2"),
 ])
 def test_path_parameter_is_fully_encoded(value, encoded):
-    url, rest = substitute_path_params("https://h/api/{p}/x", {"p": value, "q": "1"})
+    url, rest = substitute_row_path_params("https://h/api/{p}/x", {"p": value, "q": "1"},
+                                           runtime_keys=frozenset({"p"}))
     assert url == f"https://h/api/{encoded}/x" and rest == {"q": "1"}
 
 
 @pytest.mark.parametrize("value", ["", ".", ".."])
 def test_dot_segments_and_empty_values_are_refused(value):
     with pytest.raises(ValueError, match="percorso"):
-        encode_path_param("p", value)
+        encode_runtime_path_param("p", value)
 
 
-def test_one_rule_for_every_path_substitution():
-    """Esecuzione per riga, generatore e prova della connessione usano la
-    stessa funzione (nessun ``safe`` permissivo rimasto)."""
+def test_runtime_values_reach_the_strict_rule_on_every_execution_path():
+    """Per riga e generatore passano le chiavi runtime a ``url_path_params``
+    (la parita' con HEAD dei valori non runtime: test_url_path_params_parity)."""
     import inspect
 
     from app.core.arricchisci import api_connection_generator_enricher, enrichment_retry_http
 
     for module in (enrichment_retry_http, api_connection_generator_enricher):
         source = inspect.getsource(module)
-        assert "substitute_path_params(" in source
-        assert "safe=" not in source
+        assert "runtime_path_keys(" in source and "RUNTIME_STATIC_PARAMETERS" in source

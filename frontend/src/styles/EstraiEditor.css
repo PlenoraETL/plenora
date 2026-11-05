@@ -260,6 +260,19 @@
 /* Impaginazione (radice, main, canvas, strato esagonale, errore):
    components/editor/EditorShell.css. Qui solo i ritocchi di questo editor. */
 
+/* Varianti del guscio per Estrai (aspetto di 12e33b9d). */
+.editor-shell.estrai-editor { font-size: 13px; }
+.editor-shell__canvas.estrai-canvas { overflow: hidden; }
+.estrai-canvas .react-flow { background: transparent !important; }
+.editor-shell__error.estrai-error {
+  height: 100%;
+  gap: 12px;
+  padding: 20px;
+  background: transparent;
+  color: #F87171;
+}
+.estrai-error .editor-shell__error-btn { background: #F87171; }
+
 /* ReactFlow overrides: il pattern a punti è nascosto (sotto ci sono gli esagoni) */
 .estrai-canvas .react-flow__background { opacity: 0 !important; }
 
@@ -338,6 +351,9 @@
 /* ═══════════════════════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .estrai-sidebar { width: 220px; }
+}
 @media (max-width: 768px) {
   .estrai-sidebar { display: none; }
   

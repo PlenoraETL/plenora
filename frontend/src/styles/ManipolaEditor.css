@@ -4,6 +4,29 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Editor container ─────────────────────────────────────────── */
+/* Varianti del guscio per Manipola (aspetto di 12e33b9d): schermata
+   d'errore con pulsanti a bordo, viola al passaggio del mouse. */
+.editor-shell__error.manipola-error {
+  height: 100%;
+  background: transparent;
+}
+.manipola-error .editor-shell__error-message { font-size: 13.5px; }
+.manipola-error .editor-shell__error-btn {
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--plen-border-hi);
+  background: transparent;
+  color: var(--plen-text-sub);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.manipola-error .editor-shell__error-btn:hover {
+  border-color: var(--plen-manipola);
+  color: var(--plen-manipola);
+  filter: none;
+}
 
 /* ── Toolbar ──────────────────────────────────────────────────── */
 

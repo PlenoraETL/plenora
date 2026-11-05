@@ -68,6 +68,10 @@
 /* Impaginazione (radice, main, canvas, strato esagonale, errore):
    components/editor/EditorShell.css. Qui solo i ritocchi di questo editor. */
 
+/* Varianti del guscio per Arricchisci (aspetto di 12e33b9d). */
+.editor-shell.arricchisci-editor { overflow: hidden; }
+.editor-shell__canvas.arricchisci-canvas { overflow: hidden; }
+
 /* Rende il pattern dot semitrasparente → esagoni visibili sotto */
 .arricchisci-canvas .react-flow__background { opacity: 0.35; }
 

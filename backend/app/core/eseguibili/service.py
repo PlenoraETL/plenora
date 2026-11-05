@@ -36,6 +36,7 @@ from .models import (
 )
 from .runtime import resolve_runtime_inputs
 from app.shared.execution.runtime_identity import RuntimeIdentity
+from app.shared.execution.runtime_bound_fields import runtime_bound_context
 from .manifest import compile_manifest
 from .storage import INTERNAL_ARTIFACT_PREFIX
 
@@ -853,6 +854,7 @@ def execute_versioned(
                     "cleanup_file_source_ids": cleanup_ids,
                     "output_format": final_format,
                     "output_name": base_name,
+                    **runtime_bound_context(canvas),
                 },
             )
             task_info = task_service.create_enrichment_task(
@@ -885,6 +887,7 @@ def execute_versioned(
                     "cleanup_file_source_ids": cleanup_ids,
                     "output_format": final_format,
                     "output_name": base_name,
+                    **runtime_bound_context(canvas),
                 },
             )
             task_info = task_service.create_pipeline_task(

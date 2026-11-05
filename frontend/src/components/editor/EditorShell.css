@@ -4,6 +4,14 @@
    con prefisso (`estrai-canvas`...): il layout non dipende da nomi
    composti a runtime. I ritocchi del singolo editor (colori degli archi,
    controlli) restano nei CSS di ciascun editor sulle classi con prefisso.
+
+   REGOLA (correzione finale prima del deploy): qui solo cio' che i tre
+   editor avevano UGUALE in 12e33b9d; cio' che era diverso sta nella
+   variante del singolo editor (`.editor-shell.<prefisso>-editor`,
+   `.editor-shell__error.<prefisso>-error`, `.<prefisso>-canvas`), con
+   specificita' maggiore, nel suo CSS. Per esempio font-size 13px solo per
+   Estrai, overflow nascosto della radice solo per Arricchisci. Test:
+   tests/components/editor/EditorShell.contract.test.jsx (tabella 12e33b9d).
    ═══════════════════════════════════════════════════════════════ */
 
 /* Radice: tutta l'altezza della finestra, in colonna (barra, avvisi, main). */
@@ -15,8 +23,6 @@
   background: var(--plen-bg);
   color: var(--plen-text);
   font-family: var(--plen-font-body);
-  font-size: 13px;
-  overflow: hidden;
 }
 
 /* Main: lo spazio restante, in riga (sidebar | canvas). */
@@ -33,7 +39,6 @@
   position: relative;
   height: 100%;
   min-width: 0;
-  overflow: hidden;
   background: var(--plen-bg);
 }
 
@@ -56,7 +61,8 @@
 .editor-shell__canvas .react-flow__renderer,
 .editor-shell__canvas .react-flow__pane { background: transparent !important; }
 
-/* Schermata d'errore (caricamento fallito, progetto non trovato). */
+/* Schermata d'errore (caricamento fallito, progetto non trovato): aspetto
+   di Arricchisci; Estrai e Manipola hanno la loro variante. */
 .editor-shell__error {
   display: flex;
   flex-direction: column;

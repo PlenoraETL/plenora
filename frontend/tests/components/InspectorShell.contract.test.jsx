@@ -506,6 +506,53 @@ describe('useReadOnlyLock: nessun elemento staccato trattenuto', () => {
     expect(temp.disabled).toBe(true);
   });
 
+  // Correzione finale prima del deploy, punto 5: allo sblocco ogni controllo
+  // torna allo stato `disabled` che il form vuole, anche se il form l'ha
+  // cambiato DURANTE il blocco (spento o riacceso).
+  it.each([
+    ['spento dal form durante il blocco', false, true, true],
+    ['riacceso dal form durante il blocco', true, false, false],
+    ['invariato acceso', false, false, false],
+    ['invariato spento', true, true, true],
+  ])('sblocco: %s', async (_name, before, during, after) => {
+    let setRO;
+    let setDis;
+    function Panel() {
+      const ref = React.useRef(null);
+      const [ro, a] = React.useState(false);
+      const [dis, b] = React.useState(before);
+      setRO = a;
+      setDis = b;
+      useReadOnlyLock(ref, ro);
+      return <div ref={ref}><button type="button" disabled={dis}>Salva</button></div>;
+    }
+    render(<Panel />);
+    const btn = screen.getByRole('button', { name: 'Salva' });
+    await act(async () => { setRO(true); });
+    expect(btn.disabled).toBe(true);
+    await act(async () => { setDis(during); });
+    expect(btn.disabled).toBe(true);
+    await act(async () => { setRO(false); });
+    expect(btn.disabled).toBe(after);
+    expect(btn.hasAttribute('data-readonly-locked')).toBe(false);
+  });
+
+  it('sblocco nello stesso giro del cambio del form (record non ancora consegnati)', async () => {
+    let setBoth;
+    function Panel() {
+      const ref = React.useRef(null);
+      const [state, setState] = React.useState({ ro: true, dis: false });
+      setBoth = setState;
+      useReadOnlyLock(ref, state.ro);
+      return <div ref={ref}><button type="button" disabled={state.dis}>Salva</button></div>;
+    }
+    render(<Panel />);
+    const btn = screen.getByRole('button', { name: 'Salva' });
+    expect(btn.disabled).toBe(true);
+    await act(async () => { setBoth({ ro: false, dis: true }); });
+    expect(btn.disabled).toBe(true);
+  });
+
   it('statico: il blocco non tiene collezioni di elementi (Set/Map/array)', () => {
     const text = fs.readFileSync(path.resolve(import.meta.dirname, '../../src/components/common/readOnlySafe.js'), 'utf-8');
     const body = text.slice(text.indexOf('export function useReadOnlyLock'));

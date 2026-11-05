@@ -8,6 +8,7 @@ from app.core.eseguibili.models import ExecutableManifest
 from app.core.eseguibili.runtime import resolve_runtime_inputs
 from app.core.eseguibili.service import resolve_runtime_connection_id
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
+from app.shared.execution.runtime_bound_fields import RUNTIME_BOUND_REGISTRY, runtime_bound_context
 from app.shared.execution.runtime_identity import RuntimeIdentity, identity_input_nodes
 from app.shared.execution.runtime_input_kinds import node_value, project_input_role
 
@@ -74,6 +75,9 @@ def apply_project_runtime_inputs(
     if runtime_connection_id:
         context["default_connection_id"] = runtime_connection_id
     context["runtime_input_summary"] = input_summary
+    # Registro dei campi scritti dalla risoluzione (regola del lettore).
+    context.pop(RUNTIME_BOUND_REGISTRY, None)
+    context.update(runtime_bound_context(resolved_canvas))
     return execution_contract.model_copy(
         update={"canvas": resolved_canvas, "runtime_context": context}
     )
@@ -157,4 +161,7 @@ def apply_identity_inputs(
             str(edge.get("source")) in removed_ids or str(edge.get("target")) in removed_ids
         ))
     ]
-    return execution_contract.model_copy(update={"canvas": resolved_canvas})
+    context = dict(execution_contract.runtime_context)
+    context.pop(RUNTIME_BOUND_REGISTRY, None)
+    context.update(runtime_bound_context(resolved_canvas))
+    return execution_contract.model_copy(update={"canvas": resolved_canvas, "runtime_context": context})

@@ -38,14 +38,25 @@ export const isReadOnlySafe = (el) => Boolean(el?.closest?.(SAFE_SELECTOR));
 
 /**
  * Spegne in `ref.current` ogni controllo che non sia un'azione di lettura,
- * finche' `readOnly` e' vero. Riaccende solo quelli che ha spento lui.
+ * finche' `readOnly` e' vero. Allo sblocco ogni controllo spento da qui torna
+ * allo stato che il form vuole.
  *
  * Nessun riferimento trattenuto (Fase 5, T5+T6, seconda correzione): chi e'
  * stato spento lo dice un marcatore sull'elemento (`data-readonly-locked`),
  * non un Set di elementi. Un controllo smontato mentre il pannello e' in
  * sola lettura esce dal DOM e da qui: nessun elemento staccato resta vivo.
+ *
+ * REGOLA (correzione finale prima del deploy): il marcatore porta lo stato
+ * `disabled` che il controllo deve avere allo sblocco (`'0'` acceso, `'1'`
+ * spento). Parte da quello che aveva prima del blocco; se durante il blocco
+ * qualcun altro (React, il form) cambia `disabled` su un controllo bloccato,
+ * l'osservatore lo vede e il marcatore prende quel valore. Le modifiche fatte
+ * da qui si scartano (`takeRecords`) e non contano come volonta' del form.
+ * Allo sblocco: `disabled = marcatore === '1'`.
  */
 const LOCKED_ATTR = 'data-readonly-locked';
+const WANT_ENABLED = '0';
+const WANT_DISABLED = '1';
 
 export function useReadOnlyLock(ref, readOnly) {
   useLayoutEffect(() => {
@@ -54,17 +65,32 @@ export function useReadOnlyLock(ref, readOnly) {
     const lock = () => {
       for (const el of root.querySelectorAll(FORM_CONTROLS)) {
         if (isReadOnlySafe(el) || el.disabled) continue;
+        // Acceso adesso: allo sblocco torna acceso, salvo che il form lo cambi.
+        el.setAttribute(LOCKED_ATTR, WANT_ENABLED);
         el.disabled = true;
-        el.setAttribute(LOCKED_ATTR, '');
       }
     };
     lock();
-    const observer = typeof MutationObserver === 'function' ? new MutationObserver(lock) : null;
+    let observer = null;
+    const onMutations = (records) => {
+      // Solo cambi fatti da altri: i nostri si scartano a fine giro.
+      for (const record of records) {
+        const el = record.target;
+        if (record.attributeName !== 'disabled' || !el.hasAttribute?.(LOCKED_ATTR)) continue;
+        // Valore voluto da chi l'ha cambiato (l'ultimo record vince: e' lo stato attuale).
+        el.setAttribute(LOCKED_ATTR, el.disabled ? WANT_DISABLED : WANT_ENABLED);
+        if (!el.disabled) el.disabled = true;
+      }
+      lock();
+      observer?.takeRecords();
+    };
+    observer = typeof MutationObserver === 'function' ? new MutationObserver(onMutations) : null;
     observer?.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled'] });
     return () => {
+      if (observer) onMutations(observer.takeRecords());
       observer?.disconnect();
       for (const el of root.querySelectorAll(`[${LOCKED_ATTR}]`)) {
-        el.disabled = false;
+        el.disabled = el.getAttribute(LOCKED_ATTR) === WANT_DISABLED;
         el.removeAttribute(LOCKED_ATTR);
       }
     };

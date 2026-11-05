@@ -45,7 +45,12 @@ from app.core.arricchisci.success_evaluator import (
 from app.core.arricchisci.types import JsonObject, JsonRows
 from app.core.artifacts.static_parameters import process_static_fields
 from app.shared.execution.runtime_bound_fields import RUNTIME_STATIC_PARAMETERS
-from app.core.arricchisci.url_path_params import substitute_path_params
+from app.core.arricchisci.url_path_params import (
+    CONNECTION_SAFE,
+    GENERATOR_SAFE,
+    runtime_path_keys,
+    substitute_key_path_params,
+)
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
@@ -289,14 +294,23 @@ class ApiConnectionGeneratorEnricherMixin:
         return all_rows
 
     @staticmethod
-    def _substitute_url_path_params(url: str, params: JsonObject) -> tuple:
-        """Sostituisce i segnaposto ``{name}`` del URL: regola unica di
-        ``url_path_params`` (valore codificato per intero, ``.``/``..``/vuoto
-        rifiutati). Ritorna ``(updated_url, query_params)``.
+    def _substitute_url_path_params(
+        url: str, params: JsonObject, *, safe: str = CONNECTION_SAFE,
+        runtime_values: Optional[JsonObject] = None,
+    ) -> tuple:
+        """Sostituisce i segnaposto ``{name}`` del URL con i valori di ``params``.
 
-        Usato da `_execute_api_generator` e `test_api_connection`.
+        Ritorna ``(updated_url, query_params)``. Codifica di HEAD 5ea2d748
+        (``url_path_params``): ``safe`` permissivo di default (prova della
+        connessione: alcuni endpoint vogliono ``lat,lon`` non codificato),
+        ``GENERATOR_SAFE`` per il generatore. I valori scritti dagli input
+        runtime (``runtime_values``) seguono la regola stretta.
+
+        Usato da `_call_generator_endpoint` e `test_api_connection`.
         """
-        return substitute_path_params(url, params)
+        return substitute_key_path_params(
+            url, params, safe=safe, runtime_keys=runtime_path_keys(params, runtime_values),
+        )
 
     def _call_generator_endpoint(
         self,
@@ -314,6 +328,7 @@ class ApiConnectionGeneratorEnricherMixin:
         response_body_config: JsonObject,
         success_config: JsonObject,
         output_mapping: JsonRows,
+        runtime_values: Optional[JsonObject] = None,
     ) -> tuple:
         """Esegue una singola chiamata del generator e parsa la response.
 
@@ -324,8 +339,9 @@ class ApiConnectionGeneratorEnricherMixin:
         Solleva `ValueError` su HTTP error.
         """
         target_url = call_url or url
+        # Generatore: codifica stretta di HEAD 5ea2d748 (GENERATOR_SAFE).
         target_url, query_params = self._substitute_url_path_params(
-            target_url, call_params
+            target_url, call_params, safe=GENERATOR_SAFE, runtime_values=runtime_values,
         )
 
         logger.info(f"Generator API call: {method} {target_url}")
@@ -491,6 +507,7 @@ class ApiConnectionGeneratorEnricherMixin:
                 response_body_config=api_config,
                 success_config=success_config,
                 output_mapping=output_mapping,
+                runtime_values=api_config.get(RUNTIME_STATIC_PARAMETERS) or {},
             )
 
         all_rows = self._paginate_generator_results(
