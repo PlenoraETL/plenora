@@ -51,7 +51,7 @@ export const RUNTIME_INPUT_KINDS = Object.freeze([
 const BY_KIND = Object.freeze(Object.fromEntries(RUNTIME_INPUT_KINDS.map(k => [k.kind, k])));
 
 /** Spec del tipo (senza tipo = file, come il backend). */
-export const runtimeInputKindSpec = (value) => BY_KIND[String(value || 'file').toLowerCase()] || null;
+const runtimeInputKindSpec = (value) => BY_KIND[String(value || 'file').toLowerCase()] || null;
 
 /** Il valore lo mette il server («Utente che esegue»): mai inviato dal browser. */
 export const isServerInjectedKind = (value) => runtimeInputKindSpec(value)?.source === 'server';

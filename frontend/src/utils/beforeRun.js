@@ -36,7 +36,7 @@ import { formatNumber } from './format';
 
 export const BEFORE_RUN_REASONS = Object.freeze(['inputs', 'staff', 'estimate', 'blocking', 'changed', 'migrate']);
 
-export const PREPARATION_CHANGED = 'preparation_changed';
+const PREPARATION_CHANGED = 'preparation_changed';
 
 /** Avvio di Arricchisci rifiutato perche' la preparazione e' cambiata. */
 export const isPreparationChanged = (err) =>
@@ -48,7 +48,7 @@ export const needsPreflight = (mode) => mode === 'arricchisci';
 const preflightNodes = (preflight) => (Array.isArray(preflight?.nodes) ? preflight.nodes : []);
 
 /** Chiamate da confermare: piu' di zero, o non conoscibili, su almeno un nodo. */
-export const estimateNeedsConfirm = (preflight) =>
+const estimateNeedsConfirm = (preflight) =>
   preflightNodes(preflight).some(n => n?.api_calls == null || Number(n.api_calls) > 0);
 
 /** La preparazione rifiuta il canvas o un nodo. */
@@ -75,12 +75,8 @@ export function beforeRunReasons({
 }
 
 /** Input che il client compila (non quelli impostati dal server). */
-export const clientInputDefinitions = (inputDefinitions = []) =>
+const clientInputDefinitions = (inputDefinitions = []) =>
   (inputDefinitions || []).filter(d => !isServerInjectedKind(d.input_kind ?? d.kind));
-
-/** Input impostati dal server: righe in sola lettura nella finestra. */
-export const serverInputDefinitions = (inputDefinitions = []) =>
-  (inputDefinitions || []).filter(d => isServerInjectedKind(d.input_kind ?? d.kind));
 
 /** Valori iniziali degli input runtime: i default dichiarati. */
 export const initialInputValues = (inputDefinitions = []) => Object.fromEntries(
@@ -133,7 +129,7 @@ export const runInputs = (inputDefinitions = [], values = {}, { omitEmptyOptiona
 export const inputsKey = (inputs = {}) => JSON.stringify(inputs || {});
 
 // Testi per l'utente dei campi del preflight (righe in ingresso).
-export const INPUT_ROWS_STATUS_LABEL = Object.freeze({
+const INPUT_ROWS_STATUS_LABEL = Object.freeze({
   exact: 'esatte',
   estimated: 'stimate',
   unknown: 'non conoscibili',

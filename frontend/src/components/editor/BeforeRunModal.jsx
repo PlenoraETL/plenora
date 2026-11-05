@@ -44,14 +44,14 @@ import { formatNumber } from '../../utils/format';
 
 // Valori ammessi dal backend per intermediate_mode; '' = non mandarlo
 // (vale l'impostazione globale).
-export const INTERMEDIATE_MODE_OPTIONS = Object.freeze([
+const INTERMEDIATE_MODE_OPTIONS = Object.freeze([
   { value: '', label: 'Predefinita (impostazioni globali)' },
   { value: 'metadata_only', label: 'Solo metadati' },
   { value: 'full_artifact', label: 'Risultati completi' },
 ]);
 
 // Pausa prima di rifare la stima dopo un input cambiato.
-export const PREFLIGHT_DELAY_MS = 300;
+const PREFLIGHT_DELAY_MS = 300;
 
 // Fase 5 T5 (R8.10): min/max/pattern/lunghezze non sono solo attributi
 // HTML: il valore passa dal convertitore del suo tipo (stessa regola del

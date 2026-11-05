@@ -29,7 +29,7 @@
 const TEXT_INPUT_TYPES = new Set(['', 'text', 'search', 'email', 'url', 'tel', 'password', 'number']);
 
 /** true se l'elemento e' un campo di testo (si modifica digitando). */
-export function isTextField(el) {
+function isTextField(el) {
   if (!el || el.nodeType !== 1) return false;
   if (el.isContentEditable) return true;
   const tag = el.tagName;
@@ -83,7 +83,7 @@ export function endTyping() {
 
 let installedOn = null;
 /** Installa gli ascoltatori (una volta per documento). */
-export function installTypingTracker(doc = typeof document !== 'undefined' ? document : null) {
+function installTypingTracker(doc = typeof document !== 'undefined' ? document : null) {
   if (!doc || installedOn === doc) return;
   doc.addEventListener('focusin', onFocusIn, true);
   doc.addEventListener('input', onTextEvent, true);

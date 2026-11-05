@@ -169,20 +169,12 @@ describe('CSS', () => {
     expect(out).toEqual([]);
   });
 
-  // Classi di librerie (DOM che non scriviamo noi) e file della funzione in
-  // corso in un altro worktree (input «Utente che esegue»): da ripulire
-  // dopo l'unione, per non cancellare classi che quel lavoro usa.
+  // Classi di librerie (DOM che non scriviamo noi).
   const LIB_PREFIXES = ['react-flow', 'leaflet'];
-  const PARALLEL_FILES = new Set([
-    'components/eseguibili/EseguibileExecuteWizard.css',
-    'components/nodes/ProjectInputNode.css',
-    'components/editor/BeforeRunModal.css',
-  ]);
   it('nessuna classe CSS senza uso', () => {
     const { unused } = cssUsage();
     const dead = unused
       .filter(([name]) => !LIB_PREFIXES.some(p => name.startsWith(p)))
-      .filter(([, locs]) => locs.some(l => !PARALLEL_FILES.has(l.split(':')[0])))
       .map(([name, locs]) => `${name} @ ${locs[0]}`);
     expect(dead).toEqual([]);
   });
@@ -202,16 +194,6 @@ describe('codice morto', () => {
     'utils/session.js:registeredSessionResets': 'sonda del registro delle cache di sessione',
     'utils/taskOutcome.js:TASK_PHASES': 'fasi dei task: enumerate dal test dell\'esito',
   };
-  // Export usati nel proprio file e da nessun altro (né test): file della
-  // funzione in corso in un altro worktree, non toccati qui.
-  const PARALLEL = new Set([
-    'components/editor/BeforeRunModal.jsx:INTERMEDIATE_MODE_OPTIONS',
-    'components/editor/BeforeRunModal.jsx:PREFLIGHT_DELAY_MS',
-    'hooks/useRuntimeInputDefinitions.js:runtimeInputKind',
-    'utils/beforeRun.js:PREPARATION_CHANGED',
-    'utils/beforeRun.js:estimateNeedsConfirm',
-    'utils/beforeRun.js:INPUT_ROWS_STATUS_LABEL',
-  ]);
   const usage = exportUsage();
 
   it('nessun export morto (usato solo dai test o da nessuno) se non dichiarato', () => {
@@ -219,10 +201,9 @@ describe('codice morto', () => {
   });
   it('nessuna dichiarazione superata', () => {
     expect(Object.keys(TEST_ONLY).filter(id => !usage.dead.includes(id))).toEqual([]);
-    expect([...PARALLEL].filter(id => !usage.untested.includes(id))).toEqual([]);
   });
   it('nessun export che nessuno importa (né src né test)', () => {
-    expect(usage.untested.filter(id => !PARALLEL.has(id) && id !== 'utils/format.js:ENUM_LABELS')).toEqual([]);
+    expect(usage.untested.filter(id => id !== 'utils/format.js:ENUM_LABELS')).toEqual([]);
   });
 
   it('dipendenze e build senza resti (D6): maplibre-gl, deck.gl, ImdfPreviewModal, nome del pacchetto', () => {

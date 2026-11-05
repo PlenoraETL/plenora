@@ -12,7 +12,7 @@ import { useResource } from './useResource';
 const EMPTY = [];
 
 // Stesso default del backend (eseguibili/manifest.py): senza tipo = file.
-export const runtimeInputKind = (node) => String(node?.data?.input_kind || 'file').trim().toLowerCase();
+const runtimeInputKind = (node) => String(node?.data?.input_kind || 'file').trim().toLowerCase();
 
 /**
  * Input chiesti nella finestra di esecuzione dell'EDITOR: i file no (nel

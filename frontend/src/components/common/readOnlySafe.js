@@ -19,11 +19,11 @@
  */
 import { useLayoutEffect } from 'react';
 
-export const READ_ONLY_SAFE_ATTR = 'data-readonly-safe';
+const READ_ONLY_SAFE_ATTR = 'data-readonly-safe';
 /** Da spargere sul controllo: `<button {...READ_ONLY_SAFE}>`. */
 export const READ_ONLY_SAFE = Object.freeze({ [READ_ONLY_SAFE_ATTR]: '' });
 const SAFE_SELECTOR = `[${READ_ONLY_SAFE_ATTR}]`;
-export const FORM_CONTROLS = 'input, select, textarea, button';
+const FORM_CONTROLS = 'input, select, textarea, button';
 
 /** true se il controllo e' un'azione di lettura (lui o un contenitore dichiarato). */
 export const isReadOnlySafe = (el) => Boolean(el?.closest?.(SAFE_SELECTOR));
