@@ -1,0 +1,116 @@
+[
+  {
+    "kind": "file",
+    "value": "file",
+    "modes": [
+      "estrai",
+      "manipola",
+      "arricchisci"
+    ],
+    "source": "client",
+    "source_modes": [
+      "estrai",
+      "manipola",
+      "arricchisci"
+    ]
+  },
+  {
+    "kind": "text",
+    "value": "scalar",
+    "modes": [
+      "estrai",
+      "manipola",
+      "arricchisci"
+    ],
+    "source": "client",
+    "source_modes": []
+  },
+  {
+    "kind": "integer",
+    "value": "scalar",
+    "modes": [
+      "estrai",
+      "manipola",
+      "arricchisci"
+    ],
+    "source": "client",
+    "source_modes": []
+  },
+  {
+    "kind": "number",
+    "value": "scalar",
+    "modes": [
+      "estrai",
+      "manipola",
+      "arricchisci"
+    ],
+    "source": "client",
+    "source_modes": []
+  },
+  {
+    "kind": "boolean",
+    "value": "scalar",
+    "modes": [
+      "estrai",
+      "manipola",
+      "arricchisci"
+    ],
+    "source": "client",
+    "source_modes": []
+  },
+  {
+    "kind": "date",
+    "value": "scalar",
+    "modes": [
+      "estrai",
+      "manipola",
+      "arricchisci"
+    ],
+    "source": "client",
+    "source_modes": []
+  },
+  {
+    "kind": "datetime",
+    "value": "scalar",
+    "modes": [
+      "estrai",
+      "manipola",
+      "arricchisci"
+    ],
+    "source": "client",
+    "source_modes": []
+  },
+  {
+    "kind": "select",
+    "value": "scalar",
+    "modes": [
+      "estrai",
+      "manipola",
+      "arricchisci"
+    ],
+    "source": "client",
+    "source_modes": []
+  },
+  {
+    "kind": "connection",
+    "value": "connection",
+    "modes": [
+      "estrai"
+    ],
+    "source": "client",
+    "source_modes": []
+  },
+  {
+    "kind": "current_user",
+    "value": "scalar",
+    "modes": [
+      "estrai",
+      "manipola",
+      "arricchisci"
+    ],
+    "source": "server",
+    "source_modes": [
+      "manipola"
+    ]
+  }
+]

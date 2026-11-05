@@ -11,6 +11,7 @@ from app.core.eseguibili.service import (
 )
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
+from app.shared.execution.runtime_identity import RuntimeIdentity
 
 
 def _canvas() -> dict:
@@ -76,7 +77,7 @@ def test_connection_selector_and_filter_binding_compile_and_resolve(monkeypatch)
     assert connection_input.connection_set_id == "cset_clienti"
     assert all(binding.input_key != "cliente" for binding in manifest.bindings)
 
-    resolved, cleanup_ids, summary = runtime.resolve_runtime_inputs(
+    resolved, cleanup_ids, summary = runtime.resolve_runtime_inputs(identity=RuntimeIdentity.unattended(),
         eseguibile_id="exec",
         canvas=_canvas(),
         manifest=manifest,
@@ -165,6 +166,7 @@ def test_project_execution_contract_freezes_resolved_connection(monkeypatch):
     resolved = apply_project_runtime_inputs(
         contract,
         {"cliente": "cliente_b", "stato": "OPEN"},
+        identity=RuntimeIdentity.project_run(),
     )
 
     assert resolved.runtime_context["default_connection_id"] == "connection_cliente_b"

@@ -14,7 +14,10 @@ describe('Connection Set runtime contract', () => {
     expect(source).toContain('INPUT_KIND_LABELS');
     expect(read('src/utils/glossary.js')).toContain("connection: 'Set di connessioni'");
     expect(source).toContain('connection_set_id');
-    expect(source).toContain("kind !== 'connection'");
+    // Nessuna maniglia per la connessione: regola unica del ruolo
+    // (utils/runtimeInputKinds.projectInputHandle -> null per 'connection').
+    expect(source).toContain('projectInputHandle(data) && (');
+    expect(read('src/utils/runtimeInputKinds.js')).toContain("source: 'output', parameter: 'parameter', connection: null");
     expect(source).toContain('seleziona la connessione dell’intero progetto Estrai');
   });
 

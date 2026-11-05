@@ -35,6 +35,7 @@ from app.shared.execution.api_mapping import mapping_destination
 from app.core.arricchisci.enrichment_service import resolve_enrichment_output_mapping
 from app.shared.execution.graph import GraphCycleError, kahn_topological_order
 from app.shared.execution.schema_types import InferredSchema
+from app.shared.execution.runtime_input_kinds import project_input_role
 from app.shared.execution.validation_protocol import validator_for
 from app.shared.execution.validation_types import Issue, ValidationReport
 
@@ -220,7 +221,7 @@ def _source_node_issues(nodes: list, edges: list) -> List[Issue]:
         ntype = getattr(n, "type", None)
         if ntype not in _SOURCE_NODE_TYPES:
             continue
-        if ntype == "project_input" and getattr(n, "input_kind", None) != "file":
+        if ntype == "project_input" and project_input_role(n) != "source":
             continue
         if n.id not in touched:
             out.append(Issue(
@@ -339,7 +340,7 @@ def _type_specific_issues(
             ntype = getattr(n, "type", None)
             scalar_project_input = (
                 ntype == "project_input"
-                and getattr(n, "input_kind", None) != "file"
+                and project_input_role(n) != "source"
             )
             if (
                 ntype in _ESTRAI_UNSUPPORTED_SOURCE_TYPES
@@ -364,7 +365,7 @@ def _type_specific_issues(
             getattr(n, "type", None) in _SOURCE_NODE_TYPES
             and not (
                 getattr(n, "type", None) == "project_input"
-                and getattr(n, "input_kind", None) != "file"
+                and project_input_role(n) != "source"
             )
             for n in nodes
         )

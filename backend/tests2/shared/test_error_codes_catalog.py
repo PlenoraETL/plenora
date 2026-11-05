@@ -128,6 +128,9 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "auth_rate_limit_exceeded",
     # 503 — infra fail-loud
     "auth_revocation_unavailable",
+    # Input «Utente che esegue» (shared/execution/runtime_identity)
+    "runtime_identity_required",
+    "runtime_identity_client_value",
 }
 
 # Pattern accettati come `http_<status>` fallback intenzionale
@@ -224,7 +227,9 @@ def test_catalog_count_domain_seventy_three():
     5 dispatch carica #18/#20 write/visibility family +
     1 task store availability code + 9 CARICA uncertainty/error codes."""
     # 73: +carica_rest_auth_unavailable (Fase 5 T1, R10.8).
-    assert len(EXPECTED_DOMAIN_CODES) == 73
+    # 75: +runtime_identity_required, runtime_identity_client_value
+    # (input «Utente che esegue»).
+    assert len(EXPECTED_DOMAIN_CODES) == 75
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 

@@ -140,6 +140,7 @@ export const INPUT_KIND_LABELS = Object.freeze({
   datetime: 'Data e ora',
   select: 'Scelta',
   connection: 'Set di connessioni',
+  current_user: 'Utente che esegue',
 });
 export const inputKindLabel = (kind) => INPUT_KIND_LABELS[String(kind || 'file').toLowerCase()] || String(kind);
 

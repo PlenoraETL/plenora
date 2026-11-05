@@ -18,6 +18,7 @@ from app.core.resources import memory_guard
 from app.core.query_execution.query_executor import QueryExecutor
 from app.core.query_execution.query_streaming import execute_streaming_to_writer
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
+from app.shared.execution.runtime_identity import RuntimeIdentityError, assert_identity_resolved
 from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult
@@ -255,6 +256,12 @@ class OrchestratorService:
                 project_id=project_id,
                 message=f"Tipo progetto '{project_type}' non supportato",
             )
+        # Ogni esecuzione passa di qui (API, Schedule, catene, Carica, worker):
+        # un input «Utente che esegue» non risolto blocca la catena.
+        try:
+            assert_identity_resolved(canvas)
+        except RuntimeIdentityError as exc:
+            return PipelineArtifact.failure(project_id=project_id, message=exc.message, error=exc.code)
 
         output_persistence = None
         if execution_context is not None and execution_context.get("output_task_id"):
@@ -334,6 +341,10 @@ class OrchestratorService:
         executor = self._executor_dispatch.get(metadata.project_type)
         if executor is None:
             return {"success": False, "message": f"Preview non supportata per tipo '{metadata.project_type}'"}
+        try:
+            assert_identity_resolved(canvas)
+        except RuntimeIdentityError as exc:
+            return {"success": False, "message": exc.message, "error": exc.code}
         return executor.preview(project_id, canvas, limit)
 
     def execute_preview_from_contract(
@@ -351,6 +362,10 @@ class OrchestratorService:
                     f"'{contract.project_type}'"
                 ),
             }
+        try:
+            assert_identity_resolved(contract.canvas)
+        except RuntimeIdentityError as exc:
+            return {"success": False, "message": exc.message, "error": exc.code}
         return executor.preview(
             contract.project_id,
             self._coerce_canvas(contract.canvas),

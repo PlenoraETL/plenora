@@ -7,6 +7,9 @@
  *
  * Sezioni:
  *  - Input: i valori chiesti all'esecuzione (project_input non di tipo file).
+ *    «Utente che esegue» (tipo impostato dal server) e' una riga in sola
+ *    lettura con lo username di chi e' collegato: non si compila e non si
+ *    invia, lo mette il server (utils/beforeRun).
  *  - Stima (Arricchisci): per ogni nodo API righe in ingresso (esatte,
  *    stimate o non conoscibili, campionate), chiamate stimate e motivi. La
  *    stima usa GLI STESSI input dell'avvio: cambiare un input la rifa'.
@@ -26,7 +29,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { role } from '../../utils/permissions';
-import { term } from '../../utils/glossary';
+import { inputKindLabel, term } from '../../utils/glossary';
+import { isServerInjectedKind } from '../../utils/runtimeInputKinds';
+import { useAuth } from '../../context/AuthContext';
 import { requestErrorMessage } from '../../utils/errorMessages';
 import {
   describeApiCalls, describeInputRows, initialInputValues, inputsComplete, inputsKey, needsPreflight,
@@ -107,6 +112,35 @@ function InputField({ definition, value, onChange, error, onBlur }) {
   );
 }
 
+// Nome utente di chi e' collegato (null fuori da AuthProvider: la finestra
+// e' condivisa e si usa anche senza sessione nei test).
+function useSignedInUsername() {
+  try {
+    return useAuth()?.user?.username || null;
+  } catch {
+    return null;
+  }
+}
+
+// «Utente che esegue»: sola lettura, nessun valore inviato (il server usa
+// l'utente autenticato che avvia).
+function IdentityField({ definition, username }) {
+  const id = `before-run-input-${definition.input_key}`;
+  return (
+    <div className="before-run__row">
+      <label htmlFor={id} className="before-run__label">
+        {definition.label || definition.input_key}
+      </label>
+      <input id={id} className="before-run__field" type="text" value={username || ''} readOnly aria-readonly="true" />
+      <span className="before-run__hint">
+        {inputKindLabel('current_user')}: lo imposta il server con l'utente che avvia l'esecuzione
+        {username ? '' : ' (utente non disponibile in questa finestra)'}; non si può cambiare.
+      </span>
+      {definition.description && <span className="before-run__hint">{definition.description}</span>}
+    </div>
+  );
+}
+
 const nodeProblems = (node) => [
   node?.message,
   ...(Array.isArray(node?.errors) ? node.errors.map(item => (typeof item === 'string' ? item : item?.message)) : []),
@@ -173,6 +207,7 @@ export default function BeforeRunModal({
   extra = null, extraInputs = null, extraComplete = true,
 }) {
   const definitions = request?.inputDefinitions || [];
+  const username = useSignedInUsername();
   const migration = request?.migration || [];
   const withEstimate = Boolean(request) && migration.length === 0 && needsPreflight(request.mode) && typeof onPreflight === 'function';
   const [values, setValues] = useState({});
@@ -295,7 +330,9 @@ export default function BeforeRunModal({
         {definitions.length > 0 && (
           <section className="before-run__section" aria-label="Input">
             <h3 className="before-run__heading">Input</h3>
-            {definitions.map(d => (
+            {definitions.map(d => (isServerInjectedKind(d.input_kind) ? (
+              <IdentityField key={d.input_key} definition={d} username={username} />
+            ) : (
               <InputField
                 key={d.input_key}
                 definition={d}
@@ -304,7 +341,7 @@ export default function BeforeRunModal({
                 onBlur={() => setTouched(cur => ({ ...cur, [d.input_key]: true }))}
                 onChange={(v) => setValues(cur => ({ ...cur, [d.input_key]: v }))}
               />
-            ))}
+            )))}
           </section>
         )}
         {extra}

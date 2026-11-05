@@ -39,6 +39,7 @@ from app.core.arricchisci.types import StringMap
 from app.core.projects.exceptions import CanvasCorruptedError
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
+from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError
 from app.core.artifacts import (
     LatestProjectArtifactRef,
     SourceLoader,
@@ -804,9 +805,12 @@ def _compatibility_node_preflight(request: ValidateRequest | EstimateRequest, cu
     node_id = selected[0]["id"]
     selected[0]["data"] = {**(selected[0].get("data") or {}), "param_mapping": request.param_mapping}
     selected[0]["param_mapping"] = request.param_mapping
-    response = preflight_enrichment(request.project_id,
-                                    EnrichPreflightRequest(canvas=_ancestor_subcanvas(canvas, node_id), inputs=request.inputs),
-                                    current_user)
+    subcanvas = _ancestor_subcanvas(canvas, node_id)
+    # Stima del nodo nell'editor = anteprima: «Utente che esegue» vale lo
+    # username di prova del nodo (runtime_identity).
+    response = _preflight_enrichment(request.project_id,
+                                     EnrichPreflightRequest(canvas=subcanvas, inputs=request.inputs),
+                                     current_user, identity=RuntimeIdentity.preview_of(subcanvas))
     estimate = next((value for value in response["nodes"] if value["node_id"] == node_id), None)
     if estimate is None:
         raise_typed_http(error_codes.VALIDATION_ERROR, status_code=422, message="Nodo API non preparabile",
@@ -829,6 +833,13 @@ def _preflight_connections(canvas: JsonObject, current_user: CurrentUser) -> Jso
 @enrich_router.post("/{project_id}/preflight")
 def preflight_enrichment(project_id: str, request: EnrichPreflightRequest,
                          current_user: CurrentUser = Depends(require_not_esecutore)) -> JsonObject:
+    """Stima prima di «Esegui» del progetto: stessa identita' dell'avvio
+    (``project_run``), un input «Utente che esegue» blocca gia' qui."""
+    return _preflight_enrichment(project_id, request, current_user, identity=RuntimeIdentity.project_run())
+
+
+def _preflight_enrichment(project_id: str, request: EnrichPreflightRequest, current_user: CurrentUser, *,
+                          identity: RuntimeIdentity) -> JsonObject:
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
     if metadata.project_type != "arricchisci":
@@ -839,9 +850,12 @@ def preflight_enrichment(project_id: str, request: EnrichPreflightRequest,
             raise HTTPException(404, "Canvas non trovato")
         canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False)
         contract, manifest = prepare_contract(PipelineExecutionContract(project_id=project_id,
-            project_type=metadata.project_type, group_id=metadata.group_id, canvas=canvas.model_dump()), request.inputs)
+            project_type=metadata.project_type, group_id=metadata.group_id, canvas=canvas.model_dump()), request.inputs,
+            identity=identity)
         connections = _preflight_connections(contract.canvas, current_user)
         nodes = estimate_canvas(contract, connections)
+    except RuntimeIdentityError as exc:
+        raise_typed_http(exc.code, status_code=400, message=exc.message)
     except PREPARATION_ERRORS as exc:
         raise_preparation_failure(exc)
     return {"valid": all(node["valid"] for node in nodes), "manifest": manifest.model_dump(), "nodes": nodes,
@@ -960,7 +974,10 @@ def execute_enrichment_async(
                     canvas=canvas.model_dump(),
                 ),
                 request.inputs,
+                identity=RuntimeIdentity.project_run(),
             )
+        except RuntimeIdentityError as exc:
+            raise_typed_http(exc.code, status_code=400, message=exc.message)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

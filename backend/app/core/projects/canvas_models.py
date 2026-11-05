@@ -15,6 +15,7 @@ from app.shared.execution.canvas_types import (
     WriteModeLiteral,
 )
 from app.shared.execution.canvas_column import Column as _Column
+from app.shared.execution.runtime_input_kinds import RuntimeInputKind
 from app.utils.logger import get_logger
 
 _canvas_logger = get_logger(__name__)
@@ -168,10 +169,8 @@ class Node(BaseModel):
     # Input pubblico di progetto. Viene risolto prima del dispatch sia nella
     # normale esecuzione sia nel publisher/runtime degli eseguibili.
     input_key: Optional[str] = None
-    input_kind: Optional[Literal[
-        "file", "text", "integer", "number", "boolean", "date",
-        "datetime", "select", "connection"
-    ]] = None
+    # Tabella unica dei tipi: app/shared/execution/runtime_input_kinds.py.
+    input_kind: Optional[RuntimeInputKind] = None
     connection_set_id: Optional[str] = None
     required: Optional[bool] = True
     default_value: Optional[Any] = None
@@ -179,6 +178,12 @@ class Node(BaseModel):
     expected_columns: Optional[List[dict]] = []
     validation: Optional[dict] = {}
     bindings: Optional[List[dict]] = []
+    # «Utente che esegue» (runtime_input_kinds): sorgente di una riga in
+    # Manipola (`as_source` + `source_column`) e nome utente di PROVA per
+    # anteprima e Valida (mai nel manifest, mai in un'esecuzione salvata).
+    as_source: Optional[bool] = False
+    source_column: Optional[str] = None
+    preview_username: Optional[str] = None
     order: Optional[int] = 0
 
     label: Optional[str] = None

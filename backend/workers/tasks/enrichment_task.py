@@ -39,6 +39,7 @@ from app.core.results import store as result_store
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution import carica_dispatcher
 from app.shared.execution.canvas_graph import CanvasGraph
+from app.shared.execution.runtime_identity import assert_identity_resolved
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.utils import debug_payload_builder as debug_payload_builder_module
 from app.core.arricchisci.enrichment_service import (
@@ -437,6 +438,9 @@ def execute_enrichment_task(
 
         if not nodes:
             raise ValueError("Nessun nodo nel canvas")
+        # Input «Utente che esegue» non risolto (avvio legacy, catene, avvio
+        # non presidiato): la catena si blocca (shared/execution/runtime_identity).
+        assert_identity_resolved(canvas)
 
         update_task_progress(self, 5, "Caricamento dati...", task_id=task_id)
 

@@ -1,3 +1,5 @@
+import { projectInputRole } from './runtimeInputKinds';
+
 export const PARAMETER_EDGE_KIND = 'parameter_binding';
 
 const SCALAR_PARAMETER_TYPES = new Set(['string', 'number', 'boolean', 'select']);
@@ -23,8 +25,9 @@ export function dataFlowEdges(edges) {
   return (edges || []).filter(edge => !isParameterBindingEdge(edge));
 }
 
+/** Input che scrive parametri di altri nodi (ruolo unico: utils/runtimeInputKinds). */
 export function isScalarProjectInputNode(node) {
-  return node?.type === 'project_input' && node.data?.input_kind !== 'file';
+  return projectInputRole(node) === 'parameter';
 }
 
 export function isBindableTransformParameter(param, transformDefinition = {}) {
@@ -75,7 +78,7 @@ export function createParameterBindingEdge({
 export function hydrateParameterBindingEdges(nodes) {
   const result = [];
   (nodes || []).forEach(node => {
-    if (node.type !== 'project_input' || node.data?.input_kind === 'file') return;
+    if (!isScalarProjectInputNode(node)) return;
     (node.data?.bindings || []).forEach((binding, index) => {
       if (!binding?.target_node_id || !binding?.target_field) return;
       const directParameter = String(binding.target_field).match(/^config\.([^.]+)$/)?.[1] || '';
@@ -99,7 +102,10 @@ export function serializedBindingsForInput(node, edges) {
       target_node_id: edge.target,
       target_field: edge.data.target_field,
     }));
-  return node.data?.input_kind === 'file' ? (node.data?.bindings || []) : live;
+  if (isScalarProjectInputNode(node)) return live;
+  // Sorgenti: il file conserva i suoi binding di sorgente; la sorgente
+  // «Utente che esegue» non ne ha (entra con gli archi dei dati).
+  return (node.data?.input_kind || 'file') === 'file' ? (node.data?.bindings || []) : [];
 }
 
 export function getNodeBindableTargets(node, registry = null) {

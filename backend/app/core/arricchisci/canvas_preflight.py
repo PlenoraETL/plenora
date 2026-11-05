@@ -18,12 +18,14 @@ from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.projects.canvas_models import CanvasState
 from app.core.projects.schema_execution_sources import prepare_canvas_data
 from app.shared.execution.node_fields import node_field
+from app.shared.execution.runtime_identity import RuntimeIdentity
 
 
-def prepare_contract(contract: PipelineExecutionContract, inputs: JsonObject) -> tuple[PipelineExecutionContract, Any]:
+def prepare_contract(contract: PipelineExecutionContract, inputs: JsonObject, *,
+                     identity: RuntimeIdentity) -> tuple[PipelineExecutionContract, Any]:
     manifest = compile_manifest(for_project=True, source_project_id=contract.project_id, project_type=contract.project_type,
                                 canvas=contract.canvas, default_connection_id=contract.runtime_context.get("default_connection_id"))
-    return apply_project_runtime_inputs(contract, inputs), manifest
+    return apply_project_runtime_inputs(contract, inputs, identity=identity), manifest
 
 
 def preparation_fingerprint(contract: PipelineExecutionContract, connections: JsonObject, *, revision: Any = None,

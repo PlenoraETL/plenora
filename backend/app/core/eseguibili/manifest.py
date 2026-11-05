@@ -12,6 +12,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from app.shared.contracts.payloads import JsonObject
+from app.shared.execution.runtime_identity import identity_source_column
+from app.shared.execution.runtime_input_kinds import kind_spec, project_input_role
 
 from .binding_capabilities import canonical_binding_path
 from .models import (
@@ -93,25 +95,44 @@ def _compile_project_input(
     raw_validation = data.get("validation") or {}
     if not isinstance(raw_validation, Mapping):
         raise ValueError(f"Validazione input {key or node_id} non valida")
+    spec = kind_spec(kind)
+    if spec is None:
+        raise ValueError(f"Tipo di input non valido: {kind!r}")
+    # Tipo impostato dal server («Utente che esegue»): niente valore
+    # predefinito, vincoli o facoltativita' dal canvas (resti di un tipo
+    # precedente compresi); lo username di prova non entra mai nel manifest.
+    server = spec.server_injected
 
     definition = ExecutableInputDefinition(
         key=key,
         label=label,
         kind=kind,
         description=str(data.get("description") or ""),
-        required=bool(data.get("required", True)),
-        default_value=data.get("default_value"),
+        required=True if server else bool(data.get("required", True)),
+        default_value=None if server else data.get("default_value"),
         multiple=bool(data.get("multiple", False)),
         expected_columns=_as_expected_columns(data.get("expected_columns")),
-        validation=ExecutableInputValidation.model_validate(dict(raw_validation)),
+        validation=ExecutableInputValidation.model_validate(
+            {} if server else dict(raw_validation)
+        ),
         connection_set_id=(
             str(data.get("connection_set_id") or "").strip() or None
         ),
         order=int(data.get("order", order)),
     )
 
+    # Ruolo nel canvas: regola unica (runtime_input_kinds.project_input_role).
+    # Una sorgente (file, «Utente che esegue» come tabella di una riga)
+    # sostituisce il nodo stesso; un parametro scrive campi di altri nodi.
+    role = project_input_role(node)
     bindings: list[ExecutableInputBinding] = []
-    if definition.kind == "file":
+    if role == "source":
+        if spec.value != "file":
+            column = identity_source_column(node)
+            if not _SAFE_SEGMENT.fullmatch(column) or len(column) > 80:
+                raise ValueError(
+                    f"Nome colonna non valido per l'input '{definition.label}': {column!r}"
+                )
         bindings.append(
             ExecutableInputBinding(
                 input_key=definition.key,
@@ -123,6 +144,11 @@ def _compile_project_input(
     raw_bindings = data.get("bindings") or []
     if not isinstance(raw_bindings, list):
         raise ValueError(f"Binding input {definition.key} non validi")
+    if role == "source" and spec.value != "file" and raw_bindings:
+        raise ValueError(
+            f"L'input '{definition.label}' e' una sorgente: non si collega a "
+            "parametri di altri nodi"
+        )
     for raw in raw_bindings:
         if not isinstance(raw, Mapping):
             raise ValueError(f"Binding input {definition.key} non valido")
@@ -139,11 +165,11 @@ def _compile_project_input(
             )
         )
 
-    if definition.kind not in {"file", "connection"} and not bindings:
+    if spec.value == "scalar" and not bindings:
         raise ValueError(
             f"L'input scalare '{definition.label}' non è collegato a nessun campo"
         )
-    if definition.kind == "connection" and bindings:
+    if spec.value == "connection" and bindings:
         raise ValueError(
             f"L'input connessione '{definition.label}' è un parametro di progetto "
             "e non può essere collegato a un nodo"
@@ -192,7 +218,7 @@ def compile_manifest(
         node_id = str(node.get("id") or "")
         targets = list(dict.fromkeys(outgoing_targets.get(node_id, [])))
         data = _node_data(node)
-        if str(data.get("input_kind") or "file") != "file" and len(targets) > 1:
+        if project_input_role(node) != "source" and len(targets) > 1:
             raise ValueError(
                 f"L'input scalare '{data.get('label') or node_id}' deve essere "
                 "collegato a un solo nodo destinazione"
@@ -203,9 +229,25 @@ def compile_manifest(
             inferred_target_id=targets[0] if targets else None,
         )
         inputs.append(definition)
-        if definition.kind == "connection" and project_type != "estrai":
+        spec = kind_spec(definition.kind)
+        if spec is not None and project_type not in spec.modes:
+            if spec.value == "connection":
+                raise ValueError(
+                    "Gli input Connection Set sono supportati solo nei progetti Estrai"
+                )
             raise ValueError(
-                "Gli input Connection Set sono supportati solo nei progetti Estrai"
+                f"Il tipo di input '{definition.kind}' non e' disponibile nei "
+                f"progetti {project_type}"
+            )
+        if (
+            spec is not None
+            and spec.value != "file"
+            and project_input_role(node) == "source"
+            and project_type not in spec.source_modes
+        ):
+            raise ValueError(
+                f"L'input '{definition.label}' come sorgente e' disponibile solo "
+                f"nei progetti {', '.join(spec.source_modes)}"
             )
         bindings.extend(node_bindings)
 

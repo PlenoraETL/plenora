@@ -9,20 +9,12 @@ from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.shared.contracts.payloads import JsonRows, ObjectMap, ObjectRows, StringMap
+from app.shared.execution.runtime_input_kinds import RuntimeInputKind, is_server_injected
 
 
 ProjectType = Literal["estrai", "manipola", "arricchisci"]
-ExecutableInputKind = Literal[
-    "file",
-    "text",
-    "integer",
-    "number",
-    "boolean",
-    "date",
-    "datetime",
-    "select",
-    "connection",
-]
+# Tabella unica dei tipi: app/shared/execution/runtime_input_kinds.py.
+ExecutableInputKind = RuntimeInputKind
 ExecutableBindingMode = Literal["data_source", "node_field"]
 
 
@@ -109,6 +101,16 @@ class ExecutableInputDefinition(BaseModel):
             )
         if self.kind != "file" and self.expected_columns:
             raise ValueError("expected_columns è valido solo per input file")
+        if is_server_injected(self.kind) and (
+            self.default_value is not None
+            or not self.required
+            or self.validation != ExecutableInputValidation()
+        ):
+            # «Utente che esegue»: il valore lo mette solo il server, sempre.
+            raise ValueError(
+                "un input impostato dal server non ha valore predefinito, "
+                "vincoli o facoltativita'"
+            )
         return self
 
 

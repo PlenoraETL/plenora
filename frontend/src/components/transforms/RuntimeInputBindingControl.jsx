@@ -7,6 +7,7 @@ import {
   createParameterBindingEdge,
   isBindableTransformParameter,
   isParameterBindingEdge,
+  isScalarProjectInputNode,
   suggestedInputKind,
 } from '../../utils/runtimeBindingEdges';
 import { newProjectInputData } from '../../utils/uniqueName';
@@ -21,7 +22,7 @@ export default function RuntimeInputBindingControl({
   // un trascinamento non ridisegna il controllo (R9-U N6). I calcoli al clic
   // leggono lo store corrente.
   const inputFlat = useCanvasStore(useShallow(state => (state.nodes || [])
-    .filter(node => node.type === 'project_input' && node.data?.input_kind !== 'file')
+    .filter(isScalarProjectInputNode)
     .flatMap(node => [node.id, node.data])));
   const edges = useCanvasStore(state => state.edges);
   const addNodes = useCanvasStore(state => state.addNodes);

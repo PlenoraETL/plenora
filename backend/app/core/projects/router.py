@@ -6,7 +6,8 @@ Endpoint CRUD progetti, gestione canvas, e inferenza schema.
 from app.core.eseguibili.manifest import compile_manifest
 from app.core.manipola.canvas_data_preparation import CanvasDataPreparation, PREPARATION_ERRORS, classify_preparation_error
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
-from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
+from app.core.orchestrator.runtime_inputs import apply_identity_inputs, apply_project_runtime_inputs
+from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError, identity_input_nodes
 from app.core.orchestrator.carica_payload_validation import assert_canvas_rest_auth_usable
 from app.core.projects.canvas_validation import _StaticCanvasService
 from app.core.projects.canvas_validation import validate_project_chain
@@ -998,6 +999,17 @@ def distinct_node_values(project_id: str, node_id: str, body: DistinctRequest,
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
     canvas = _prepare_canvas_for_owner(project_id, CanvasState(nodes=body.canvas.nodes, edges=body.canvas.edges), metadata, current_user, for_save=False)
+    # Anteprima dei valori: «Utente che esegue» = username di prova (runtime_identity).
+    try:
+        if identity_input_nodes(canvas):
+            canvas = CanvasState(**apply_identity_inputs(PipelineExecutionContract(
+                project_id=project_id, project_type=metadata.project_type, group_id=metadata.group_id,
+                canvas=canvas.model_dump(), runtime_context={"default_connection_id": getattr(metadata, "default_connection_id", None)}),
+                RuntimeIdentity.preview_of(canvas)).canvas)
+    except RuntimeIdentityError as exc:
+        raise_typed_http(exc.code, status_code=400, message=exc.message)
+    except ValueError as exc:
+        raise_typed_http(error_codes.VALIDATION_ERROR, status_code=400, message=str(exc))
     preparation = CanvasDataPreparation(canvas, metadata.group_id)
     if node_id not in preparation.nodes:
         raise HTTPException(404, "Nodo non trovato")
@@ -1136,14 +1148,19 @@ def validate_project_canvas(
             selected_canvas = _prepare_canvas_for_owner(project_id, selected_canvas, metadata, current_user, for_save=False)
         manifest = None
         input_error = None
+        input_error_code = "runtime_inputs.invalid"
         try:
             manifest = compile_manifest(for_project=True, source_project_id=project_id, project_type=metadata.project_type,
                                         canvas=selected_canvas.model_dump(), default_connection_id=getattr(metadata, "default_connection_id", None) if isinstance(getattr(metadata, "default_connection_id", None), str) else None)
             if body and body.inputs is not None:
                 contract = apply_project_runtime_inputs(PipelineExecutionContract(
                     project_id=project_id, project_type=metadata.project_type, group_id=metadata.group_id,
-                    canvas=selected_canvas.model_dump(), runtime_context={"default_connection_id": getattr(metadata, "default_connection_id", None)}), body.inputs)
+                    canvas=selected_canvas.model_dump(), runtime_context={"default_connection_id": getattr(metadata, "default_connection_id", None)}), body.inputs,
+                    # Valida con input = anteprima: username di prova.
+                    identity=RuntimeIdentity.preview_of(selected_canvas))
                 selected_canvas = CanvasState(**contract.canvas)
+        except RuntimeIdentityError as exc:
+            input_error, input_error_code = exc.message, exc.code
         except ValueError as exc:
             input_error = str(exc)
 
@@ -1185,7 +1202,7 @@ def validate_project_canvas(
         )
         result = report.to_dict()
         if input_error:
-            result["issues"].append({"node_id": "", "severity": "error", "code": "runtime_inputs.invalid", "message": input_error})
+            result["issues"].append({"node_id": "", "severity": "error", "code": input_error_code, "message": input_error})
         result["valid"] = not report.has_errors and input_error is None
         result["has_errors"] = not result["valid"]
         result["manifest"] = manifest.model_dump() if manifest else None

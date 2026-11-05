@@ -15,6 +15,7 @@
  *    solo quando cambia la struttura (structureKey), non a ogni drag.
  */
 import { dataFlowEdges } from './runtimeBindingEdges';
+import { projectInputRole } from './runtimeInputKinds';
 
 export const OUTPUT_TYPES = ['result', 'resultNode'];
 
@@ -31,7 +32,7 @@ export function nodeRole(node) {
   const t = node?.type;
   const d = node?.data || {};
   if (t === 'comment') return 'off';
-  if (t === 'project_input') return (d.input_kind || 'file') === 'file' ? 'source' : 'off';
+  if (t === 'project_input') return projectInputRole(node) === 'source' ? 'source' : 'off';
   if (OUTPUT_TYPES.includes(t)) return 'output';
   if (['carica', 'carica_arcgis', 'caricaArcgis'].includes(t)) return 'sink';
   if (t === 'datasourceNode' || t === 'datasource_node') return d.mode === 'carica' ? 'sink' : 'source';

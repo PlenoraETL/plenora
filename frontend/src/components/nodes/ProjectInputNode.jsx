@@ -1,7 +1,9 @@
 import React, { memo, useMemo, useRef } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
-import { acceptsInputKind } from '../../utils/runtimeInputKinds';
+import {
+  acceptsInputKind, canBeSource, isServerInjectedKind, projectInputHandle, projectInputRole,
+} from '../../utils/runtimeInputKinds';
 import { loadSharedConnectionSets } from '../../utils/connectionSets';
 import { useTransformRegistry } from '../../hooks/useTransformRegistry';
 import { useResource } from '../../hooks/useResource';
@@ -38,6 +40,11 @@ const MIN_LENGTH = codecs.integer({ min: 0, optional: true });
 const MAX_LENGTH = codecs.integer({ min: 1, optional: true });
 const BOUND = codecs.decimal({ optional: true });
 const PATTERN = codecs.regex();
+// Username di prova dell'«Utente che esegue»: solo per Anteprima e Valida.
+const PREVIEW_USERNAME = codecs.text({ empty: null });
+// Colonna della sorgente «Utente che esegue» (stessa regola della chiave).
+const SOURCE_COLUMN = codecs.key({ allowed: '_', startsWithLetter: true, maxLength: 80 });
+const DEFAULT_SOURCE_COLUMN = 'utente';
 
 /**
  * N4: le colonne attese si ricostruiscono dai NOMI conservando tipo e
@@ -66,6 +73,13 @@ function ProjectInputNode({ id, data }) {
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const mode = useCanvasStore(s => s.mode);
   const kind = data.input_kind || 'file';
+  // «Utente che esegue»: il valore lo mette il server con l'utente che avvia
+  // (utils/runtimeInputKinds, source 'server'): niente valore predefinito né
+  // facoltativo; qui solo lo username di PROVA per Anteprima e Valida.
+  const serverKind = isServerInjectedKind(kind);
+  // Ruolo unico (utils/runtimeInputKinds): sorgente o parametro.
+  const asSource = projectInputRole({ type: 'project_input', data }) === 'source' && kind !== 'file';
+  const sourceAllowed = canBeSource(mode, kind);
   const registryResource = useTransformRegistry({ enabled: kind !== 'file' });
   const registry = registryResource.data || null;
   const registryStatus = registry ? 'ready' : registryResource.status;
@@ -131,6 +145,26 @@ function ProjectInputNode({ id, data }) {
         input_kind: nextKind,
         bindings: [],
         connection_set_id: nextKind === 'connection' ? (node.data?.connection_set_id || '') : null,
+        // Il tipo server non ha valore predefinito ed e' sempre obbligatorio;
+        // lo username di prova vale solo per lui.
+        ...(isServerInjectedKind(nextKind)
+          ? { default_value: null, required: true }
+          : (node.data?.preview_username != null ? { preview_username: null } : {})),
+        ...(node.data?.as_source ? { as_source: false } : {}),
+      },
+    })),
+  }));
+  // Parametro <-> sorgente: gli archi dell'uso vecchio si tolgono nella
+  // STESSA azione (un Ctrl+Z ripristina uso e collegamenti).
+  const changeUsage = nextSource => editGraph(({ nodes: all, edges: allEdges }) => ({
+    edges: allEdges.filter(edge => edge.source !== id),
+    nodes: all.map(node => (node.id !== id ? node : {
+      ...node,
+      data: {
+        ...node.data,
+        as_source: nextSource,
+        bindings: [],
+        source_column: nextSource ? (node.data?.source_column || DEFAULT_SOURCE_COLUMN) : (node.data?.source_column ?? null),
       },
     })),
   }));
@@ -178,10 +212,12 @@ function ProjectInputNode({ id, data }) {
             .map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
-      <label className="pin__check nodrag">
-        <input type="checkbox" checked={data.required !== false} onChange={event => update({ required: event.target.checked })} />
-        Obbligatorio
-      </label>
+      {!serverKind && (
+        <label className="pin__check nodrag">
+          <input type="checkbox" checked={data.required !== false} onChange={event => update({ required: event.target.checked })} />
+          Obbligatorio
+        </label>
+      )}
 
       {kind === 'connection' ? (
         <>
@@ -268,6 +304,61 @@ function ProjectInputNode({ id, data }) {
         </>
       ) : (
         <>
+          {serverKind ? (
+            <>
+              <p className="pin__binding-hint">
+                Prende il nome utente di accesso di chi avvia l’Eseguibile: collegalo a un filtro o a un
+                parametro per vedere solo i dati di quell’utente. Il valore lo imposta il server, non si
+                può scrivere né cambiare in «Prima di avviare». Senza un utente (Pianificazione, catene,
+                «Esegui» dall’editor) l’esecuzione si blocca.
+              </p>
+              {sourceAllowed && (
+                <label className="pin__field">
+                  <span>Come entra nella catena</span>
+                  <select
+                    className="nodrag"
+                    value={asSource ? 'source' : 'parameter'}
+                    disabled={isReadOnly}
+                    onChange={event => changeUsage(event.target.value === 'source')}
+                  >
+                    <option value="parameter">Valore di un parametro (filtro, passo, API)</option>
+                    <option value="source">Sorgente: tabella di una riga</option>
+                  </select>
+                </label>
+              )}
+              {asSource && (
+                <>
+                  <label className="pin__field">
+                    <span>Nome della colonna</span>
+                    <FieldInput
+                      className="nodrag"
+                      codec={SOURCE_COLUMN}
+                      value={data.source_column || DEFAULT_SOURCE_COLUMN}
+                      onCommit={column => update({ source_column: column || DEFAULT_SOURCE_COLUMN })}
+                    />
+                  </label>
+                  <p className="pin__binding-hint">
+                    Il nodo produce una tabella di una riga con questa colonna (testo) che contiene il nome
+                    utente di chi esegue. Collegalo ai passi (Formula, Mappa valori, Join) e chiudi con un Join
+                    interno sui dati principali per filtrarli.
+                  </p>
+                </>
+              )}
+              <label className="pin__field">
+                <span>Nome utente di prova (solo Anteprima e Valida)</span>
+                <FieldInput
+                  className="nodrag"
+                  codec={PREVIEW_USERNAME}
+                  value={data.preview_username ?? null}
+                  onCommit={value => update({ preview_username: value ?? null })}
+                  placeholder="es. mario.rossi"
+                />
+              </label>
+              <p className="pin__binding-hint">
+                Usato solo nell’editor per Anteprima e Valida; mai in un’esecuzione che salva risultati.
+              </p>
+            </>
+          ) : (
           <label className="pin__field">
             <span>Valore predefinito</span>
             {kind === 'boolean' ? (
@@ -287,6 +378,7 @@ function ProjectInputNode({ id, data }) {
               />
             )}
           </label>
+          )}
           {kind === 'select' && (
             <label className="pin__field">
               <span>Opzioni (separate da virgola)</span>
@@ -311,6 +403,7 @@ function ProjectInputNode({ id, data }) {
               <label className="pin__field"><span>Valore massimo</span><FieldInput className="nodrag" codec={BOUND} value={data.validation?.maximum ?? null} onCommit={v => updateValidation({ maximum: v })} /></label>
             </div>
           )}
+          {!asSource && (
           <div className="pin__binding">
             <div className="pin__binding-title">Collegamenti al canvas</div>
             {bindingEdges.length === 0 && (
@@ -376,16 +469,17 @@ function ProjectInputNode({ id, data }) {
               );
             })}
           </div>
+          )}
         </>
       )}
 
       </div>
 
-      {kind !== 'connection' && (
+      {projectInputHandle(data) && (
         <NodeHandle
           type="source"
           position={Position.Right}
-          id={kind === 'file' ? 'output' : 'parameter'}
+          id={projectInputHandle(data)}
           className="pin__handle"
           isConnectable={!isReadOnly}
         />

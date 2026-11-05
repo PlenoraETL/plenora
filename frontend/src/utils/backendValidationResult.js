@@ -10,6 +10,8 @@
 
 import { buildResult, createIssue } from './canvasValidationContract';
 import { requestErrorMessage, asSentence } from './errorMessages';
+import { projectRunBlockReason } from './runtimeInputKinds';
+import { inputKindLabel } from './glossary';
 
 /**
  * Mappa un singolo issue backend nel ValidationIssue FE.
@@ -77,13 +79,23 @@ export function saveFailedResult(err) {
   })]);
 }
 
-/** Input runtime di un tipo che questa modalita' non esegue (utils/runtimeInputKinds). */
-export function unsupportedInputsResult(nodes) {
-  return buildResult((nodes || []).map(n => createIssue({
-    id: 'RUNTIME_INPUT_KIND_UNSUPPORTED',
-    severity: 'error',
-    message: `L'input «${n.data?.label || n.data?.input_key || n.id}» è di tipo connessione: questo tipo è disponibile solo nei progetti Estrai. Cambialo o rimuovilo.`,
-    nodeId: n.id,
-    source: 'frontend',
-  })));
+/**
+ * Input runtime che bloccano «Esegui» del progetto (utils/runtimeInputKinds,
+ * projectRunBlockReason): un tipo che questa modalita' non esegue, oppure un
+ * tipo impostato dal server («Utente che esegue», nessun utente dall'editor).
+ */
+export function unsupportedInputsResult(nodes, mode) {
+  return buildResult((nodes || []).map((n) => {
+    const name = n.data?.label || n.data?.input_key || n.id;
+    const server = projectRunBlockReason(mode, n.data?.input_kind) === 'server';
+    return createIssue({
+      id: server ? 'RUNTIME_IDENTITY_REQUIRED' : 'RUNTIME_INPUT_KIND_UNSUPPORTED',
+      severity: 'error',
+      message: server
+        ? `L'input «${name}» è «${inputKindLabel('current_user')}»: prende il nome dell'utente che avvia un Eseguibile, quindi il progetto non si esegue dall'editor. Pubblicalo come Eseguibile; per Anteprima e Valida indica un nome utente di prova nell'input.`
+        : `L'input «${name}» è di tipo connessione: questo tipo è disponibile solo nei progetti Estrai. Cambialo o rimuovilo.`,
+      nodeId: n.id,
+      source: 'frontend',
+    });
+  }));
 }

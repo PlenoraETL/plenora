@@ -34,6 +34,7 @@ from app.core.io.bounded_streams import read_prefix
 from app.core.orchestrator.task_service import task_service as _task_service
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
+from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError
 
 from . import db as eseguibili_db
 from . import output_store as _output_store
@@ -708,8 +709,13 @@ def preflight_eseguibile_run(
         return eseguibili_preflight.preflight_versioned(
             eseguibile=record,
             raw_inputs=trusted_inputs,
+            # «Utente che esegue» = chi e' autenticato in questa richiesta
+            # (letto dal DB da get_current_user), mai un valore del client.
+            identity=RuntimeIdentity.authenticated(current_user),
             version_id=version.id,
         )
+    except RuntimeIdentityError as exc:
+        raise_typed_http(exc.code, status_code=400, message=exc.message)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=sanitize_http_detail(str(exc)))
 
@@ -728,6 +734,7 @@ def create_eseguibile_run(
     version, manifest = _run_version(record, eseguibile_id, payload.version_id)
 
     consumed_uploads: list[str] = []
+    identity = RuntimeIdentity.authenticated(current_user)
     try:
         trusted_inputs, consumed_uploads = _trusted_run_inputs(
             eseguibile_id, manifest, payload.inputs, current_user,
@@ -736,7 +743,7 @@ def create_eseguibile_run(
         # connettori), niente avvio e gli upload restano per la nuova stima.
         if payload.preparation_fingerprint is not None:
             current = eseguibili_preflight.fingerprint_for(
-                eseguibile=record, raw_inputs=trusted_inputs, version_id=version.id,
+                eseguibile=record, raw_inputs=trusted_inputs, identity=identity, version_id=version.id,
             )
             if current != payload.preparation_fingerprint:
                 consumed_uploads = []
@@ -758,6 +765,7 @@ def create_eseguibile_run(
                 eseguibile=record,
                 raw_inputs=trusted_inputs,
                 user_id=current_user.user_id,
+                identity=identity,
                 version_id=version.id,
                 output_format=payload.output_format,
                 output_name=payload.output_name,
@@ -772,6 +780,9 @@ def create_eseguibile_run(
         return result.to_api_dict()
     except HTTPException:
         raise
+    except RuntimeIdentityError as exc:
+        consumed_uploads = []
+        raise_typed_http(exc.code, status_code=400, message=exc.message)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=sanitize_http_detail(str(exc)))
     except Exception as exc:

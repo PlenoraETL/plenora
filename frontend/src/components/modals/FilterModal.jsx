@@ -14,6 +14,7 @@ import useCanvasStore from '../../store/useCanvasStore';
 import {
   createParameterBindingEdge,
   isParameterBindingEdge,
+  isScalarProjectInputNode,
 } from '../../utils/runtimeBindingEdges';
 import './FilterModal.css';
 import { termName } from '../../utils/glossary';
@@ -33,11 +34,9 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
   const editEdges = useCanvasStore(state => state.editEdges);
   // Solo gli input scalari (id e dati), non tutti i nodi con le posizioni:
   // un trascinamento non ridisegna la finestra (R9-U N6).
-  const scalarFlat = useCanvasStore(useShallow(state => (state.nodes || []).filter(node => (
-    node.type === 'project_input'
-    && node.data?.input_kind !== 'file'
-    && node.data?.input_kind !== 'connection'
-  )).flatMap(node => [node.id, node.data])));
+  const scalarFlat = useCanvasStore(useShallow(state => (state.nodes || [])
+    .filter(isScalarProjectInputNode)
+    .flatMap(node => [node.id, node.data])));
   const scalarInputs = useMemo(() => {
     const out = [];
     for (let i = 0; i < scalarFlat.length; i += 2) out.push({ id: scalarFlat[i], type: 'project_input', data: scalarFlat[i + 1] });

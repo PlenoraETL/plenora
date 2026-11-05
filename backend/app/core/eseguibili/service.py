@@ -35,6 +35,7 @@ from .models import (
     ConnectionInputOption,
 )
 from .runtime import resolve_runtime_inputs
+from app.shared.execution.runtime_identity import RuntimeIdentity
 from .manifest import compile_manifest
 from .storage import INTERNAL_ARTIFACT_PREFIX
 
@@ -772,12 +773,17 @@ def execute_versioned(
     eseguibile: eseguibili_db.EseguibileRow,
     raw_inputs: Mapping[str, object],
     user_id: str,
+    identity: RuntimeIdentity,
     version_id: Optional[str] = None,
     output_format: Optional[str] = None,
     output_name: Optional[str] = None,
     task_id: Optional[str] = None,
 ) -> ExecutableRunResult:
-    """Valida una run v2 e la inoltra all'executor del tipo progetto."""
+    """Valida una run v2 e la inoltra all'executor del tipo progetto.
+
+    ``identity`` = l'utente autenticato che avvia (``RuntimeIdentity.
+    authenticated(current_user)``): valorizza gli input «Utente che esegue».
+    """
 
     from app.core.orchestrator.task_service import task_service
 
@@ -789,6 +795,7 @@ def execute_versioned(
         manifest=manifest,
         values=raw_inputs,
         group_id=eseguibile.group_id,
+        identity=identity,
     )
     # Regola unica dei file temporanei (punto 5): da qui ogni uscita con
     # errore li elimina (except sotto); con successo li possiede il task.

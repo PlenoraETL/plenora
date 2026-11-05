@@ -10,6 +10,7 @@ from app.core.eseguibili import runtime as executable_runtime
 from app.core.eseguibili import service as executable_service
 from app.core.eseguibili.manifest import compile_manifest
 from app.core.eseguibili.models import ExecutableInputDefinition
+from app.shared.execution.runtime_identity import RuntimeIdentity
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -144,7 +145,7 @@ def test_real_manipola_parameter_binding_is_generic_and_supports_fanout() -> Non
         "config.value",
     ]
 
-    resolved, cleanup_ids, _summary = executable_runtime.resolve_runtime_inputs(
+    resolved, cleanup_ids, _summary = executable_runtime.resolve_runtime_inputs(identity=RuntimeIdentity.unattended(),
         eseguibile_id="exec-1",
         canvas=canvas,
         manifest=manifest,
@@ -176,7 +177,7 @@ def test_runtime_binding_can_override_an_implicit_registry_default() -> None:
         canvas=canvas,
     )
 
-    resolved, _cleanup_ids, _summary = executable_runtime.resolve_runtime_inputs(
+    resolved, _cleanup_ids, _summary = executable_runtime.resolve_runtime_inputs(identity=RuntimeIdentity.unattended(),
         eseguibile_id="exec-1",
         canvas=canvas,
         manifest=manifest,
@@ -279,7 +280,7 @@ def test_runtime_resolves_two_file_nodes_and_scalar(monkeypatch) -> None:
         lambda **_kwargs: next(generated),
     )
 
-    canvas, cleanup_ids, summary = executable_runtime.resolve_runtime_inputs(
+    canvas, cleanup_ids, summary = executable_runtime.resolve_runtime_inputs(identity=RuntimeIdentity.unattended(),
         eseguibile_id="exec-1",
         canvas=_multi_input_canvas(),
         manifest=manifest,
@@ -478,7 +479,7 @@ def test_runtime_cleans_materialized_files_when_later_binding_fails(monkeypatch)
     )
 
     with pytest.raises(ValueError, match="senza campo binding"):
-        executable_runtime.resolve_runtime_inputs(
+        executable_runtime.resolve_runtime_inputs(identity=RuntimeIdentity.unattended(),
             eseguibile_id="exec-1",
             canvas=canvas,
             manifest=manifest,
@@ -514,7 +515,7 @@ def test_runtime_rejects_binding_to_missing_field(monkeypatch) -> None:
     )
 
     with pytest.raises(ValueError, match="senza campo binding"):
-        executable_runtime.resolve_runtime_inputs(
+        executable_runtime.resolve_runtime_inputs(identity=RuntimeIdentity.unattended(),
             eseguibile_id="exec-1",
             canvas=canvas,
             manifest=manifest,
@@ -606,7 +607,7 @@ def test_task_launch_failure_marks_run_and_cleans_inputs(monkeypatch) -> None:
     )
 
     with pytest.raises(RuntimeError, match="broker down"):
-        executable_service.execute_versioned(
+        executable_service.execute_versioned(identity=RuntimeIdentity.unattended(),
             eseguibile=executable,
             raw_inputs={},
             user_id="user-1",
@@ -698,7 +699,7 @@ def test_versioned_execution_dispatches_all_publishable_project_types(
         or SimpleNamespace(task_id=kwargs["task_id"]),
     )
 
-    result = executable_service.execute_versioned(
+    result = executable_service.execute_versioned(identity=RuntimeIdentity.unattended(),
         eseguibile=executable,
         raw_inputs={},
         user_id="user-1",

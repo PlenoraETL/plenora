@@ -17,6 +17,7 @@ import { getCachedTransformRegistry, isMultiInputOp } from '../../utils/transfor
 import { KNOWN_OPERATION_NAMES } from '../../utils/operationNames';
 import { displayIcon } from '../../utils/displayIcon';
 import { TERMS, applyTransformTerms, inputKindLabel, term } from '../../utils/glossary';
+import { projectInputHandle } from '../../utils/runtimeInputKinds';
 
 export { displayIcon };
 
@@ -156,9 +157,7 @@ const D = {
     category: 'input', ...named('runtime_input'),
     title: (d) => d.label || d.input_key || term('runtime_input').name,
     summary: (d) => `${d.input_key || '?'} · ${inputKindLabel(d.input_kind)}`,
-    defaultHandles: (d) => (d.input_kind === 'connection'
-      ? []
-      : [{ ...OUT, id: (d.input_kind || 'file') === 'file' ? 'output' : 'parameter' }]),
+    defaultHandles: (d) => (projectInputHandle(d) ? [{ ...OUT, id: projectInputHandle(d) }] : []),
   },
   transform: {
     category: 'step', icon: (d) => transformInfo(d).icon, kind: (d) => transformInfo(d).name,

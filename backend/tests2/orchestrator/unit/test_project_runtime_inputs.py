@@ -190,7 +190,10 @@ def test_tutti_i_tipi_scalari_per_modalita(editor, kind, value):
 def test_enumerazione_tipi_input_completa():
     from typing import get_args
     from app.core.eseguibili.models import ExecutableInputKind
-    assert {kind for kind, _ in SCALAR_CASES} | {"file", "connection"} == set(get_args(ExecutableInputKind))
+    from app.shared.execution.runtime_input_kinds import SERVER_INJECTED_KINDS
+    # I tipi impostati dal server hanno la loro enumerazione
+    # (tests2/eseguibili/unit/test_runtime_identity_inputs.py).
+    assert {kind for kind, _ in SCALAR_CASES} | {"file", "connection"} | SERVER_INJECTED_KINDS == set(get_args(ExecutableInputKind))
 
 
 
@@ -198,6 +201,7 @@ def test_estrai_consuma_connessione_risolta_nel_contesto(monkeypatch):
     from app.core.estrai.executor import EstraiExecutor
     from app.core.orchestrator.execution_contract import PipelineExecutionContract
     from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
+    from app.shared.execution.runtime_identity import RuntimeIdentity
     from app.core.projects.canvas_models import CanvasState
 
     canvas = {"nodes": [
@@ -211,7 +215,7 @@ def test_estrai_consuma_connessione_risolta_nel_contesto(monkeypatch):
     contract = apply_project_runtime_inputs(PipelineExecutionContract(
         project_id="p", project_type="estrai", group_id="g", canvas=canvas,
         runtime_context={"default_connection_id": "conn-progetto"},
-    ), {"cliente": "scelta"})
+    ), {"cliente": "scelta"}, identity=RuntimeIdentity.project_run())
     service = Mock()
     executor = EstraiExecutor(service, Mock(), Mock(), Mock())
     connection = SimpleNamespace(type="postgres", db_schema="public")

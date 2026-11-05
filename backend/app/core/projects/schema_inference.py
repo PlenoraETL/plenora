@@ -36,6 +36,8 @@ from app.shared.execution.config_column_refs import resolve_config_column_refs
 from app.shared.execution.output_names import make_unique_column_names
 from app.shared.execution.output_column_refs import resolve_output_column_refs, unique_column_names
 from app.shared.execution.schema_types import ColumnSchema, InferredSchema
+from app.shared.execution.runtime_identity import identity_source_column, identity_source_fields
+from app.shared.execution.runtime_input_kinds import is_server_injected, node_value, project_input_role
 from app.core.projects import schema_execution_sources
 from app.utils.logger import get_logger
 
@@ -464,6 +466,18 @@ class SchemaInferenceService:
         self,
         context: _NodeSchemaContext,
     ) -> List[ColumnSchema]:
+        if project_input_role(context.node) == "source" and is_server_injected(
+            node_value(context.node, "input_kind")
+        ):
+            # Sorgente «Utente che esegue»: e' un nodo Valori statici con una
+            # colonna di testo (runtime_identity.identity_source_fields), la
+            # stessa forma dell'esecuzione -> schema certo, stessi id.
+            fields = identity_source_fields(identity_source_column(context.node), "")
+            return [ColumnSchema(
+                name=col["name"], type=col["type"],
+                id=_stable_column_id(context.node.id, col["name"]),
+                source_name=col["name"], source_node=context.node.id,
+            ) for col in static_columns(fields)]
         if getattr(context.node, "input_kind", None) != "file":
             return []
         self._status_cache[context.node.id] = (

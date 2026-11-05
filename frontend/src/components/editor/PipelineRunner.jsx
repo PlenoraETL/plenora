@@ -93,7 +93,7 @@ export function runBlockedResult(nodes, mode) {
     return accessDeniedResult(denied);
   }
   const unsupported = unsupportedInputNodes(nodes, mode);
-  return unsupported.length ? unsupportedInputsResult(unsupported) : null;
+  return unsupported.length ? unsupportedInputsResult(unsupported, mode) : null;
 }
 
 // Input runtime del canvas: si ricalcolano solo quando cambiano i nodi di input.

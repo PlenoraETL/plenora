@@ -13,9 +13,18 @@ from app.core.dataframes import geodata as dataframe_geodata
 from app.core.dataframes import tabular as dataframe_tabular
 from app.core.files.service import file_source_service
 from app.shared.contracts.payloads import JsonObject
+from app.shared.execution.runtime_identity import (
+    RuntimeIdentity,
+    identity_source_column,
+    identity_source_fields,
+    resolve_identity_inputs,
+)
+from app.shared.execution.runtime_input_kinds import is_server_injected, project_input_role
 
 from . import db as eseguibili_db
 from .models import ExecutableInputDefinition, ExecutableManifest
+
+
 def _coerce_scalar(definition: ExecutableInputDefinition, value: Any) -> Any:
     kind = definition.kind
     if value is None or value == "":
@@ -26,7 +35,7 @@ def _coerce_scalar(definition: ExecutableInputDefinition, value: Any) -> Any:
         return None
 
     try:
-        if kind in {"text", "select", "connection"}:
+        if kind in {"text", "select", "connection"} or is_server_injected(kind):
             coerced: Any = str(value)
         elif kind == "integer":
             if isinstance(value, bool):
@@ -129,6 +138,15 @@ def _apply_scalar_binding(node: dict[str, Any], path: str, value: Any) -> None:
         applied = True
     if not applied:
         raise ValueError(f"Nodo {node.get('id')} senza campo binding {path}")
+
+
+def _as_identity_source(node: dict[str, Any], username: str) -> None:
+    fields = identity_source_fields(identity_source_column(node), username)
+    node["type"] = "staticValues"
+    node["fields"] = fields
+    data = node.setdefault("data", {})
+    if isinstance(data, dict):
+        data["fields"] = fields
 
 
 def _materialize_file_input(
@@ -339,6 +357,15 @@ def _resolve_into(
 
         scalar = coerced_scalars[definition.key]
         for binding in bindings:
+            if binding.mode == "data_source" and is_server_injected(definition.kind):
+                # Sorgente «Utente che esegue»: il nodo diventa Valori statici
+                # con una riga (la colonna dichiarata = lo username). Da qui
+                # segue il percorso normale di una sorgente (schema, esecuzione).
+                node = nodes_by_id.get(binding.target_node_id)
+                if node is None:
+                    raise ValueError(f"Nodo input non trovato: {binding.target_node_id}")
+                _as_identity_source(node, str(scalar))
+                continue
             if binding.mode != "node_field" or not binding.target_field:
                 continue
             node = nodes_by_id.get(binding.target_node_id)
@@ -346,6 +373,9 @@ def _resolve_into(
                 raise ValueError(f"Nodo binding non trovato: {binding.target_node_id}")
             _apply_scalar_binding(node, binding.target_field, scalar)
         summary[definition.key] = {"kind": definition.kind, "provided": scalar is not None}
+        if is_server_injected(definition.kind):
+            # Audit della run: per quale utente e' stata filtrata.
+            summary[definition.key]["username"] = scalar
 
     return summary
 
@@ -357,13 +387,24 @@ def resolve_runtime_inputs(
     manifest: ExecutableManifest,
     values: Mapping[str, Any],
     group_id: str,
+    identity: RuntimeIdentity,
 ) -> tuple[JsonObject, list[str], JsonObject]:
-    """Valida gli input e restituisce canvas risolto, cleanup ids e audit."""
+    """Valida gli input e restituisce canvas risolto, cleanup ids e audit.
+
+    ``identity`` e' obbligatoria (nessun default): ogni percorso dichiara chi
+    esegue. Gli input «Utente che esegue» prendono SOLO il suo username
+    (``runtime_identity.resolve_identity_inputs``): un valore del client si
+    rifiuta, senza utente la catena si blocca.
+    """
 
     expected_keys = {item.key for item in manifest.inputs}
     unknown = sorted(set(values) - expected_keys)
     if unknown:
         raise ValueError("Input non dichiarati: " + ", ".join(unknown))
+    identity_values = resolve_identity_inputs(
+        manifest.inputs, identity=identity, client_values=values,
+    )
+    values = {**values, **identity_values}
 
     resolved_canvas = copy.deepcopy(dict(canvas))
     nodes = resolved_canvas.get("nodes") or []
@@ -401,9 +442,7 @@ def resolve_runtime_inputs(
             str(node.get("id"))
             for node in nodes
             if isinstance(node, dict)
-            and node.get("type") == "project_input"
-            and str((node.get("data") or {}).get("input_kind") or node.get("input_kind") or "file")
-            != "file"
+            and project_input_role(node) in {"parameter", "connection"}
         }
         resolved_canvas["nodes"] = [
             node for node in nodes if str(node.get("id")) not in scalar_node_ids

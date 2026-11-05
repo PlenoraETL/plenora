@@ -5,8 +5,8 @@ applicato alle esecuzioni degli Eseguibili:
 
 - la stima usa GLI STESSI input dell'avvio (file caricati compresi), sulla
   versione che partira', senza eseguire API esterne;
-- l'impronta (``preparation_fingerprint``) riassume versione, input, gruppo e
-  connettori API usati: l'avvio (``POST /eseguibili/{id}/runs``) la ricalcola
+- l'impronta (``preparation_fingerprint``) riassume versione, input, gruppo,
+  utente che esegue (input «Utente che esegue») e connettori API usati: l'avvio (``POST /eseguibili/{id}/runs``) la ricalcola
   e, se diversa, rifiuta con 409 ``preparation_changed`` (la finestra rifa'
   la stima e mostra il motivo);
 - i file temporanei creati per leggere gli input si eliminano sempre; gli
@@ -27,6 +27,7 @@ from app.core.arricchisci.canvas_preflight import estimate_canvas
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.node_fields import node_field
+from app.shared.execution.runtime_identity import RuntimeIdentity, resolve_identity_inputs
 
 from . import db as eseguibili_db
 from . import service as eseguibili_service
@@ -72,12 +73,16 @@ def preparation_fingerprint(
     group_id: str,
     raw_inputs: Mapping[str, Any],
     connections: JsonObject,
+    identity_values: Mapping[str, str],
 ) -> str:
     content = {
         "eseguibile_id": eseguibile_id,
         "version_id": version_id,
         "group_id": group_id,
         "inputs": _public_inputs(dict(raw_inputs)),
+        # Valori iniettati dal server (username di chi esegue): due utenti
+        # diversi = due preparazioni diverse.
+        "identity": dict(identity_values),
         "connections": connections,
     }
     return hashlib.sha256(
@@ -89,16 +94,18 @@ def fingerprint_for(
     *,
     eseguibile: eseguibili_db.EseguibileRow,
     raw_inputs: Mapping[str, Any],
+    identity: RuntimeIdentity,
     version_id: Optional[str] = None,
 ) -> str:
     """Impronta della preparazione di questa esecuzione (per l'avvio)."""
-    version, _manifest = eseguibili_service.resolve_version_manifest(eseguibile, version_id)
+    version, manifest = eseguibili_service.resolve_version_manifest(eseguibile, version_id)
     return preparation_fingerprint(
         eseguibile_id=eseguibile.id,
         version_id=version.id,
         group_id=eseguibile.group_id,
         raw_inputs=raw_inputs,
         connections=api_connections_of(version.canvas),
+        identity_values=resolve_identity_inputs(manifest.inputs, identity=identity, client_values=raw_inputs),
     )
 
 
@@ -106,6 +113,7 @@ def preflight_versioned(
     *,
     eseguibile: eseguibili_db.EseguibileRow,
     raw_inputs: Mapping[str, Any],
+    identity: RuntimeIdentity,
     version_id: Optional[str] = None,
 ) -> JsonObject:
     """Stima dell'esecuzione con questi input. Errori di preparazione =
@@ -118,6 +126,7 @@ def preflight_versioned(
         group_id=eseguibile.group_id,
         raw_inputs=raw_inputs,
         connections=connections,
+        identity_values=resolve_identity_inputs(manifest.inputs, identity=identity, client_values=raw_inputs),
     )
     if manifest.project_type != "arricchisci":
         return {"valid": True, "nodes": [], "preparation_fingerprint": fingerprint, "checks": dict(PREFLIGHT_CHECKS)}
@@ -128,6 +137,7 @@ def preflight_versioned(
         manifest=manifest,
         values=raw_inputs,
         group_id=eseguibile.group_id,
+        identity=identity,
     )
     try:
         runtime_connection_id = eseguibili_service.resolve_runtime_connection_id(

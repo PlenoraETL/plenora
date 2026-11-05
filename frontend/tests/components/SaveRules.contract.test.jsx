@@ -140,10 +140,11 @@ describe('runtime input kinds per mode (same table as the backend)', () => {
   it('connection only in Estrai; scalars and file everywhere', async () => {
     const { RUNTIME_INPUT_KINDS_BY_MODE, unsupportedInputNodes } = await import('../../src/utils/runtimeInputKinds');
     const scalars = ['text', 'integer', 'number', 'boolean', 'date', 'datetime', 'select'];
+    // «Utente che esegue» si dichiara ovunque (lo esegue solo un Eseguibile).
     expect(RUNTIME_INPUT_KINDS_BY_MODE).toEqual({
-      estrai: ['file', ...scalars, 'connection'],
-      manipola: ['file', ...scalars],
-      arricchisci: ['file', ...scalars],
+      estrai: ['file', ...scalars, 'connection', 'current_user'],
+      manipola: ['file', ...scalars, 'current_user'],
+      arricchisci: ['file', ...scalars, 'current_user'],
     });
     const nodes = [n('c', 'project_input', { input_kind: 'connection' }), n('t', 'project_input', { input_kind: 'text' }), n('f', 'project_input', {})];
     expect(unsupportedInputNodes(nodes, 'estrai')).toEqual([]);

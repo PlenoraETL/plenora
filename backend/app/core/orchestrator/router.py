@@ -63,7 +63,8 @@ from app.core.io.http_streaming import (
 )
 from app.core.results import output_file_cleanup
 from app.core.projects.canvas_preview_scope import preview_canvas
-from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
+from app.core.orchestrator.runtime_inputs import apply_identity_inputs, apply_project_runtime_inputs
+from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError
 
 def _mime_for_filename(filename: str) -> str:
     """Ritorna il Content-Type corretto basandosi sull'estensione del file."""
@@ -205,10 +206,15 @@ def execute_project_pipeline(
                 project_id=project_id,
                 project_service=project_service,
             )
+            # «Esegui» del progetto: nessun utente per «Utente che esegue»
+            # (si esegue come Eseguibile), regola di runtime_identity.
             execution_contract = apply_project_runtime_inputs(
                 execution_contract,
                 request.inputs if request else {},
+                identity=RuntimeIdentity.project_run(),
             )
+        except RuntimeIdentityError as exc:
+            raise_typed_http(exc.code, status_code=400, message=exc.message)
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
@@ -266,6 +272,17 @@ def preview_project(
                 status_code=404,
                 message="Progetto non trovato",
             )
+        # Anteprima: «Utente che esegue» vale lo username di prova del nodo
+        # (mai l'utente reale, mai per un risultato salvato).
+        try:
+            execution_contract = apply_identity_inputs(
+                execution_contract,
+                RuntimeIdentity.preview_of(execution_contract.canvas),
+            )
+        except RuntimeIdentityError as exc:
+            raise_typed_http(exc.code, status_code=400, message=exc.message)
+        except ValueError as exc:
+            raise_typed_http(error_codes.VALIDATION_ERROR, status_code=400, message=str(exc))
         if node_id is not None:
             try:
                 if execution_contract.project_type.lower() not in {"manipola", "estrai", "arricchisci"}:

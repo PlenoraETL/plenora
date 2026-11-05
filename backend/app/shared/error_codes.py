@@ -310,6 +310,17 @@ DATASOURCE_VISIBILITY_CHECK_FAILED = "datasource_visibility_check_failed"
 TICKET_NOT_FOUND = "ticket_not_found"
 
 
+# Domain-specific — Input «Utente che esegue» (shared/execution/runtime_identity)
+
+RUNTIME_IDENTITY_REQUIRED = "runtime_identity_required"
+"""400-state: la catena ha un input «Utente che esegue» ma nessun utente
+autenticato lo valorizza (progetto dall'editor, Schedule, catene, anteprima
+senza username di prova): si blocca."""
+RUNTIME_IDENTITY_CLIENT_VALUE = "runtime_identity_client_value"
+"""400: il client ha inviato un valore per un input «Utente che esegue»: il
+valore lo imposta solo il server, la richiesta si rifiuta."""
+
+
 # Catalog set — drift detection
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
 # codici NON globali) come `frozenset[str]`. Usato dal test
@@ -406,6 +417,9 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     DATASOURCE_NOT_FOUND,
     # Tickets
     TICKET_NOT_FOUND,
+    # Input «Utente che esegue»
+    RUNTIME_IDENTITY_REQUIRED,
+    RUNTIME_IDENTITY_CLIENT_VALUE,
 })
 
 # Codici globali (envelope-level): NON domain-specific

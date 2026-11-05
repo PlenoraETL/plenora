@@ -201,7 +201,45 @@ describe('ProjectInputNode (R8.1, N4, N11)', () => {
     expect(nodeData().input_key).toBe('file_clienti');
   });
 
-  it.each(['file', 'text', 'integer', 'select', 'connection'])('sola lettura (%s): ogni controllo e\' spento (N11)', (kind) => {
+  it('«Utente che esegue»: niente valore predefinito né facoltativo, solo lo username di prova', async () => {
+    const user = userEvent.setup();
+    loadInput({ input_key: 'utente', label: 'Utente', input_kind: 'text', default_value: 'resto', required: false });
+    const { rerender } = render(<ProjectInputNode id="in1" data={nodeData()} />);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tipo' }), { target: { value: 'current_user' } });
+    expect(nodeData()).toMatchObject({ input_kind: 'current_user', default_value: null, required: true });
+    rerender(<ProjectInputNode id="in1" data={nodeData()} />);
+    expect(screen.queryByText('Valore predefinito')).toBeNull();
+    expect(screen.queryByLabelText('Obbligatorio')).toBeNull();
+    expect(screen.getByText(/Prende il nome utente di accesso di chi avvia/)).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('es. mario.rossi'), 'prova');
+    await user.tab();
+    expect(nodeData().preview_username).toBe('prova');
+    // Tornando a un altro tipo lo username di prova si toglie.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tipo' }), { target: { value: 'text' } });
+    expect(nodeData().preview_username).toBeNull();
+  });
+
+  it('«Utente che esegue» in Manipola puo\' essere una sorgente di una riga (colonna dichiarata)', () => {
+    const s = useCanvasStore.getState();
+    s.reset();
+    s.init('p1', 'manipola');
+    s.setReadOnly(false);
+    s.loadGraph([{ id: 'in1', type: 'project_input', position: { x: 0, y: 0 },
+      data: { input_key: 'utente', label: 'Utente', input_kind: 'current_user' } }], []);
+    const { rerender } = render(<ProjectInputNode id="in1" data={nodeData()} />);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Come entra nella catena' }), { target: { value: 'source' } });
+    expect(nodeData()).toMatchObject({ as_source: true, source_column: 'utente' });
+    rerender(<ProjectInputNode id="in1" data={nodeData()} />);
+    expect(screen.getByRole('textbox', { name: 'Nome della colonna' })).toHaveValue('utente');
+    expect(screen.queryByText('Collegamenti al canvas')).toBeNull();
+    // In Estrai la scelta non c'e' (sorgente solo in Manipola).
+    cleanup();
+    loadInput({ input_key: 'utente', label: 'Utente', input_kind: 'current_user' });
+    render(<ProjectInputNode id="in1" data={nodeData()} />);
+    expect(screen.queryByRole('combobox', { name: 'Come entra nella catena' })).toBeNull();
+  });
+
+  it.each(['file', 'text', 'integer', 'select', 'connection', 'current_user'])('sola lettura (%s): ogni controllo e\' spento (N11)', (kind) => {
     loadInput({ ...FILE, input_kind: kind, validation: kind === 'select' ? { options: ['a'] } : {} }, { readOnly: true });
     const { container } = render(<ProjectInputNode id="in1" data={nodeData()} />);
     const controls = [...container.querySelectorAll('input, select, textarea, button')];

@@ -24,6 +24,7 @@ from app.core.eseguibili.manifest import ExecutableManifest
 from app.core.eseguibili.runtime import resolve_runtime_inputs
 from tests2.eseguibili.unit.conftest import build_client
 from tests2.helpers.builders import build_current_user
+from app.shared.execution.runtime_identity import RuntimeIdentity
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.eseguibili, pytest.mark.contract]
@@ -117,7 +118,7 @@ def test_resolve_runtime_inputs_removes_every_temp_file_on_any_error(case):
     files = _TempFiles()
     with _Ctx(_patch_temp_files(files)):
         with pytest.raises(ValueError):
-            resolve_runtime_inputs(
+            resolve_runtime_inputs(identity=RuntimeIdentity.unattended(),
                 eseguibile_id="exe-1", canvas=CANVAS, manifest=manifest, values=values, group_id="grp-1",
             )
     assert len(files.created) == expected_created, case
@@ -139,7 +140,7 @@ def test_resolve_runtime_inputs_removes_temp_files_when_materializing_the_second
         patch("app.core.eseguibili.runtime.file_source_service.delete_file_source", side_effect=files.delete),
     ]):
         with pytest.raises(RuntimeError):
-            resolve_runtime_inputs(
+            resolve_runtime_inputs(identity=RuntimeIdentity.unattended(),
                 eseguibile_id="exe-1", canvas=CANVAS, manifest=manifest,
                 values={"primo": FILE, "secondo": FILE}, group_id="grp-1",
             )
@@ -151,7 +152,7 @@ def test_resolve_runtime_inputs_success_hands_the_files_to_the_caller():
     manifest = ExecutableManifest.model_validate(_manifest_dict())
     files = _TempFiles()
     with _Ctx(_patch_temp_files(files)):
-        _canvas, cleanup_ids, _summary = resolve_runtime_inputs(
+        _canvas, cleanup_ids, _summary = resolve_runtime_inputs(identity=RuntimeIdentity.unattended(),
             eseguibile_id="exe-1", canvas=CANVAS, manifest=manifest,
             values={"primo": FILE, "secondo": FILE}, group_id="grp-1",
         )
@@ -240,7 +241,7 @@ def test_execute_versioned_removes_temp_files_when_it_fails_after_resolving():
         *_patch_temp_files(files),
     ]):
         with pytest.raises(ValueError):
-            eseguibili_service.execute_versioned(
+            eseguibili_service.execute_versioned(identity=RuntimeIdentity.unattended(),
                 eseguibile=executable,
                 raw_inputs={"primo": FILE, "secondo": SECOND},
                 user_id="u-1",

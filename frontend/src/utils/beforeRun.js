@@ -23,10 +23,15 @@
  * La stima di Arricchisci e' il preflight del server (POST /preflight) con
  * GLI STESSI input dell'esecuzione sul canvas salvato; l'impronta
  * (`preparation_fingerprint`) va all'avvio, che la verifica.
+ *
+ * Input impostati dal server («Utente che esegue», utils/runtimeInputKinds
+ * source 'server'): la finestra li mostra in sola lettura con lo username di
+ * chi e' collegato, ma non hanno valore, errore ne' payload: il browser non
+ * li invia MAI (il server li rifiuterebbe), li mette il server.
  */
 import { errorReason } from '../api/errors';
 import { role } from './permissions';
-import { runtimeInputCodec } from './runtimeInputKinds';
+import { isServerInjectedKind, runtimeInputCodec } from './runtimeInputKinds';
 
 export const BEFORE_RUN_REASONS = Object.freeze(['inputs', 'staff', 'estimate', 'blocking', 'changed', 'migrate']);
 
@@ -68,9 +73,17 @@ export function beforeRunReasons({
   return BEFORE_RUN_REASONS.filter(r => on[r]);
 }
 
+/** Input che il client compila (non quelli impostati dal server). */
+export const clientInputDefinitions = (inputDefinitions = []) =>
+  (inputDefinitions || []).filter(d => !isServerInjectedKind(d.input_kind ?? d.kind));
+
+/** Input impostati dal server: righe in sola lettura nella finestra. */
+export const serverInputDefinitions = (inputDefinitions = []) =>
+  (inputDefinitions || []).filter(d => isServerInjectedKind(d.input_kind ?? d.kind));
+
 /** Valori iniziali degli input runtime: i default dichiarati. */
 export const initialInputValues = (inputDefinitions = []) => Object.fromEntries(
-  (inputDefinitions || []).map(d => [d.input_key, d.default_value ?? '']),
+  clientInputDefinitions(inputDefinitions).map(d => [d.input_key, d.default_value ?? '']),
 );
 
 const blank = (v) => v === '' || v == null;
@@ -82,7 +95,7 @@ const blank = (v) => v === '' || v == null;
  */
 export function runInputErrors(inputDefinitions = [], values = {}) {
   const errors = {};
-  (inputDefinitions || []).forEach((d) => {
+  clientInputDefinitions(inputDefinitions).forEach((d) => {
     const raw = values[d.input_key];
     if (blank(raw)) {
       if (d.required !== false) errors[d.input_key] = 'Campo obbligatorio';
@@ -105,7 +118,7 @@ export const inputsComplete = (inputDefinitions = [], values = {}) =>
  * cosi' vale il suo default dichiarato.
  */
 export const runInputs = (inputDefinitions = [], values = {}, { omitEmptyOptional = false } = {}) => Object.fromEntries(
-  (inputDefinitions || [])
+  clientInputDefinitions(inputDefinitions)
     .filter(d => !omitEmptyOptional || d.required !== false || !blank(values[d.input_key]))
     .map((d) => {
       const raw = values[d.input_key];

@@ -93,7 +93,7 @@ def enrichment_client(monkeypatch):
         get_project_metadata=lambda _: SimpleNamespace(project_type="arricchisci", group_id="g", updated_at=None),
         get_canvas_version=lambda _: "c1:v"))
     monkeypatch.setattr(R, "_prepare_canvas_for_owner", lambda project_id, canvas, *a, **k: canvas)
-    monkeypatch.setattr(R, "prepare_contract", lambda contract, inputs: (contract, SimpleNamespace(model_dump=lambda: {})))
+    monkeypatch.setattr(R, "prepare_contract", lambda contract, inputs, **_: (contract, SimpleNamespace(model_dump=lambda: {})))
     monkeypatch.setattr(R, "_preflight_connections", lambda canvas, user: apis)
 
     def estimate(contract, connections):

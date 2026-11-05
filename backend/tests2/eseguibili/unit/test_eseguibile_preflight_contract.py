@@ -180,6 +180,7 @@ def test_run_with_current_fingerprint_starts():
         group_id="grp-1",
         raw_inputs={"dati": {"file_id": "up-1", "column_mapping": [], "_upload_group_id": "grp-1"}},
         connections={"api-1": {"id": "api-1", "api_type": "enrichment", "token": "segreto"}},
+        identity_values={},
     )
 
     class _Result:
@@ -208,9 +209,14 @@ def test_fingerprint_depends_on_public_inputs_version_and_connections_only():
         group_id="grp-1",
         raw_inputs={"dati": {"file_id": "up-1", "_upload_group_id": "grp-1"}},
         connections={"api-1": {"token": "a"}},
+        identity_values={},
     )
     fp = eseguibili_preflight.preparation_fingerprint(**base)
     assert fp == eseguibili_preflight.preparation_fingerprint(**{**base, "raw_inputs": {"dati": {"file_id": "up-1", "_upload_group_id": "altro"}}})
     assert fp != eseguibili_preflight.preparation_fingerprint(**{**base, "raw_inputs": {"dati": {"file_id": "up-2"}}})
     assert fp != eseguibili_preflight.preparation_fingerprint(**{**base, "version_id": "v2"})
     assert fp != eseguibili_preflight.preparation_fingerprint(**{**base, "connections": {"api-1": {"token": "b"}}})
+    # Utente che esegue: due utenti = due impronte.
+    assert fp != eseguibili_preflight.preparation_fingerprint(**{**base, "identity_values": {"utente": "mario"}})
+    mario = eseguibili_preflight.preparation_fingerprint(**{**base, "identity_values": {"utente": "mario"}})
+    assert mario != eseguibili_preflight.preparation_fingerprint(**{**base, "identity_values": {"utente": "anna"}})
