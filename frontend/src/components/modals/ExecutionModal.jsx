@@ -200,8 +200,8 @@ function ExecutionModal({
           {result.test_run && (
             <div className="execution-modal__test-run" role="status">
               <strong>Esecuzione di prova (utente: {result.test_run.username})</strong>
-              {' '}— il risultato non è l&apos;Output del progetto, non aggiorna chi lo usa come sorgente e non
-              ha avviato Carica. Il file si scarica una volta.
+              {' '}— il risultato non è l&apos;Output del progetto, non aggiorna chi lo usa come sorgente, non
+              ha ricalcolato i progetti a monte e non ha avviato Carica. Il file si scarica una volta.
             </div>
           )}
           {result.success ? (

@@ -5,7 +5,7 @@ Endpoints CRUD per la gestione dei Data Source e operazioni sui file.
 """
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
-from typing import Annotated, Optional
+from typing import Annotated, Mapping, Optional
 
 from app.utils.logger import get_logger
 from app.core.datasources import errors as datasource_errors
@@ -258,9 +258,15 @@ def _find_projects_using_datasource(
         logger=logger,
     )
 
+def _datasource_secrets(ds_id: str) -> Optional[Mapping[str, object]]:
+    """La config con le credenziali in chiaro: i segreti da oscurare
+    nell'esito salvato del test (connection_tests.results)."""
+    return _svc()._get_full_config(ds_id)
+
+
 @router.post("/{ds_id}/test", response_model=DataSourceTestResult)
 @audit_action(action="datasource.test", target_param="ds_id")
-@records_connection_test("datasource", id_param="ds_id")
+@records_connection_test("datasource", id_param="ds_id", secrets_of=_datasource_secrets)
 def test_connection(ds_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Testa la connessione di un Data Source. Read-only su risorsa visibile."""
     existing = _svc().get_datasource(ds_id)

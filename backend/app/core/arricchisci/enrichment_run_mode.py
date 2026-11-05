@@ -26,7 +26,7 @@ from app.core.projects import service as project_service_module
 from app.core.results import pipeline_result as pipeline_result_module
 from app.utils.logger import get_logger
 from app.shared.contracts.payloads import JsonRows
-from app.shared.execution.runtime_identity import trigger_for_test_run
+from app.shared.execution.runtime_identity import task_result, trigger_for_test_run
 
 logger = get_logger("app.core.arricchisci.enrichment_run_mode")
 
@@ -308,9 +308,9 @@ class ProjectTestRunMode(EnrichmentRunMode):
         return None, Path(saved.output_filename)
 
     def decorate_result(self, result: MutableMapping[str, Any], *, project_id: str, task_id: str) -> None:
-        # Download da /api/tasks/{task_id}/download (proprietario del task).
-        result["result_id"] = None
-        result["test_run"] = {"username": self.username}
+        # Download da /api/tasks/{task_id}/download (proprietario del task);
+        # il segno della prova dall'unica funzione dei risultati.
+        result.update(task_result({"result_id": None}, {"username": self.username}))
 
 
 def for_task(is_eseguibile: bool, test_run: Optional[Mapping[str, Any]] = None) -> EnrichmentRunMode:

@@ -23,7 +23,7 @@ from app.core.projects import runtime_context as project_runtime_context
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.utils import debug_payload_builder as debug_payload_builder_module
-from app.shared.execution.runtime_identity import trigger_for_test_run
+from app.shared.execution.runtime_identity import task_result, trigger_for_test_run
 
 logger = get_logger("workers.pipeline_task")
 
@@ -137,14 +137,6 @@ def _executable_subject(
     if not contract:
         return None
     return contract.executable_subject
-
-
-def _test_run_mark(test_run: JsonObject | None) -> JsonObject:
-    """Segno dell'esecuzione di prova nel risultato del task (finestra di
-    esecuzione e download): l'utente di prova che il server ha usato."""
-    if test_run is None:
-        return {}
-    return {"test_run": {"username": str(test_run.get("username") or "")}}
 
 
 def _cleanup_executable_inputs(
@@ -308,6 +300,17 @@ def execute_pipeline_task(
     # intermedia, nessun Carica, output del progetto intatto.
     test_run = contract.test_run_subject if contract is not None else None
     isolated = contract is not None and contract.isolated_output
+    if test_run is not None:
+        # La prova non ricalcola nulla a monte (gli endpoint lo rifiutano).
+        force_recalculate = False
+
+    def _outcome(payload: Any) -> JsonObject:
+        # REGOLA: ogni esito del task passa di qui e porta il segno della
+        # prova (permesso revocato, idempotenza, connessione persa,
+        # fallimento, successo). Gli esiti in eccezione (raise) li scrive
+        # la finalizzazione del worker con la stessa funzione
+        # (task_progress.finalize_from_celery).
+        return task_result(payload, test_run)
     # Run intermedie (cronologia dei nodi, idempotenza, retention): solo le
     # esecuzioni che pubblicano l'output del progetto.
     intermediate_run = not isolated
@@ -329,6 +332,8 @@ def execute_pipeline_task(
         _revoked = async_user_recheck_module.recheck_user_authorized(
             user_id=user_id, project_id=project_id,
             task_id=task_id, run_id=run_id, task_name="PIPELINE",
+            # Prova: anche il ruolo (runtime_identity.can_test_run).
+            test_run=test_run is not None,
         )
     if _revoked is not None:
         _cleanup_executable_inputs(contract)
@@ -345,7 +350,7 @@ def execute_pipeline_task(
                 )
         _revoked.update({"run_id": run_id, "task_id": task_id})
         _close_worker_connection(stage="post-permission-revoke")
-        return _revoked
+        return _outcome(_revoked)
 
     logger.info(
         f"Task PIPELINE {task_id} avviato per progetto {project_id}",
@@ -392,7 +397,7 @@ def execute_pipeline_task(
                     else None
                 )
                 _close_worker_connection(stage="post-eseguibile-idempotency")
-                return {
+                return _outcome({
                     "status": "skipped_idempotent",
                     "success": True,
                     "project_id": project_id,
@@ -402,7 +407,7 @@ def execute_pipeline_task(
                     "output_file": output_file,
                     "download_url": f"/api/eseguibili/{project_id}/download/{task_id}",
                     "is_eseguibile": True,
-                }
+                })
     elif has_external_run_id and run_idempotency_module.is_already_completed(run_id):
         logger.info(
             f"[IDEMPOTENCY] Task PIPELINE {task_id}: run_id {run_id} "
@@ -416,7 +421,7 @@ def execute_pipeline_task(
             "task_id": task_id,
         }
         _close_worker_connection(stage="post-idempotency")
-        return result
+        return _outcome(result)
 
     project_info = _get_project_info(project_id) if contract is None else None
     group_id = (
@@ -552,14 +557,14 @@ def execute_pipeline_task(
                     f"Connessione al database persa. {message}",
                     check_revocation=False,
                 )
-                return {
+                return _outcome({
                     "success": False,
                     "retryable": True,
                     "message": f"Connessione al database persa: {message}",
                     "project_id": project_id,
                     "run_id": run_id,
                     "task_id": task_id,
-                }
+                })
 
             # Errore logico — costruisce debug_payload
             if result.get("user_error"):
@@ -610,14 +615,13 @@ def execute_pipeline_task(
                 )
 
             _update_progress(self, 0, message, check_revocation=False)
-            return {
+            return _outcome({
                 "success": False,
                 "message": message,
                 "project_id": project_id,
                 "run_id": run_id,
                 "task_id": task_id,
-                **_test_run_mark(test_run),
-            }
+            })
 
         rows_out = result.rows_count or 0
         # Ultimo checkpoint revocabile prima della finalizzazione degli output.
@@ -692,7 +696,6 @@ def execute_pipeline_task(
             extra.update({
                 "output_file": (executable_output or {}).get("filename") or output_file,
                 "result_id": None,
-                **_test_run_mark(test_run),
             })
         elif executable_output is not None:
             extra.update(
@@ -704,14 +707,14 @@ def execute_pipeline_task(
                     "is_eseguibile": True,
                 }
             )
-        return {
+        return _outcome({
             "success": True,
             "project_id": project_id,
             "run_id": run_id,
             "task_id": task_id,
             **{k: v for k, v in result.items() if k not in ("success", "output_path")},
             **extra,
-        }
+        })
 
     except TaskRevoked:
         _cleanup_executable_inputs(contract)

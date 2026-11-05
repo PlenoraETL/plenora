@@ -24,6 +24,7 @@ from app.core.output_contract import (
 )
 from app.core.projects.service import ProjectService
 from app.core.projects.source_freshness import get_project_source_freshness
+from app.shared.execution.runtime_identity import guard_upstream_recompute
 from app.shared.security.outbound_url import check_outbound_address
 from app.utils.logger import get_logger
 
@@ -144,7 +145,12 @@ class ApiConnectionSourceLoadingMixin:
             return False
 
     def _recompute_upstream_project(
-        self, source_project_id: str, force_recalculate: bool
+        self,
+        source_project_id: str,
+        force_recalculate: bool,
+        *,
+        test_run: bool = False,
+        source_name: Optional[str] = None,
     ) -> None:
         """Istanzia un OrchestratorService standalone e ri-esegue la
         pipeline di `source_project_id`. Solleva `ValueError` su
@@ -155,6 +161,11 @@ class ApiConnectionSourceLoadingMixin:
         un'altro `loader.load` post-recompute per leggere il risultato
         appena salvato.
         """
+        # L'unica porta del ricalcolo a monte: una prova si ferma qui, prima
+        # di ogni scrittura (runtime_identity, regola madre).
+        guard_upstream_recompute(
+            test_run=test_run, source_name=source_name or source_project_id,
+        )
         logger.info(f"Riesecuzione progetto upstream: {source_project_id}")
         from app.runtime.services import build_orchestrator_stack
 
@@ -203,6 +214,12 @@ class ApiConnectionSourceLoadingMixin:
 
         ref = SourceRef.from_node_data('project_source', node_data)
         loader = SourceLoader()
+        # Esecuzione di prova: nessun ricalcolo a monte (force ignorato;
+        # artefatto mancante o scaduto -> guard_upstream_recompute).
+        test_run = bool(getattr(ctx, "test_run", False))
+        if test_run:
+            force_recalculate = False
+        source_name: Optional[str] = None
 
         df = None
         # Se il canvas upstream e' piu' recente dell'ultimo blob risultato,
@@ -216,7 +233,8 @@ class ApiConnectionSourceLoadingMixin:
                 source_project_id,
                 expected_group_id=executing_group_id,
             )
-            if freshness and not force_recalculate:
+            source_name = freshness.source_project_name if freshness else None
+            if freshness and not force_recalculate and not test_run:
                 raise ValueError(freshness.message)
             logger.info(
                 f"Upstream blob stale per {source_project_id}: "
@@ -249,6 +267,8 @@ class ApiConnectionSourceLoadingMixin:
             self._recompute_upstream_project(
                 source_project_id,
                 force_recalculate=force_recalculate or upstream_stale,
+                test_run=test_run,
+                source_name=source_name,
             )
 
             # Re-tenta load via SourceLoader dopo recompute

@@ -25,9 +25,12 @@ class CanvasExecutionContext:
             (preview UI). ``None`` or ``<= 0`` = full execution.
         output_task_id: stable executable task id used to persist outputs
             outside project-scoped result tables. ``None`` for projects.
+        test_run: esecuzione di prova dall'editor (``runtime_identity``):
+            nessun ricalcolo a monte, nessuna risorsa condivisa aggiornata.
     """
 
     project_id: str
     group_id: Optional[str]
     preview_limit: Optional[int]
     output_task_id: Optional[str] = None
+    test_run: bool = False

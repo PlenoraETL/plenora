@@ -36,6 +36,7 @@ from app.core.arricchisci.success_evaluator import (
 from app.core.arricchisci.response_parser import parse_response_body
 import app.core.arricchisci.db as db_svc
 from app.shared.connections.oauth import get_arcgis_token
+from app.shared.error_sanitizer import collect_secret_values, sanitize_with_secrets
 from app.utils.logger import get_logger
 from app.core.artifacts.static_parameters import process_static_fields
 
@@ -45,6 +46,13 @@ from app.core.artifacts.static_parameters import process_static_fields
 # per nome canonico (incluso il test B3-B.2a-modernizzato che usa
 # handler stdlib agganciato a `"app.core.arricchisci.api_connector"`
 logger = get_logger("app.core.arricchisci.api_connector")
+
+# Lunghezza massima del motivo (``error``) di un test fallito: status HTTP +
+# estratto GIA' sanitizzato, mai il corpo grezzo della risposta remota.
+TEST_ERROR_MAX_LEN = 200
+# Quanto corpo della risposta si sanitizza prima del troncamento: tagliare
+# prima spezzerebbe un segreto rendendolo irriconoscibile alle regole.
+_TEST_ERROR_SCAN_LEN = 4000
 
 _SENSITIVE_AUTH_FIELDS = {
     "key_value",
@@ -523,7 +531,26 @@ class ApiConnectionManagementMixin:
         if not config:
             return {"success": False, "error": "Nessuna configurazione fornita"}
         config = self._normalize_auth_schema(deepcopy(config))
+        result = self._run_api_connection_test(config, test_params)
+        # REGOLA: il motivo di un test fallito esce SEMPRE da qui, senza i
+        # segreti del connettore (valori noti, anche codificati) e con le
+        # regole generiche del sanitizer, al massimo TEST_ERROR_MAX_LEN.
+        error = result.get("error")
+        if error:
+            result["error"] = sanitize_with_secrets(
+                str(error)[:_TEST_ERROR_SCAN_LEN],
+                collect_secret_values(config),
+                max_len=TEST_ERROR_MAX_LEN,
+            )
+        return result
 
+    def _run_api_connection_test(
+        self,
+        config: JsonObject,
+        test_params: Optional[JsonObject],
+    ) -> JsonObject:
+        """La chiamata di prova (``error`` ancora da sanitizzare: lo fa
+        ``test_api_connection``, unico punto di uscita)."""
         url = config.get("endpoint", {}).get("url", "")
         method = config.get("endpoint", {}).get("method", "GET").upper()
         auth = config.get("auth", {})
@@ -613,10 +640,8 @@ class ApiConnectionManagementMixin:
                 "headers": dict(response.headers),
             }
             if response.status_code != 200:
-                result["error"] = (
-                    f"HTTP {response.status_code}: "
-                    f"{response.text[:200] if response.text else 'Nessuna risposta'}"
-                )
+                body = response.text[:_TEST_ERROR_SCAN_LEN] if response.text else "Nessuna risposta"
+                result["error"] = f"HTTP {response.status_code}: {body}"
                 return result
 
             json_data, parse_error = self._parse_test_response_body(response, config)

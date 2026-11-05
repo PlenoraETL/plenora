@@ -16,7 +16,7 @@ from pydantic import (
 
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.runtime_bound_fields import RUNTIME_BOUND_REGISTRY, retain_registered
-from app.shared.execution.runtime_identity import TEST_RUN_SUBJECT_KIND
+from app.shared.execution.runtime_identity import TEST_RUN_SUBJECT_KIND, is_test_run_trigger
 
 
 SUPPORTED_PIPELINE_EXECUTION_CONTRACT_VERSIONS = frozenset({1, 2})
@@ -164,6 +164,10 @@ class PipelineExecutionContract(BaseModel):
         # congelato: aggiornare il contratto sovrascriverebbe lo schema
         # corrente con quello dello snapshot.
         context["persist_contract"] = output_task_id is None
+        if self.test_run_subject is not None:
+            # Esecuzione di prova: gli executor non ricalcolano a monte
+            # (runtime_identity.guard_upstream_recompute).
+            context["test_run"] = True
         return context
 
     @property
@@ -226,6 +230,9 @@ class CaricaExecutionContract(BaseModel):
         normalized = str(value or "").strip()
         if not normalized:
             raise ValueError(f"carica_execution_contract.{info.field_name} is required")
+        if info.field_name == "triggered_by" and is_test_run_trigger(normalized):
+            # Un Carica non e' mai un'esecuzione di prova (runtime_identity).
+            raise ValueError("carica_execution_contract.triggered_by: un Carica non e' una prova")
         return normalized
 
     @field_validator("schema_version")

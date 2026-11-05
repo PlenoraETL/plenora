@@ -52,7 +52,11 @@ from app.core.orchestrator.runtime_inputs import (
     apply_test_run_inputs,
     register_test_run_owner,
 )
-from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError
+from app.shared.execution.runtime_identity import (
+    TEST_RUN_NO_RECALCULATE_MESSAGE,
+    RuntimeIdentity,
+    RuntimeIdentityError,
+)
 from app.core.artifacts import (
     LatestProjectArtifactRef,
     SourceLoader,
@@ -762,11 +766,21 @@ def _tests_saved_api_configuration(kwargs: Mapping[str, Any]) -> bool:
     return not (isinstance(body, Mapping) and isinstance(body.get("config_overrides"), Mapping))
 
 
+def _api_connection_secrets(api_id: str) -> Optional[JsonObject]:
+    """Il connettore con l'auth in chiaro: i segreti da oscurare nell'esito
+    salvato del test (connection_tests.results)."""
+    try:
+        return _api_connection_service.get_api_connection(api_id, include_token=True)
+    except CredentialUnavailableError:
+        return None
+
+
 @api_connections_router.post("/api-connections/{api_id}/test")
 @audit_action(action="api_connection.test", target_param="api_id")
 @records_connection_test(
     "api_connection",
     id_param="api_id",
+    secrets_of=_api_connection_secrets,
     when=_tests_saved_api_configuration,
 )
 def test_api_connection(
@@ -933,6 +947,12 @@ def preflight_enrichment(project_id: str, request: EnrichPreflightRequest,
     return _preflight_enrichment(project_id, request, current_user, identity=RuntimeIdentity.project_run())
 
 
+def _refuse_test_run_recalculate(force_recalculate: bool) -> None:
+    """La prova non ricalcola nulla a monte (runtime_identity, regola madre)."""
+    if force_recalculate:
+        raise_typed_http(error_codes.VALIDATION_ERROR, status_code=400, message=TEST_RUN_NO_RECALCULATE_MESSAGE)
+
+
 class EnrichTestRunPreflightRequest(BaseModel):
     """Stima dell'«Esegui di prova»: nessun canvas (si usa quello SALVATO)."""
 
@@ -948,6 +968,7 @@ def preflight_enrichment_test_run(project_id: str, request: EnrichTestRunPreflig
     """Stima prima dell'«Esegui di prova» (runtime_identity, regola H): stessa
     preparazione dell'avvio di prova (identita' di prova del canvas salvato),
     stessa impronta. Solo chi puo' modificare il progetto."""
+    _refuse_test_run_recalculate(request.force_recalculate)
     response = _preflight_enrichment(
         project_id,
         EnrichPreflightRequest(inputs=request.inputs, force_recalculate=request.force_recalculate),
@@ -1044,6 +1065,7 @@ def launch_enrichment_test_run(
     puo' modificare il progetto, utente di prova del canvas salvato,
     risultato isolato (nessun output del progetto, nessun Carica)."""
     request = request or EnrichTestRunRequest()
+    _refuse_test_run_recalculate(request.force_recalculate)
     return _launch_enrichment(
         project_id, EnrichAsyncRequest(**request.model_dump()), None, current_user, test_run=True,
     )

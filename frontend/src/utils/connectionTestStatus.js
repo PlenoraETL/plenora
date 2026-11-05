@@ -15,6 +15,11 @@
  *  - esito riuscito        → «Verificata il <data> da <utente>»
  *  - esito fallito         → «Ultimo test fallito: <motivo>»
  * Date e durate con utils/format.
+ *
+ * Il nome di chi ha testato (`tested_by`) arriva solo a un superadmin o a un
+ * utente dello stesso gruppo di chi ha testato (regola del backend, come la
+ * lista utenti); agli altri arriva `null` e l'interfaccia dice solo
+ * «Verificata il <data>», senza «da …», in etichetta, dettaglio e titolo.
  */
 import { formatDateTime, formatDuration } from './format';
 

@@ -75,6 +75,7 @@ def test_context_fields_typed():
         "group_id",
         "preview_limit",
         "output_task_id",
+        "test_run",  # esecuzione di prova: nessun ricalcolo a monte (runtime_identity)
     }
 
 

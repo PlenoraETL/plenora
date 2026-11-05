@@ -279,7 +279,10 @@ class ManipolaExecutor:
             # Tutti e 3 i loader sono ctx-strict: `executing_group_id` e'
             # l'unico canale tenant, nessuno stato di istanza coinvolto.
             for loader in [
-                lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id, group_id=executing_group_id),
+                lambda: self._carica_sorgenti_progetto(
+                    canvas, dataframes, force_recalculate, run_id=run_id, group_id=executing_group_id,
+                    test_run=bool((execution_context or {}).get("test_run")),
+                ),
                 lambda: self._carica_sorgenti_file(canvas, dataframes, group_id=executing_group_id),
                 lambda: self._carica_sorgenti_datasource(canvas, dataframes, group_id=executing_group_id),
                 lambda: self._carica_sorgenti_statiche(canvas, dataframes, group_id=executing_group_id),
@@ -604,6 +607,7 @@ class ManipolaExecutor:
         force_recalculate: bool,
         run_id: Optional[str] = None,
         *, group_id: Optional[str] = None,
+        test_run: bool = False,
     ) -> Optional[JsonObject]:
         """Carica DataFrame dai progetti sorgente (type=project_source).
 
@@ -625,6 +629,7 @@ class ManipolaExecutor:
             run_id=run_id,
             group_id=group_id,
             logger=logger,
+            test_run=test_run,
         )
 
     def _carica_sorgenti_file(

@@ -87,6 +87,7 @@ class EnrichExecutor:
                 output_task_id=(
                     str(execution_context.get("output_task_id") or "") or None
                 ),
+                test_run=bool(execution_context.get("test_run")),
             )
 
         final_dataframe = None

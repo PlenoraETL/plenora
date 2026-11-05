@@ -53,6 +53,7 @@ Nell'editor non c'è un utente che esegue: al suo posto si usa il nome utente di
 - «Esegui» diventa un'esecuzione di prova. Può farla solo chi può modificare il progetto (non i visualizzatori, non gli esecutori).
 - L'esecuzione di prova usa il nome utente di prova SALVATO nel progetto: salva prima di eseguire. La finestra «Prima di avviare» mostra con quale utente parte.
 - Il risultato si scarica una volta dalla finestra di esecuzione. Non diventa l'Output del progetto: non cambia i progetti che lo usano come sorgente, non avvia Carica e non aggiorna le colonne pubblicate.
+- La prova non ricalcola i progetti a monte: usa il loro risultato salvato. «Ricalcola tutto» non vale per la prova. Se un progetto a monte non ha un risultato o è stato modificato dopo l'ultima esecuzione, la prova si ferma con «Esegui prima il progetto a monte»: eseguilo, poi rilancia la prova.
 - Nella cronologia delle esecuzioni compare come «Esecuzione di prova (utente: …)» e non conta come ultima esecuzione del progetto.
 
 ## Pubblicare come Eseguibile

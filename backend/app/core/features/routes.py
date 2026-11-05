@@ -190,9 +190,17 @@ def delete_connection(connection_id: str, current_user: CurrentUser = Depends(re
     # DELETE risponde 204 No Content, body vuoto.
 
 
+def _arcgis_connection_secrets(connection_id: str) -> Optional[ArcGISConnection]:
+    """La connessione con password e client secret in chiaro: i segreti da
+    oscurare nell'esito salvato del test (connection_tests.results)."""
+    return get_service().get_connection(connection_id)
+
+
 @router.post("/connections/{connection_id}/test", response_model=ArcGISTestResult)
 @audit_action(action="arcgis.connection.test", target_param="connection_id")
-@records_connection_test("arcgis_connection", id_param="connection_id")
+@records_connection_test(
+    "arcgis_connection", id_param="connection_id", secrets_of=_arcgis_connection_secrets,
+)
 def test_connection(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Testa una connessione ArcGIS. Qualsiasi utente del gruppo."""
     _check_arcgis_access(connection_id, current_user)

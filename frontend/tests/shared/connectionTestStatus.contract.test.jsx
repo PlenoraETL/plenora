@@ -41,6 +41,16 @@ describe('describeConnectionTest: i quattro stati', () => {
       .toBe(`Ultimo test il ${formatDateTime(AT)} da mario, fallito: Host irraggiungibile`);
   });
 
+  it.each([
+    ['riuscita', { ...base, tested_by: null }],
+    ['fallita', { ...base, tested_by: null, success: false, message: 'Timeout' }],
+    ['scaduta', { ...base, tested_by: null, stale: true }],
+  ])('senza tested_by (utente di un altro gruppo) nessun «da …»: %s', (_, lastTest) => {
+    const out = describeConnectionTest(lastTest);
+    expect(`${out.label} ${out.detail}`).not.toMatch(/\bda\b|null|undefined/);
+    expect(`${out.label} ${out.detail}`).toContain(formatDateTime(AT));
+  });
+
   it('il dettaglio dell\'esito riuscito porta messaggio e durata', () => {
     expect(describeConnectionTest(base).detail).toBe('Connessione PostgreSQL riuscita (120ms)');
   });

@@ -10,7 +10,7 @@ l'esito del task. Gli errori vengono loggati, non propagati.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from app.core.orchestrator.task_result_store import (
     TaskResultStore,
@@ -21,6 +21,7 @@ from app.core.orchestrator.task_revocation_store import (
     default_task_revocation_store,
 )
 from app.core.resources.exceptions import MemoryLimitExceededError
+from app.shared.execution.runtime_identity import task_result
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -178,13 +179,15 @@ def finalize_revoked(
     name: Optional[str] = None,
     run_id: Optional[str] = None,
     store: Optional[TaskResultStore] = None,
+    test_run: Any = None,
 ) -> None:
-    """Scrive l'esito terminale ``REVOKED`` (task annullato cooperativamente)."""
-    payload = {
+    """Scrive l'esito terminale ``REVOKED`` (task annullato cooperativamente).
+    ``test_run``: soggetto di prova del task (``task_result``)."""
+    payload = task_result({
         "success": False,
         "status": "revoked",
         "message": "Task annullato",
-    }
+    }, test_run)
     if run_id:
         payload["run_id"] = run_id
     elif name == "pipeline.execute" and task_id:
@@ -207,9 +210,14 @@ def finalize_from_celery(
     name: Optional[str] = None,
     run_id: Optional[str] = None,
     store: Optional[TaskResultStore] = None,
+    test_run: Any = None,
 ) -> None:
     """Adatta i parametri di ``Task.after_return`` (o del middleware Dramatiq)
     allo store.
+
+    ``test_run``: soggetto di prova del task (dal contratto del messaggio):
+    ogni esito scritto qui, anche di un task finito in eccezione o
+    annullato, passa da ``runtime_identity.task_result`` e ne porta il segno.
 
     Un'eccezione ``TaskRevoked`` mappa sullo stato terminale ``REVOKED``
     (annullamento cooperativo). Altrimenti solo SUCCESS/FAILURE vengono
@@ -220,7 +228,7 @@ def finalize_from_celery(
     """
     exc = getattr(einfo, "exception", None)
     if isinstance(exc, TaskRevoked):
-        finalize_revoked(task_id, name=name, run_id=run_id, store=store)
+        finalize_revoked(task_id, name=name, run_id=run_id, store=store, test_run=test_run)
         return
     if status not in _FINAL_CELERY_STATES:
         return
@@ -228,7 +236,7 @@ def finalize_from_celery(
         # Non mutare il dict restituito dal task: il middleware puo' dover
         # aggiungere la correlazione logica usata dalla transazione atomica
         # task_result + log_run.
-        payload = dict(retval) if isinstance(retval, dict) else {"result": retval}
+        payload = task_result(retval if isinstance(retval, dict) else {"result": retval}, test_run)
         if run_id:
             payload["run_id"] = run_id
         resolved_state = (
@@ -240,10 +248,10 @@ def finalize_from_celery(
             task_id, state=resolved_state, payload=payload, name=name, store=store
         )
         return
-    payload = {
+    payload = task_result({
         "success": False,
         "error": type(exc).__name__ if exc is not None else "TaskFailure",
-    }
+    }, test_run)
     if isinstance(exc, MemoryLimitExceededError):
         payload.update(
             {

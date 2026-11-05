@@ -70,7 +70,13 @@ from app.core.orchestrator.runtime_inputs import (
     apply_test_run_inputs,
     register_test_run_owner,
 )
-from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError
+from app.shared.execution.runtime_identity import (
+    TEST_RUN_NO_RECALCULATE_MESSAGE,
+    RuntimeIdentity,
+    RuntimeIdentityError,
+    can_test_run,
+    client_trigger,
+)
 
 def _mime_for_filename(filename: str) -> str:
     """Ritorna il Content-Type corretto basandosi sull'estensione del file."""
@@ -279,6 +285,9 @@ def launch_project_test_run(
     require_service(_orchestrator, "OrchestratorService")
     _assert_project_group(project_id, current_user)
     request = request or ProjectTestRunRequest()
+    if request.force_recalculate:
+        # La prova non ricalcola nulla a monte (runtime_identity, regola madre).
+        raise_typed_http(error_codes.VALIDATION_ERROR, status_code=400, message=TEST_RUN_NO_RECALCULATE_MESSAGE)
     project_service = _project_service()
     # Errori inattesi: il gestore globale risponde 500 tipizzato (nessun
     # broad-catch nuovo qui).
@@ -436,6 +445,13 @@ class CreateTaskRequest(BaseModel):
     force_recalculate: bool = False
     carica_node_data: Optional[JsonObject] = None
     triggered_by: str = "manual"
+
+    @field_validator("triggered_by")
+    @classmethod
+    def _client_trigger(cls, value: str) -> str:
+        """Dal client solo i valori dichiarati (``CLIENT_TRIGGERS``): il
+        prefisso ``test_run:`` e gli altri li scrive solo il server."""
+        return client_trigger(value)
 
 
 class TaskStatusResponse(BaseModel):
@@ -911,6 +927,10 @@ def download_task_result(
         if safe_task_id == task_id and eseguibile_record is not None:
             task_scoped_group_id = str(eseguibile_record.get("group_id") or "")
         elif safe_task_id == task_id and isinstance(eseguibile_payload.get("test_run"), Mapping):
+            if not can_test_run(current_user.role):
+                # Stessa regola dell'avvio e del worker: chi e' stato
+                # retrocesso non scarica il risultato di prova.
+                raise HTTPException(status_code=403, detail="Risultato di prova non accessibile con il tuo ruolo")
             test_run_meta = _project_service().get_project_metadata(str(project_id or ""))
             task_scoped_group_id = str(getattr(test_run_meta, "group_id", "") or "")
             if not task_scoped_group_id:

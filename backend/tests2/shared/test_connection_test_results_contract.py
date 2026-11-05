@@ -102,6 +102,10 @@ def _user() -> CurrentUser:
     return CurrentUser(user_id="u-1", username="mario", group_id="g-1", role="user")
 
 
+def _no_secrets(resource_id: str) -> dict:
+    return {}
+
+
 # Enumerazione delle route
 
 
@@ -195,7 +199,7 @@ def test_record_from_model_result(store):
         success: bool
         message: str
 
-    @results.records_connection_test("connection", id_param="connection_id")
+    @results.records_connection_test("connection", id_param="connection_id", secrets_of=_no_secrets)
     def route(connection_id: str, current_user: CurrentUser):
         return Result(success=True, message="Connessione PostgreSQL riuscita")
 
@@ -210,7 +214,7 @@ def test_record_from_model_result(store):
 
 
 def test_record_from_dict_result_without_secrets(store):
-    @results.records_connection_test("api_connection", id_param="api_id")
+    @results.records_connection_test("api_connection", id_param="api_id", secrets_of=_no_secrets)
     def route(api_id: str, current_user: CurrentUser):
         return {
             "success": False,
@@ -225,7 +229,7 @@ def test_record_from_dict_result_without_secrets(store):
 
 
 def test_record_without_message_uses_fallback(store):
-    @results.records_connection_test("api_connection", id_param="api_id")
+    @results.records_connection_test("api_connection", id_param="api_id", secrets_of=_no_secrets)
     def route(api_id: str, current_user: CurrentUser):
         return {"success": True, "status_code": 200}
 
@@ -234,7 +238,7 @@ def test_record_without_message_uses_fallback(store):
 
 
 def test_refused_test_is_not_recorded(store):
-    @results.records_connection_test("datasource", id_param="ds_id")
+    @results.records_connection_test("datasource", id_param="ds_id", secrets_of=_no_secrets)
     def route(ds_id: str, current_user: CurrentUser):
         raise HTTPException(status_code=404, detail="Data Source non trovato")
 
@@ -270,7 +274,7 @@ def test_reset_after_successful_write_only(store):
 def test_store_errors_never_break_the_route(store):
     store.fail_with = psycopg.OperationalError("pool")
 
-    @results.records_connection_test("connection", id_param="connection_id")
+    @results.records_connection_test("connection", id_param="connection_id", secrets_of=_no_secrets)
     def route(connection_id: str, current_user: CurrentUser):
         return {"success": True, "message": "ok"}
 
@@ -280,19 +284,22 @@ def test_store_errors_never_break_the_route(store):
 
     assert route(connection_id="c-1", current_user=_user()) == {"success": True, "message": "ok"}
     write(connection_id="c-1")
-    assert results.last_connection_tests("connection", ["c-1"]) == {}
+    assert results.last_connection_tests("connection", ["c-1"], viewer=_user()) == {}
 
 
 def test_attach_marks_stale_after_declared_age(store):
     now = datetime(2026, 11, 5, 12, 0, tzinfo=timezone.utc)
     store.rows = [
         {"resource_id": "fresh", "success": True, "message": "ok",
-         "tested_at": now - timedelta(days=1), "tested_by_name": "mario", "duration_ms": 120},
+         "tested_at": now - timedelta(days=1), "tested_by_name": "mario",
+         "tested_by_group": "g-1", "duration_ms": 120},
         {"resource_id": "old", "success": False, "message": "Timeout",
          "tested_at": now - results.STALE_AFTER - timedelta(minutes=1),
          "tested_by_name": None, "duration_ms": 5000},
     ]
-    statuses = results.last_connection_tests("connection", ["fresh", "old", "never"], now=now)
+    statuses = results.last_connection_tests(
+        "connection", ["fresh", "old", "never"], viewer=_user(), now=now,
+    )
     assert statuses["fresh"].stale is False and statuses["fresh"].tested_by == "mario"
     assert statuses["old"].stale is True and statuses["old"].success is False
     assert "never" not in statuses
@@ -309,11 +316,11 @@ def test_attach_writes_models_and_dicts(store):
         last_test: ConnectionTestStatus | None = None
 
     models = [Item(id="a"), Item(id="b")]
-    results.attach_last_tests("connection", models)
+    results.attach_last_tests("connection", models, viewer=_user())
     assert models[0].last_test.success is True and models[1].last_test is None
 
     dicts = [{"id": "a"}, {"id": "b"}]
-    results.attach_last_tests("api_connection", dicts)
+    results.attach_last_tests("api_connection", dicts, viewer=_user())
     assert dicts[0]["last_test"]["success"] is True
     assert dicts[0]["last_test"]["tested_at"].endswith(("Z", "+00:00"))
     assert dicts[1]["last_test"] is None
@@ -321,7 +328,7 @@ def test_attach_writes_models_and_dicts(store):
 
 def test_unknown_kind_is_refused():
     with pytest.raises(ValueError):
-        results.records_connection_test("ftp_server", id_param="x")
+        results.records_connection_test("ftp_server", id_param="x", secrets_of=_no_secrets)
 
 
 def test_real_route_records_with_user(store, monkeypatch):
@@ -343,3 +350,199 @@ def test_real_route_records_with_user(store, monkeypatch):
     assert (entry.kind, entry.resource_id, entry.success, entry.tested_by_name) == (
         "connection", "c-9", False, "mario",
     )
+
+
+# Chi vede il nome di chi ha testato (regola di users_router.list_users)
+
+
+def _tested_row(group):
+    return {"resource_id": "c-1", "success": True, "message": "ok",
+            "tested_at": datetime.now(timezone.utc), "tested_by_name": "mario",
+            "tested_by_group": group, "duration_ms": 3}
+
+
+@pytest.mark.parametrize(
+    ("viewer", "tester_group", "expected"),
+    [
+        (CurrentUser(user_id="u-2", username="anna", group_id="g-1", role="user"), "g-1", "mario"),
+        (CurrentUser(user_id="u-3", username="admin", group_id="g-1", role="admin"), "g-1", "mario"),
+        (CurrentUser(user_id="u-4", username="luca", group_id="g-2", role="user"), "g-1", None),
+        (CurrentUser(user_id="u-5", username="adm2", group_id="g-2", role="admin"), "g-1", None),
+        (CurrentUser(user_id="u-6", username="root", group_id="g-9", role="superadmin"), "g-1", "mario"),
+        # Utente che ha testato cancellato: gruppo sconosciuto.
+        (CurrentUser(user_id="u-2", username="anna", group_id="g-1", role="user"), None, None),
+        (CurrentUser(user_id="u-6", username="root", group_id="g-9", role="superadmin"), None, "mario"),
+        (None, "g-1", None),
+    ],
+)
+def test_tester_name_only_for_same_group_or_superadmin(store, viewer, tester_group, expected):
+    store.rows = [_tested_row(tester_group)]
+    statuses = results.last_connection_tests("connection", ["c-1"], viewer=viewer)
+    assert statuses["c-1"].tested_by == expected
+    items = [{"id": "c-1"}]
+    results.attach_last_tests("connection", items, viewer=viewer)
+    assert items[0]["last_test"]["tested_by"] == expected
+
+
+def test_list_route_passes_the_requesting_user(store):
+    """Il decoratore della lista usa ``current_user`` della richiesta."""
+    store.rows = [_tested_row("g-1")]
+
+    @results.attaches_connection_tests("connection", items_field="connections")
+    def route(current_user: CurrentUser):
+        return {"connections": [{"id": "c-1"}]}
+
+    same = route(current_user=_user())
+    other = route(current_user=CurrentUser(user_id="x", username="x", group_id="g-2", role="admin"))
+    assert same["connections"][0]["last_test"]["tested_by"] == "mario"
+    assert other["connections"][0]["last_test"]["tested_by"] is None
+
+
+# Errori dello store: fail-open solo per la disponibilita'
+
+
+_UNAVAILABLE = [
+    psycopg.OperationalError("pool timeout"),
+    psycopg.InterfaceError("connection closed"),
+    psycopg.errors.UndefinedTable("relation connection_test_results does not exist"),
+    RuntimeError("DATABASE_URL non configurato. Imposta la variabile d'ambiente."),
+]
+_PROGRAMMING = [
+    psycopg.errors.SyntaxError("syntax error at or near"),
+    psycopg.errors.UndefinedColumn("column tested_by_grup does not exist"),
+    psycopg.ProgrammingError("can't adapt type"),
+    psycopg.errors.DatatypeMismatch("argument of WHERE must be type boolean"),
+    RuntimeError("UnitOfWork is already active"),
+]
+
+
+def _store_calls():
+    @results.records_connection_test("connection", id_param="connection_id", secrets_of=_no_secrets)
+    def test_route(connection_id: str, current_user: CurrentUser):
+        return {"success": True, "message": "ok"}
+
+    @results.resets_connection_test("connection", id_param="connection_id")
+    def write(connection_id: str):
+        return None
+
+    return {
+        "record": lambda: test_route(connection_id="c-1", current_user=_user()),
+        "reset": lambda: write(connection_id="c-1"),
+        "load": lambda: results.last_connection_tests("connection", ["c-1"], viewer=_user()),
+    }
+
+
+def _capture_errors(monkeypatch) -> list[tuple[str, object]]:
+    logged: list[tuple[str, object]] = []
+    monkeypatch.setattr(
+        results.logger, "error",
+        lambda msg, *args, **kwargs: logged.append((msg % args, kwargs.get("exc_info"))),
+    )
+    return logged
+
+
+# Qualunque errore, non solo quelli del DB: anche il sanitizer o un bug.
+_ANY_ERROR = _UNAVAILABLE + _PROGRAMMING + [ValueError("bad"), TypeError("bad"), KeyError("bad")]
+
+
+def test_after_effect_ops_are_the_writes():
+    assert set(results.AFTER_EFFECT_OPS) == {"record", "reset"}
+    assert set(_store_calls()) == set(results.AFTER_EFFECT_OPS) | {"load"}
+
+
+@pytest.mark.parametrize("error", _ANY_ERROR, ids=lambda e: type(e).__name__)
+@pytest.mark.parametrize("op", results.AFTER_EFFECT_OPS)
+def test_writes_after_the_effect_never_reach_the_user(store, error, op, monkeypatch):
+    """Registrazione e azzeramento seguono un effetto compiuto (test eseguito,
+    connessione modificata/eliminata): qualunque errore e' loggato ERROR con
+    il tipo e lo stack e la route risponde come senza registro."""
+    logged = _capture_errors(monkeypatch)
+    store.fail_with = error
+    _store_calls()[op]()
+    ((line, exc_info),) = [entry for entry in logged if f"connection_test_{op}_error" in entry[0]]
+    assert type(error).__name__ in line
+    assert exc_info is error  # stack nel log
+
+
+def test_any_error_after_the_test_is_not_propagated(store, monkeypatch):
+    """Anche ``when``, la lettura dei segreti e il calcolo del messaggio
+    stanno dopo il test: la risposta della route arriva comunque."""
+    logged = _capture_errors(monkeypatch)
+
+    def broken_secrets(resource_id):
+        raise ZeroDivisionError("bug")
+
+    @results.records_connection_test("connection", id_param="connection_id", secrets_of=broken_secrets)
+    def route(connection_id: str, current_user: CurrentUser):
+        return {"success": True, "message": "ok"}
+
+    @results.records_connection_test(
+        "connection", id_param="connection_id", secrets_of=_no_secrets, when=lambda kw: 1 / 0,
+    )
+    def route_when(connection_id: str, current_user: CurrentUser):
+        return {"success": True, "message": "ok"}
+
+    assert route(connection_id="c-1", current_user=_user()) == {"success": True, "message": "ok"}
+    assert route_when(connection_id="c-1", current_user=_user()) == {"success": True, "message": "ok"}
+    assert len([line for line, _ in logged if "connection_test_record_error" in line]) == 2
+    assert store.records == []
+
+
+@pytest.mark.parametrize("error", _UNAVAILABLE, ids=lambda e: type(e).__name__)
+def test_load_availability_errors_are_fail_open(store, error):
+    store.fail_with = error
+    assert _store_calls()["load"]() == {}
+
+
+@pytest.mark.parametrize("error", _PROGRAMMING, ids=lambda e: type(e).__name__)
+def test_load_programming_errors_are_not_silenced(store, error, monkeypatch):
+    logged = _capture_errors(monkeypatch)
+    store.fail_with = error
+    with pytest.raises(type(error)):
+        _store_calls()["load"]()
+    assert any("connection_test_load_error" in line for line, _ in logged), logged
+
+
+# Segreti della risorsa non leggibili: messaggio generico (fail-closed)
+
+
+def _failing_loader(resource_id):
+    raise RuntimeError("pool")
+
+
+@pytest.mark.parametrize("loader", [lambda rid: None, _failing_loader], ids=["resource-none", "loader-error"])
+def test_unreadable_secrets_save_the_generic_message(store, loader):
+    @results.records_connection_test("datasource", id_param="ds_id", secrets_of=loader)
+    def route(ds_id: str, current_user: CurrentUser):
+        return {"success": False, "message": "Login fallito per sftp con password Zq8!x"}
+
+    route(ds_id="d-1", current_user=_user())
+    assert store.records[0].message == "Test non riuscito"
+
+
+def test_secrets_of_is_mandatory():
+    with pytest.raises(TypeError):
+        results.records_connection_test("connection", id_param="connection_id")  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        results.records_connection_test("connection", id_param="connection_id", secrets_of=None)
+
+
+# Gli SQL dello store sono PostgreSQL valido
+
+
+_STORE_SQL = {
+    "record": results._RECORD_SQL,
+    "reset": results._RESET_SQL,
+    "load": results._LOAD_SQL,
+}
+
+
+@pytest.mark.parametrize("name", sorted(_STORE_SQL))
+def test_store_sql_parses_as_postgresql(name):
+    """Parser di PostgreSQL (libpg_query via pglast). pglast non e' nelle
+    dipendenze del progetto: senza, il test si salta e resta il test
+    integration ``test_connection_test_results_pg_integration.py`` (PG reale)."""
+    pglast = pytest.importorskip("pglast")
+    sql = _STORE_SQL[name].replace("%s", "NULL")
+    (stmt,) = pglast.parse_sql(sql)
+    assert stmt.stmt is not None

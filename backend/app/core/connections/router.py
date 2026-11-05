@@ -369,9 +369,18 @@ def delete_connection(
     # DELETE risponde 204 No Content, body vuoto.
 
 
+def _connection_secrets(connection_id: str) -> DatabaseConnection | None:
+    """La connessione con la password in chiaro: i segreti da oscurare
+    nell'esito salvato del test (connection_tests.results)."""
+    try:
+        return _connection_service.get_connection(connection_id)
+    except CredentialUnavailableError:
+        return None
+
+
 @router.post("/connections/{connection_id}/test", response_model=ConnectionTestResult)
 @audit_action(action="connection.test", target_param="connection_id")
-@records_connection_test("connection", id_param="connection_id")
+@records_connection_test("connection", id_param="connection_id", secrets_of=_connection_secrets)
 def test_connection(
     connection_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),

@@ -101,12 +101,23 @@ class _TaskResultMiddleware(Middleware):
             finalize_from_celery,
             finalize_task_result,
         )
+        from app.shared.execution.runtime_identity import (
+            contract_test_run_subject,
+            task_result,
+        )
 
         message_kwargs = getattr(message, "kwargs", None)
         requested_run_id = (
             str(message_kwargs.get("run_id") or "")
             if isinstance(message_kwargs, dict)
             else ""
+        )
+        # Esecuzione di prova: anche l'esito di un task in eccezione, in
+        # nuovo tentativo o annullato porta il segno (task_result).
+        test_run = contract_test_run_subject(
+            message_kwargs.get("execution_contract")
+            if isinstance(message_kwargs, dict)
+            else None
         )
         effective_run_id = (
             (requested_run_id or str(message.message_id))
@@ -122,12 +133,12 @@ class _TaskResultMiddleware(Middleware):
                 finalize_task_result(
                     message.message_id,
                     state="RETRY",
-                    payload={
+                    payload=task_result({
                         "success": False,
                         "retryable": True,
                         "message": "Errore transitorio: nuovo tentativo in corso",
                         "run_id": effective_run_id,
-                    },
+                    }, test_run),
                     name=message.actor_name,
                 )
                 return
@@ -143,6 +154,7 @@ class _TaskResultMiddleware(Middleware):
             einfo,
             name=message.actor_name,
             run_id=effective_run_id,
+            test_run=test_run,
         )
 
 

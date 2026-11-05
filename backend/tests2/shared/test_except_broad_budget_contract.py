@@ -97,7 +97,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # resta invariato il vincolo shrink-only per le modifiche successive.
 # +1: per-node schema inference safety-net. Arbitrary handler failures are
 # logged and fall back to the first input; other project nodes remain available.
-_EXPECT_BROAD_BUDGET = 784
+# +1 (2026-11-05): connection_tests.results._after_effect. Registrazione e
+# azzeramento dell'esito del «Test connessione» seguono un effetto gia'
+# compiuto: qualunque errore si logga ERROR con lo stack e non arriva all'utente.
+_EXPECT_BROAD_BUDGET = 785
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

@@ -42,6 +42,7 @@ from app.core.intermediate import runs_db as intermediate_runs_db
 from app.core.intermediate.run_idempotency import is_already_completed
 from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.core.orchestrator.execution_contract import CaricaExecutionContract
+from app.shared.execution.runtime_identity import is_test_run_trigger
 from app.core.projects.service import ProjectService
 from app.db.pg_connection import close_connection as _close_config_connection
 from app.runtime import services as runtime_services_module
@@ -129,6 +130,10 @@ def execute_carica_task(
         output_format = contract.output_format
         force_recalculate = contract.force_recalculate
         triggered_by = contract.triggered_by
+    if is_test_run_trigger(triggered_by):
+        # Anche senza contratto (messaggi legacy): il prefisso delle prove lo
+        # scrive solo il server per le prove, e una prova non avvia Carica.
+        raise ValueError("triggered_by di prova non ammesso per CARICA")
     if run_id is None:
         run_id = str(_uuid.uuid4())
 

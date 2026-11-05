@@ -154,7 +154,7 @@ const TEST_RUN_PROBLEMS = Object.freeze({
 });
 
 // «Esegui di prova» (regola H del backend): con chi, dove finisce il risultato.
-function TestRunNotice({ username, problem }) {
+function TestRunNotice({ username, problem, recalculateIgnored = false }) {
   return (
     <section className="before-run__section" aria-label="Esecuzione di prova">
       <h3 className="before-run__heading">Esecuzione di prova</h3>
@@ -164,8 +164,15 @@ function TestRunNotice({ username, problem }) {
         <div className="before-run__notice" role="status">
           Il progetto viene eseguito come se lo avviasse l&apos;utente di prova <strong>{username}</strong>.
           {' '}Il risultato si scarica una volta dalla finestra di esecuzione: non diventa l&apos;Output del
-          progetto, non aggiorna chi lo usa come sorgente e non avvia Carica. Pianificazioni e catene restano
-          bloccate: per gli utenti veri pubblica il progetto come Eseguibile.
+          progetto, non aggiorna chi lo usa come sorgente e non avvia Carica. Non ricalcola i progetti a monte:
+          usa il loro risultato salvato e, se manca o non è aggiornato, si ferma e chiede di eseguire prima il
+          progetto a monte. Pianificazioni e catene restano bloccate: per gli utenti veri pubblica il progetto
+          come Eseguibile.
+          {recalculateIgnored && (
+            <>
+              {' '}<strong>«Ricalcola tutto» non vale per la prova</strong>: si usa la cache.
+            </>
+          )}
         </div>
       )}
     </section>
@@ -345,7 +352,13 @@ export default function BeforeRunModal({
       footer={footer}
     >
       <div className="before-run">
-        {testRun && <TestRunNotice username={testUsername} problem={testRun.problem} />}
+        {testRun && (
+          <TestRunNotice
+            username={testUsername}
+            problem={testRun.problem}
+            recalculateIgnored={Boolean(request.runOptions?.force_recalculate)}
+          />
+        )}
         {notice}
         {migration.length > 0 && (
           <section className="before-run__section" aria-label="Credenziali da migrare">

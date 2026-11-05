@@ -54,8 +54,30 @@ Un progetto con «Utente che esegue» si prova dall'editor SOLO cosi':
 - cronologia: la riga di ``log_runs`` ha ``triggered_by`` =
   ``test_run:<username>`` (:func:`trigger_for_test_run`), mostrata come
   «Esecuzione di prova (utente: X)» ed esclusa dallo stato «ultima
-  esecuzione» del progetto;
+  esecuzione» del progetto. Il prefisso ``test_run:`` lo scrive SOLO il
+  server (questa factory): ``triggered_by`` dal client e' ammesso solo da
+  :data:`CLIENT_TRIGGERS` e un Carica non e' mai una prova
+  (:func:`is_test_run_trigger`);
 - Schedule e catene non passano mai di qui: restano bloccati.
+
+REGOLA MADRE (correzione dopo la conferma di G+H): la prova non scrive
+NULLA fuori dallo spazio della propria attivita' e dalla riga ``log_runs``
+marcata. Di conseguenza:
+
+- nessun ricalcolo a monte: ``force_recalculate`` non e' ammesso (gli
+  endpoint di prova lo rifiutano, :data:`TEST_RUN_NO_RECALCULATE_MESSAGE`; il
+  worker lo ignora) e se l'artefatto del progetto a monte manca o e' scaduto
+  la prova si ferma con «Esegui prima il progetto a monte X»
+  (:func:`guard_upstream_recompute`, l'unica porta del ricalcolo a monte di
+  Manipola e Arricchisci, che conosce il soggetto dell'esecuzione);
+- nessuna risorsa condivisa aggiornata (es. lo schema della connessione API
+  rilevato da Arricchisci);
+- il ruolo si ricontrolla anche al prelievo dal worker e al download del
+  risultato (:func:`can_test_run`, la stessa regola di
+  ``require_user_or_above``): un utente retrocesso mentre la prova e' in coda
+  la vede annullata con il motivo e non scarica il risultato;
+- ogni esito del worker (anche connessione persa e permesso revocato) porta
+  il segno della prova.
 
 Due usi dello stesso valore (``runtime_input_kinds.project_input_role``):
 parametro (binding ``node_field``: filtro di Estrai, parametro di un passo,
@@ -71,7 +93,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from app.shared import error_codes
-from app.shared.contracts.auth import CurrentUser, username_form_error
+from app.shared.contracts.auth import ROLES_ABOVE_VIEWER, CurrentUser, username_form_error
 from app.shared.execution.runtime_input_kinds import (
     SOURCE_COLUMN_FIELD,
     is_server_injected,
@@ -289,6 +311,100 @@ def trigger_for_test_run(username: str) -> str:
     return f"{TEST_RUN_TRIGGER_PREFIX}{username}"
 
 
+TEST_RUN_RESULT_FIELD = "test_run"
+
+
+def task_result(payload: Any, test_run: Any) -> dict[str, Any]:
+    """L'UNICA funzione che costruisce il risultato di un task (Pipeline e
+    Arricchisci, worker e finalizzazione dell'esito): con il soggetto di prova
+    ``test_run`` (``{"username": ...}``) il risultato porta il segno
+    ``test_run`` in OGNI esito (successo, fallimento, permesso revocato,
+    idempotenza, connessione persa, eccezione, annullamento); senza, e' il
+    payload invariato."""
+    result = dict(payload or {})
+    if isinstance(test_run, Mapping):
+        result[TEST_RUN_RESULT_FIELD] = {"username": str(test_run.get("username") or "")}
+    return result
+
+
+def contract_test_run_subject(execution_contract: Any) -> dict[str, str] | None:
+    """Il soggetto di prova dal contratto grezzo di un messaggio del worker
+    (``execution_contract.execution_subject``), ``None`` se non e' una prova
+    o il contratto non e' leggibile: serve a chi scrive l'esito di un task
+    finito in eccezione, senza il risultato del task."""
+    if not isinstance(execution_contract, Mapping):
+        return None
+    subject = execution_contract.get("execution_subject")
+    if not isinstance(subject, Mapping) or subject.get("kind") != TEST_RUN_SUBJECT_KIND:
+        return None
+    username = subject.get("username")
+    return {"username": username} if isinstance(username, str) and username.strip() else None
+
+
+# Valori di ``triggered_by`` che un client puo' dichiarare (POST /tasks).
+# Tutti gli altri li scrive solo il server (scheduler, cascata, pipeline,
+# Eseguibili, prova).
+CLIENT_TRIGGERS: tuple[str, ...] = ("manual",)
+
+TEST_RUN_NO_RECALCULATE_MESSAGE = (
+    "L'esecuzione di prova non ricalcola nulla: usa il risultato salvato dei "
+    "progetti a monte. Togli «Ricalcola tutto»; se un progetto a monte non e' "
+    "aggiornato, eseguilo prima."
+)
+TEST_RUN_ROLE_REVOKED_MESSAGE = (
+    "Esecuzione di prova annullata: il tuo ruolo non permette piu' di "
+    "modificare il progetto (servono i permessi di chi lo modifica)."
+)
+
+
+def is_test_run_trigger(value: Any) -> bool:
+    """``triggered_by`` di un'esecuzione di prova (prefisso ``test_run:``)."""
+    return isinstance(value, str) and value.startswith(TEST_RUN_TRIGGER_PREFIX)
+
+
+def client_trigger(value: Any) -> str:
+    """``triggered_by`` dichiarato da un client: solo da :data:`CLIENT_TRIGGERS`."""
+    if value not in CLIENT_TRIGGERS:
+        raise ValueError(
+            "triggered_by non ammesso: i valori dal client sono "
+            + ", ".join(CLIENT_TRIGGERS)
+        )
+    return str(value)
+
+
+def can_test_run(role: Any) -> bool:
+    """Chi puo' lanciare (e tenere) un'esecuzione di prova: chi puo'
+    modificare il progetto, cioe' ``require_user_or_above`` (il gruppo lo
+    verifica chi chiama). Stessa regola all'avvio, al prelievo dal worker e
+    al download del risultato."""
+    return role in ROLES_ABOVE_VIEWER
+
+
+class TestRunUpstreamRefused(ValueError):
+    """La prova avrebbe ricalcolato un progetto a monte: si ferma."""
+
+    __test__ = False  # non e' una classe di test (pytest)
+
+    def __init__(self, source_name: str) -> None:
+        self.source_name = source_name
+        super().__init__(
+            f"Esecuzione di prova: il progetto a monte «{source_name}» non ha un "
+            "risultato aggiornato e la prova non lo ricalcola (non scrive nulla "
+            f"fuori da se'). Esegui prima il progetto a monte «{source_name}», poi "
+            "rilancia la prova."
+        )
+
+
+def guard_upstream_recompute(*, test_run: bool, source_name: str) -> None:
+    """L'UNICA porta del ricalcolo di un progetto a monte (Manipola e
+    Arricchisci, sorgente «progetto»): chiamata prima di qualunque scrittura
+    del ricalcolo (run intermedia, ``results``, ``output_contract``,
+    ``log_runs``, Carica). In un'esecuzione di prova solleva
+    :class:`TestRunUpstreamRefused`; altrimenti non fa nulla."""
+    if test_run:
+        raise TestRunUpstreamRefused(source_name)
+
+
 def assert_identity_resolved(canvas: Any) -> None:
     """Ultima difesa agli executor: un nodo «Utente che esegue» ancora nel
     canvas vuol dire che nessuno ha risolto l'utente (Schedule, catene,
@@ -299,7 +415,15 @@ def assert_identity_resolved(canvas: Any) -> None:
 
 
 __all__ = [
+    "CLIENT_TRIGGERS",
     "DEFAULT_SOURCE_COLUMN",
+    "TEST_RUN_NO_RECALCULATE_MESSAGE",
+    "TEST_RUN_ROLE_REVOKED_MESSAGE",
+    "TestRunUpstreamRefused",
+    "can_test_run",
+    "client_trigger",
+    "guard_upstream_recompute",
+    "is_test_run_trigger",
     "KIND_LABEL",
     "PREVIEW_USERNAME_FIELD",
     "TEST_RUN_SUBJECT_KIND",
@@ -314,4 +438,7 @@ __all__ = [
     "resolve_identity_inputs",
     "subject_for_test_run",
     "trigger_for_test_run",
+    "TEST_RUN_RESULT_FIELD",
+    "contract_test_run_subject",
+    "task_result",
 ]

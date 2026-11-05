@@ -17,6 +17,10 @@ from app.core.projects.lineage import ProjectLineageCycleError
 from app.core.projects.source_freshness import get_project_source_freshness
 from app.core.resources.memory_guard import cleanup_worker_memory
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
+from app.shared.execution.runtime_identity import (
+    TestRunUpstreamRefused,
+    guard_upstream_recompute,
+)
 from app.core.artifacts import (
     ArtifactResolver,
     ArtifactResolutionError,
@@ -207,8 +211,17 @@ def load_project_sources(
     run_id: Optional[str] = None,
     group_id: Optional[str] = None,
     logger=None,
+    test_run: bool = False,
 ) -> Optional[JsonObject]:
-    """Load ``project_source`` nodes, recomputing upstream projects as needed."""
+    """Load ``project_source`` nodes, recomputing upstream projects as needed.
+
+    ``test_run`` (esecuzione di prova, ``runtime_identity``): nessun ricalcolo
+    a monte. ``force_recalculate`` si ignora e un artefatto mancante o
+    scaduto ferma la prova con il messaggio di
+    :func:`guard_upstream_recompute` (l'unica porta del ricalcolo).
+    """
+    if test_run:
+        force_recalculate = False
     del run_id  # The upstream recompute path opens its own cascade run id.
     log = logger or globals()["logger"]
     source_nodes = [n for n in canvas.nodes if n.type == "project_source"]
@@ -234,13 +247,14 @@ def load_project_sources(
             source_project_id,
             expected_group_id=executing_group_id,
         )
-        if freshness and freshness.stale and not force_recalculate:
+        stale = bool(freshness and freshness.stale)
+        if stale and not force_recalculate and not test_run:
             return {
                 "success": False,
                 "message": freshness.message,
             }
 
-        if not force_recalculate:
+        if not force_recalculate and not stale:
             try:
                 # mode="bytes": `_load_materialized_project_source` accetta
                 # data direttamente, niente tempfile bounce.
@@ -295,6 +309,19 @@ def load_project_sources(
                         type(exc).__name__, exc,
                         exc_info=True,
                     )
+
+        # Ricalcolo a monte (forzato, scaduto o mancante): l'unica porta,
+        # prima di ogni scrittura (run intermedia, results, log_runs, Carica).
+        try:
+            guard_upstream_recompute(
+                test_run=test_run,
+                source_name=str(
+                    (freshness.source_project_name if freshness else None)
+                    or source_project_id
+                ),
+            )
+        except TestRunUpstreamRefused as refused:
+            return {"success": False, "message": str(refused), "user_error": True}
 
         if not pipeline_dispatcher:
             return {"success": False, "message": "Pipeline dispatcher non configurato"}

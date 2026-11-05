@@ -175,6 +175,17 @@ describe('4. the test run is recognizable afterwards', () => {
       .toHaveTextContent(/non è l.Output del progetto.*Carica/);
   });
 
+  // Ogni ramo dell'esito (anche permesso revocato, annullata, persa): il
+  // segno dal risultato del task o, senza risultato (task in eccezione), dalla
+  // risposta dell'avvio.
+  it.each(['success', 'failure', 'permission_revoked', 'revoked', 'lost'])('%s keeps the mark in every branch', (phase) => {
+    const fromTask = executionResult({ phase, error: 'x', result: { test_run: { username: 'prova' } } }, 't1');
+    const fromLaunch = executionResult({ phase, error: 'x', result: null }, 't1', { username: 'prova' });
+    expect(fromTask.test_run).toEqual({ username: 'prova' });
+    expect(fromLaunch.test_run).toEqual({ username: 'prova' });
+    expect(executionResult({ phase, error: 'x', result: null }, 't1').test_run).toBeUndefined();
+  });
+
   it('history: «Esecuzione di prova (utente: X)», other triggers as before; same prefix as the backend', () => {
     expect(runTriggerLabel('test_run:E0041')).toBe('Esecuzione di prova (utente: E0041)');
     expect(runTriggerLabel('manual')).toBe('manual');
@@ -187,5 +198,48 @@ describe('4. the test run is recognizable afterwards', () => {
       request={{ id: 1, mode: 'manipola', inputDefinitions: [], user: null, values: {}, testRun: { username: 'prova', problem: null } }}
       onLaunch={() => {}} onCancel={() => {}} />);
     expect(screen.getByText(/Pianificazioni e catene restano/)).toBeInTheDocument();
+  });
+});
+
+// Correzione dopo la conferma di G+H (regola madre del backend: la prova non
+// scrive nulla fuori dalla sua attivita'): nessun ricalcolo a monte, detto
+// nella finestra; la guida ha le sezioni sotto il titolo della finestra.
+describe('5. the test run never recalculates (backend guard_upstream_recompute)', () => {
+  it('the window says it, and «Ricalcola tutto» is declared ignored', () => {
+    render(<BeforeRunModal
+      request={{ id: 1, mode: 'manipola', inputDefinitions: [], user: null, values: {},
+        runOptions: { force_recalculate: true }, testRun: { username: 'prova', problem: null } }}
+      onLaunch={() => {}} onCancel={() => {}} />);
+    const notice = screen.getByRole('region', { name: 'Esecuzione di prova' });
+    expect(notice).toHaveTextContent(/Non ricalcola i progetti a monte/);
+    expect(notice).toHaveTextContent(/eseguire prima il progetto a monte/);
+    expect(notice).toHaveTextContent(/«Ricalcola tutto» non vale per la prova/);
+    expect(BACKEND_IDENTITY).toMatch(/Esegui prima il progetto a monte/);
+  });
+
+  it.each(Object.keys(EDITORS))('%s: with «Ricalcola tutto» on, the test run still sends force_recalculate false', async (mode) => {
+    if (mode === 'arricchisci') {
+      preflightEnrichment.mockResolvedValue({ valid: true, preparation_fingerprint: 'f', test_run: { username: 'prova' },
+        nodes: [], checks: {} });
+    }
+    openEditor(mode, [user({ preview_username: 'prova' })]);
+    useCanvasStore.getState().setRunOptions({ force_recalculate: true });
+    await run();
+    if (mode === 'arricchisci') {
+      await waitFor(() => expect(preflightEnrichment).toHaveBeenCalledWith('p1', { inputs: {}, force_recalculate: false, test_run: true }));
+    }
+    const launch = screen.getByRole('button', { name: /prova/ });
+    await waitFor(() => expect(launch.disabled).toBe(false));
+    await act(async () => { fireEvent.click(launch); });
+    expect(onExecute.mock.calls.at(-1)[1]).toMatchObject({ force_recalculate: false, test_run: true });
+    await executeTestRun('p1', { mode, force_recalculate: true });
+    expect(http.post.mock.calls.at(-1)[1].force_recalculate).toBe(false);
+  });
+
+  it('the execution window says the upstream projects were not recalculated', () => {
+    const ok = executionResult({ phase: 'success', result: { output_file: 'o.csv', test_run: { username: 'prova' } } }, 't1');
+    render(<ExecutionModal isOpen onClose={() => {}} isExecuting={false} result={ok} onDownload={() => {}} />);
+    expect(screen.getByText(/Esecuzione di prova \(utente: prova\)/).closest('[role="status"]'))
+      .toHaveTextContent(/non ha ricalcolato i progetti a monte/);
   });
 });

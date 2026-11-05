@@ -24,6 +24,7 @@ vi.mock('../../src/hooks/useTransformRegistry', () => ({ useTransformRegistry: (
 import { IDENTITY_EXAMPLE, UTENTE_CHE_ESEGUE_GUIDE } from '../../src/utils/guides/utenteCheEsegue';
 import { guideToMarkdown } from '../helpers/guideMarkdown';
 import ProjectInputNode from '../../src/components/nodes/ProjectInputNode';
+import GuideModal from '../../src/components/common/GuideModal';
 import useCanvasStore from '../../src/store/useCanvasStore';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
@@ -109,5 +110,19 @@ describe('3. in the app', () => {
     const guide = screen.getByRole('article', { name: /Guida: Input «Utente che esegue»/ });
     UTENTE_CHE_ESEGUE_GUIDE.sections.forEach(s => expect(within(guide).getByRole('heading', { name: s.title })).toBeInTheDocument());
     expect(within(guide).getAllByText(IDENTITY_EXAMPLE.formula).length).toBeGreaterThan(0);
+  });
+});
+
+describe('GuideModal headings (the window title is h3)', () => {
+  it('sections are h4', () => {
+    render(<GuideModal guide={UTENTE_CHE_ESEGUE_GUIDE} isOpen onClose={() => {}} />);
+    const titles = UTENTE_CHE_ESEGUE_GUIDE.sections.map(s => s.title);
+    expect(screen.getAllByRole('heading', { level: 4 }).map(h => h.textContent)).toEqual(titles);
+    const h3 = screen.queryAllByRole('heading', { level: 3 }).map(h => h.textContent);
+    expect(h3.filter(t => titles.includes(t))).toEqual([]);
+  });
+
+  it('the guide says the test run does not recalculate upstream projects', () => {
+    expect(text(UTENTE_CHE_ESEGUE_GUIDE)).toMatch(/La prova non ricalcola i progetti a monte/);
   });
 });

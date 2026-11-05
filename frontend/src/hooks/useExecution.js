@@ -26,16 +26,22 @@ import useCanvasStore from '../store/useCanvasStore';
 import { pollTask } from '../utils/taskPoller';
 import { isPreparationChanged } from '../utils/beforeRun';
 
-/** Esito della finestra a partire dall'esito del task. */
-export function executionResult(outcome, taskId) {
+/**
+ * Esito della finestra a partire dall'esito del task.
+ * REGOLA: l'esecuzione di prova resta riconoscibile in OGNI ramo (successo,
+ * permesso revocato, fallimento, annullata, persa). Il segno `test_run` viene
+ * dal risultato del task o, se il task non ne ha uno (eccezione, 404),
+ * dalla risposta dell'avvio (`launchTestRun`).
+ */
+export function executionResult(outcome, taskId, launchTestRun = null) {
   if (!outcome) return null;
-  if (outcome.phase === 'success') return { success: true, ...(outcome.result || {}), task_id: taskId || undefined };
+  const testRun = outcome.result?.test_run || launchTestRun || null;
+  const mark = testRun ? { test_run: testRun } : {};
+  if (outcome.phase === 'success') return { success: true, ...(outcome.result || {}), task_id: taskId || undefined, ...mark };
   if (outcome.phase === 'permission_revoked') {
-    return { success: false, permissionRevoked: true, status: 'permission_revoked', message: outcome.error };
+    return { success: false, permissionRevoked: true, status: 'permission_revoked', message: outcome.error, ...mark };
   }
-  // L'esecuzione di prova resta riconoscibile anche quando fallisce.
-  const testRun = outcome.result?.test_run;
-  return { success: false, message: outcome.error, code: outcome.code || undefined, ...(testRun ? { test_run: testRun } : {}) };
+  return { success: false, message: outcome.error, code: outcome.code || undefined, ...mark };
 }
 
 // Stato mostrato dalla finestra (colori, "annullata").
@@ -149,9 +155,12 @@ export function useExecution(projectId, options = {}) {
     if (tracksRunState && useCanvasStore.getState().runState === 'running') useCanvasStore.getState().setRunState?.('idle');
   }, [tracksRunState]);
 
+  // Segno della prova dalla risposta dell'avvio (executionResult).
+  const launchTestRunRef = useRef(null);
+
   const settle = useCallback((outcome, taskId) => {
     executingRef.current = false;
-    const r = executionResult(outcome, taskId);
+    const r = executionResult(outcome, taskId, launchTestRunRef.current);
     setResult(r);
     if (!showModalRef.current) setUnseenResult(true);
     if (outcome.phase === 'success') {
@@ -173,12 +182,15 @@ export function useExecution(projectId, options = {}) {
     stopAllCaricaPolling();
 
     let preparationChanged = null;
+    launchTestRunRef.current = null;
     const outcome = await runTask(async () => {
       if (onBeforeExecute) await onBeforeExecute();
       // Esecuzione di prova (PipelineRunner, regola H): una sola funzione
       // per i tre editor, che sceglie l'endpoint dalla modalita'.
       const executeFn = executeOptions.test_run ? executeTestRun : (executeFunction || executeProjectQuery);
-      return executeFn(projectId, executeOptions);
+      const response = await executeFn(projectId, executeOptions);
+      launchTestRunRef.current = response?.test_run || null;
+      return response;
     }, {
       onDone: settle,
       onLaunchError: (err) => {

@@ -229,8 +229,9 @@ export const executeProjectQuery = async (projectId, options = null) => {
  * @returns {Promise<Object>} { task_id, async, test_run: { username } }
  */
 export const executeTestRun = async (projectId, options = {}) => {
-  const { mode, inputs = {}, force_recalculate = false, preparation_fingerprint = null, format = null } = options;
-  const body = { inputs: inputs || {}, force_recalculate: Boolean(force_recalculate) };
+  const { mode, inputs = {}, preparation_fingerprint = null, format = null } = options;
+  // La prova non ricalcola mai i progetti a monte (il server rifiuta `true`).
+  const body = { inputs: inputs || {}, force_recalculate: false };
   if (mode === 'arricchisci') {
     if (preparation_fingerprint) body.preparation_fingerprint = preparation_fingerprint;
     if (format) body.format = format;

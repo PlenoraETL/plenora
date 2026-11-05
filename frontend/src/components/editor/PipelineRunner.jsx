@@ -130,7 +130,9 @@ const nodeLabel = (id) => {
 async function preflightFor(inputs, runOptions, testRun = null) {
   try {
     const preflight = await preflightEnrichment(useCanvasStore.getState().projectId, {
-      inputs, force_recalculate: Boolean(runOptions?.force_recalculate), ...(testRun ? { test_run: true } : {}),
+      // La prova non ricalcola mai (regola madre del backend): «Ricalcola
+      // tutto» non vale per la prova e la finestra lo dice.
+      inputs, force_recalculate: !testRun && Boolean(runOptions?.force_recalculate), ...(testRun ? { test_run: true } : {}),
     });
     return { preflight, preflightError: null };
   } catch (e) {
@@ -189,6 +191,7 @@ export default function PipelineRunner({ user = null }) {
     if (testRun) {
       opts.test_run = true;
       opts.mode = useCanvasStore.getState().mode;
+      opts.force_recalculate = false;
     }
     const onExecute = useCanvasStore.getState().getEditorAction('onExecute');
     if (!onExecute) return false;

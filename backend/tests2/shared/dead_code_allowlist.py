@@ -87,7 +87,7 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+intermediate[\\/]snapshot\.py:\d+: unused function 'flush_snapshots' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+manipola[\\/]executor\.py:\d+: unused method '(set_pipeline_dispatcher|_rileva_geometria_da_contenuto)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/](execution_logs|router_mappers)\.py:\d+: unused function "),
-    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/]router\.py:\d+: unused method 'coerce_progress_to_int' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/]router\.py:\d+: unused method '(coerce_progress_to_int|_client_trigger)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/]task_service\.py:\d+: unused method '(create_carica_task|create_preview_task|get_task_result|cleanup_old_results)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+projects[\\/]service\.py:\d+: unused method '(get_project|project_exists)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+projects[\\/]source_freshness\.py:\d+: unused function 'assert_project_source_fresh' "),

@@ -40,7 +40,7 @@ from app.core.results import store as result_store
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution import carica_dispatcher
 from app.shared.execution.canvas_graph import CanvasGraph
-from app.shared.execution.runtime_identity import assert_identity_resolved
+from app.shared.execution.runtime_identity import assert_identity_resolved, task_result
 from app.shared.execution.runtime_bound_fields import (
     strip_runtime_bound_fields,
     with_runtime_static_parameters,
@@ -177,6 +177,17 @@ def execute_enrichment_task(
     # #28-B: la run-mode incapsula le divergenze standard vs eseguibile
     # (auth recheck, logger project_id, group_id + intermediate run).
     run_mode = enrichment_run_mode.for_task(is_eseguibile, test_run)
+    if test_run is not None:
+        # La prova non ricalcola nulla a monte (gli endpoint lo rifiutano).
+        force_recalculate = False
+
+    def _outcome(payload: Any) -> JsonObject:
+        # REGOLA: ogni esito del task passa di qui e porta il segno della
+        # prova (permesso revocato, idempotenza, fallimento gestito,
+        # fallimento, successo). Gli esiti in eccezione (raise) li scrive
+        # la finalizzazione del worker con la stessa funzione
+        # (task_progress.finalize_from_celery).
+        return task_result(payload, test_run)
 
     def complete_executable_run(
         *,
@@ -227,17 +238,19 @@ def execute_enrichment_task(
             _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
             _revoked.update({"task_id": task_id, "project_id": project_id})
             _close_worker_connection(stage="post-permission-revoke")
-            return _revoked
+            return _outcome(_revoked)
 
     if run_mode.should_recheck_auth():
         _revoked = async_user_recheck_module.recheck_user_authorized(
             user_id=user_id, project_id=project_id,
             task_id=task_id, run_id=run_id or "", task_name="ENRICHMENT",
+            # Prova: anche il ruolo (runtime_identity.can_test_run).
+            test_run=test_run is not None,
         )
         if _revoked is not None:
             _revoked.update({"task_id": task_id, "project_id": project_id})
             _close_worker_connection(stage="post-permission-revoke")
-            return _revoked
+            return _outcome(_revoked)
 
     _log_pid = run_mode.log_project_id(project_id)
 
@@ -271,7 +284,7 @@ def execute_enrichment_task(
                     else None
                 )
                 _close_worker_connection(stage="post-eseguibile-idempotency")
-                return {
+                return _outcome({
                     "status": "skipped_idempotent",
                     "success": True,
                     "project_id": project_id,
@@ -281,7 +294,7 @@ def execute_enrichment_task(
                     "output_file": output_file,
                     "download_url": f"/api/eseguibili/{project_id}/download/{task_id}",
                     "is_eseguibile": True,
-                }
+                })
     elif run_id is not None and run_idempotency_module.is_already_completed(run_id):
         logger.info(
             f"[IDEMPOTENCY] Task ENRICHMENT {task_id}: run_id {run_id} "
@@ -295,7 +308,7 @@ def execute_enrichment_task(
             "task_id": task_id,
         }
         _close_worker_connection(stage="post-idempotency")
-        return result
+        return _outcome(result)
 
     # Variabili per statistiche enrichment
     enrichment_stats = None
@@ -444,6 +457,8 @@ def execute_enrichment_task(
             ),
             preview_limit=None,  # task celery non e' preview
             output_task_id=task_id if run_mode.isolated_output else None,
+            # Prova: nessun ricalcolo a monte (guard_upstream_recompute).
+            test_run=test_run is not None,
         )
 
         nodes = canvas.get("nodes", [])
@@ -634,7 +649,13 @@ def execute_enrichment_task(
                     "error_report_result_id": error_report_result_id,
                 })
 
-            if not executor.api_config.get("output_mapping") and executor.detected_column_types:
+            # Lo schema rilevato aggiorna la connessione API (risorsa
+            # condivisa): mai da un'esecuzione di prova (regola madre).
+            if (
+                test_run is None
+                and not executor.api_config.get("output_mapping")
+                and executor.detected_column_types
+            ):
                 detected = executor.detected_column_types
                 new_schema = [
                     {"path": col, "name": col, "type": typ}
@@ -1030,7 +1051,7 @@ def execute_enrichment_task(
                 task_id=task_id,
                 check_revocation=False,
             )
-            return result
+            return _outcome(result)
         
         final_df = final_result
         
@@ -1135,7 +1156,7 @@ def execute_enrichment_task(
             task_id=task_id,
             check_revocation=False,
         )
-        return result
+        return _outcome(result)
 
     except TaskRevoked:
         if _run_id and run_mode.logs_run():
@@ -1205,7 +1226,7 @@ def execute_enrichment_task(
                 success=False,
                 error_message=str(e.payload.get("error") or "Esecuzione fallita"),
             )
-            return e.payload
+            return _outcome(e.payload)
         if _run_id and run_mode.logs_run():
             try:
                 intermediate_writer.close_run(
@@ -1273,7 +1294,7 @@ def execute_enrichment_task(
         complete_executable_run(success=False, error_message=error_message)
 
         # Ritorna dict con errore (serializzabile
-        return {
+        return _outcome({
             "success": False,
             "task_id": task_id,
             "project_id": project_id,
@@ -1283,7 +1304,7 @@ def execute_enrichment_task(
             "enrichment_stats": enrichment_stats,
             "error_report": error_report_file,
             "error_report_result_id": error_report_result_id,
-        }
+        })
 
     finally:
         _close_worker_connection()

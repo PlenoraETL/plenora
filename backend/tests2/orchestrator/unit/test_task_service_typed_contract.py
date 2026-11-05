@@ -966,7 +966,8 @@ def test_create_task_router_uses_carica_task_service_boundary(monkeypatch):
             carica_node_data={"id": "carica-1", "dest_type": "pg"},
             output_format="geojson",
             force_recalculate=True,
-            triggered_by="cron",
+            # Dal client solo CLIENT_TRIGGERS (runtime_identity).
+            triggered_by="manual",
         ),
         current_user=SimpleNamespace(user_id="user-1"),
     )
@@ -978,7 +979,7 @@ def test_create_task_router_uses_carica_task_service_boundary(monkeypatch):
         "carica_node_data": {"id": "carica-1", "dest_type": "pg"},
         "output_format": "geojson",
         "force_recalculate": True,
-        "triggered_by": "cron",
+        "triggered_by": "manual",
         "user_id": "user-1",
         "execution_contract": {
             "schema_version": 1,
@@ -989,6 +990,6 @@ def test_create_task_router_uses_carica_task_service_boundary(monkeypatch):
             "carica_node_data": {"id": "carica-1", "dest_type": "pg"},
             "output_format": "geojson",
             "force_recalculate": True,
-            "triggered_by": "cron",
+            "triggered_by": "manual",
         },
     }

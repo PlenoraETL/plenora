@@ -17,6 +17,7 @@ from app.core.auth.db import get_user
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.resource_access import assert_project_access
 from app.core.auth.ownership import assert_resource_visible
+from app.shared.execution.runtime_identity import TEST_RUN_ROLE_REVOKED_MESSAGE, can_test_run
 
 logger = get_logger(__name__)
 
@@ -34,8 +35,12 @@ def recheck_user_authorized(
     task_id: str = "",
     run_id: str = "",
     task_name: str = "task",
+    test_run: bool = False,
 ) -> Optional[PermissionRevokedResult]:
     """Re-verifica permessi user al pickup del worker.
+
+    ``test_run`` (esecuzione di prova): oltre al gruppo si ricontrolla il
+    ruolo con la stessa regola dell'avvio (``runtime_identity.can_test_run``).
 
     Returns:
         None se autorizzato (task procede).
@@ -74,6 +79,17 @@ def recheck_user_authorized(
             group_id=user.group_id,
             role=user.role,
         )
+        if test_run and not can_test_run(live_user.role):
+            logger.warning(
+                f"{task_name} {task_id} rifiutato: user {user_id} con ruolo "
+                f"{live_user.role} non puo' piu' lanciare la prova",
+                run_id=run_id, project_id=project_id,
+            )
+            return {
+                "status": "permission_revoked",
+                "success": False,
+                "message": TEST_RUN_ROLE_REVOKED_MESSAGE,
+            }
         try:
             assert_project_access(project_id, live_user)
         except HTTPException as http_exc:

@@ -41,7 +41,8 @@ export default function GuideModal({ guide, isOpen, onClose }) {
         {guide.intro && <p className="guide__p guide__intro"><InlineText text={guide.intro} /></p>}
         {guide.sections.map(section => (
           <section key={section.title} className="guide__section">
-            <h3 className="guide__heading">{section.title}</h3>
+            {/* h4: il titolo della finestra (ModalWrapper) e' h3. */}
+            <h4 className="guide__heading">{section.title}</h4>
             {section.blocks.map(block => (
               <Block key={block.p || block.note || block.code || (block.ul || block.ol || []).join('|')} block={block} />
             ))}
