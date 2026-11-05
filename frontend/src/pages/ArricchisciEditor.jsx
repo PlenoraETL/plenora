@@ -65,6 +65,7 @@ import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term, termName } from '../utils/glossary';
 import useEditorActions from '../components/editor/useEditorActions';
+import { renderNodeType } from '../utils/nodeTypeRegistry';
 
 /**
  * Costruisce una mappa nodeId → titolo per il raggruppamento colonne in
@@ -235,13 +236,17 @@ const ArricchisciEditorContent = () => {
       // `getViewportCenter({ screenToFlowPosition })` direttamente
       // qui dentro, e `screenToFlowPosition` e' in deps.
       position: getViewportCenter({ screenToFlowPosition }),
+      // Il nodo porta il RIFERIMENTO alla connessione (Fase 5, T6, R2.10,
+      // N11): niente endpoint, auth mascherata ne' openapi_spec copiati nel
+      // canvas; il pannello li legge dalla connessione. `parameters` e
+      // `static_parameters` sono l'istantanea per la validazione,
+      // riallineata ogni volta che la connessione si rilegge.
       data: { api_id: connection.id, api_name: connection.name, param_mapping: {},
-        enrich_type: category, api_type: connection.api_type, endpoint: connection.endpoint,
-        auth: connection.auth, parameters: connection.parameters, output_mapping: connection.output_mapping,
+        enrich_type: category, api_type: connection.api_type,
+        parameters: connection.parameters, output_mapping: connection.output_mapping,
         static_parameters: connection.static_parameters || {},
         ...(category === 'rest_file'  && { connection_type: 'rest_file',  request: connection.request, response: connection.response }),
-        ...(category === 'datasource' && { source_type: 'datasource', datasource_config: connection.datasource }),
-        ...(category === 'openapi' && { openapi_spec: connection.openapi_spec }) } });
+        ...(category === 'datasource' && { source_type: 'datasource', datasource_config: connection.datasource }) } });
     // Un progetto sorgente non ha ingresso: dopo la palette nasce solo vicino.
     const afterId = paletteAfterRef.current;
     paletteAfterRef.current = null;
@@ -298,7 +303,7 @@ const ArricchisciEditorContent = () => {
     if (currentNodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning(onlyOneMessage('load_arcgis')); return; }
     const resultNode = currentNodes.find(n => n.type === 'result');
     const newNode = {
-      id: `carica_arcgis_${Date.now()}`, type: 'carica_arcgis',
+      id: `carica_arcgis_${Date.now()}`, type: renderNodeType('carica_arcgis'),
       position: { x: resultNode.position.x + 400, y: resultNode.position.y + 200 },
       data: { arcgis_connection_id: '', arcgis_service_url: '', arcgis_layer_url: '',
         arcgis_operation: 'add', arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',

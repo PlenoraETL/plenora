@@ -6,6 +6,7 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 from app.core.projects.schema_inference import SchemaInferenceService
 from app.core.estrai.sql_preparation import sql_connection_options
+from app.core.estrai import query_plan as query_plan_module
 from app.core.projects.canvas_schema_preparation import infer_canvas_columns
 import time as _time
 import re
@@ -411,9 +412,9 @@ class EstraiExecutor:
     ) -> JsonObject:
         """Percorso esecuzione SQL classico."""
         try:
-            query_info = self.generator.generate_sql(
-                canvas.nodes, canvas.edges, result_node.id,
-                **sql_connection_options(connection)
+            query_info = query_plan_module.sql_query(
+                self.generator, canvas.nodes, canvas.edges, result_node,
+                sql_connection_options(connection),
             )
         except Exception as e:
             # Anche gli errori non-SQL devono entrare nel log aggregato con
@@ -488,27 +489,17 @@ class EstraiExecutor:
         Legge i nodi feature_source dal canvas, query via REST API,
         salva il file di output.
         """
-        feature_nodes = [n for n in canvas.nodes if n.type == "feature_source"]
-        if not feature_nodes:
+        # Piano unico della lettura (query_plan): lo stesso dell'anteprima
+        # della query nel canvas. Un solo feature_source (no JOIN tra layer).
+        plan = query_plan_module.feature_service_query(canvas.nodes, result_node)
+        if plan is None:
             return {"success": False, "message": "Nessun nodo Feature Source trovato nel canvas"}
-
-        # Per ora supporta un singolo feature_source (no JOIN tra layer
-        node = feature_nodes[0]
-        layer_url = node.layer_url or (node.data or {}).get('layer_url', '')
-        where = node.where or (node.data or {}).get('where', '') or '1=1'
-        
-        # Colonne visibili (escludi geometry che è gestito da return_geometry
-        visible_cols = [c for c in self._get_visible_columns(node) if c != 'geometry']
-        out_fields = ','.join(visible_cols) if visible_cols else '*'
-        
-        # Geometria: attiva se il nodo ha geometry_type E geometry è visibile
-        has_geom = bool(node.geometry_type or (node.data or {}).get('geometry_type'))
-        geom_visible = self._is_column_visible(node, 'geometry')
-        return_geometry = has_geom and geom_visible
-        geom_column = result_node.geomColumn or 'geometry'
-        
-        # Limit dal nodo result
-        max_features = result_node.limit if result_node.limit else None
+        layer_url = plan["layer_url"]
+        where = plan["where"]
+        out_fields = plan["out_fields"]
+        return_geometry = plan["return_geometry"]
+        geom_column = plan["geom_column"]
+        max_features = plan["max_features"]
 
         try:
             feature_reader = self._require_feature_reader()
@@ -640,9 +631,9 @@ class EstraiExecutor:
     ) -> JsonObject:
         """Percorso preview SQL classico."""
         try:
-            query_info = self.generator.generate_sql(
-                canvas.nodes, canvas.edges, result_node.id,
-                **sql_connection_options(connection)
+            query_info = query_plan_module.sql_query(
+                self.generator, canvas.nodes, canvas.edges, result_node,
+                sql_connection_options(connection),
             )
 
             base_sql = query_info['sql']
@@ -802,57 +793,12 @@ class EstraiExecutor:
     # HELPER: COLONNE VISIBILI DA NODO FEATURE_SOURCE
 
     def _get_visible_columns(self, node) -> List[str]:
-        """
-        Estrae le colonne visibili da un nodo feature_source.
-        
-        Legge node.columns (Pydantic) o node.data.columns (dict),
-        filtra per visible=True, restituisce lista nomi.
-        """
-        columns = []
-        
-        # Prova prima node.columns (modello Pydantic
-        if hasattr(node, 'columns') and node.columns:
-            columns = node.columns
-        elif node.data and isinstance(node.data, dict) and 'columns' in node.data:
-            columns = node.data['columns']
-        
-        if not columns:
-            return []
-        
-        visible = []
-        for col in columns:
-            if isinstance(col, dict):
-                if col.get('visible', True):
-                    visible.append(col.get('name', ''))
-            else:
-                if getattr(col, 'visible', True):
-                    visible.append(getattr(col, 'name', ''))
-        
-        return [c for c in visible if c]
+        """Colonne visibili di un feature_source (regola unica: query_plan)."""
+        return query_plan_module.visible_column_names(node)
 
     def _is_column_visible(self, node, column_name: str) -> bool:
-        """
-        Verifica se una colonna specifica è visibile nel nodo.
-        
-        Se la colonna non esiste nella lista, restituisce True (default visibile).
-        """
-        columns = []
-        if hasattr(node, 'columns') and node.columns:
-            columns = node.columns
-        elif node.data and isinstance(node.data, dict) and 'columns' in node.data:
-            columns = node.data['columns']
-        
-        if not columns:
-            return True
-        
-        for col in columns:
-            name = col.get('name', '') if isinstance(col, dict) else getattr(col, 'name', '')
-            if name == column_name:
-                visible = col.get('visible', True) if isinstance(col, dict) else getattr(col, 'visible', True)
-                return visible
-        
-        # Colonna non trovata nella lista → default visibile
-        return True
+        """Visibilita' di una colonna (regola unica: query_plan)."""
+        return query_plan_module.is_column_visible(node, column_name)
 
     # SALVATAGGIO TIPI COLONNE
 

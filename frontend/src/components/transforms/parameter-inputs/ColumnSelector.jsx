@@ -8,6 +8,7 @@
  * `parameter-input__field`).
  */
 import React from 'react';
+import { missingValue } from '../../common/OptionSelect';
 
 const ColumnSelector = ({
   columns,
@@ -97,6 +98,10 @@ const ColumnSelector = ({
       className="parameter-input__field"
     >
       <option value="">{placeholder}</option>
+      {/* Colonna sparita o rinominata a monte: si vede, non sembra vuota (R3.21). */}
+      {missingValue(value, filteredColumns.map(col => col.name)) !== null && (
+        <option value={value}>⚠️ {value} (non più disponibile)</option>
+      )}
       {filteredColumns.map((col, idx) => (
         <option key={`${columnKey(col)}-${idx}`} value={col.name}>
           {sourceLabel ? `${sourceLabel} ` : ''}{col.name} ({col.type || 'str'})

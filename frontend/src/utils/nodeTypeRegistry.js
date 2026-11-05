@@ -161,7 +161,6 @@ export const NODE_TYPES = {
     enrich_type: 'manual',
     connection_type: null,
     exec_params: {},
-    endpoint: null,
     batch: {},
     continue_on_error: true,
     skip_null_params: true,
@@ -177,8 +176,59 @@ export const NODE_TYPES = {
   }),
 };
 
+/**
+ * Campi degli archi di join (Fase 5, T6, N6): tabella dichiarativa unica per
+ * il salvataggio (canvasSerializer.serializeEdge) e il caricamento
+ * (nodeFactories.createEdgeFromData), come i campi dei nodi. `keep`:
+ * 'truthy' = il valore vale se non e' falsy (come prima), 'nullish' = vale
+ * anche 0/'' (spatial_distance), 'present' = si salva solo se c'e' (non
+ * aggiunge chiavi ai canvas che non l'hanno). Il round-trip di OGNI campo e'
+ * nel test tests/shared/nodeTypeRoundTrip.contract.test.js.
+ */
+export const JOIN_EDGE_FIELDS = {
+  join_type:          { default: 'left', keep: 'truthy' },
+  source_column:      { default: '', keep: 'truthy' },
+  target_column:      { default: '', keep: 'truthy' },
+  join_conditions:    { default: null, keep: 'truthy' },
+  on_filters:         { default: null, keep: 'truthy' },
+  is_spatial:         { default: false, keep: 'truthy' },
+  spatial_predicate:  { default: null, keep: 'truthy' },
+  source_geom_column: { default: null, keep: 'truthy' },
+  target_geom_column: { default: null, keep: 'truthy' },
+  spatial_distance:   { default: null, keep: 'nullish' },
+  // Chiavi suggerite di un join nato da una relazione ArcGIS "da completare"
+  // (utils/estraiJoins.relationJoinEnds): prima si perdevano al reload.
+  suggestion:         { default: null, keep: 'present' },
+};
+
+/** Campi di un arco di join da `source` (data dell'arco o arco salvato). */
+export function joinEdgeFields(source) {
+  const out = {};
+  for (const [key, field] of Object.entries(JOIN_EDGE_FIELDS)) {
+    const value = source?.[key];
+    if (field.keep === 'present') {
+      if (value !== undefined && value !== null) out[key] = value;
+    } else if (field.keep === 'nullish') {
+      out[key] = value ?? field.default;
+    } else {
+      out[key] = value || field.default;
+    }
+  }
+  return out;
+}
+
 const aliases = new Map(Object.values(NODE_TYPES).flatMap(entry =>
   [entry.type, ...entry.aliases].map(type => [type, entry.type])));
+
+/**
+ * Tipo di rendering di un nodo NUOVO (Fase 5, T6, R2.6): lo stesso che
+ * produce il deserializer (reactFlowType del registro), cosi' nella stessa
+ * sessione non convivono due forme dello stesso tipo. Eccezione dichiarata
+ * del deserializer: l'Output di Manipola/Arricchisci resta `result`.
+ */
+export function renderNodeType(type) {
+  return NODE_TYPES[canonicalNodeType(type)]?.reactFlowType ?? type;
+}
 
 export function canonicalNodeType(type) {
   return aliases.get(type) ?? type;
@@ -197,6 +247,16 @@ export function backendAccessFlags(node) {
 // campo superfluo salvato che un dato perso.
 export const TRANSIENT_DATA_KEYS = new Set(['availableColumns', 'inputColumns', '_advOpen', '_lastUpdate']);
 
+// COPIE DI UNA RISORSA (Fase 5, T6, R2.10, N11): dettagli che appartengono
+// alla risorsa riferita dal nodo (la connessione API di `api_id`) e che il
+// backend legge dalla risorsa, mai dal nodo. Non si salvano: i canvas vecchi
+// che li contengono li perdono al primo salvataggio (auth mascherata,
+// openapi_spec intero, endpoint), senza effetto sull'esecuzione.
+export const RESOURCE_COPY_KEYS = {
+  api_enrich: new Set(['endpoint', 'auth', 'openapi_spec']),
+};
+const isResourceCopyKey = (type, key) => Boolean(RESOURCE_COPY_KEYS[type]?.has(key));
+
 // Colonne DERIVATE (Blocco A, regola 4): i nodi che calcolano le colonne
 // dai loro ingressi non le tengono in `data.columns`. Le colonne vengono dal
 // server (utils/columnSource) e al salvataggio si allegano dalla mappa
@@ -212,7 +272,7 @@ export function persistedNodeData(node) {
   const entry = NODE_TYPES[type];
   const data = {};
   for (const [key, value] of Object.entries(node.data || {})) {
-    if (!TRANSIENT_DATA_KEYS.has(key) && !isDerivedColumnsKey(type, key)) data[key] = value;
+    if (!TRANSIENT_DATA_KEYS.has(key) && !isDerivedColumnsKey(type, key) && !isResourceCopyKey(type, key)) data[key] = value;
   }
   for (const [key, field] of Object.entries(entry?.fields || {})) {
     if (field.persisted) data[key] = nd(node, key, structuredClone(field.default));

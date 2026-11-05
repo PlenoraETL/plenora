@@ -14,12 +14,13 @@ import useCanvasStore from '../../store/useCanvasStore';
 import { CanvasGraphContext } from './CanvasGraphContext';
 import { nodeDescriptor, nodeIcon, nodeTitle } from './nodeDescriptors';
 import './StepsView.css';
+import { useNodesContent } from '../../hooks/useColumns';
 
 const LANE_TITLE = { source: 'Ramo da', join: 'Da più ingressi:', fork: 'Dopo il bivio:' };
 
 export default function StepsView({ onAddAfter, edgeInspector = null }) {
   const graph = useContext(CanvasGraphContext);
-  const nodes = useCanvasStore(s => s.nodes);
+  const nodes = useNodesContent();
   const edges = useCanvasStore(s => s.edges);
   const selectEdge = useCanvasStore(s => s.selectEdge);
   const focusNodeId = useCanvasStore(s => s.focusNodeId);

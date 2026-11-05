@@ -20,6 +20,7 @@
  * "Colonne Output" (non output-setting, gestita dal parent).
  */
 import React, { useState } from 'react';
+import OptionSelect from '../../../common/OptionSelect';
 import FieldInput from '../../../common/FieldInput';
 import { fileStem, integer } from '../../../../utils/fieldCodecs';
 import { OUTPUT_FORMATS } from '../../../../constants/outputFormats';
@@ -129,15 +130,13 @@ export default function OutputSettingsPanel({
             {isGeoFormat && availableGeomColumns.length > 0 && (
               <div className="result-node__geom-select">
                 <div className="result-node__label">📍 Colonna geometria:</div>
-                <select
-                  value={selectedGeomColumn || availableGeomColumns[0] || ''}
+                <OptionSelect
+                  value={selectedGeomColumn || ''}
+                  options={availableGeomColumns}
+                  placeholder="Scegli la colonna geometria…"
                   onChange={(e) => handleChangeGeomColumn(e.target.value)}
                   className="result-node__geom-dropdown"
-                >
-                  {availableGeomColumns.map(col => (
-                    <option key={col} value={col}>{col}</option>
-                  ))}
-                </select>
+                />
               </div>
             )}
 

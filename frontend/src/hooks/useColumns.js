@@ -58,6 +58,22 @@ export function useNodesInfo(ids) {
   );
 }
 
+/**
+ * Tutti i nodi SENZA posizioni: id, tipo, dati e selezione (Fase 5, T6,
+ * R9-U N6). Per i pannelli che elencano i nodi (pannello laterale, vista
+ * Passi, finestre): un trascinamento cambia solo le posizioni, quindi non li
+ * ridisegna. Il test tests/shared/nodeLocalState.contract.test.jsx vieta
+ * `useCanvasStore(s => s.nodes)` fuori dal canvas.
+ */
+export function useNodesContent() {
+  const flat = useCanvasStore(useShallow(s => (s.nodes || []).flatMap(n => [n.id, n.type, n.data, Boolean(n.selected)])));
+  return useMemo(() => {
+    const out = [];
+    for (let i = 0; i < flat.length; i += 4) out.push({ id: flat[i], type: flat[i + 1], data: flat[i + 2] || {}, selected: flat[i + 3] });
+    return out;
+  }, [flat]);
+}
+
 /** Snapshot corrente (mappa + grafo), per le azioni fuori dal render. */
 export function columnSnapshot() {
   const columns = useColumnStore.getState();

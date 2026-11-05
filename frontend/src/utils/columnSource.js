@@ -193,21 +193,31 @@ function inputNodes(snapshot, node) {
 }
 
 // ── Ripiego dichiarato: le sorgenti, dalla loro configurazione ────────────
+export const STATIC_FIELD_TYPES = { string: 'str', integer: 'int', float: 'real', boolean: 'bool' };
 function declaredColumns(node) {
   const type = canonicalNodeType(node?.type);
   if (COLUMN_ROLES[type] !== 'declared') return null;
   const data = node.data || {};
   if (type === 'staticValues') {
-    return (data.fields || []).filter(f => f?.name).map(f => normalizeColumn({ name: f.name, type: f.type || 'str' }, node.id));
+    // Il nodo scrive `field_type` (string/integer/float/boolean), lo stesso
+    // campo che il backend usa per convertire il valore (artifacts/
+    // static_parameters._cast_static_value): Fase 5 T6, N7.
+    return (data.fields || []).filter(f => f?.name).map(f => normalizeColumn({
+      name: f.name, type: STATIC_FIELD_TYPES[f.field_type] || f.type || 'str',
+    }, node.id));
   }
   if (type === 'project_input') {
     return (data.expected_columns || []).map(c => normalizeColumn(c, node.id)).filter(c => c.name);
   }
+  // Layer ArcGIS: l'alias e' l'etichetta di visualizzazione del servizio,
+  // non una rinomina; il backend usa sempre il nome del campo
+  // (schema_inference._infer_feature_source_node_schema). Fase 5 T6, R3.15.
+  const renames = type !== 'feature_source';
   return (data.columns || [])
     .filter(c => typeof c === 'string' || c?.visible !== false)
     .map(c => (typeof c === 'string'
       ? normalizeColumn(c, node.id)
-      : normalizeColumn({ ...c, name: c.alias || c.name, source_name: c.name }, node.id)))
+      : normalizeColumn({ ...c, name: (renames && c.alias) || c.name, source_name: c.name }, node.id)))
     .filter(c => c.name);
 }
 

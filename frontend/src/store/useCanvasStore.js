@@ -570,6 +570,28 @@ export const createCanvasStore = () => create(
         );
       },
 
+      /**
+       * Mutazione utente di nodi E archi insieme (updater funzionale su
+       * { nodes, edges }): una sola azione, un solo Ctrl+Z (Fase 5, T6,
+       * R9-U N2: cambio di operazione che toglie i collegamenti agli input).
+       */
+      editGraph: (updater) => {
+        if (get().isReadOnly) return;
+        get().takeSnapshot();
+        set(
+          state => {
+            const next = updater({ nodes: state.nodes, edges: state.edges }) || {};
+            return {
+              nodes: next.nodes || state.nodes,
+              edges: uniqueDataEdges(next.edges || state.edges),
+              ...dirtyAndClearHighlights(),
+            };
+          },
+          false,
+          'editGraph',
+        );
+      },
+
       /** Mutazione utente generica degli edge (updater funzionale). */
       editEdges: (updater) => {
         if (get().isReadOnly) return;
@@ -773,6 +795,9 @@ export const createCanvasStore = () => create(
       updateNodeData: (nodeId, updates, opts = {}) => {
         // opts.derived = true: dato calcolato (schema caricato, default
         // automatico, stato UI) -> niente dirty ne' snapshot (audit R1.8).
+        // `updates` puo' essere una patch o una funzione (data) => patch sui
+        // dati CORRENTI dello store (Fase 5 T6, R1.4/N5): chi aggiorna un
+        // campo annidato dopo un await non parte mai dalla copia del render.
         const derived = opts.derived === true;
         if (!derived) {
           if (get().isReadOnly) return;
@@ -780,9 +805,11 @@ export const createCanvasStore = () => create(
         }
         set(
           state => ({
-            nodes: state.nodes.map(n =>
-              n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
-            ),
+            nodes: state.nodes.map(n => {
+              if (n.id !== nodeId) return n;
+              const changes = typeof updates === 'function' ? updates(n.data || {}) : updates;
+              return { ...n, data: { ...n.data, ...(changes || {}) } };
+            }),
             ...(derived ? { pendingSync: true } : dirtyAndClearHighlights())
           }),
           false,

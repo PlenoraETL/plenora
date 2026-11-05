@@ -3,8 +3,18 @@
  * parametri `expression` del registro) e loro riscrittura quando una
  * colonna cambia nome a monte.
  *
- * Regola unica: un nome nell'espressione si riscrive SOLO se si risolve in
- * modo univoco a una colonna, e la riscrittura segue l'id.
+ * DOVE si riscrive (Fase 5, T6, R3.12): solo sui token che il motore delle
+ * formule legge come riferimenti a colonna. Copia del tokenizzatore del
+ * backend (backend/app/shared/execution/expression_refs.py, lo stesso
+ * riconoscimento di `ast` sulle espressioni valide): un nome che non e' una
+ * parola chiave, un attributo (`x.str`), il nome di una funzione chiamata
+ * (`round(x)`) o di un argomento (`ndigits=2`), oppure un nome tra backtick.
+ * Mai dentro le stringhe tra apici o virgolette, mai nei numeri (`1e5`), mai
+ * nei commenti. Il corpus backend/tests2/contracts/expression_refs_cases.json
+ * fa girare le due copie sugli stessi casi.
+ *
+ * QUANDO si riscrive: un nome nell'espressione si riscrive SOLO se si
+ * risolve in modo univoco a una colonna, e la riscrittura segue l'id.
  *  - Con i riferimenti salvati (`<param>_column_refs` = [{id, name}]): per
  *    id. Il nome vecchio si sostituisce col nome attuale della stessa
  *    colonna, ma non se il nome vecchio e' oggi il nome di UN'ALTRA colonna
@@ -17,28 +27,132 @@
  *    `name_R`.
  */
 const columnKey = (col) => col?.id || col?.column_id || null;
-const isIdentifier = (token) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(token);
-const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const PY_KEYWORDS = new Set(['False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break',
+  'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if',
+  'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while',
+  'with', 'yield']);
+// Come Python `[^\W\d]\w*` (lettere, numeri non decimali, underscore).
+const NAME_RE = /[\p{L}\p{Nl}\p{No}_][\p{L}\p{N}_]*/uy;
+const NUMBER_RE = /0[xXoObB][0-9a-fA-F_]+|(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9][0-9_]*)(?:[eE][+-]?[0-9][0-9_]*)?[jJ]?/y;
+const STRING_PREFIXES = new Set(['r', 'u', 'b', 'f', 'br', 'rb', 'fr', 'rf']);
+const SPACES = ' \t\r\n\f\v';
+const isDigit = (ch) => ch >= '0' && ch <= '9';
+
+function stringEnd(expr, index) {
+  const quote = expr[index];
+  const triple = quote.repeat(3);
+  if (expr.startsWith(triple, index)) {
+    const close = expr.indexOf(triple, index + 3);
+    return close < 0 ? expr.length : close + 3;
+  }
+  let i = index + 1;
+  while (i < expr.length) {
+    const ch = expr[i];
+    if (ch === '\\') { i += 2; continue; }
+    if (ch === quote || ch === '\n') return i + 1;
+    i += 1;
+  }
+  return expr.length;
+}
+
+function skipSpaces(expr, index, step) {
+  let i = index;
+  while (i >= 0 && i < expr.length && SPACES.includes(expr[i])) i += step;
+  return i;
+}
+
+function nameKind(expr, start, end, text) {
+  if (PY_KEYWORDS.has(text)) return 'keyword';
+  const before = skipSpaces(expr, start - 1, -1);
+  if (before >= 0 && expr[before] === '.') return 'attribute';
+  const after = skipSpaces(expr, end, 1);
+  if (after < expr.length) {
+    if (expr[after] === '(') return 'function';
+    if (expr[after] === '=' && !expr.startsWith('==', after)) return 'kwarg';
+  }
+  return 'name';
+}
+
+/** Token dell'espressione: { kind, start, end, text }. */
+export function expressionTokens(expression) {
+  const tokens = [];
+  if (typeof expression !== 'string') return tokens;
+  const expr = expression;
+  const n = expr.length;
+  let i = 0;
+  const push = (kind, start, end) => tokens.push({ kind, start, end, text: expr.slice(start, end) });
+  while (i < n) {
+    const ch = expr[i];
+    if (SPACES.includes(ch)) { i += 1; continue; }
+    if (ch === '#') {
+      const nl = expr.indexOf('\n', i);
+      const end = nl < 0 ? n : nl;
+      push('comment', i, end); i = end; continue;
+    }
+    if (ch === "'" || ch === '"') {
+      const end = stringEnd(expr, i);
+      push('string', i, end); i = end; continue;
+    }
+    if (ch === '`') {
+      const close = expr.indexOf('`', i + 1);
+      if (close < 0) { push('other', i, n); break; }
+      push('backtick', i, close + 1); i = close + 1; continue;
+    }
+    if (isDigit(ch) || (ch === '.' && i + 1 < n && isDigit(expr[i + 1]))) {
+      NUMBER_RE.lastIndex = i;
+      const m = NUMBER_RE.exec(expr);
+      const end = m && m[0].length > 0 ? i + m[0].length : i + 1;
+      push('number', i, end); i = end; continue;
+    }
+    NAME_RE.lastIndex = i;
+    const m = NAME_RE.exec(expr);
+    if (m) {
+      const text = m[0];
+      const end = i + text.length;
+      if (end < n && (expr[end] === "'" || expr[end] === '"') && STRING_PREFIXES.has(text.toLowerCase())) {
+        const close = stringEnd(expr, end);
+        push('string', i, close); i = close; continue;
+      }
+      tokens.push({ kind: nameKind(expr, i, end, text), start: i, end, text });
+      i = end; continue;
+    }
+    // Un carattere (anche fuori dal BMP) alla volta.
+    const cp = expr.codePointAt(i);
+    const width = cp > 0xffff ? 2 : 1;
+    push('other', i, i + width); i += width;
+  }
+  return tokens;
+}
+
+const tokenRef = (t) => {
+  if (t.kind === 'name') return t.text;
+  if (t.kind === 'backtick') return t.text.slice(1, -1);
+  return null;
+};
+
+/** Nomi delle colonne citate, nell'ordine, senza doppioni. */
+export function expressionColumnRefs(expression) {
+  return [...new Set(expressionTokens(expression).map(tokenRef).filter(r => r !== null))];
+}
 
 export function expressionHasToken(expression, token) {
   if (!expression || !token || typeof expression !== 'string') return false;
-  if (expression.includes(`\`${token}\``)) return true;
-  if (expression.includes(`['${token}']`)) return true;
-  if (expression.includes(`["${token}"]`)) return true;
-  if (isIdentifier(token)) return new RegExp(`\\b${escapeRegExp(token)}\\b`).test(expression);
-  return expression.includes(token);
+  return expressionTokens(expression).some(t => tokenRef(t) === token);
 }
 
 export function rewriteExpressionToken(expression, oldName, newName) {
   if (!expression || !oldName || !newName || oldName === newName) return expression;
-  let rewritten = expression
-    .replaceAll(`\`${oldName}\``, `\`${newName}\``)
-    .replaceAll(`['${oldName}']`, `['${newName}']`)
-    .replaceAll(`["${oldName}"]`, `["${newName}"]`);
-  if (isIdentifier(oldName)) {
-    rewritten = rewritten.replace(new RegExp(`\\b${escapeRegExp(oldName)}\\b`, 'g'), newName);
+  let out = '';
+  let cursor = 0;
+  let changed = false;
+  for (const t of expressionTokens(expression)) {
+    if (tokenRef(t) !== oldName) continue;
+    out += expression.slice(cursor, t.start) + (t.kind === 'backtick' ? `\`${newName}\`` : newName);
+    cursor = t.end;
+    changed = true;
   }
-  return rewritten;
+  return changed ? out + expression.slice(cursor) : expression;
 }
 
 /**
@@ -61,10 +175,11 @@ const candidateTokens = (columns) => [...new Set((columns || [])
 /** Riferimenti {id, name} dell'espressione: solo i nomi risolti in modo univoco. */
 export function collectExpressionRefs(expression, columns) {
   if (!expression || typeof expression !== 'string') return [];
+  const present = new Set(expressionColumnRefs(expression));
   const seen = new Set();
   const refs = [];
   for (const token of candidateTokens(columns)) {
-    if (!expressionHasToken(expression, token)) continue;
+    if (!present.has(token)) continue;
     const col = resolveColumnToken(token, columns);
     const id = columnKey(col);
     if (!id || seen.has(id)) continue;
@@ -94,8 +209,9 @@ export function rewriteExpressionRefs(expression, refs, columns) {
     }
     return next;
   }
+  const present = new Set(expressionColumnRefs(expression));
   for (const token of candidateTokens(list)) {
-    if (!expressionHasToken(expression, token)) continue;
+    if (!present.has(token)) continue;
     const col = resolveColumnToken(token, list);
     if (col && col.name !== token) next = rewriteExpressionToken(next, token, String(col.name));
   }

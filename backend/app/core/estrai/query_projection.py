@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, List
+from typing import Any, Callable, List
 
 from app.db.sql_functions import translate_calculated_column
 from app.db.sql_translator import sql_translator
@@ -61,6 +61,30 @@ class QueryProjectionRenderer:
         self._get_node_table_name: Callable[[Node], str] = generator._get_node_table_name
         self._safe_identifier: Callable[[str, str], str] = generator._safe_identifier
         self._prossimo_nome_param: Callable[[], str] = generator._prossimo_nome_param
+
+    def qualified_column(self, col: Any, table_nodes: List[Node]):
+        """``tabella.colonna`` -> (riferimento SQL, nome reale, nodo) o None.
+
+        Fase 5, T6 (R3.16): GROUP BY, ORDER BY, aggregazioni e HAVING possono
+        indicare la colonna di UNA tabella anche quando lo stesso nome e' in
+        piu' tabelle (``comuni.id`` e ``province.id``). Solo questa forma: un
+        nome semplice segue la regola di sempre (``_visible_column_table_map``),
+        quindi i progetti salvati producono lo stesso SQL.
+        """
+        if not isinstance(col, str) or "." not in col:
+            return None
+        for node in table_nodes or []:
+            table_alias = node.alias or self._get_node_table_name(node)
+            if not table_alias or not col.startswith(f"{table_alias}."):
+                continue
+            name = col[len(table_alias) + 1:]
+            for column in (node.columns or []):
+                col_name = column.name if hasattr(column, "name") else column.get("name", "")
+                visible = column.visible if hasattr(column, "visible") else column.get("visible", True)
+                if col_name and col_name == name and visible:
+                    col_sql = self._safe_identifier(name, "Nome colonna")
+                    return f"{table_alias}.{col_sql}", name, node
+        return None
 
     def _output_name(self, name: str) -> str:
         """PostgreSQL restituisce in minuscolo gli identificatori non quotati."""
@@ -186,6 +210,9 @@ class QueryProjectionRenderer:
         table_map = self._visible_column_table_map(table_nodes)
 
         def _resolve_col(col_name, context):
+            qualified = self.qualified_column(col_name, table_nodes)
+            if qualified:
+                return qualified[0], qualified[1]
             resolved = table_map.get(col_name)
             if resolved:
                 col_real = col_name.split("__", 1)[1] if "__" in col_name else col_name
@@ -197,7 +224,14 @@ class QueryProjectionRenderer:
         for col_name in group_columns:
             col_ref, _ = _resolve_col(col_name, "Nome colonna GROUP BY")
             columns.append(col_ref)
-            if column_metadata is not None:
+            qualified = self.qualified_column(col_name, table_nodes)
+            if column_metadata is not None and qualified:
+                _, real_name, owner = qualified
+                source = next((col for col in owner.columns if col.name == real_name), None)
+                column_metadata.append({"name": self._output_name(real_name), "type": _declared_column_type(source),
+                                        "source_name": real_name, "id": getattr(source, "id", None),
+                                        "source_node": owner.id})
+            elif column_metadata is not None:
                 real_name = col_name.split("__", 1)[1] if table_map.get(col_name) and "__" in col_name else col_name
                 source = next((col for node in reversed(table_nodes)
                                if (node.alias or self._get_node_table_name(node)) == table_map.get(col_name)
@@ -255,6 +289,10 @@ class QueryProjectionRenderer:
 
         qualified = []
         for col in columns:
+            explicit = self.qualified_column(col, table_nodes or [])
+            if explicit:
+                qualified.append(explicit[0])
+                continue
             resolved = table_map.get(col)
             if resolved:
                 col_real = col.split("__", 1)[1] if "__" in col else col
@@ -296,6 +334,8 @@ class QueryProjectionRenderer:
                 if not re.match(r"^[A-Z_]+\([a-zA-Z0-9_.*\s,]+\)$", col.strip()):
                     raise ValueError(f"Espressione aggregata ORDER BY non valida: {col}")
                 parts.append(f"{col} {direction}")
+            elif self.qualified_column(col, table_nodes or []):
+                parts.append(f"{self.qualified_column(col, table_nodes or [])[0]} {direction}")
             else:
                 col_real = col.split("__", 1)[1] if "__" in col else col
                 resolved = table_map.get(col)
@@ -313,6 +353,8 @@ class QueryProjectionRenderer:
         having_config: JsonObject,
         group_by_config: JsonObject,
         params: JsonObject,
+        *,
+        table_nodes: List[Node] | None = None,
     ) -> str:
         """Genera la clausola HAVING."""
         if not having_config.get("enabled") or not having_config.get("conditions"):
@@ -334,8 +376,11 @@ class QueryProjectionRenderer:
             if operator not in valid_operators:
                 continue
 
+            qualified = self.qualified_column(column, table_nodes or [])
             if column == "*":
                 expression = f"{function}(*)"
+            elif qualified:
+                expression = f"{function}({qualified[0]})"
             else:
                 col_sql = self._safe_identifier(column, "Nome colonna HAVING")
                 expression = f"{function}({col_sql})"

@@ -7,7 +7,8 @@ from app.shared.execution.column_selection import join_column_plan
 from typing import TYPE_CHECKING, List
 from dataclasses import replace
 import uuid
-from app.shared.execution.lookup_mapping import normalize_lookup_mapping, lookup_is_numeric, normalize_unmatched
+from app.shared.execution.lookup_mapping import normalize_unmatched
+from app.core.manipola.lookup_type_plan import lookup_type_plan
 
 if TYPE_CHECKING:
     from app.shared.execution.schema_types import ColumnSchema
@@ -100,18 +101,19 @@ class JoinSchemaHandlers:
 
         out_col_cfg = config.get("output_column")
         target = out_col_cfg if out_col_cfg else column
-        numeric = lookup_is_numeric(
-            normalize_lookup_mapping(mapping), config.get("unmatched"), config.get("default")
-        )
-        if target in existing:
-            if numeric:
-                result = [self._copy_column(c, node_id, type_="real") if c.name == target else c for c in result]
-            return result
-
         src_col = next(c for c in result if c.name == column)
+        # Fase 5, T6 (BA1): il tipo e' quello che produce l'esecuzione
+        # (manipola/lookup_type_plan esegue op_lookup su ingressi
+        # rappresentativi della colonna); se dipende dai valori, lo stato dei
+        # tipi del nodo e' "indeterminate" (schema_inference).
+        out_type = lookup_type_plan(src_col.type, config).type
+        if target in existing:
+            return [self._copy_column(c, node_id, type_=out_type) if c.name == target and c.type != out_type else c
+                    for c in result]
+
         result.append(self._column_schema_cls(
             name=target,
-            type="real" if numeric else src_col.type,
+            type=out_type,
             source_node=node_id,
             is_calculated=True,
         ))

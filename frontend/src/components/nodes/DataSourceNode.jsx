@@ -18,6 +18,7 @@ import ModalWrapper from '../common/ModalWrapper';
 import './DataSourceNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { requestErrorMessage } from '../../utils/errorMessages';
+import OptionSelect from '../common/OptionSelect';
 import FieldInput from '../common/FieldInput';
 import { integer } from '../../utils/fieldCodecs';
 
@@ -352,39 +353,33 @@ return (
               {fileMode === 'fixed' && availableSheets.length > 1 && (
                 <div className="dsn__field">
                   <label className="dsn__label">Foglio</label>
-                  <select
+                  <OptionSelect
                     className="dsn__select"
-                    value={data.parse_options?.sheet || availableSheets[0]}
+                    value={data.parse_options?.sheet || ''}
+                    options={availableSheets}
+                    placeholder="Primo foglio (predefinito)"
                     onChange={e => {
                       const sheet = e.target.value;
-                      const po = { ...(data.parse_options || {}), sheet };
-                      upd({ parse_options: po });
+                      upd(d => ({ parse_options: { ...(d.parse_options || {}), sheet } }));
                       fetchSchema(data.file_path, { sheet });
                     }}
-                  >
-                    {availableSheets.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               )}
               {fileMode === 'fixed' && availableLayers.length > 1 && (
                 <div className="dsn__field">
                   <label className="dsn__label">Layer</label>
-                  <select
+                  <OptionSelect
                     className="dsn__select"
-                    value={data.parse_options?.layer || availableLayers[0]}
+                    value={data.parse_options?.layer || ''}
+                    options={availableLayers}
+                    placeholder="Primo layer (predefinito)"
                     onChange={e => {
                       const layer = e.target.value;
-                      const po = { ...(data.parse_options || {}), layer };
-                      upd({ parse_options: po });
+                      upd(d => ({ parse_options: { ...(d.parse_options || {}), layer } }));
                       fetchSchema(data.file_path, { layer });
                     }}
-                  >
-                    {availableLayers.map(l => (
-                      <option key={l} value={l}>{l}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               )}
 

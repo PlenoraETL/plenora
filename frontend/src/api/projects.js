@@ -288,6 +288,19 @@ export const inferProjectSchemas = async (projectId, canvas) => {
 };
 
 /**
+ * Query di Estrai che l'esecuzione lancerebbe sul canvas dell'editor (anche
+ * non salvato), dallo stesso piano del backend (estrai/query_plan; Fase 5
+ * T6, R3.13). Non salva niente.
+ * @returns {Promise<{kind: 'sql'|'feature_service'|'none', sql, params:
+ *   Array<{name, value, input_key, input_label}>, tables_used: string[],
+ *   feature_service, error, notes: string[]}>}
+ */
+export const previewProjectQuery = async (projectId, canvas, { signal } = {}) => {
+  const response = await http.post(`/projects/${projectId}/query-preview`, { canvas }, { signal });
+  return response.data;
+};
+
+/**
  * Valori distinti di una colonna nell'INGRESSO di un nodo (Lookup, «Riempi
  * con i valori presenti»), letti dal server sul canvas dell'editor anche non
  * salvato, con la stessa preparazione dell'esecuzione. Testo dei valori nella

@@ -68,10 +68,11 @@ describe('(a) nessun file scrive colonne derivate nei nodi', () => {
     const ALLOWED = {
       'store/useCanvasStore.js': [3, 'toggleColumn/toggleAllColumns/updateColumnAlias: visibile e alias delle tabelle'],
       'components/nodes/DataSourceNode.jsx': [3, 'colonne dichiarate del Data Source'],
+      'components/nodes/FeatureLayerNode.jsx': [1, 'colonne dichiarate del layer (layer salvati senza colonne, T6 R3.15)'],
       'components/nodes/FileSourceNode.jsx': [2, 'colonne dichiarate del file'],
       'components/nodes/ProjectSourceNode.jsx': [4, 'colonne (visibile/alias) del progetto sorgente'],
       'components/nodes/result/standard/OutputColumnsSection.jsx': [1, 'Estrai: visibile/alias delle tabelle a monte (sorgenti)'],
-      'pages/EstraiEditor.jsx': [3, 'creazione di tabelle e layer; anteprima (non un nodo)'],
+      'pages/EstraiEditor.jsx': [2, 'creazione di tabelle; anteprima (non un nodo)'],
       'pages/ManipolaEditor.jsx': [3, 'creazione delle sorgenti (progetto, file, Data Source)'],
       'pages/ArricchisciEditor.jsx': [3, 'creazione delle sorgenti; anteprima (non un nodo)'],
       'components/transforms/panels/SelectColumnsPanel.jsx': [1, 'config.columns di "Seleziona e rinomina"'],
@@ -80,6 +81,7 @@ describe('(a) nessun file scrive colonne derivate nei nodi', () => {
       'utils/columnSource.js': [4, 'risultato del selettore (non un nodo)'],
       'utils/nodeTypeRegistry.js': [5, 'default delle sorgenti (i tipi derivati non hanno il campo)'],
       'utils/displayIcon.js': [1, 'nome di icona'],
+      'utils/featureLayers.js': [1, 'colonne dichiarate del layer ArcGIS (costruzione unica, T6 R3.15)'],
       'utils/glossary.js': [1, 'descrizione di un parametro'],
     };
     const KEY = /(^|[^\w.])columns\s*:|\.\.\.[\w.?]*data\s*,\s*columns\s*(?=[,}])/g;

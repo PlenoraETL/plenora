@@ -416,6 +416,12 @@ class Edge(BaseModel):
     target_geom_column: Optional[str] = None
     spatial_distance: Optional[float] = None
 
+    # Fase 5, T6 (N6): chiavi suggerite di un join nato da una relazione
+    # ArcGIS "da completare" ({source_column, target_column, label}). Solo
+    # interfaccia: il generatore SQL non la legge. Prima `extra="ignore"` la
+    # scartava e al reload il suggerimento spariva.
+    suggestion: Optional[Dict[str, str]] = None
+
 
 class CanvasState(BaseModel):
     """Stato completo del canvas di un progetto."""

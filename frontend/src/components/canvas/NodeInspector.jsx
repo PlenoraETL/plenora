@@ -32,6 +32,7 @@ import { derivedTitle, nodeDescriptor, nodeIcon, nodeTitle, titlePatch, userTitl
 import BranchSection from './BranchSection';
 import './NodeInspector.css';
 import { term } from '../../utils/glossary';
+import { useNodesContent } from '../../hooks/useColumns';
 
 // Id del nodo da ispezionare: esattamente un nodo selezionato, note escluse.
 const selectInspectedId = (s) => {
@@ -81,7 +82,7 @@ function InspectorFrame({ prefix, label, icon, kind, title, summary, onClose, sw
 
 /** Archi di un nodo (es. i join di una tabella), ognuno apribile nel pannello. */
 function EdgeLinks({ nodeId, edgeInspector }) {
-  const nodes = useCanvasStore(s => s.nodes);
+  const nodes = useNodesContent();
   const edges = useCanvasStore(s => s.edges);
   const selectEdge = useCanvasStore(s => s.selectEdge);
   const byId = new Map(nodes.map(n => [n.id, n]));
@@ -105,7 +106,7 @@ function EdgeLinks({ nodeId, edgeInspector }) {
 
 function EdgeInspector({ edgeId, edgeInspector, prefix }) {
   const edge = useCanvasStore(useCallback(s => (s.edges || []).find(e => e.id === edgeId) || null, [edgeId]));
-  const nodes = useCanvasStore(s => s.nodes);
+  const nodes = useNodesContent();
   const onEdgesChange = useCanvasStore(s => s.onEdgesChange);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const { canDelete } = useCanvasDeletion();

@@ -57,6 +57,26 @@ import { columnsConfirmed, outputColumnsAsRead } from '../../../utils/columnSour
 
 const NONE = [];
 
+/** Voci GROUP BY/ORDER BY di Estrai: nome semplice se unico, `tabella.colonna` se no. */
+export function estraiGroupColumns(columns) {
+  const count = new Map();
+  (columns || []).forEach(c => count.set(c.name, (count.get(c.name) || 0) + 1));
+  const out = new Map();
+  for (const col of columns || []) {
+    const ambiguous = count.get(col.name) > 1 && col.source_table;
+    const value = ambiguous ? `${col.source_table}.${col.source_name || col.name}` : col.name;
+    if (!out.has(value)) {
+      out.set(value, {
+        name: value,
+        label: ambiguous ? `${col.source_table}.${col.name}` : col.name,
+        type: col.type || 'str',
+        fullName: col.source_table ? `${col.source_table}.${col.name}` : col.name,
+      });
+    }
+  }
+  return [...out.values()];
+}
+
 const ResultNodeStandardView = memo(({
   data,
   id,
@@ -121,14 +141,13 @@ const ResultNodeStandardView = memo(({
     }
   }, [confirmed, hasGeometryColumns, isGeoFormat, id]);
 
-  // Colonne disponibili per GROUP BY / ORDER BY (Estrai, SQL): le colonne
-  // delle tabelle a monte, nomi senza doppioni.
-  const availableColumnsRaw = isEstrai ? upstreamColumns.map(col => ({
-    name: col.name,
-    type: col.type || 'str',
-    fullName: col.source_table ? `${col.source_table}.${col.name}` : col.name,
-  })) : NONE;
-  const availableColumns = [...new Map(availableColumnsRaw.map(col => [col.name, col])).values()];
+  // Colonne disponibili per GROUP BY / ORDER BY (Estrai, SQL): una voce per
+  // colonna di ogni tabella a monte (Fase 5, T6, R3.16). Un nome presente in
+  // piu' tabelle si offre qualificato (`comuni.id`, `province.id`): il
+  // generatore SQL lo risolve nella colonna di quella tabella
+  // (estrai/query_projection.qualified_column). Un nome unico resta semplice
+  // (stesso SQL dei progetti salvati).
+  const availableColumns = isEstrai ? estraiGroupColumns(upstreamColumns) : NONE;
 
   // Colonne a monte di Manipola (con gli id), senza doppioni per nome.
   const manipolaUpstream = [...new Map(upstreamColumns.map(col => [col.name, col])).values()];

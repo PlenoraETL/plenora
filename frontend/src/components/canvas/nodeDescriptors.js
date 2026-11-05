@@ -14,8 +14,9 @@
  * binding degli input runtime): nessun collegamento salvato resta orfano.
  */
 import { getCachedTransformRegistry, isMultiInputOp } from '../../utils/transformRegistry';
+import { KNOWN_OPERATION_NAMES } from '../../utils/operationNames';
 import { displayIcon } from '../../utils/displayIcon';
-import { TERMS, inputKindLabel, term } from '../../utils/glossary';
+import { TERMS, applyTransformTerms, inputKindLabel, term } from '../../utils/glossary';
 
 export { displayIcon };
 
@@ -275,6 +276,11 @@ export function derivedTitle(type, data = {}) {
 // catalogo), per le tabelle il loro nome, e i titoli di Collega ("Unisci X",
 // "Accoda X") e Duplica ramo ("<titolo generato> · X").
 const FORMER_NAMES = new Set(Object.values(TERMS).flatMap(t => t.formerNames || []));
+const GENERATED_OPERATION_NAMES = new Set(Object.entries(KNOWN_OPERATION_NAMES).flatMap(([op, names]) => {
+  const [name, catalogName] = names;
+  const termed = applyTransformTerms(op, { name, catalog_name: catalogName });
+  return [...names, termed?.name, termed?.catalog_name].filter(Boolean);
+}));
 const LEGACY_BRANCH_TITLE = /^(Unisci|Accoda) \S/;
 
 function isGeneratedName(type, data, text) {
@@ -283,8 +289,10 @@ function isGeneratedName(type, data, text) {
   const d = data || {};
   if (text === d.table_name || (d.schema_name && text === `${d.schema_name}.${d.table_name}`)) return true;
   if (nodeDescriptor(type) !== D.transform) return false;
-  const transforms = getCachedTransformRegistry()?.transforms || {};
-  return Object.entries(transforms).some(([op, def]) => text === (def?.name || op) || text === def?.catalog_name);
+  // Nomi di operazione dalla tabella statica (KNOWN_OPERATION_NAMES, uguale
+  // al registry del backend) e i loro nomi del glossario: la risposta non
+  // cambia col caricamento del catalogo (Fase 5, T6, R9-U N7).
+  return GENERATED_OPERATION_NAMES.has(text);
 }
 
 function isLegacyGeneratedTitle(type, data, text) {

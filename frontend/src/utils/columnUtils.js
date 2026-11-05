@@ -87,8 +87,15 @@ export function mapApiTypeToStandard(apiType) {
     'polygon': 'geometry:polygon',
     'multipolygon': 'geometry:multipolygon',
     'linestring': 'geometry:line',
+    // Tipi gia' del canvas (Fase 5, T6, R3.20): restano se stessi (prima
+    // 'int' e 'real' diventavano 'str').
+    'str': 'str',
+    'int': 'int',
+    'real': 'real',
   };
-  return typeMap[(apiType || 'string').toLowerCase()] || 'str';
+  const key = (apiType || 'string').toLowerCase();
+  if (key.startsWith('geometry:')) return key;
+  return typeMap[key] || 'str';
 }
 
 /**

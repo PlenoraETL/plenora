@@ -3071,6 +3071,20 @@
             ],
             "title": "Spatial Predicate"
           },
+          "suggestion": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          },
           "target": {
             "minLength": 1,
             "title": "Target",
@@ -13711,7 +13725,11 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preflight Eseguibile Run Api Eseguibili  Eseguibile Id  Preflight Post",
+                  "type": "object"
+                }
               }
             },
             "description": "Successful Response"
@@ -16625,6 +16643,66 @@
         "summary": "Preview Project",
         "tags": [
           "orchestrator"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/query-preview": {
+      "post": {
+        "description": "Query di ESTRAI che l'esecuzione lancerebbe sul canvas non salvato.\n\nFase 5, T6 (R3.13): stesso piano dell'esecuzione (estrai/query_plan), mai\nuna ricostruzione nel frontend. Non modifica il progetto.",
+        "operationId": "preview_project_query_api_projects__project_id__query_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchemaInferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Project Query Api Projects  Project Id  Query Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Preview Project Query",
+        "tags": [
+          "projects"
         ]
       }
     },

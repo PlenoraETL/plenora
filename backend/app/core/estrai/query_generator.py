@@ -118,7 +118,7 @@ class QueryGenerator:
             "from": self._genera_from(table_nodes, edges),
             "where": self._genera_where(table_nodes, params),
             "group_by": self._genera_group_by(group_by_config, table_nodes),
-            "having": self._genera_having(having_config, group_by_config, params),
+            "having": self._genera_having(having_config, group_by_config, params, table_nodes),
             "order_by": self._genera_order_by(order_by_config, table_nodes, group_by_config),
             "distinct": result_node.distinct if hasattr(result_node, 'distinct') else False,
             "limit": result_node.limit if hasattr(result_node, 'limit') else None
@@ -457,10 +457,11 @@ class QueryGenerator:
         self,
         having_config: JsonObject,
         group_by_config: JsonObject,
-        params: JsonObject
+        params: JsonObject,
+        table_nodes: Optional[List[Node]] = None,
     ) -> str:
         return self._projection_renderer().generate_having(
-            having_config, group_by_config, params
+            having_config, group_by_config, params, table_nodes=table_nodes,
         )
 
     # GEOMETRIE — CONVERSIONE WKT

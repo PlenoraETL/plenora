@@ -1,0 +1,86 @@
+"""Tipi previsti del Lookup = tipi dell'esecuzione (Fase 5, T6, residuo BA1).
+
+Matrice 5 tipi di colonna x 6 mappe x 4 «Valori non mappati» x 2 uscite x
+{righe, vuoto} = 480 casi (quella del rapporto A3, sezione F3, dove 380 casi
+divergevano). Per ogni caso:
+
+- previsione certa (stato dei tipi ``certain``) -> tipo previsto == tipo eseguito;
+- previsione incerta -> lo stato dei tipi del nodo e' ``indeterminate`` e il
+  tipo eseguito e' tra le alternative dichiarate dal piano
+  (``manipola/lookup_type_plan``).
+"""
+
+from __future__ import annotations
+
+import itertools
+from types import SimpleNamespace
+
+import pandas as pd
+import pytest
+
+from app.core.manipola.canvas_schema_runtime import build_columns_with_types
+from app.core.manipola.lookup_type_plan import lookup_type_plan
+from app.core.manipola.plugin_executor import get_executor
+from app.core.projects.schema_inference import SchemaInferenceService
+from app.shared.execution.schema_types import ColumnSchema
+
+COLUMNS = {
+    "int": [1, 2, 3, 4], "real": [1.5, 2.0, 3.5, 4.0], "str": ["a", "b", "c", "d"],
+    "bool": [True, False, True, False], "date": list(pd.to_datetime(["2024-01-05"] * 4)),
+}
+_ALL = list(dict.fromkeys(["a", "b", "c", "d", "1", "2", "3", "4", "1.5", "3.5", "True", "False", "2024-01-05"]))
+MAPPINGS = {
+    "testo": [{"from": "a", "to": "X"}, {"from": "1", "to": "Y"}, {"from": "True", "to": "Z"}],
+    "numeri": [{"from": "a", "to": "10"}, {"from": "1", "to": "20"}, {"from": "True", "to": "30"}],
+    "tutte_testo": [{"from": v, "to": "X"} for v in _ALL],
+    "tutte_numeri": [{"from": v, "to": "7"} for v in _ALL],
+    "nessuna": [{"from": "zzz", "to": "X"}],
+    "vuota": [],
+}
+UNMATCHED = [None, "keep", "null", "value"]
+OUTPUTS = [None, "nuova"]
+
+MATRIX = list(itertools.product(COLUMNS, MAPPINGS, UNMATCHED, OUTPUTS, [False, True]))
+
+
+def test_matrix_size():
+    assert len(MATRIX) == 5 * 6 * 4 * 2 * 2 == 480
+
+
+@pytest.mark.parametrize("col_type,mapping,unmatched,output,empty", MATRIX)
+def test_lookup_type_matches_execution(col_type, mapping, unmatched, output, empty):
+    frame = pd.DataFrame({"c": COLUMNS[col_type]})
+    if empty:
+        frame = frame.iloc[:0]
+    config = {"column": "c", "mapping": MAPPINGS[mapping], "unmatched": unmatched,
+              "default": "0" if unmatched == "value" else None}
+    if output:
+        config["output_column"] = output
+    schemas = [[ColumnSchema(**col, id=f"0:{i}", source_name=col["name"])
+                for i, col in enumerate(build_columns_with_types(frame, {}))]]
+    service = SchemaInferenceService(None)
+    node = SimpleNamespace(id="t", config=config, data={}, transform_op="lookup")
+    inferred = {c.name: c.type for c in service._infer_transform_schema(node, schemas, {})}
+    executed = get_executor().execute_with_params("lookup", [frame], config)
+    actual = {c["name"]: c["type"] for c in build_columns_with_types(executed, {})}
+    assert set(inferred) == set(actual)
+    target = output or "c"
+    plan = lookup_type_plan(schemas[0][0].type, config)
+    status = service._types_status_cache.get("t", ("certain", ""))[0]
+    if status == "certain":
+        assert inferred == actual
+    else:
+        assert plan.certain is False
+        assert actual[target] in plan.alternatives
+        assert {k: v for k, v in inferred.items() if k != target} == {k: v for k, v in actual.items() if k != target}
+
+
+def test_prediction_is_certain_where_values_do_not_matter():
+    certain = [
+        lookup_type_plan(t, {"column": "c", "mapping": MAPPINGS[m], "unmatched": u,
+                             "default": "0" if u == "value" else None}).certain
+        for t, m, u in itertools.product(["int", "real", "str", "bool", "date"], MAPPINGS, UNMATCHED)
+    ]
+    # La grande maggioranza dei casi e' certa; solo la conversione numerica
+    # dell'uscita dipende dai valori (intero o decimale).
+    assert sum(certain) >= len(certain) * 3 // 4

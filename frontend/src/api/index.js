@@ -110,6 +110,7 @@ export {
 export {
   inferProjectSchemas,
   distinctNodeValues,
+  previewProjectQuery,
   restoreCanvasVersion,
 } from './projects';
 

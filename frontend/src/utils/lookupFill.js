@@ -42,6 +42,7 @@
 import { distinctNodeValues } from '../api';
 import { serializeCanvas } from './canvasSerializer';
 import useCanvasStore from '../store/useCanvasStore';
+import { rowHasSavedKey, rowHasSavedTarget, savedCellValue } from './lookupMapping';
 
 export const FILL_LIMIT = 200;
 
@@ -62,7 +63,10 @@ export const fillSourceKey = ({ column = null, columnId = null } = {}) => {
 };
 
 /** Riga vuota: ne' valore ne' «diventa» utilizzabili (si scarta). */
-export const isEmptyRow = (r) => !isUsableValue(r?.from) && !isUsableValue(r?.to);
+export const isEmptyRow = (r) => !hasKey(r) && !isUsableValue(r?.to) && !rowHasSavedTarget(r);
+
+/** Chiave della riga: testo utilizzabile o chiave salvata non toccata (anche null, R9-U N1). */
+export const hasKey = (r) => isUsableValue(r?.from) || rowHasSavedKey(r);
 
 /**
  * Proposta ancora da compilare: riga aggiunta da Riempi (`proposed`, segno
@@ -74,7 +78,9 @@ export const isPendingProposal = (r) => Boolean(r?.proposed) && !isUsableValue(r
 /** Righe da salvare: non vuote e non proposte da compilare (non cambiano il risultato). */
 export const toSavedRows = (rows) => (rows || [])
   .filter(r => !isEmptyRow(r) && !isPendingProposal(r))
-  .map(r => ({ from: r.from, to: r.to }));
+  // Chiavi e valori salvati non testuali restano col loro tipo finche' il
+  // testo della cella non cambia (utils/lookupMapping, R9-U N1 / BA3).
+  .map(r => ({ from: savedCellValue(r.from, r.saved_from), to: savedCellValue(r.to, r.saved_to) }));
 
 /**
  * Toglie le proposte non compilate che vengono da un'altra colonna; le

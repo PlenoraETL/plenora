@@ -18,7 +18,7 @@ vi.mock('../../../src/store/useCanvasStore', () => {
   hook.getState = () => storeState.current;
   return { default: hook };
 });
-vi.mock('../../../src/context/ConfirmContext', () => ({ useConfirm: () => async () => true }));
+vi.mock('../../../src/context/ConfirmContext', () => ({ useConfirm: () => async () => true, useConfirmOrDeny: () => async () => true }));
 vi.mock('../../../src/components/modals/RunHistoryModal', () => ({ default: () => null }));
 vi.mock('../../../src/utils/transformRegistry', () => ({
   fetchTransformRegistry: vi.fn(async () => registryValue.current),

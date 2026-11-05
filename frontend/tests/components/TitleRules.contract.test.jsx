@@ -83,7 +83,8 @@ const ACTIONS = [
     () => useCanvasStore.getState().updateNodeData('n1', { transform_op: 'concat', config: {} }), 'Concatena · Canoni'],
   ['Duplica ramo', cloneStepData({ id: 'x', type: 'transform', data: { transform_op: 'filter', config: {}, title: 'Filtra righe · Canoni' } }, 'Contratti'),
     null, 'Filtra righe · Contratti'],
-  ['titolo congelato e cambio operazione', { transform_op: 'filter', config: {}, title: 'Filtra righe' },
+  // Titolo congelato = un nome VERO del catalogo (tabella statica utils/operationNames, T6 R9-U N7).
+  ['titolo congelato e cambio operazione', { transform_op: 'filter', config: {}, title: 'Filtra' },
     () => useCanvasStore.getState().updateNodeData('n1', { transform_op: 'lookup', config: {} }), 'Mappa valori'],
 ];
 

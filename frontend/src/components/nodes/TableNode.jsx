@@ -13,6 +13,7 @@ import FilterModal from '../modals/FilterModal';
 import ColumnBuilderModal from '../modals/ColumnBuilderModal';
 import { getColumnTypeIcon, getColumnTypeLabel, getColumnSRID, isColumnVisible, isGeometryType } from '../../utils/columnUtils';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useStoreDraft } from '../../hooks/useStoreDraft';
 import './TableNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 
@@ -29,12 +30,14 @@ const TableNode = memo(({ data, id }) => {
   const [searchTerm, setSearchTerm] = useState('');
   
   // State per editing alias tabella
-  const [isEditingAlias, setIsEditingAlias] = useState(false);
-  const [tempAlias, setTempAlias] = useState(data.alias || '');
+  // Bozze dei campi solo durante la modifica, derivate dallo store
+  // (hooks/useStoreDraft, R1.9): un Ctrl+Z le scarta.
+  const aliasDraft = useStoreDraft(data.alias || '');
+  const isEditingAlias = aliasDraft.editing;
 
   // State per editing alias colonna
   const [editingColumnIndex, setEditingColumnIndex] = useState(null);
-  const [tempColumnAlias, setTempColumnAlias] = useState('');
+  const columnAliasDraft = useStoreDraft(editingColumnIndex === null ? null : ((data.columns || [])[editingColumnIndex]?.alias || ''));
 
   // State per modale filtri WHERE
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -77,8 +80,7 @@ const TableNode = memo(({ data, id }) => {
 
   const handleSaveAlias = () => {
     // Solo l'alias SQL: il titolo del passo ne e' derivato (nodeDescriptors).
-    updateNodeData(id, { alias: tempAlias.trim() || null });
-    setIsEditingAlias(false);
+    aliasDraft.commit(value => updateNodeData(id, { alias: String(value).trim() || null }));
   };
 
   const handleToggleColumn    = (columnIndex) => toggleColumn(id, columnIndex);
@@ -86,18 +88,17 @@ const TableNode = memo(({ data, id }) => {
 
   const handleStartEditColumnAlias = (columnIndex) => {
     setEditingColumnIndex(columnIndex);
-    setTempColumnAlias(columns[columnIndex].alias || '');
+    columnAliasDraft.beginWith(columns[columnIndex].alias || '');
   };
 
   const handleSaveColumnAlias = () => {
-    updateColumnAlias(id, editingColumnIndex, tempColumnAlias.trim() || null);
+    columnAliasDraft.commit(value => updateColumnAlias(id, editingColumnIndex, String(value).trim() || null));
     setEditingColumnIndex(null);
-    setTempColumnAlias('');
   };
 
   const handleCancelEditColumnAlias = () => {
     setEditingColumnIndex(null);
-    setTempColumnAlias('');
+    columnAliasDraft.cancel();
   };
 
   const handleSaveFilters             = (newFilters) => updateNodeData(id, { filters: newFilters });
@@ -127,14 +128,13 @@ const TableNode = memo(({ data, id }) => {
           {isEditingAlias ? (
             <input
               type="text"
-              value={tempAlias}
-              onChange={(e) => setTempAlias(e.target.value)}
+              value={aliasDraft.value}
+              onChange={(e) => aliasDraft.change(e.target.value)}
               onBlur={handleSaveAlias}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleSaveAlias();
                 if (e.key === 'Escape') {
-                  setIsEditingAlias(false);
-                  setTempAlias(alias || '');
+                  aliasDraft.cancel();
                 }
               }}
               autoFocus
@@ -145,7 +145,7 @@ const TableNode = memo(({ data, id }) => {
             alias && (
               <div 
                 className="table-node__alias-display"
-                onClick={() => setIsEditingAlias(true)}
+                onClick={() => aliasDraft.begin()}
                 title="Clic per modificare l'alias"
               >
                 → {alias}
@@ -157,7 +157,7 @@ const TableNode = memo(({ data, id }) => {
           {!alias && !isEditingAlias && (
             <button
               type="button"
-              onClick={() => setIsEditingAlias(true)}
+              onClick={() => aliasDraft.begin()}
               className="table-node__add-alias-btn"
             >
               + Aggiungi alias
@@ -252,13 +252,13 @@ const TableNode = memo(({ data, id }) => {
               )}
               
               {/* Alias colonna - editabile */}
-              {editingColumnIndex === column._origIndex ? (
+              {editingColumnIndex === column._origIndex && columnAliasDraft.editing ? (
                 <div className="table-node__column-alias-editor">
                   <span className="table-node__column-alias-arrow">→</span>
                   <input
                     type="text"
-                    value={tempColumnAlias}
-                    onChange={(e) => setTempColumnAlias(e.target.value)}
+                    value={columnAliasDraft.value}
+                    onChange={(e) => columnAliasDraft.change(e.target.value)}
                     onBlur={handleSaveColumnAlias}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleSaveColumnAlias();

@@ -17,6 +17,8 @@ import React, { useState, useEffect, memo } from 'react';
 import { Position } from '@xyflow/react';
 import { getLayerSchema } from '../../api/features';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useStoreDraft } from '../../hooks/useStoreDraft';
+import { featureLayerColumns } from '../../utils/featureLayers';
 import { isColumnVisible } from '../../utils/columnUtils';
 import './FeatureLayerNode.css';
 import NodeHandle from '../canvas/NodeHandle';
@@ -58,9 +60,11 @@ const FeatureLayerNode = memo(({ data, id }) => {
   // State
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showWhereEditor, setShowWhereEditor] = useState(false);
-  const [whereClause, setWhereClause] = useState(data.where || '');
-  const [tempWhere, setTempWhere] = useState(data.where || '');
+  // WHERE: il valore e' quello dello store; la bozza vive solo mentre
+  // l'editor e' aperto (hooks/useStoreDraft, R1.9: un Ctrl+Z la scarta).
+  const whereClause = data.where || '';
+  const whereDraft = useStoreDraft(whereClause);
+  const showWhereEditor = whereDraft.editing;
 
   // Props dal nodo
   const serviceName = data.service_name || '';
@@ -82,14 +86,13 @@ const FeatureLayerNode = memo(({ data, id }) => {
   const schemaData = schemaResource.data;
   useEffect(() => {
     if (!schemaData?.fields) return;
-    const columns = schemaData.fields.map(f => ({
-      name:    f.name,
-      type:    f.type || 'str',
-      alias:   f.alias || null,
-      visible: true,
-    }));
+    // Layer salvati senza colonne (prima di T6 il trascinamento le lasciava
+    // vuote): stessa costruzione del trascinamento (utils/featureLayers).
     // Schema caricato dal servizio: dato derivato, non dirty (audit R1.8).
-    updateNodeData(id, { columns }, { derived: true });
+    updateNodeData(id, (d) => ({
+      columns: featureLayerColumns(schemaData.fields),
+      ...(d.relationships?.length ? {} : { relationships: schemaData.relationships || [] }),
+    }), { derived: true });
   }, [schemaData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleColumn     = useCanvasStore(s => s.toggleColumn);
@@ -100,15 +103,11 @@ const FeatureLayerNode = memo(({ data, id }) => {
   const handleToggleAll    = (makeVisible)  => toggleAllColumns(id, makeVisible);
 
   const handleSaveWhere = () => {
-    const trimmed = tempWhere.trim();
-    setWhereClause(trimmed);
-    updateNodeData(id, { where: trimmed });
-    setShowWhereEditor(false);
+    whereDraft.commit(value => updateNodeData(id, { where: String(value).trim() }));
   };
 
   const handleCancelWhere = () => {
-    setTempWhere(whereClause);
-    setShowWhereEditor(false);
+    whereDraft.cancel();
   };
 
   const handleAddRelated = async (rel) => {
@@ -277,8 +276,8 @@ const FeatureLayerNode = memo(({ data, id }) => {
                 <div className="fl-node__where-editor">
                   <label className="fl-node__where-label">Filtro WHERE (Esri SQL):</label>
                   <textarea
-                    value={tempWhere}
-                    onChange={(e) => setTempWhere(e.target.value)}
+                    value={whereDraft.value}
+                    onChange={(e) => whereDraft.change(e.target.value)}
                     placeholder="Es. ANNO > 2000 AND TIPO = 'residenziale'"
                     className="fl-node__where-textarea"
                     rows={3}
@@ -301,7 +300,7 @@ const FeatureLayerNode = memo(({ data, id }) => {
               ) : (
                 <button
                   type="button"
-                  onClick={() => { setTempWhere(whereClause); setShowWhereEditor(true); }}
+                  onClick={() => whereDraft.begin()}
                   className={`fl-node__where-toggle ${whereClause ? 'fl-node__where-toggle--active' : ''}`}
                 >
                   <span>🔍 Filtro WHERE</span>

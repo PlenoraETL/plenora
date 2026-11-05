@@ -216,6 +216,28 @@ def empty_dataframe_from_column_metadata(
     return pd.DataFrame(columns_data)
 
 
+def typed_probe_frame(column: str, canvas_type: Optional[str], values: List[Any]) -> pd.DataFrame:
+    """Frame di una colonna del tipo ``canvas_type`` con i valori dati.
+
+    Serve alle previsioni che ESEGUONO l'operazione su ingressi rappresentativi
+    (Fase 5, T6, BA1: tipi del Lookup). ``None`` e' il null nella forma che
+    quella famiglia ha davvero nei dati caricati: NaN per i numeri (una
+    colonna intera con null arriva come float64), NaT per le date, None per
+    testo e booleani (object).
+    """
+    dtype = canvas_type_to_pandas_dtype(canvas_type)
+    has_null = any(value is None for value in values)
+    if dtype == "int64" and has_null:
+        dtype = "float64"
+    if dtype == "bool" and has_null:
+        dtype = "object"
+    if dtype.startswith("datetime64"):
+        series = pd.Series(pd.to_datetime(values), dtype=dtype)
+    else:
+        series = pd.Series(values, dtype=dtype)
+    return pd.DataFrame({column: series})
+
+
 def canvas_type_to_pandas_dtype(canvas_type: Optional[str]) -> str:
     """Return a pandas dtype string for a canvas column type.
 

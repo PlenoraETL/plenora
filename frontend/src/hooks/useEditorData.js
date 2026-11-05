@@ -126,7 +126,9 @@ export function useEditorData(projectId, options = {}) {
     if (projectsRes.status === 'rejected' && filesRes.status === 'rejected') throw projectsRes.reason;
     const all = projectsRes.status === 'fulfilled' ? (projectsRes.value.projects || []) : [];
     return {
-      sources: all.filter(p => types.includes(p.project_type || 'estrai')),
+      // Il progetto aperto non e' mai una sorgente di se stesso (Fase 5, T6,
+      // R3.19: trascinarlo creava un ciclo).
+      sources: all.filter(p => types.includes(p.project_type || 'estrai') && String(p.id) !== String(projectId)),
       files: filesRes.status === 'fulfilled' ? (filesRes.value.files || []) : [],
       errors: [
         projectsRes.status === 'rejected' ? `Progetti non caricati: ${requestErrorMessage(projectsRes.reason)}` : null,

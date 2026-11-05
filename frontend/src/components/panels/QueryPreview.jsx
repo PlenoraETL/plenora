@@ -1,314 +1,96 @@
 /**
- * QueryPreview.jsx — Preview SQL della query costruita nel canvas
+ * QueryPreview.jsx — Anteprima della query costruita nel canvas di Estrai.
  *
- * Pannello collassabile in fondo all'editor Estrai che mostra
- * la SQL generata dai nodi del canvas in tempo reale.
- * Evidenzia gli errori di validazione con indicatori visivi.
+ * Fase 5, T6 (R3.13, N14): la query mostrata e' QUELLA DELL'ESECUZIONE. Il
+ * backend la costruisce sul canvas corrente (anche non salvato) con lo
+ * stesso piano dell'esecuzione (POST /projects/{id}/query-preview,
+ * estrai/query_plan + QueryGenerator con le opzioni della connessione):
+ * ORDER BY, HAVING, layer ArcGIS, tabelle non collegate, filtri 0, IN e
+ * BETWEEN, alias delle colonne calcolate, filtri presi da un input runtime.
+ * Qui non si ricostruisce niente: si mostra la risposta.
+ *
+ * La richiesta parte dopo una pausa nelle modifiche, sull'impronta del
+ * contenuto (utils/canvasContentKey: spostare i nodi non la rifa'); l'id di
+ * richiesta di useResource fa vincere l'ultima.
  */
-import React, { useState } from 'react';
-import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
-import { isColumnVisible } from '../../utils/columnUtils';
+import React, { useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import useCanvasStore from '../../store/useCanvasStore';
+import { previewProjectQuery } from '../../api';
+import { useResource } from '../../hooks/useResource';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { canvasContentKey } from '../../utils/canvasContentKey';
+import { serializeCanvas } from '../../utils/canvasSerializer';
+import { ResourceError } from '../common/ListState';
+import '../common/ListState.css';
 import './QueryPreview.css';
 import { term } from '../../utils/glossary';
 
-/**
- * Componente per visualizzare preview SQL della query
- */
-function QueryPreview({ nodes, edges, validationErrors = [] }) {
+const formatValue = (value) => {
+  if (value === null || value === undefined) return 'NULL';
+  if (Array.isArray(value)) return `(${value.map(formatValue).join(', ')})`;
+  if (typeof value === 'string') return `'${value}'`;
+  return String(value);
+};
+
+/** Una riga per parametro: valore, o «dall'input X all'avvio». */
+export function paramLabel(param) {
+  if (param.input_key) {
+    return `${formatValue(param.value)} — dall'input «${param.input_label || param.input_key}» all'avvio`;
+  }
+  return formatValue(param.value);
+}
+
+function QueryPreview() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const projectId = useCanvasStore(s => s.projectId);
+  // Solo id, tipo e dati dei nodi (non le posizioni): un trascinamento non
+  // ricalcola l'impronta.
+  const flat = useCanvasStore(useShallow(s => (s.nodes || []).flatMap(n => [n.id, n.type, n.data])));
+  const edges = useCanvasStore(s => s.edges);
+  const contentKey = useMemo(() => {
+    const nodes = [];
+    for (let i = 0; i < flat.length; i += 3) nodes.push({ id: flat[i], type: flat[i + 1], data: flat[i + 2] });
+    return canvasContentKey(nodes, edges);
+  }, [flat, edges]);
+  const { value: settledKey } = useDebouncedValue(contentKey, 400);
+  const hasNodes = useCanvasStore(s => (s.nodes || []).some(n => n.type !== 'comment'));
 
-  /**
-   * Genera SQL dalla configurazione canvas
-   */
-  const generateSQL = () => {
-    if (nodes.length === 0) {
-      return { 
-        sql: '-- Aggiungi tabelle al canvas per generare la query',
-        errors: []
-      };
+  const query = useResource(({ signal }) => {
+    const st = useCanvasStore.getState();
+    return previewProjectQuery(st.projectId, serializeCanvas(st.nodes, st.edges), { signal });
+  }, {
+    key: ['estrai-query-preview', projectId, settledKey],
+    enabled: Boolean(projectId) && hasNodes,
+    keepPreviousData: true,
+  });
+  const result = query.data || null;
+
+  const sql = useMemo(() => {
+    if (!hasNodes) return '-- Aggiungi tabelle al canvas per generare la query';
+    if (!result) return query.initialLoading ? '-- Preparazione della query…' : '';
+    if (result.kind === 'feature_service' && result.feature_service) {
+      const fs = result.feature_service;
+      return [
+        `-- Lettura del layer ArcGIS (REST), come in esecuzione`,
+        `LAYER   ${fs.layer_url}`,
+        `WHERE   ${fs.where}`,
+        `CAMPI   ${fs.out_fields}`,
+        `GEOMETRIA ${fs.return_geometry ? 'sì' : 'no'}`,
+        fs.max_features ? `LIMITE  ${fs.max_features}` : null,
+      ].filter(Boolean).join('\n');
     }
+    return result.sql || '';
+  }, [hasNodes, result, query.initialLoading]);
 
-    // Helper: wrappa espressione colonna con funzione opzionale
-    const wrapColWithFunc = (expr, func) => {
-      if (!func) return expr;
-      if (func === 'TRIM') return `TRIM(${expr})`;
-      if (func === 'LTRIM_RTRIM') return `LTRIM(RTRIM(${expr}))`;
-      if (func === 'UPPER') return `UPPER(${expr})`;
-      if (func === 'LOWER') return `LOWER(${expr})`;
-      if (func === 'COALESCE_EMPTY') return `COALESCE(${expr}, '')`;
-      return expr;
-    };
+  const resultInfo = useCanvasStore(s => {
+    const out = (s.nodes || []).find(n => n.type === 'resultNode');
+    return out ? `${out.data?.fileName || 'output'}.${out.data?.format || 'csv'}` : null;
+  });
 
-    const lines = [];
-    const errors = [];
-    const flowEdges = dataFlowEdges(edges);
-
-    // Trova nodo risultato
-    const resultNode = nodes.find(n => n.type === 'resultNode');
-    const useDistinct = resultNode?.data?.distinct || false;
-    
-    // ✅ GROUP BY configuration
-    const groupByEnabled = resultNode?.data?.group_by_enabled || false;
-    const groupByColumns = resultNode?.data?.group_by_columns || [];
-    const aggregations = resultNode?.data?.aggregations || [];
-
-    // SELECT clause
-    if (groupByEnabled && (groupByColumns.length > 0 || aggregations.length > 0)) {
-      // SELECT con GROUP BY
-      lines.push('SELECT');
-      const selectColumns = [];
-      
-      // Colonne di raggruppamento
-      groupByColumns.forEach(col => {
-        selectColumns.push(`  ${col}`);
-      });
-      
-      // Aggregazioni
-      aggregations.forEach(agg => {
-        const colExpr = agg.column === '*' ? '*' : agg.column;
-        const alias = agg.alias || `${agg.function.toLowerCase()}_${agg.column}`;
-        selectColumns.push(`  ${agg.function}(${colExpr}) AS ${alias}`);
-      });
-      
-      if (selectColumns.length === 0) {
-        lines.push('  *  -- Configura GROUP BY');
-      } else {
-        lines.push(selectColumns.join(',\n'));
-      }
-    } else {
-      // SELECT normale
-      lines.push(useDistinct ? 'SELECT DISTINCT' : 'SELECT');
-      const selectColumns = [];
-      
-      nodes.forEach(node => {
-        if (node.type !== 'tableNode' && node.type !== 'datasourceNode') return;
-        if (node.type === 'datasourceNode' && node.data?.mode !== 'source') return;
-        
-        // Per datasourceNode usa l'id come alias tabella (viene materializzato come CTE)
-        const tableName = node.type === 'datasourceNode'
-          ? (node.data?.datasource_name || node.id).replace(/[^a-zA-Z0-9_]/g, '_')
-          : (node.data.alias || node.data.table_name);
-        
-        // Colonne normali visibili
-        const visibleColumns = node.data.columns?.filter(isColumnVisible) || [];
-        visibleColumns.forEach(col => {
-          const columnExpr = col.alias 
-            ? `  ${tableName}.${col.name} AS ${col.alias}`
-            : `  ${tableName}.${col.name}`;
-          selectColumns.push(columnExpr);
-        });
-        
-        // Colonne calcolate
-        const calculatedColumns = node.data.calculated_columns || [];
-        calculatedColumns.forEach(col => {
-          const sqlExpr = col.sql || `-- ${col.name} (colonna calcolata)`;
-          selectColumns.push(`  ${sqlExpr}`);
-        });
-      });
-
-      if (selectColumns.length === 0) {
-        lines.push('  *  -- Nessuna colonna selezionata');
-      } else {
-        lines.push(selectColumns.join(',\n'));
-      }
-    }
-
-    // FROM clause - trova la prima tabella (nodo senza edges in ingresso da altre tabelle)
-    // Include sia tableNode che datasourceNode in modalità sorgente
-    const sourceNodeTypes = ['tableNode', 'datasourceNode'];
-    const tableNodes = nodes.filter(n =>
-      sourceNodeTypes.includes(n.type) &&
-      !(n.type === 'datasourceNode' && n.data?.mode !== 'source')
-    );
-    const targetNodeIds = new Set(flowEdges.filter(e => {
-      const targetNode = nodes.find(n => n.id === e.target);
-      return targetNode && sourceNodeTypes.includes(targetNode.type);
-    }).map(e => e.target));
-    
-    // Prima tabella = quella che non è target di nessun join (o la prima se tutte sono target)
-    const firstNode = tableNodes.find(n => !targetNodeIds.has(n.id)) || tableNodes[0];
-    
-    if (firstNode) {
-      let fromTable, fromAlias;
-      if (firstNode.type === 'datasourceNode') {
-        // CTE generata dal backend: nome basato su datasource_name o id
-        fromTable = (firstNode.data?.datasource_name || firstNode.id).replace(/[^a-zA-Z0-9_]/g, '_');
-        fromAlias = null;
-        lines.push(`-- DATA SOURCE: ${firstNode.data?.datasource_name || '?'} → ${firstNode.data?.file_path || firstNode.data?.folder_path || '/'}`);
-      } else {
-        fromTable = firstNode.data.table_name;
-        fromAlias = firstNode.data.alias;
-      }
-      lines.push('FROM ' + fromTable + (fromAlias ? ` AS ${fromAlias}` : ''));
-    }
-
-    // JOIN clauses
-    flowEdges.forEach(edge => {
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      const targetNode = nodes.find(n => n.id === edge.target);
-      
-      if (!sourceNode || !targetNode) {
-        errors.push(`⚠️ Tabella del Join non trovata`);
-        return;
-      }
-
-      // Skip edge verso nodi destinazione (resultNode, carica, datasourceNode carica)
-      if (
-        targetNode.type === 'resultNode' ||
-        targetNode.type === 'carica' ||
-        edge.data?.join_type === 'output' ||
-        edge.data?.join_type === 'carica' ||
-        (targetNode.type === 'datasourceNode' && targetNode.data?.mode === 'carica')
-      ) {
-        return;
-      }
-
-      const joinType = (edge.data?.join_type || 'left').toUpperCase();
-
-      // Helper per ricavare il nome tabella in SQL (supporta sia tableNode che datasourceNode)
-      const getNodeSqlName = (n) => {
-        if (n.type === 'datasourceNode') {
-          return (n.data?.datasource_name || n.id).replace(/[^a-zA-Z0-9_]/g, '_');
-        }
-        return n.data?.alias || n.data?.table_name;
-      };
-
-      const targetTable = targetNode.type === 'datasourceNode'
-        ? getNodeSqlName(targetNode)
-        : targetNode.data.table_name;
-      const targetAlias = targetNode.type === 'datasourceNode' ? null : targetNode.data.alias;
-      const sourceTableName = getNodeSqlName(sourceNode);
-      const targetTableName = getNodeSqlName(targetNode);
-      
-      // ✅ Controlla se è un join spaziale
-      const isSpatial = edge.data?.is_spatial || false;
-      
-      if (isSpatial) {
-        // Join spaziale
-        const spatialPredicate = edge.data?.spatial_predicate || 'ST_Intersects';
-        const sourceGeomCol = edge.data?.source_geom_column || 'geom';
-        const targetGeomCol = edge.data?.target_geom_column || 'geom';
-        const spatialDistance = edge.data?.spatial_distance;
-        
-        lines.push(`${joinType} JOIN ${targetTable}${targetAlias ? ` AS ${targetAlias}` : ''}`);
-        
-        // Costruisci la condizione spaziale
-        if (spatialPredicate === 'ST_DWithin' && spatialDistance) {
-          lines.push(`  ON ${spatialPredicate}(${sourceTableName}.${sourceGeomCol}, ${targetTableName}.${targetGeomCol}, ${spatialDistance})`);
-        } else {
-          lines.push(`  ON ${spatialPredicate}(${sourceTableName}.${sourceGeomCol}, ${targetTableName}.${targetGeomCol})`);
-        }
-      } else {
-        // Join normale (attributi) - supporta condizioni multiple (AND)
-        const joinConditions = edge.data?.join_conditions;
-        
-        if (joinConditions && joinConditions.length > 0) {
-          // Nuovo formato: condizioni multiple
-          const validConditions = joinConditions.filter(c => c.source_column && c.target_column);
-          
-          if (validConditions.length === 0) {
-            errors.push(`⚠️ Join incompleto: ${sourceTableName} → ${targetTableName}`);
-            lines.push(`${joinType} JOIN ${targetTable}${targetAlias ? ` AS ${targetAlias}` : ''}`);
-            lines.push(`  ON ... -- CONFIGURAZIONE JOIN MANCANTE`);
-          } else {
-            lines.push(`${joinType} JOIN ${targetTable}${targetAlias ? ` AS ${targetAlias}` : ''}`);
-            validConditions.forEach((cond, idx) => {
-              const prefix = idx === 0 ? '  ON ' : '  AND ';
-              const srcExpr = wrapColWithFunc(`${sourceTableName}.${cond.source_column}`, cond.source_func);
-              const tgtExpr = wrapColWithFunc(`${targetTableName}.${cond.target_column}`, cond.target_func);
-              lines.push(`${prefix}${srcExpr} = ${tgtExpr}`);
-            });
-            // Filtri ON aggiuntivi
-            const onFilters = edge.data?.on_filters || [];
-            onFilters.forEach(f => {
-              if (!f.column) return;
-              const colExpr = wrapColWithFunc(`${targetTableName}.${f.column}`, f.func);
-              
-              if (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') {
-                lines.push(`  AND ${colExpr} ${f.operator}`);
-              } else {
-                lines.push(`  AND ${colExpr} ${f.operator} '${f.value || ''}'`);
-              }
-            });
-          }
-        } else {
-          // Backward compatibility: singola coppia
-          const sourceCol = edge.data?.source_column;
-          const targetCol = edge.data?.target_column;
-
-          if (!sourceCol || !targetCol) {
-            errors.push(`⚠️ Join incompleto: ${sourceTableName} → ${targetTableName}`);
-            lines.push(`${joinType} JOIN ${targetTable}${targetAlias ? ` AS ${targetAlias}` : ''}`);
-            lines.push(`  ON ... -- CONFIGURAZIONE JOIN MANCANTE`);
-          } else {
-            lines.push(`${joinType} JOIN ${targetTable}${targetAlias ? ` AS ${targetAlias}` : ''}`);
-            lines.push(`  ON ${sourceTableName}.${sourceCol} = ${targetTableName}.${targetCol}`);
-            // Filtri ON aggiuntivi (anche per formato legacy)
-            const onFilters = edge.data?.on_filters || [];
-            onFilters.forEach(f => {
-              if (!f.column) return;
-              const colExpr = wrapColWithFunc(`${targetTableName}.${f.column}`, f.func);
-              
-              if (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') {
-                lines.push(`  AND ${colExpr} ${f.operator}`);
-              } else {
-                lines.push(`  AND ${colExpr} ${f.operator} '${f.value || ''}'`);
-              }
-            });
-          }
-        }
-      }
-    });
-
-    // WHERE clause
-    const whereConditions = [];
-    
-    nodes.forEach(node => {
-      if (node.type === 'tableNode' && node.data.filters && node.data.filters.length > 0) {
-        const tableName = node.data.alias || node.data.table_name;
-        
-        node.data.filters.forEach(filter => {
-          if (filter.operator === 'IS NULL' || filter.operator === 'IS NOT NULL') {
-            whereConditions.push(`${tableName}.${filter.column} ${filter.operator}`);
-          } else if (filter.value) {
-            const needsQuotes = ['LIKE', '=', '!='].includes(filter.operator);
-            const valueStr = needsQuotes ? `'${filter.value}'` : filter.value;
-            whereConditions.push(`${tableName}.${filter.column} ${filter.operator} ${valueStr}`);
-          }
-        });
-      }
-    });
-
-    if (whereConditions.length > 0) {
-      lines.push('WHERE ' + whereConditions[0]);
-      whereConditions.slice(1).forEach(condition => {
-        lines.push('  AND ' + condition);
-      });
-    }
-
-    // ✅ GROUP BY clause
-    if (groupByEnabled && groupByColumns.length > 0) {
-      lines.push('GROUP BY ' + groupByColumns.join(', '));
-    }
-
-    // LIMIT clause
-    const limitValue = resultNode?.data?.limit;
-    if (limitValue && limitValue > 0) {
-      lines.push(`LIMIT ${limitValue}`);
-    }
-
-    return { sql: lines.join('\n'), errors };
-  };
-
-  const { sql, errors } = generateSQL();
-
-  // Info output
-  const resultNode = nodes.find(n => n.type === 'resultNode');
-  const outputInfo = resultNode ? {
-    fileName: resultNode.data?.fileName || 'output',
-    format: resultNode.data?.format || 'csv'
-  } : null;
+  const tablesCount = result?.kind === 'sql' ? (result.tables_used || []).length : null;
+  const params = result?.params || [];
 
   const handleCopy = () => {
     navigator.clipboard.writeText(sql);
@@ -318,27 +100,19 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
 
   return (
     <div className={`query-preview ${isCollapsed ? 'query-preview--collapsed' : 'query-preview--expanded'}`}>
-      {/* Header */}
-      <div 
-        className="query-preview__header"
-        onClick={() => setIsCollapsed(!isCollapsed)}
-      >
+      <div className="query-preview__header" onClick={() => setIsCollapsed(!isCollapsed)}>
         <div className="query-preview__header-left">
-          <span className="query-preview__toggle-icon">
-            {isCollapsed ? '▲' : '▼'}
-          </span>
+          <span className="query-preview__toggle-icon">{isCollapsed ? '▲' : '▼'}</span>
           <span className="query-preview__title">🔍 {term('preview').name} della query</span>
-          <span className="query-preview__stats">
-            {nodes.length} tabelle, {edges.length} Join
-          </span>
+          {tablesCount !== null && (
+            <span className="query-preview__stats">
+              {tablesCount === 1 ? '1 tabella' : `${tablesCount} tabelle`} nella query
+            </span>
+          )}
         </div>
-
-        {!isCollapsed && (
+        {!isCollapsed && sql && (
           <button type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleCopy();
-            }}
+            onClick={(e) => { e.stopPropagation(); handleCopy(); }}
             className={`query-preview__copy-btn ${copySuccess ? 'query-preview__copy-btn--success' : ''}`}
           >
             {copySuccess ? '✓ Copiato!' : '📋 Copia SQL'}
@@ -346,47 +120,39 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
         )}
       </div>
 
-      {/* Content */}
       {!isCollapsed && (
         <div className="query-preview__content">
-          {/* Errori di validazione */}
-          {validationErrors && validationErrors.length > 0 && (
-            <div className="query-preview__errors">
-              <div className="query-preview__errors-header">
-                <span className="query-preview__errors-icon">⛔</span>
-                Errori di validazione ({validationErrors.length})
-              </div>
-              {validationErrors.map((err, idx) => (
-                <div key={idx} className="query-preview__error-item">
-                  {idx + 1}. {err}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Warning SQL */}
-          {errors && errors.length > 0 && validationErrors.length === 0 && (
+          <ResourceError compact resource={query} title="Query non aggiornata" />
+          {result?.error && (
             <div className="query-preview__warnings">
-              {errors.map((err, idx) => (
-                <div key={idx} className="query-preview__warning-item">
-                  {err}
-                </div>
-              ))}
+              <div className="query-preview__warning-item">⚠️ {result.error}</div>
+            </div>
+          )}
+          {(result?.notes || []).length > 0 && (
+            <div className="query-preview__warnings">
+              {result.notes.map(note => <div key={note} className="query-preview__warning-item">{note}</div>)}
             </div>
           )}
 
-          {/* SQL */}
-          <pre className="query-preview__sql">
-            {highlightSQL(sql)}
-          </pre>
+          {sql && <pre className="query-preview__sql">{highlightSQL(sql)}</pre>}
 
-          {/* Output info */}
-          {outputInfo && (
+          {params.length > 0 && (
+            <div className="query-preview__output-info" aria-label="Parametri della query">
+              <div className="query-preview__output-label">Parametri:</div>
+              <div>
+                {params.map(p => (
+                  <div key={p.name} className="query-preview__output-filename">
+                    :{p.name} = {paramLabel(p)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {resultInfo && (
             <div className="query-preview__output-info">
               <div className="query-preview__output-label">📁 Output:</div>
-              <div className="query-preview__output-filename">
-                {outputInfo.fileName}.{outputInfo.format}
-              </div>
+              <div className="query-preview__output-filename">{resultInfo}</div>
             </div>
           )}
         </div>
@@ -400,47 +166,35 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
  */
 function highlightSQL(sql) {
   const keywords = [
-    'SELECT', 'FROM', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'JOIN', 'ON', 'AS', 
-    'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'DISTINCT', 'HAVING',
-    // Funzioni aggregate
+    'SELECT', 'FROM', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'JOIN', 'ON', 'AS',
+    'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'DISTINCT', 'HAVING', 'AND', 'OR', 'IN', 'BETWEEN',
+    'ASC', 'DESC', 'FETCH', 'TOP',
     'COUNT', 'SUM', 'AVG', 'MIN', 'MAX',
-    // Funzioni di trasformazione
     'TRIM', 'LTRIM', 'RTRIM', 'UPPER', 'LOWER', 'COALESCE',
-    // Funzioni spaziali PostGIS
     'ST_Intersects', 'ST_Contains', 'ST_Within', 'ST_Touches', 'ST_Crosses',
     'ST_Overlaps', 'ST_Equals', 'ST_Disjoint', 'ST_Covers', 'ST_CoveredBy',
-    'ST_DWithin', 'ST_Distance', 'ST_Buffer', 'ST_Centroid'
+    'ST_DWithin', 'ST_Distance', 'ST_Buffer', 'ST_Centroid', 'ST_AsText',
   ];
-  
+
   const lines = sql.split('\n');
   let keyCounter = 0;
-  
+
   return lines.map((line, lineIdx) => {
     let parts = [line];
-    
     keywords.forEach(keyword => {
       const newParts = [];
       parts.forEach(part => {
-        if (typeof part === 'string') {
-          const segments = part.split(new RegExp(`\\b(${keyword})\\b`, 'gi'));
-          segments.forEach((segment) => {
-            if (segment.toUpperCase() === keyword.toUpperCase()) {
-              newParts.push(
-                <span key={`kw-${keyCounter++}`} className="query-preview__sql-keyword">
-                  {segment}
-                </span>
-              );
-            } else if (segment) {
-              newParts.push(segment);
-            }
-          });
-        } else {
-          newParts.push(part);
-        }
+        if (typeof part !== 'string') { newParts.push(part); return; }
+        part.split(new RegExp(`\\b(${keyword})\\b`, 'gi')).forEach((segment) => {
+          if (segment.toUpperCase() === keyword.toUpperCase()) {
+            newParts.push(<span key={`kw-${keyCounter++}`} className="query-preview__sql-keyword">{segment}</span>);
+          } else if (segment) {
+            newParts.push(segment);
+          }
+        });
       });
       parts = newParts;
     });
-    
     return (
       <React.Fragment key={lineIdx}>
         {parts}

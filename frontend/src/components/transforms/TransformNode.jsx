@@ -12,6 +12,7 @@
  */
 import React, { memo, useState, useMemo } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useConfirmOrDeny } from '../../context/ConfirmContext';
 import { useColumnsOf, useNodesInfo } from '../../hooks/useColumns';
 import { columnsConfirmed } from '../../utils/columnSource';
 import ColumnStatusNote from '../common/ColumnStatusNote';
@@ -106,16 +107,40 @@ const TransformNode = memo(({ data, id }) => {
     patchNodeConfig(id, toPatch(field, value), { derived: true });
   };
 
-  // Cambio di operazione e conversione in Mappa valori: il titolo derivato
-  // segue da solo (nodeDescriptors), nessun titolo da aggiornare qui.
-  const onOpChange = (evt) => {
-    updateNodeData(id, { transform_op: evt.target.value, config: {} });
-  };
-
   // Input runtime collegati a un parametro singolo -> resta il form
   // generico (i pannelli usano le liste).
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
-  const hasParameterBindings = useCanvasStore(s => (s.edges || []).some(e => e.target === id && isParameterBindingEdge(e)));
+  const bindingCount = useCanvasStore(s => (s.edges || []).filter(e => e.target === id && isParameterBindingEdge(e)).length);
+  const hasParameterBindings = bindingCount > 0;
+  const editGraph = useCanvasStore(s => s.editGraph);
+  const confirm = useConfirmOrDeny();
+
+  // Cambio di operazione (Fase 5, T6, R9-U N2): la configurazione e i
+  // collegamenti agli input runtime sono della VECCHIA operazione. Se ce ne
+  // sono si chiede conferma; poi operazione nuova, config vuota e
+  // collegamenti tolti in UNA azione (un solo Ctrl+Z). Il titolo derivato
+  // segue da solo (nodeDescriptors), nessun titolo da aggiornare qui.
+  const onOpChange = async (evt) => {
+    const nextOp = evt.target.value;
+    if (nextOp === transform_op) return;
+    const hasConfig = Object.keys(config).length > 0;
+    if (hasConfig || bindingCount > 0) {
+      const lost = [hasConfig ? 'la configurazione del passo' : null,
+        bindingCount > 0 ? `${bindingCount === 1 ? 'il collegamento' : `${bindingCount} collegamenti`} agli input runtime` : null]
+        .filter(Boolean).join(' e ');
+      const ok = await confirm({
+        title: 'Cambiare operazione?',
+        message: `Cambiando operazione si perdono ${lost}. Continuare?`,
+        confirmText: 'Cambia operazione',
+        variant: 'warning',
+      });
+      if (!ok) return;
+    }
+    editGraph(({ nodes, edges }) => ({
+      nodes: nodes.map(n => (n.id === id ? { ...n, data: { ...n.data, transform_op: nextOp, config: {} } } : n)),
+      edges: edges.filter(e => !(e.target === id && isParameterBindingEdge(e))),
+    }));
+  };
   const convertToLookup = (lookupConfig) => {
     updateNodeData(id, { transform_op: 'lookup', config: lookupConfig });
   };

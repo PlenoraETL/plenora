@@ -1,5 +1,6 @@
-import { DERIVED_COLUMNS_TYPES, canonicalNodeType, persistedNodeData, persistenceValue } from './nodeTypeRegistry';
+import { DERIVED_COLUMNS_TYPES, canonicalNodeType, joinEdgeFields, persistedNodeData, persistenceValue } from './nodeTypeRegistry';
 import {
+  dataFlowEdges,
   isParameterBindingEdge,
   serializedBindingsForInput,
 } from './runtimeBindingEdges';
@@ -32,14 +33,21 @@ function serializeNode(node, edges, derivedColumns) {
   }
   if (type === 'multi_join' && node.data?.config) {
     const cfg = node.data.config;
-    const pairs = (cfg.join_pairs ?? data.join_pairs).filter(p => p && p.left && p.right)
+    // Fase 5, T6 (R3.10): si salva quello che il pannello mostra e che
+    // l'esecuzione usa. Con 3 o piu' sorgenti il backend unisce solo per le
+    // chiavi comuni (manipola/executor: use_pair_keys solo con 2 ingressi) e
+    // il pannello nasconde le coppie: le coppie non entrano ne' in join_pairs
+    // ne' (quelle uguali) in join_keys. La config del nodo le conserva per
+    // quando si torna a 2 sorgenti.
+    const sources = dataFlowEdges(edges || []).filter(e => e.target === node.id).length;
+    const pairs = sources >= 3 ? [] : (cfg.join_pairs ?? data.join_pairs).filter(p => p && p.left && p.right)
       .map(p => ({ left: p.left, right: p.right }));
     data.join_keys = [...new Set([...(cfg.join_keys ?? data.join_keys),
       ...pairs.filter(p => p.left === p.right).map(p => p.left)])];
     data.join_key_ids = cfg.join_key_ids ?? data.join_key_ids;
     data.join_pairs = pairs;
-    data.left_keys = pairs.length ? pairs.map(p => p.left) : (cfg.left_keys ?? data.left_keys);
-    data.right_keys = pairs.length ? pairs.map(p => p.right) : (cfg.right_keys ?? data.right_keys);
+    data.left_keys = sources >= 3 ? [] : (pairs.length ? pairs.map(p => p.left) : (cfg.left_keys ?? data.left_keys));
+    data.right_keys = sources >= 3 ? [] : (pairs.length ? pairs.map(p => p.right) : (cfg.right_keys ?? data.right_keys));
     data.multi_join_type = cfg.join_type ?? data.multi_join_type;
   }
   return persistenceValue({ id: node.id, type, position: node.position, ...data });
@@ -48,19 +56,7 @@ function serializeNode(node, edges, derivedColumns) {
 export function serializeEdge(edge) {
   if (isParameterBindingEdge(edge)) return null;
   if (!edge.data || !edge.data.join_type) return edge;
-  return {
-    id: edge.id, source: edge.source, target: edge.target,
-    join_type:          edge.data.join_type          || 'left',
-    source_column:      edge.data.source_column      || '',
-    target_column:      edge.data.target_column      || '',
-    join_conditions:    edge.data.join_conditions    || null,
-    on_filters:         edge.data.on_filters         || null,
-    is_spatial:         edge.data.is_spatial         || false,
-    spatial_predicate:  edge.data.spatial_predicate  || null,
-    source_geom_column: edge.data.source_geom_column || null,
-    target_geom_column: edge.data.target_geom_column || null,
-    spatial_distance:   edge.data.spatial_distance   ?? null,
-  };
+  return { id: edge.id, source: edge.source, target: edge.target, ...joinEdgeFields(edge.data) };
 }
 
 /**

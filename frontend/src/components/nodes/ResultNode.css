@@ -745,3 +745,9 @@
   padding: 4px 6px;
   background: var(--plen-surface-2, #121724);
 }
+
+/* Colonna configurata non piu disponibile a monte (Fase 5, T6, R3.17) */
+.result-node__groupby-tag--missing {
+  border-color: var(--plen-warning, #f59e0b);
+  color: var(--plen-warning, #f59e0b);
+}

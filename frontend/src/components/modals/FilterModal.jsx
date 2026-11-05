@@ -6,7 +6,8 @@
  * stringa (LIKE, =, IS NULL...), numero (>, <, BETWEEN...),
  * data (>, <, BETWEEN con datepicker), geometry (ST_IsValid...).
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { columnTypeFamily, getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -29,14 +30,19 @@ import { termName } from '../../utils/glossary';
 function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onSave }) {
   const [localFilters, setLocalFilters] = useState([]);
   const [bindingSelections, setBindingSelections] = useState({});
-  const nodes = useCanvasStore(state => state.nodes);
-  const edges = useCanvasStore(state => state.edges);
   const editEdges = useCanvasStore(state => state.editEdges);
-  const scalarInputs = nodes.filter(node => (
+  // Solo gli input scalari (id e dati), non tutti i nodi con le posizioni:
+  // un trascinamento non ridisegna la finestra (R9-U N6).
+  const scalarFlat = useCanvasStore(useShallow(state => (state.nodes || []).filter(node => (
     node.type === 'project_input'
     && node.data?.input_kind !== 'file'
     && node.data?.input_kind !== 'connection'
-  ));
+  )).flatMap(node => [node.id, node.data])));
+  const scalarInputs = useMemo(() => {
+    const out = [];
+    for (let i = 0; i < scalarFlat.length; i += 2) out.push({ id: scalarFlat[i], type: 'project_input', data: scalarFlat[i + 1] });
+    return out;
+  }, [scalarFlat]);
 
   // Normalizza colonne per supportare sia vecchio formato (stringhe) che nuovo ({name, type})
   const normalizedColumns = columns.map(col => {
@@ -49,8 +55,15 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
     };
   });
 
+  // La copia locale (buffer della finestra) si fa SOLO all'apertura (N8):
+  // prima l'effetto dipendeva anche da `edges` e `filters`, e un cambio
+  // degli archi con la finestra aperta riportava le righe al valore salvato.
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (isOpen) {
+    const opening = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+    if (opening) {
+      const edges = useCanvasStore.getState().edges || [];
       // Copia PROFONDA: le righe vengono modificate localmente e "Annulla"
       // non deve toccare gli oggetti in node.data (audit R1.3).
       setLocalFilters(filters.length > 0 ? filters.map(f => ({ ...f })) : [{ column: '', operator: '=', value: '' }]);
@@ -65,7 +78,8 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
       });
       setBindingSelections(nextSelections);
     }
-  }, [isOpen, filters, edges, nodeId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   // RIMOSSO: useEffect per ESC - ModalWrapper lo gestisce automaticamente
 
@@ -368,7 +382,7 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
                   } else if (f.operator === 'BETWEEN') {
                     valueDisplay = f.value || '? AND ?';
                   } else {
-                    const inputNode = nodes.find(node => node.id === bindingSelections[idx]);
+                    const inputNode = scalarInputs.find(node => node.id === bindingSelections[idx]);
                     valueDisplay = inputNode
                       ? `{{${inputNode.data?.input_key || 'input'}}}`
                       : f.value

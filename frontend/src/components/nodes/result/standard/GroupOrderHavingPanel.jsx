@@ -49,6 +49,35 @@ export function groupPreviewItems({ isManipulate, groupByColumns = [], aggregati
     ...aggregations.map(agg => ['agg', agg.alias || `${agg.function}(${agg.column})`])];
 }
 
+/**
+ * Alias delle aggregazioni dell'Output (Fase 5, T6, R3.17; unione con T5
+ * R8.19: la regola e' questa, il suffisso viene da `uniqueName`).
+ *  - L'alias generato e' `funzione_colonna` (`*` -> `all`), reso unico tra le
+ *    aggregazioni del nodo (`count_all`, `count_all_2`...): mai due colonne
+ *    con lo stesso nome dopo una rimozione (prima `count_${n}`).
+ *  - Un alias scritto dall'utente (`alias_source: 'user'`) non si tocca piu'
+ *    cambiando colonna o funzione. Gli alias senza marcatore (salvati prima)
+ *    sono generati se hanno la forma generata (`count_3`, `sum_area`).
+ */
+const baseAlias = (agg) => `${String(agg.function || 'COUNT').toLowerCase()}_${agg.column === '*' || !agg.column ? 'all' : String(agg.column).replace(/\./g, '_')}`;
+
+export function uniqueAlias(base, aggregations, skipIndex = -1) {
+  // Il suffisso viene dalla regola unica dei nomi generati (utils/uniqueName,
+  // T5 R8.19): primo libero tra quelli gia' usati, mai il conteggio.
+  const taken = (aggregations || []).filter((_, i) => i !== skipIndex).map(a => a.alias);
+  return uniqueName(base, taken, { bareFirst: true });
+}
+
+export function isGeneratedAlias(agg) {
+  if (agg?.alias_source === 'user') return false;
+  const alias = agg?.alias || '';
+  if (!alias) return true;
+  if (/^count_\d+$/.test(alias)) return true;
+  const base = baseAlias(agg);
+  if (alias === base) return true;
+  return alias.startsWith(`${base}_`) && /^\d+$/.test(alias.slice(base.length + 1));
+}
+
 const AGGREGATE_FUNCTIONS = [
   { value: 'COUNT', label: 'COUNT', desc: 'Conta' },
   { value: 'SUM', label: 'SUM', desc: 'Somma' },
@@ -79,16 +108,24 @@ export default function GroupOrderHavingPanel({
   const havingConditions = data.having_conditions || [];
 
   const groupByAvailableColumns = isManipulate ? manipolaColumns : availableColumns;
+  // Colonne configurate che non sono piu' tra quelle disponibili (sparite o
+  // rinominate a monte): si segnalano, non si mostrano come valide (R3.17).
+  const availableNames = new Set(groupByAvailableColumns.map(c => c.name));
+  const missing = (name) => Boolean(name) && name !== '*' && groupByAvailableColumns.length > 0 && !availableNames.has(name);
+  const labelOf = (col) => col.label || col.name;
   const showGroupOrderGate =
     (isEstrai || isManipulate) &&
     (availableColumns.length > 0 || manipolaColumns.length > 0);
   const showHavingGate = groupByEnabled && aggregations.length > 0;
 
   const handleToggleGroupBy = () => {
+    // Spegnere il GROUP BY toglie anche l'HAVING (che senza GROUP BY non
+    // entra nella query): prima restava nei dati e riappariva (R3.17).
     updateNodeData(id, {
       group_by_enabled: !groupByEnabled,
       group_by_columns: groupByEnabled ? [] : groupByColumns,
       aggregations: groupByEnabled ? [] : aggregations,
+      ...(groupByEnabled ? { having_enabled: false, having_conditions: [] } : {}),
     });
   };
   const handleAddGroupByColumn = (columnName) => {
@@ -110,8 +147,7 @@ export default function GroupOrderHavingPanel({
     const newAgg = {
       column: '*',
       function: 'COUNT',
-      // Primo alias libero, non il conteggio (utils/uniqueName, R8.19).
-      alias: uniqueName('count', aggregations.map(a => a.alias)),
+      alias: uniqueAlias('count_all', aggregations),
     };
     updateNodeData(id, {
       group_by_enabled: true,
@@ -121,12 +157,13 @@ export default function GroupOrderHavingPanel({
   };
   const handleUpdateAggregation = (index, field, value) => {
     const newAggregations = [...aggregations];
-    newAggregations[index] = { ...newAggregations[index], [field]: value };
-    if (field === 'column' || field === 'function') {
-      const agg = newAggregations[index];
-      const colName = agg.column === '*' ? 'all' : agg.column;
-      const others = newAggregations.filter((_a, i) => i !== index).map(a => a.alias);
-      newAggregations[index].alias = uniqueName(`${agg.function.toLowerCase()}_${colName}`, others, { bareFirst: true });
+    const before = newAggregations[index];
+    newAggregations[index] = { ...before, [field]: value };
+    if (field === 'alias') {
+      // Scritto dall'utente: da qui in poi non si rigenera (vuoto = generato).
+      newAggregations[index] = { ...newAggregations[index], alias_source: value ? 'user' : undefined };
+    } else if ((field === 'column' || field === 'function') && isGeneratedAlias(before)) {
+      newAggregations[index].alias = uniqueAlias(baseAlias(newAggregations[index]), newAggregations, index);
     }
     updateNodeData(id, {
       group_by_enabled: groupByEnabled,
@@ -234,8 +271,9 @@ export default function GroupOrderHavingPanel({
                     {groupByColumns.length > 0 && (
                       <div className="result-node__groupby-selected">
                         {groupByColumns.map((col, idx) => (
-                          <span key={idx} className="result-node__groupby-tag">
-                            {col}
+                          <span key={idx} className={`result-node__groupby-tag${missing(col) ? ' result-node__groupby-tag--missing' : ''}`}
+                            title={missing(col) ? 'Colonna non più disponibile a monte' : undefined}>
+                            {missing(col) ? `⚠️ ${col}` : col}
                             <button type="button"
                               onClick={() => handleRemoveGroupByColumn(col)}
                               className="result-node__groupby-tag-remove"
@@ -257,7 +295,7 @@ export default function GroupOrderHavingPanel({
                         .filter(col => !groupByColumns.includes(col.name))
                         .map((col, idx) => (
                           <option key={idx} value={col.name}>
-                            {getColumnTypeIcon(col.type)} {col.name}
+                            {getColumnTypeIcon(col.type)} {labelOf(col)}
                           </option>
                         ))}
                     </select>
@@ -284,8 +322,9 @@ export default function GroupOrderHavingPanel({
                           className="result-node__agg-select result-node__agg-select--col"
                         >
                           <option value="*">* (tutte)</option>
+                          {missing(agg.column) && <option value={agg.column}>⚠️ {agg.column} (non più disponibile)</option>}
                           {groupByAvailableColumns.map((col, colIdx) => (
-                            <option key={colIdx} value={col.name}>{col.name}</option>
+                            <option key={colIdx} value={col.name}>{labelOf(col)}</option>
                           ))}
                         </select>
 
@@ -371,8 +410,9 @@ export default function GroupOrderHavingPanel({
                   {orderByColumns.length > 0 && (
                     <div className="result-node__groupby-selected">
                       {orderByColumns.map((item, idx) => (
-                        <span key={idx} className="result-node__groupby-tag">
-                          {item.column}
+                        <span key={idx} className={`result-node__groupby-tag${missing(item.column) ? ' result-node__groupby-tag--missing' : ''}`}
+                          title={missing(item.column) ? 'Colonna non più disponibile a monte' : undefined}>
+                          {missing(item.column) ? `⚠️ ${item.column}` : item.column}
                           <button type="button"
                             onClick={() => handleToggleOrderByDirection(idx)}
                             className="result-node__orderby-dir-btn"
@@ -401,7 +441,7 @@ export default function GroupOrderHavingPanel({
                       .filter(col => !orderByColumns.some(c => c.column === col.name))
                       .map((col, idx) => (
                         <option key={idx} value={col.name}>
-                          {getColumnTypeIcon(col.type)} {col.name}
+                          {getColumnTypeIcon(col.type)} {labelOf(col)}
                         </option>
                       ))}
                   </select>
@@ -446,8 +486,9 @@ export default function GroupOrderHavingPanel({
                       className="result-node__agg-select result-node__agg-select--col"
                     >
                       <option value="*">* (tutte)</option>
+                      {missing(cond.column) && <option value={cond.column}>⚠️ {cond.column} (non più disponibile)</option>}
                       {groupByAvailableColumns.map((col, colIdx) => (
-                        <option key={colIdx} value={col.name}>{col.name}</option>
+                        <option key={colIdx} value={col.name}>{labelOf(col)}</option>
                       ))}
                     </select>
 

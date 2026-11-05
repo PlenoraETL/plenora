@@ -6,11 +6,34 @@
  * a valle di un Join con nomi doppi `name` non diventa mai `name_R`.
  */
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { render } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import {
-  collectExpressionRefs, resolveColumnToken, rewriteExpressionRefs,
+  collectExpressionRefs, expressionColumnRefs, resolveColumnToken, rewriteExpressionRefs, rewriteExpressionToken,
 } from '../../src/utils/expressionRefs';
+
+// Fase 5, T6, R3.12: lo stesso corpus del backend (generato da
+// app/shared/execution/expression_refs.py, verificato contro `ast`).
+const TOKEN_CASES = JSON.parse(fs.readFileSync(
+  path.resolve(import.meta.dirname, '../../../backend/tests2/contracts/expression_refs_cases.json'), 'utf-8'));
+
+describe('parita\' col tokenizzatore del backend: solo i riferimenti, mai i letterali', () => {
+  it.each(TOKEN_CASES.map(c => [c.expression || '<vuota>', c]))('%s', (_, c) => {
+    expect(expressionColumnRefs(c.expression)).toEqual(c.refs);
+    for (const rw of c.rewrites) {
+      expect(rewriteExpressionToken(c.expression, rw.old, rw.new)).toBe(rw.expected);
+    }
+  });
+
+  it('scenario dell\'audit: stato == \'stato\' con stato -> status', () => {
+    const columns = [{ id: 'c1', name: 'status', source_name: 'stato' }];
+    expect(rewriteExpressionRefs("stato == 'stato'", [{ id: 'c1', name: 'stato' }], columns)).toBe("status == 'stato'");
+    // Il letterale non conta come riferimento.
+    expect(collectExpressionRefs("x == 'status'", columns)).toEqual([]);
+  });
+});
 
 vi.mock('../../src/store/useCanvasStore', () => {
   const state = { edges: [], nodes: [] };

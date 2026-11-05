@@ -344,7 +344,10 @@ def test_geo_nearest_adds_right_non_geometry_columns_and_distance():
     ]
 
 
-def test_lookup_explicit_output_column_uses_source_type():
+def test_lookup_explicit_output_column_uses_execution_type():
+    # Fase 5, T6 (BA1): il tipo e' quello dell'esecuzione (manipola/
+    # lookup_type_plan). Mappa 1 -> "one" su colonna intera: l'esecuzione
+    # produce testo; prima la previsione copiava il tipo della sorgente (int).
     out = _infer(
         "lookup",
         {"column": "a", "mapping": {"1": "one"}, "output_column": "label"},
@@ -352,7 +355,7 @@ def test_lookup_explicit_output_column_uses_source_type():
     assert _pairs(out) == [
         ("a", "int", False),
         ("b", "str", False),
-        ("label", "int", True),
+        ("label", "str", True),
     ]
 
 

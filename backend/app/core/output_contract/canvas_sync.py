@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Mapping
 
 from app.core.output_contract.service import node_columns_from_contract
 from app.shared.execution.canvas_column import Column
+from app.shared.execution.expression_refs import expression_has_ref, rewrite_expression_ref
 from app.shared.execution.config_column_refs import (
     LIST_COLUMN_CONFIG_KEYS,
     SCALAR_COLUMN_CONFIG_KEYS,
@@ -945,30 +945,15 @@ def _collect_expression_refs(
     return refs
 
 
+# Riferimenti nelle espressioni: regola unica (shared/execution/expression_refs,
+# Fase 5 T6 R3.12): solo i token che il motore delle formule legge come
+# colonne, mai i letterali tra apici, i nomi di funzione o gli attributi.
 def _rewrite_expression_token(expression: str, old_name: str, new_name: str) -> str:
-    if not expression or not old_name or not new_name or old_name == new_name:
-        return expression
-    rewritten = expression
-    rewritten = rewritten.replace(f"`{old_name}`", f"`{new_name}`")
-    rewritten = rewritten.replace(f"['{old_name}']", f"['{new_name}']")
-    rewritten = rewritten.replace(f'["{old_name}"]', f'["{new_name}"]')
-    if old_name.isidentifier():
-        rewritten = re.sub(rf"\b{re.escape(old_name)}\b", new_name, rewritten)
-    return rewritten
+    return rewrite_expression_ref(expression, old_name, new_name)
 
 
 def _expression_has_token(expression: str, token: str) -> bool:
-    if not expression or not token:
-        return False
-    if f"`{token}`" in expression:
-        return True
-    if f"['{token}']" in expression:
-        return True
-    if f'["{token}"]' in expression:
-        return True
-    if token.isidentifier():
-        return bool(re.search(rf"\b{re.escape(token)}\b", expression))
-    return token in expression
+    return expression_has_ref(expression, token)
 
 
 def _column_fingerprint(columns: list[dict[str, Any]]) -> list[tuple[Any, ...]]:

@@ -1,5 +1,5 @@
 import { nd, nodeTopLevelData } from './nodeHelpers';
-import { NODE_TYPES, TRANSIENT_DATA_KEYS, canonicalNodeType, persistedNodeData } from './nodeTypeRegistry';
+import { NODE_TYPES, RESOURCE_COPY_KEYS, TRANSIENT_DATA_KEYS, canonicalNodeType, joinEdgeFields, persistedNodeData } from './nodeTypeRegistry';
 
 export function createEdgeFromData(edge, loadedNodes) {
   const targetNode = loadedNodes.find(n => n.id === edge.target);
@@ -31,18 +31,7 @@ export function createEdgeFromData(edge, loadedNodes) {
     label,
     animated: true,
     style:    { stroke: strokeColor, strokeWidth: 2 },
-    data: {
-      join_type:          edge.join_type          || 'left',
-      source_column:      edge.source_column      || '',
-      target_column:      edge.target_column      || '',
-      join_conditions:    edge.join_conditions    || null,
-      on_filters:         edge.on_filters         || null,
-      is_spatial:         edge.is_spatial         || false,
-      spatial_predicate:  edge.spatial_predicate  || null,
-      source_geom_column: edge.source_geom_column || null,
-      target_geom_column: edge.target_geom_column || null,
-      spatial_distance:   edge.spatial_distance   ?? null,
-    },
+    data: joinEdgeFields(edge),
   };
 }
 
@@ -103,6 +92,8 @@ export function deserializeNodes(rawNodes, options = {}) {
         // campi transitori (inputColumns, availableColumns...) nemmeno.
         delete result.data.columns;
         for (const key of TRANSIENT_DATA_KEYS) delete result.data[key];
+        // Copie della connessione (R2.10, N11): il pannello le legge dalla risorsa.
+        for (const key of RESOURCE_COPY_KEYS.api_enrich) delete result.data[key];
         break;
       default:
         break;

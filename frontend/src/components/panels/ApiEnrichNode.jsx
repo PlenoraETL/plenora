@@ -17,7 +17,8 @@ import { getApiConnection } from '../../api/apiConnections';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useResource } from '../../hooks/useResource';
 import '../common/ListState.css';
-import { Position, useReactFlow, useStore } from '@xyflow/react';
+import { Position } from '@xyflow/react';
+import { useShallow } from 'zustand/react/shallow';
 import { getColumnTypeIcon, getColumnTypeLabel, mapApiTypeToStandard } from '../../utils/columnUtils';
 import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -45,7 +46,6 @@ const MAX_ERRORS = integer({ min: 0 });
  * Output: dati originali + colonne da API (con tipi)
  */
 function ApiEnrichNode({ id, data }) {
-  const { getNodes, getEdges } = useReactFlow();
   // Mutazioni SOLO dallo store (audit R1): il setter di React Flow in
   // modalita' controllata diventa un change `reset` che lo store non
   // considera una modifica -> i parametri non venivano mai salvati.
@@ -55,77 +55,91 @@ function ApiEnrichNode({ id, data }) {
   // no calcolo output columns, ecc.).
   const isExecutable = data.connection_type === 'rest_file';
   
-  // Sottoscrivi ai cambiamenti degli edge in ingresso (trigger re-render quando si collega/scollega)
-  const incomingEdgeCount = useStore(
-    state => dataFlowEdges(state.edges).filter(e => e.target === id).length
-  );
-  // Se i parametri non sono nel data (vecchio progetto), fetch dal backend
-  // Fase 5 T2: dettagli del connettore dall'hook comune (id di richiesta),
-  // chiesti solo se mancano nel nodo; errore con «Riprova». Solo dati
-  // locali: NON un update dei nodi (loop ReactFlow<->Zustand).
-  const needsApiDetails = Boolean(data.api_id && (!data.parameters?.length || !data.api_name) && !data.endpoint);
+  // Sorgente a monte dallo STORE (N9): id, tipo e dati del nodo collegato
+  // all'ingresso. Cambia la sorgente a parita' di archi (Collega,
+  // insertBetween) o cambiano i suoi flag access_denied -> il nodo si
+  // aggiorna. Prima: getNodes()/getEdges() in un useMemo legato al solo
+  // numero di archi.
+  const [upId, upType, upData] = useCanvasStore(useShallow(state => {
+    const inEdge = dataFlowEdges(state.edges || []).find(e => e.target === id);
+    const src = inEdge ? (state.nodes || []).find(n => n.id === inEdge.source) : null;
+    return [src?.id ?? null, src?.type ?? null, src?.data ?? null];
+  }));
+  // Dettagli del connettore DALLA RISORSA (Fase 5, T6, R2.9, R2.10, N11):
+  // il nodo porta solo il riferimento (`api_id`); parametri, parametri
+  // statici, endpoint e mapping disponibili si leggono sempre dalla
+  // connessione attuale (hooks/useResource, errore con «Riprova»). Le copie
+  // salvate nei canvas vecchi sono solo il ripiego mentre la connessione si
+  // carica o se non e' leggibile; `parameters: []` nel nodo non blocca piu'
+  // la lettura (prima `[] || fetched` non ripiegava mai).
   const apiResource = useResource(() => getApiConnection(data.api_id), {
     key: ['api-connection', data.api_id || null],
-    enabled: needsApiDetails,
+    enabled: Boolean(data.api_id),
     errorMessage: (error) => humanizeError(error).message,
   });
   const fetchedApi = apiResource.data || null;
   const loadingApi = apiResource.initialLoading;
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
-  
-  // Usa data.parameters se presente, altrimenti fetched
-  const apiParameters = data.parameters || fetchedApi?.parameters || [];
-  // Se output_mapping è vuoto ma schema_fields è disponibile (auto-schema dopo prima esecuzione),
-  // costruiamo l'output preview dai schema_fields con i tipi rilevati
-  const rawOutputMapping = data.output_mapping || fetchedApi?.output_mapping || [];
-  const rawSchemaFields = data.schema_fields || fetchedApi?.schema_fields || [];
+
+  const fromResource = (key, fallback) => {
+    if (fetchedApi && fetchedApi[key] !== undefined && fetchedApi[key] !== null) return fetchedApi[key];
+    return data[key] ?? fallback;
+  };
+  const apiParameters = Array.isArray(fromResource('parameters', [])) ? fromResource('parameters', []) : [];
+  // output_mapping del NODO = la selezione dell'utente (il backend la risolve
+  // sulla connessione attuale, enrichment_service.resolve_enrichment_output_mapping);
+  // senza selezione, il mapping della connessione o i campi rilevati.
+  const rawOutputMapping = (data.output_mapping?.length ? data.output_mapping : null) || fetchedApi?.output_mapping || [];
+  const rawSchemaFields = fetchedApi?.schema_fields || data.schema_fields || [];
   const apiOutputMapping = rawOutputMapping.length > 0
     ? rawOutputMapping
     : rawSchemaFields.map(f => ({ column: f.name || f.path, path: f.path, type: f.type }));
-  const apiEndpoint = data.endpoint || fetchedApi?.endpoint || null;
-  const staticParameters = data.static_parameters || fetchedApi?.static_parameters || {};
-  
+  const apiEndpoint = fetchedApi?.endpoint || data.endpoint || null;
+  const staticParameters = fromResource('static_parameters', {}) || {};
+
+  // Istantanea per la validazione (il validatore del backend e il riassunto
+  // del nodo leggono `parameters`/`static_parameters`): si riallinea alla
+  // connessione appena letta, come dato derivato (non rende il canvas
+  // modificato). /validate legge comunque la connessione attuale.
+  useEffect(() => {
+    if (!fetchedApi) return;
+    const patch = {};
+    for (const key of ['parameters', 'static_parameters']) {
+      if (fetchedApi[key] === undefined) continue;
+      if (JSON.stringify(fetchedApi[key]) !== JSON.stringify(data[key] ?? null)) patch[key] = fetchedApi[key];
+    }
+    if (Object.keys(patch).length) useCanvasStore.getState().updateNodeData(id, patch, { derived: true });
+  }, [fetchedApi]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const paramMapping = data.param_mapping || {};
 
 const connectedFileSource = useMemo(() => {
-    if (!isExecutable) return null;
-    const edges = dataFlowEdges(getEdges());
-    const nodes = getNodes();
-    const inEdge = edges.find(e => e.target === id);
-    if (!inEdge) return null;
-    const srcNode = nodes.find(n => n.id === inEdge.source);
-    if (!srcNode || srcNode.type !== 'file_source') return null;
+    if (!isExecutable || !upId || upType !== 'file_source') return null;
     return {
-      id: srcNode.data?.file_source_id,
-      name: srcNode.data?.fileName || srcNode.data?.file_source_id || 'File',
+      id: upData?.file_source_id,
+      name: upData?.fileName || upData?.file_source_id || 'File',
       // RB.4.C: backend (RB.4.B) marca i file_source non visibili al
       // gruppo del progetto. Lo propaghiamo nella validation per
       // disabilitare run/preview con messaggio operativo.
-      access_denied: !!srcNode.data?.access_denied,
-      access_denied_reason: srcNode.data?.access_denied_reason || null,
+      access_denied: !!upData?.access_denied,
+      access_denied_reason: upData?.access_denied_reason || null,
     };
-  }, [isExecutable, id, getEdges, getNodes, incomingEdgeCount]);
+  }, [isExecutable, upId, upType, upData]);
 
-  // RB.4.C: rileva se QUALSIASI nodo upstream e' marcato access_denied
+  // RB.4.C: rileva se il nodo upstream e' marcato access_denied
   // (file_source o project_source). La validation a valle blocca
   // l'esecuzione anche per il flusso standard non-executable.
   const upstreamAccessDenied = useMemo(() => {
-    const edges = dataFlowEdges(getEdges());
-    const nodes = getNodes();
-    const inEdge = edges.find(e => e.target === id);
-    if (!inEdge) return null;
-    const srcNode = nodes.find(n => n.id === inEdge.source);
-    if (!srcNode?.data?.access_denied) return null;
+    if (!upId || !upData?.access_denied) return null;
     return {
-      type: srcNode.data?.inaccessible_resource_type || srcNode.type,
-      reason: srcNode.data?.access_denied_reason || 'Sorgente non accessibile al tuo gruppo',
+      type: upData?.inaccessible_resource_type || upType,
+      reason: upData?.access_denied_reason || 'Sorgente non accessibile al tuo gruppo',
     };
-  }, [id, getEdges, getNodes, incomingEdgeCount]);
+  }, [upId, upType, upData]);
 const handleExecParamChange = (key, value) => {
     // Azione utente: dirty + undo, quindi salvata e inviata all'esecuzione.
-    const current = getNodes().find(n => n.id === id);
-    patchExecParams(id, { exec_params: { ...(current?.data?.exec_params || {}), [key]: value } });
+    patchExecParams(id, (d) => ({ exec_params: { ...(d.exec_params || {}), [key]: value } }));
   };
 
   // REST FILE: aggiorna output_kind (tag che dice "lo zip prodotto da
@@ -175,10 +189,10 @@ const handleExecParamChange = (key, value) => {
   }, [inputColumns, apiParameters]);
   
   const handleMappingChange = (paramName, columnName) => {
-    useCanvasStore.getState().updateNodeData(id, {
-      param_mapping: { ...data.param_mapping, [paramName]: columnName },
-      _lastUpdate: Date.now()
-    });
+    useCanvasStore.getState().updateNodeData(id, (d) => ({
+      param_mapping: { ...(d.param_mapping || {}), [paramName]: columnName },
+      _lastUpdate: Date.now(),
+    }));
   };
   
 
@@ -241,7 +255,7 @@ const handleExecParamChange = (key, value) => {
     return { valid: true, message: 'Pronto' };
   }, [data.api_id, isExecutable, connectedFileSource, upstreamAccessDenied, inputColumns, apiParameters, paramMapping, apiOutputMapping]);
 
-  const execConfig = data.response || fetchedApi?.response || {};
+  const execConfig = fetchedApi?.response || data.response || {};
 
   // ════════════════════════════════════════════════
   // RENDER: EXECUTABLE MODE
@@ -301,15 +315,20 @@ const handleExecParamChange = (key, value) => {
                       field={ff}
                       label={label}
                       current={current}
+                      // Dopo l'upload (await) si parte dai file CORRENTI
+                      // dello store, non da quelli di questo render: due
+                      // upload in parallelo restano entrambi (R1.4).
                       onUploaded={(info) => {
-                        const next = { ...(data.extra_files || {}) };
-                        next[ff.name] = info;
-                        useCanvasStore.getState().updateNodeData(id, { extra_files: next, _lastUpdate: Date.now() });
+                        useCanvasStore.getState().updateNodeData(id, (d) => ({
+                          extra_files: { ...(d.extra_files || {}), [ff.name]: info }, _lastUpdate: Date.now(),
+                        }));
                       }}
                       onRemoved={() => {
-                        const next = { ...(data.extra_files || {}) };
-                        delete next[ff.name];
-                        useCanvasStore.getState().updateNodeData(id, { extra_files: Object.keys(next).length ? next : null, _lastUpdate: Date.now() });
+                        useCanvasStore.getState().updateNodeData(id, (d) => {
+                          const next = { ...(d.extra_files || {}) };
+                          delete next[ff.name];
+                          return { extra_files: Object.keys(next).length ? next : null, _lastUpdate: Date.now() };
+                        });
                       }}
                     />
                   );

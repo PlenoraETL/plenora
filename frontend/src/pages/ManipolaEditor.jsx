@@ -74,6 +74,7 @@ import { buildManipolaPaletteGroups } from '../components/canvas/manipolaPalette
 import { isMultiInputOp } from '../utils/transformRegistry';
 import { useTransformRegistry } from '../hooks/useTransformRegistry';
 import useEditorActions from '../components/editor/useEditorActions';
+import { renderNodeType } from '../utils/nodeTypeRegistry';
 
 // Costante stabile — evita array literal nelle deps di useEditorData
 const MANIPOLA_SOURCE_TYPES = ['estrai', 'manipola', 'arricchisci'];
@@ -84,14 +85,10 @@ const nodeTypes = {
   transform: TransformNode, multi_join: MultiJoinNode,
   result: ResultNode, staticValues: StaticValuesNode,
   carica: CaricanNode, carica_arcgis: CaricanArcGISNode, caricaArcgis: CaricanArcGISNode, comment: AnnotationNode,
-  // React Flow `nodeTypes` chiave deve combaciare con `node.type`. Il
-  // deserializer (`nodeFactories.createDataSourceNode`) e tutti gli altri
-  // pattern del FE — EstraiEditor, QueryPreview, useEdgeHandlers,
-  // graphUtils — usano la chiave camelCase
-  // `datasourceNode`. Manteniamo `datasource_node` come alias per
-  // i nodi appena aggiunti via `handleAddDataSourceNode` (vedi sotto)
-  // finché quel path non viene allineato al deserializer.
-  datasourceNode: DataSourceNode, datasource_node: DataSourceNode,
+  // React Flow `nodeTypes`: la chiave e' il tipo di rendering del registro
+  // (nodeTypeRegistry.renderNodeType), lo stesso del deserializer e dei nodi
+  // appena aggiunti (Fase 5, T6, R2.6: prima i nuovi erano `datasource_node`).
+  datasourceNode: DataSourceNode,
 };
 
 const defaultEdgeOptions = {
@@ -253,7 +250,7 @@ const ManipolaEditorContent = () => {
   const handleAddDataSourceNode = useCallback((mode = 'source') => {
     const newNodeId = `datasource_${Date.now()}`;
     addNodes({
-      id: newNodeId, type: 'datasource_node', position: getPos(),
+      id: newNodeId, type: renderNodeType('datasource_node'), position: getPos(),
       data: { mode, datasource_id: '', datasource_name: '', file_mode: 'fixed',
         file_path: '', folder_path: '', dynamic_rule: 'latest', pattern: '',
         dest_folder: '', dest_filename: '', dest_format: 'csv', columns: [] }

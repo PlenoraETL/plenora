@@ -11,6 +11,7 @@ from dataclasses import dataclass, replace
 from copy import copy
 from types import SimpleNamespace
 from app.core.manipola.plugin_executor import get_executor
+from app.core.manipola.lookup_type_plan import lookup_type_plan
 from app.core.manipola.schema_source_plans import static_columns, unique_source_names
 from app.shared.execution.source_column_plan import source_column_plan
 from app.shared.execution.join_preparation import multi_join_renames, normalize_key_list as _normalize_key_list, normalize_join_pairs as _normalize_join_pairs
@@ -770,7 +771,7 @@ class SchemaInferenceService:
         if transform_op in {
             "pivot", "flatten_json", "table_diff",
             "formula", "conditional", "fill_na", "replace", "type_cast",
-            "lookup", "date_extract", "geo_nearest", "geo_count_points_in_polygons",
+            "date_extract", "geo_nearest", "geo_count_points_in_polygons",
             "string_pad", "string_length", "string_extract",
             "window_function", "geo_distance", "geo_line_builder",
             "geo_polygon_builder", "statistics",
@@ -779,6 +780,14 @@ class SchemaInferenceService:
             self._types_status_cache[node.id] = (
                 "indeterminate", "Tipi dipendenti dai valori effettivi dell'ingresso",
             )
+        if transform_op == "lookup" and input_schemas:
+            # Fase 5, T6 (BA1): certo solo se l'esecuzione da' lo stesso tipo
+            # qualunque siano i valori (manipola/lookup_type_plan).
+            source = next((col for col in input_schemas[0] if col.name == (config.get("column") or "")), None)
+            if source is not None and not lookup_type_plan(source.type, config).certain:
+                self._types_status_cache[node.id] = (
+                    "indeterminate", "Tipo del Lookup dipendente dai valori effettivi dell'ingresso",
+                )
         if transform_op in {"pivot", "transpose", "flatten_json", "table_diff",
                             "geo_count_points_in_polygons"}:
             self._status_cache[node.id] = ("indeterminate", "Nomi o ordine dipendenti dai valori o dal vuoto")

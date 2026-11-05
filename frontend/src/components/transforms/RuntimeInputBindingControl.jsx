@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import NodeHandle from '../canvas/NodeHandle';
@@ -16,7 +17,12 @@ export default function RuntimeInputBindingControl({
   param,
   transformDefinition,
 }) {
-  const nodes = useCanvasStore(state => state.nodes);
+  // Solo gli input runtime (id e dati), non tutti i nodi con le posizioni:
+  // un trascinamento non ridisegna il controllo (R9-U N6). I calcoli al clic
+  // leggono lo store corrente.
+  const inputFlat = useCanvasStore(useShallow(state => (state.nodes || [])
+    .filter(node => node.type === 'project_input' && node.data?.input_kind !== 'file')
+    .flatMap(node => [node.id, node.data])));
   const edges = useCanvasStore(state => state.edges);
   const addNodes = useCanvasStore(state => state.addNodes);
   const editEdges = useCanvasStore(state => state.editEdges);
@@ -34,9 +40,8 @@ export default function RuntimeInputBindingControl({
     && edge.target === targetNodeId
     && edge.data?.target_field === targetField
   ));
-  const inputs = nodes.filter(node => (
-    node.type === 'project_input' && node.data?.input_kind !== 'file'
-  ));
+  const inputs = [];
+  for (let i = 0; i < inputFlat.length; i += 2) inputs.push({ id: inputFlat[i], type: 'project_input', data: inputFlat[i + 1] });
 
   // Stessa regola del trascinamento sul canvas (store.prepareParameterBinding).
   const allowed = () => {
@@ -65,6 +70,8 @@ export default function RuntimeInputBindingControl({
 
   const createAndConnect = () => {
     if (!allowed()) return;
+    // Tutti i nodi correnti (anche gli input file) per la chiave unica.
+    const nodes = useCanvasStore.getState().nodes || [];
     const target = nodes.find(node => node.id === targetNodeId);
     const id = `project_input_${Date.now()}`;
     const label = `Input ${param.label || param.id}`;

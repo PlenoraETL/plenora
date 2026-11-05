@@ -21,7 +21,6 @@ const MultiJoinNode = memo(({ data, id }) => {
   // Configurazione
   const config = data.config || {};
   const joinKeys = config.join_keys || [];
-  const joinKeyIds = config.join_key_ids || [];
   const joinPairs = Array.isArray(config.join_pairs) ? config.join_pairs : [];
   const joinType = config.join_type || 'inner';
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
@@ -53,26 +52,28 @@ const MultiJoinNode = memo(({ data, id }) => {
     );
   }, [sources]);
 
-  const updateNodeData = useCanvasStore(s => s.updateNodeData);
+  // La patch si fonde con la config CORRENTE dello store (patchNodeConfig),
+  // non con quella del render: due modifiche nello stesso tick restano (N5).
+  const patchNodeConfig = useCanvasStore(s => s.patchNodeConfig);
 
   const updateConfig = useCallback((field, value) => {
     const patch = typeof field === 'object' && field !== null
       ? field
       : { [field]: value };
-    updateNodeData(id, { config: { ...config, ...patch } });
-  }, [id, updateNodeData, config]);
+    patchNodeConfig(id, patch);
+  }, [id, patchNodeConfig]);
 
   const toggleJoinKey = useCallback((col) => {
     const colName = typeof col === 'string' ? col : col.name;
     const colId = typeof col === 'string' ? null : col.id;
-    const newKeys = joinKeys.includes(colName)
-      ? joinKeys.filter(k => k !== colName)
-      : [...joinKeys, colName];
-    const newIds = joinKeys.includes(colName)
-      ? joinKeyIds.filter((_, idx) => joinKeys[idx] !== colName)
-      : [...joinKeyIds, colId].filter(Boolean);
-    updateConfig({ join_keys: newKeys, join_key_ids: newIds });
-  }, [joinKeys, joinKeyIds, updateConfig]);
+    patchNodeConfig(id, (c) => {
+      const keys = c.join_keys || [];
+      const ids = c.join_key_ids || [];
+      return keys.includes(colName)
+        ? { join_keys: keys.filter(k => k !== colName), join_key_ids: ids.filter((_, idx) => keys[idx] !== colName) }
+        : { join_keys: [...keys, colName], join_key_ids: [...ids, colId].filter(Boolean) };
+    });
+  }, [id, patchNodeConfig]);
 
   // Colonne in uscita: quelle previste dal server (stessa regola dell'esecuzione).
   const outputPreview = useMemo(() => output.columns.map(c => c.name), [output]);
@@ -155,9 +156,8 @@ const MultiJoinNode = memo(({ data, id }) => {
                     <select
                       value={pair.left || ''}
                       onChange={(e) => {
-                        const pairs = [...(config.join_pairs || [])];
-                        pairs[idx] = { ...pairs[idx], left: e.target.value };
-                        updateConfig('join_pairs', pairs);
+                        const left = e.target.value;
+                        patchNodeConfig(id, c => ({ join_pairs: (c.join_pairs || []).map((p, i) => (i === idx ? { ...p, left } : p)) }));
                       }}
                       className="multi-join-node__pair-select multi-join-node__pair-select--left nodrag"
                       title="Colonna sinistra"
@@ -171,9 +171,8 @@ const MultiJoinNode = memo(({ data, id }) => {
                     <select
                       value={pair.right || ''}
                       onChange={(e) => {
-                        const pairs = [...(config.join_pairs || [])];
-                        pairs[idx] = { ...pairs[idx], right: e.target.value };
-                        updateConfig('join_pairs', pairs);
+                        const right = e.target.value;
+                        patchNodeConfig(id, c => ({ join_pairs: (c.join_pairs || []).map((p, i) => (i === idx ? { ...p, right } : p)) }));
                       }}
                       className="multi-join-node__pair-select multi-join-node__pair-select--right nodrag"
                       title="Colonna destra"
@@ -186,8 +185,7 @@ const MultiJoinNode = memo(({ data, id }) => {
                     <button
                       type="button"
                       onClick={() => {
-                        const pairs = (config.join_pairs || []).filter((_, i) => i !== idx);
-                        updateConfig('join_pairs', pairs);
+                        patchNodeConfig(id, c => ({ join_pairs: (c.join_pairs || []).filter((_, i) => i !== idx) }));
                       }}
                       className="multi-join-node__pair-remove nodrag"
                       title="Rimuovi"
@@ -200,8 +198,7 @@ const MultiJoinNode = memo(({ data, id }) => {
                 <button
                   type="button"
                   onClick={() => {
-                    const pairs = [...(config.join_pairs || []), { left: '', right: '' }];
-                    updateConfig('join_pairs', pairs);
+                    patchNodeConfig(id, c => ({ join_pairs: [...(c.join_pairs || []), { left: '', right: '' }] }));
                   }}
                   className="multi-join-node__pair-add nodrag"
                 >

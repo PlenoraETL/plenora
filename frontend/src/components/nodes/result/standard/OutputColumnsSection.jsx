@@ -37,10 +37,11 @@ export function PipelineOutputColumns({ id, data, mode = 'manipola', upstreamCol
   const rows = useMemo(() => gridRows(upstreamColumns, saved), [upstreamColumns, saved]);
   const onChange = (next) => {
     const outputColumns = gridConfig(next, upstreamColumns, { withIds: byId });
-    updateNodeData(id, {
-      ...outputReferencesPatch({ ...data, output_columns: saved }, upstreamColumns, outputColumns),
+    // Dai dati CORRENTI dello store (T6, regola degli aggiornamenti funzionali).
+    updateNodeData(id, (d) => ({
+      ...outputReferencesPatch({ ...d, output_columns: outputColumnsAsRead(d.output_columns, mode) }, upstreamColumns, outputColumns),
       output_columns: outputColumns,
-    });
+    }));
   };
   return (
     <div className="result-node__section result-node__section--bordered">

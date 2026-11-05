@@ -20,9 +20,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import useDraftList from '../panels/useDraftList';
 import useCanvasStore from '../../../store/useCanvasStore';
-import { readValueMapping } from '../../../utils/lookupMapping';
+import { readValueMapping, savedCellValue } from '../../../utils/lookupMapping';
 import {
-  describeFill, dropOrphanProposals, fetchPresentValues, fillSourceKey, isEmptyRow, isUsableValue,
+  describeFill, dropOrphanProposals, fetchPresentValues, fillSourceKey, hasKey, isEmptyRow,
   mergePresentValues, toSavedRows, FILL_LIMIT,
 } from '../../../utils/lookupFill';
 import { term } from '../../../utils/glossary';
@@ -36,9 +36,11 @@ export default function ValueMappingInput({ value, onChange, disabled = false, n
   const [rows, setRows, error] = useDraftList(saved, {
     validate: (next) => {
       const live = next.filter(r => !isEmptyRow(r));
-      if (live.some(r => !isUsableValue(r.from))) return 'Ogni riga ha bisogno del valore di partenza';
-      const dup = live.map(r => r.from).find((f, i, all) => all.indexOf(f) !== i);
-      return dup !== undefined ? `Il valore "${dup}" compare due volte` : null;
+      if (live.some(r => !hasKey(r))) return 'Ogni riga ha bisogno del valore di partenza';
+      // Doppioni per chiave SALVATA (5 e "5" sono chiavi diverse, come nel backend).
+      const keys = live.map(r => JSON.stringify(savedCellValue(r.from, r.saved_from)));
+      const dupAt = keys.findIndex((k, i) => keys.indexOf(k) !== i);
+      return dupAt >= 0 ? `Il valore "${live[dupAt].from}" compare due volte` : null;
     },
     toSaved: toSavedRows,
     write: onChange,
@@ -88,7 +90,9 @@ export default function ValueMappingInput({ value, onChange, disabled = false, n
       {list.map((r, i) => (
         // eslint-disable-next-line react/no-array-index-key
         <div className="ppanel__row" key={i}>
-          <input className="ppanel__input" value={r.from} disabled={off} placeholder="valore"
+          <input className="ppanel__input" value={r.from} disabled={off}
+            placeholder={r.saved_from && r.saved_from.value === null ? 'null (valore vuoto)' : 'valore'}
+            title={r.saved_from && r.from === r.saved_from.text ? `Chiave salvata come ${JSON.stringify(r.saved_from.value)}: resta così finché non la modifichi` : undefined}
             onChange={e => set(i, { from: e.target.value })} aria-label="Valore di partenza" />
           <span aria-hidden="true">→</span>
           <input className="ppanel__input" value={r.to} disabled={off} placeholder={r.proposed ? 'da tradurre' : 'diventa'}

@@ -10,6 +10,8 @@ from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
 from app.core.orchestrator.carica_payload_validation import assert_canvas_rest_auth_usable
 from app.core.projects.canvas_validation import _StaticCanvasService
 from app.core.projects.canvas_validation import validate_project_chain
+from app.core.projects.query_preview import describe_estrai_query
+from app.core.projects import schema_execution_sources
 from app.shared.execution.lookup_mapping import lookup_value_text
 
 from fastapi import APIRouter, Body, HTTPException, Depends, Query
@@ -909,6 +911,33 @@ def _infer_project_schemas(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
+@router.post("/{project_id}/query-preview")
+def preview_project_query(
+    project_id: str,
+    body: SchemaInferenceRequest,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> JsonObject:
+    """Query di ESTRAI che l'esecuzione lancerebbe sul canvas non salvato.
+
+    Fase 5, T6 (R3.13): stesso piano dell'esecuzione (estrai/query_plan), mai
+    una ricostruzione nel frontend. Non modifica il progetto.
+    """
+    metadata = _project_service.get_project_metadata(project_id)
+    assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+    if getattr(metadata, "project_type", None) != "estrai":
+        raise HTTPException(400, "Anteprima della query disponibile solo per i progetti Estrai")
+    canvas = _prepare_canvas_for_owner(
+        project_id, CanvasState(nodes=body.canvas.nodes, edges=body.canvas.edges),
+        metadata, current_user, for_save=False,
+    )
+    connection_id = getattr(metadata, "default_connection_id", None)
+    return describe_estrai_query(
+        canvas, project_id=project_id, project_type="estrai",
+        default_connection_id=connection_id if isinstance(connection_id, str) else None,
+        load_sql_options=schema_execution_sources.load_sql_options,
+    )
+
+
 class DistinctRequest(BaseModel):
     canvas: CanvasWithPlugins
     column: str | None = None
@@ -921,6 +950,36 @@ class DistinctRequest(BaseModel):
         if not 1 <= value <= 1000:
             raise ValueError("limit deve essere compreso fra 1 e 1000")
         return value
+
+
+def with_live_api_details(canvas: Any, api_configs: dict) -> Any:
+    """Canvas con i dettagli ATTUALI delle connessioni API negli api_enrich.
+
+    Fase 5, T6 (R2.9, R2.10, N11): il nodo porta il riferimento (``api_id``);
+    parametri e parametri statici si leggono dalla connessione. Le copie
+    salvate nei canvas vecchi restano solo il ripiego quando la connessione
+    non e' leggibile. Solo per la validazione: il canvas salvato non cambia.
+    """
+    if not api_configs or canvas is None:
+        return canvas
+    dumped = canvas.model_dump()
+    changed = False
+    for node in dumped.get("nodes") or []:
+        if node.get("type") != "api_enrich":
+            continue
+        data = node.get("data") if isinstance(node.get("data"), dict) else {}
+        config = api_configs.get(node.get("api_id") or data.get("api_id"))
+        if not config:
+            continue
+        for key in ("parameters", "static_parameters"):
+            if key not in config:
+                continue
+            data[key] = config[key]
+            if key in node:
+                node[key] = config[key]
+            changed = True
+        node["data"] = data
+    return CanvasState(**dumped) if changed else canvas
 
 
 def raise_preparation_failure(error: BaseException) -> None:
@@ -1088,13 +1147,16 @@ def validate_project_canvas(
         except ValueError as exc:
             input_error = str(exc)
 
+        api_configs: dict = {}
+
         def _load(pid: str):
             # I ref project_source sono già autorizzati al PUT
             # (find_inaccessible_canvas_refs); qui risolviamo canvas+tipo.
             md = _project_service.get_project_metadata(pid)
             if not md:
                 return None
-            return (selected_canvas if pid == project_id else _project_service.get_project_canvas(pid), getattr(md, "project_type", None))
+            loaded_canvas = selected_canvas if pid == project_id else _project_service.get_project_canvas(pid)
+            return (with_live_api_details(loaded_canvas, api_configs), getattr(md, "project_type", None))
 
         # ARRICCHISCI_API_CONNECTION_STALE è DB-dependent: l'endpoint (boundary
         # DB-aware) fornisce gli id delle connessioni API esistenti; il gate
@@ -1106,10 +1168,11 @@ def validate_project_canvas(
             # niente import cross-domain di app.core.<domain>.db nel router projects.
             # group_id=None = tutte le connessioni (no falso STALE su cross-group).
             from app.core.arricchisci.api_connector import api_connection_service
-            available_api_ids = {
-                c["id"] for c in api_connection_service.list_api_connections(group_id=None)
-                if c.get("id")
-            }
+            listed = [c for c in api_connection_service.list_api_connections(group_id=None) if c.get("id")]
+            available_api_ids = {c["id"] for c in listed}
+            # Fase 5, T6 (R2.10): parametri della connessione ATTUALE, non
+            # la copia salvata nel nodo (che puo' essere vecchia).
+            api_configs.update({c["id"]: c for c in listed})
         except Exception:
             available_api_ids = None  # degrada: salta STALE, non rompe la validazione
 

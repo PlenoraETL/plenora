@@ -1,0 +1,639 @@
+[
+  {
+    "expression": "stato == 'stato'",
+    "refs": [
+      "stato"
+    ],
+    "rewrites": [
+      {
+        "old": "stato",
+        "new": "status",
+        "expected": "status == 'stato'"
+      }
+    ]
+  },
+  {
+    "expression": "stato == \"stato\"",
+    "refs": [
+      "stato"
+    ],
+    "rewrites": [
+      {
+        "old": "stato",
+        "new": "status",
+        "expected": "status == \"stato\""
+      }
+    ]
+  },
+  {
+    "expression": "'stato' + stato + \"stato\"",
+    "refs": [
+      "stato"
+    ],
+    "rewrites": [
+      {
+        "old": "stato",
+        "new": "status",
+        "expected": "'stato' + status + \"stato\""
+      }
+    ]
+  },
+  {
+    "expression": "stato == 'l\\'stato'",
+    "refs": [
+      "stato"
+    ],
+    "rewrites": [
+      {
+        "old": "stato",
+        "new": "status",
+        "expected": "status == 'l\\'stato'"
+      }
+    ]
+  },
+  {
+    "expression": "stato == r'stato'",
+    "refs": [
+      "stato"
+    ],
+    "rewrites": [
+      {
+        "old": "stato",
+        "new": "status",
+        "expected": "status == r'stato'"
+      }
+    ]
+  },
+  {
+    "expression": "stato == b'stato'",
+    "refs": [
+      "stato"
+    ],
+    "rewrites": [
+      {
+        "old": "stato",
+        "new": "status",
+        "expected": "status == b'stato'"
+      }
+    ]
+  },
+  {
+    "expression": "stato == '''stato'''",
+    "refs": [
+      "stato"
+    ],
+    "rewrites": [
+      {
+        "old": "stato",
+        "new": "status",
+        "expected": "status == '''stato'''"
+      }
+    ]
+  },
+  {
+    "expression": "stato == \"\"\"stato ' stato\"\"\"",
+    "refs": [
+      "stato"
+    ],
+    "rewrites": [
+      {
+        "old": "stato",
+        "new": "status",
+        "expected": "status == \"\"\"stato ' stato\"\"\""
+      }
+    ]
+  },
+  {
+    "expression": "prezzo * quantita",
+    "refs": [
+      "prezzo",
+      "quantita"
+    ],
+    "rewrites": [
+      {
+        "old": "prezzo",
+        "new": "costo",
+        "expected": "costo * quantita"
+      },
+      {
+        "old": "quantita",
+        "new": "pezzi",
+        "expected": "prezzo * pezzi"
+      }
+    ]
+  },
+  {
+    "expression": "prezzo*quantita+prezzo",
+    "refs": [
+      "prezzo",
+      "quantita"
+    ],
+    "rewrites": [
+      {
+        "old": "prezzo",
+        "new": "costo",
+        "expected": "costo*quantita+costo"
+      }
+    ]
+  },
+  {
+    "expression": "round(round)",
+    "refs": [
+      "round"
+    ],
+    "rewrites": [
+      {
+        "old": "round",
+        "new": "arrotonda",
+        "expected": "round(arrotonda)"
+      }
+    ]
+  },
+  {
+    "expression": "round(x, ndigits=2)",
+    "refs": [
+      "x"
+    ],
+    "rewrites": [
+      {
+        "old": "ndigits",
+        "new": "cifre",
+        "expected": "round(x, ndigits=2)"
+      },
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "round(y, ndigits=2)"
+      }
+    ]
+  },
+  {
+    "expression": "abs (x)",
+    "refs": [
+      "x"
+    ],
+    "rewrites": [
+      {
+        "old": "abs",
+        "new": "assoluto",
+        "expected": "abs (x)"
+      },
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "abs (y)"
+      }
+    ]
+  },
+  {
+    "expression": "nome.str.upper()",
+    "refs": [
+      "nome"
+    ],
+    "rewrites": [
+      {
+        "old": "nome",
+        "new": "name",
+        "expected": "name.str.upper()"
+      },
+      {
+        "old": "str",
+        "new": "testo",
+        "expected": "nome.str.upper()"
+      },
+      {
+        "old": "upper",
+        "new": "su",
+        "expected": "nome.str.upper()"
+      }
+    ]
+  },
+  {
+    "expression": "nome . str . lower ( )",
+    "refs": [
+      "nome"
+    ],
+    "rewrites": [
+      {
+        "old": "nome",
+        "new": "name",
+        "expected": "name . str . lower ( )"
+      },
+      {
+        "old": "lower",
+        "new": "giu",
+        "expected": "nome . str . lower ( )"
+      }
+    ]
+  },
+  {
+    "expression": "x == 1e5",
+    "refs": [
+      "x"
+    ],
+    "rewrites": [
+      {
+        "old": "e5",
+        "new": "esp",
+        "expected": "x == 1e5"
+      },
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "y == 1e5"
+      }
+    ]
+  },
+  {
+    "expression": "x + 0x1F + 1_000 + 2.5j + .5",
+    "refs": [
+      "x"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "y + 0x1F + 1_000 + 2.5j + .5"
+      },
+      {
+        "old": "x1F",
+        "new": "z",
+        "expected": "x + 0x1F + 1_000 + 2.5j + .5"
+      }
+    ]
+  },
+  {
+    "expression": "x if y else z",
+    "refs": [
+      "x",
+      "y",
+      "z"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "a",
+        "expected": "a if y else z"
+      },
+      {
+        "old": "y",
+        "new": "b",
+        "expected": "x if b else z"
+      }
+    ]
+  },
+  {
+    "expression": "a and b or not c",
+    "refs": [
+      "a",
+      "b",
+      "c"
+    ],
+    "rewrites": [
+      {
+        "old": "a",
+        "new": "x",
+        "expected": "x and b or not c"
+      },
+      {
+        "old": "c",
+        "new": "z",
+        "expected": "a and b or not z"
+      }
+    ]
+  },
+  {
+    "expression": "x is None",
+    "refs": [
+      "x"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "y is None"
+      }
+    ]
+  },
+  {
+    "expression": "True + flag",
+    "refs": [
+      "flag"
+    ],
+    "rewrites": [
+      {
+        "old": "True",
+        "new": "Vero",
+        "expected": "True + flag"
+      },
+      {
+        "old": "flag",
+        "new": "bandiera",
+        "expected": "True + bandiera"
+      }
+    ]
+  },
+  {
+    "expression": "`nome completo` + nome",
+    "refs": [
+      "nome completo",
+      "nome"
+    ],
+    "rewrites": [
+      {
+        "old": "nome completo",
+        "new": "full name",
+        "expected": "`full name` + nome"
+      },
+      {
+        "old": "nome",
+        "new": "name",
+        "expected": "`nome completo` + name"
+      }
+    ]
+  },
+  {
+    "expression": "`nome` * 2",
+    "refs": [
+      "nome"
+    ],
+    "rewrites": [
+      {
+        "old": "nome",
+        "new": "name",
+        "expected": "`name` * 2"
+      }
+    ]
+  },
+  {
+    "expression": "città * 2",
+    "refs": [
+      "città"
+    ],
+    "rewrites": [
+      {
+        "old": "città",
+        "new": "comune",
+        "expected": "comune * 2"
+      }
+    ]
+  },
+  {
+    "expression": "perché + città_2",
+    "refs": [
+      "perché",
+      "città_2"
+    ],
+    "rewrites": [
+      {
+        "old": "perché",
+        "new": "motivo",
+        "expected": "motivo + città_2"
+      },
+      {
+        "old": "città_2",
+        "new": "c2",
+        "expected": "perché + c2"
+      }
+    ]
+  },
+  {
+    "expression": "x  # commento con x",
+    "refs": [
+      "x"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "y  # commento con x"
+      }
+    ]
+  },
+  {
+    "expression": "x == 'non chiusa",
+    "refs": [
+      "x"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "y == 'non chiusa"
+      }
+    ]
+  },
+  {
+    "expression": "pd.to_numeric(valore)",
+    "refs": [
+      "pd",
+      "valore"
+    ],
+    "rewrites": [
+      {
+        "old": "valore",
+        "new": "importo",
+        "expected": "pd.to_numeric(importo)"
+      },
+      {
+        "old": "pd",
+        "new": "pandas",
+        "expected": "pandas.to_numeric(valore)"
+      }
+    ]
+  },
+  {
+    "expression": "valore.fillna(0).astype(int)",
+    "refs": [
+      "valore",
+      "int"
+    ],
+    "rewrites": [
+      {
+        "old": "valore",
+        "new": "importo",
+        "expected": "importo.fillna(0).astype(int)"
+      },
+      {
+        "old": "int",
+        "new": "intero",
+        "expected": "valore.fillna(0).astype(intero)"
+      }
+    ]
+  },
+  {
+    "expression": "(a+b)*(a-b)",
+    "refs": [
+      "a",
+      "b"
+    ],
+    "rewrites": [
+      {
+        "old": "a",
+        "new": "x",
+        "expected": "(x+b)*(x-b)"
+      }
+    ]
+  },
+  {
+    "expression": "aa + a + a_a",
+    "refs": [
+      "aa",
+      "a",
+      "a_a"
+    ],
+    "rewrites": [
+      {
+        "old": "a",
+        "new": "x",
+        "expected": "aa + x + a_a"
+      }
+    ]
+  },
+  {
+    "expression": "-x ** 2",
+    "refs": [
+      "x"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "-y ** 2"
+      }
+    ]
+  },
+  {
+    "expression": "x != x",
+    "refs": [
+      "x"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "y != y"
+      }
+    ]
+  },
+  {
+    "expression": "x==y",
+    "refs": [
+      "x",
+      "y"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "y==y"
+      }
+    ]
+  },
+  {
+    "expression": "f(x)(y)",
+    "refs": [
+      "x",
+      "y"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "a",
+        "expected": "f(a)(y)"
+      },
+      {
+        "old": "y",
+        "new": "b",
+        "expected": "f(x)(b)"
+      }
+    ]
+  },
+  {
+    "expression": "x + `",
+    "refs": [
+      "x"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "y + `"
+      }
+    ]
+  },
+  {
+    "expression": "",
+    "refs": [],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "y",
+        "expected": ""
+      }
+    ]
+  },
+  {
+    "expression": "'solo testo'",
+    "refs": [],
+    "rewrites": [
+      {
+        "old": "solo",
+        "new": "y",
+        "expected": "'solo testo'"
+      }
+    ]
+  },
+  {
+    "expression": "nome + ' ' + cognome",
+    "refs": [
+      "nome",
+      "cognome"
+    ],
+    "rewrites": [
+      {
+        "old": "nome",
+        "new": "n",
+        "expected": "n + ' ' + cognome"
+      },
+      {
+        "old": "cognome",
+        "new": "c",
+        "expected": "nome + ' ' + c"
+      }
+    ]
+  },
+  {
+    "expression": "concat_ws('-', a, b)",
+    "refs": [
+      "a",
+      "b"
+    ],
+    "rewrites": [
+      {
+        "old": "concat_ws",
+        "new": "c",
+        "expected": "concat_ws('-', a, b)"
+      },
+      {
+        "old": "a",
+        "new": "x",
+        "expected": "concat_ws('-', x, b)"
+      }
+    ]
+  },
+  {
+    "expression": "x\n+ y",
+    "refs": [
+      "x",
+      "y"
+    ],
+    "rewrites": [
+      {
+        "old": "y",
+        "new": "z",
+        "expected": "x\n+ z"
+      }
+    ]
+  }
+]

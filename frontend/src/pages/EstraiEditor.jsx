@@ -33,6 +33,7 @@ import { columnSnapshot } from '../hooks/useColumns';
 import { columnsOf, estraiSourceLabel } from '../utils/columnSource';
 import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
 import { getLayerSchema } from '../api/features';
+import { featureLayerData } from '../utils/featureLayers';
 import { serverVersionOf } from '../utils/canvasVersion';
 import { executionModalProps, executionToolbarProps } from '../hooks/useExecution';
 import { ResourceError } from '../components/common/ListState';
@@ -57,6 +58,7 @@ import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term } from '../utils/glossary';
 import useEditorActions from '../components/editor/useEditorActions';
+import { renderNodeType } from '../utils/nodeTypeRegistry';
 
 const nodeTypes = {
   tableNode: TableNode, resultNode: ResultNode, staticValues: StaticValuesNode,
@@ -160,15 +162,13 @@ function EstraiEditor() {
     catch (err) { toastApiError(toast, err, 'Errore caricamento schema'); return; }
     if (useCanvasStore.getState().projectId !== forProject) return;
     const newNodeId = `fl_${Date.now()}`;
-    const columns   = (schema.fields || []).map(f => ({ name: f.name, type: f.field_type || f.type || 'str', alias: null, visible: true }));
+    // Costruzione unica del layer (utils/featureLayers, R3.15).
     const newNode   = {
       id: newNodeId, type: 'featureLayerNode',
       position: { x: originNode.position.x, y: originNode.position.y + 350 },
-      data: { type: 'feature_source', layer_name: schema.name || relation.name,
-        layer_url: relation.related_url, connection_id: originNode.data.connection_id,
-        connection_name: originNode.data.connection_name, service_name: originNode.data.service_name,
-        geometry_type: schema.geometry_type_urby || schema.geometry_type || '',
-        feature_count: schema.feature_count, where: '', columns, relationships: schema.relationships || [] }
+      data: featureLayerData(schema, { layerUrl: relation.related_url, layerName: relation.name,
+        connectionId: originNode.data.connection_id, connectionName: originNode.data.connection_name,
+        serviceName: originNode.data.service_name }),
     };
     // Layer e join in un solo passo di annullamento; il join nasce da
     // completare (le chiavi della relazione sono solo un suggerimento nel
@@ -229,7 +229,7 @@ function EstraiEditor() {
     if (currentNodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning(onlyOneMessage('load_arcgis')); return; }
     const resultNode = currentNodes.find(n => n.type === 'resultNode');
     const newNode = {
-      id: `carica_arcgis_${Date.now()}`, type: 'carica_arcgis',
+      id: `carica_arcgis_${Date.now()}`, type: renderNodeType('carica_arcgis'),
       position: { x: resultNode.position.x + 400, y: resultNode.position.y + 200 },
       data: { arcgis_connection_id: '', arcgis_service_url: '', arcgis_layer_url: '',
         arcgis_operation: 'add', arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',
@@ -325,6 +325,21 @@ function EstraiEditor() {
     addNodes(buildTableNode(tableName, isView, getViewportCenter(reactFlowInstance)));
   }, [addNodes, buildTableNode, getViewportCenter, reactFlowInstance]);
 
+  // Layer trascinato dal pannello dei servizi: nasce completo (colonne,
+  // tipi e relazioni dallo schema del layer, utils/featureLayers), come il
+  // layer correlato; niente dipende dall'apertura del pannello (N1, R3.15).
+  const addFeatureLayerAt = useCallback(async (ld, position) => {
+    const forProject = useCanvasStore.getState().projectId;
+    let schema;
+    try { schema = await getLayerSchema(ld.connectionId, ld.layerUrl); }
+    catch (err) { toastApiError(toast, err, 'Schema del layer non caricato'); return; }
+    if (useCanvasStore.getState().projectId !== forProject) return;
+    addNodes({ id: `fl_${Date.now()}`, type: 'featureLayerNode', position,
+      data: featureLayerData(schema, { layerUrl: ld.layerUrl, layerName: ld.layerName,
+        connectionId: ld.connectionId, connectionName: ld.connectionName, serviceName: ld.serviceName,
+        geometryType: ld.geometryType, featureCount: ld.featureCount }) });
+  }, [addNodes, toast]);
+
   const onDrop = useCallback((event) => {
     event.preventDefault();
     if (!reactFlowInstance) return;
@@ -332,17 +347,14 @@ function EstraiEditor() {
 
     const featureLayerRaw = event.dataTransfer.getData('featureLayerData');
     if (featureLayerRaw) {
-      try {
-        const ld = JSON.parse(featureLayerRaw);
-        addNodes({ id: `fl_${Date.now()}`, type: 'featureLayerNode', position,
-          data: { type: 'feature_source', layer_name: ld.layerName, layer_url: ld.layerUrl,
-            connection_id: ld.connectionId, connection_name: ld.connectionName, service_name: ld.serviceName,
-            geometry_type: ld.geometryType, feature_count: ld.featureCount, where: '', columns: [] } });
-      } catch (err) {
+      let ld;
+      try { ld = JSON.parse(featureLayerRaw); } catch (err) {
         // Fase 5 T2 (N10): un trascinamento non leggibile si dice.
         console.warn('Errore parsing feature layer data:', err);
         toast.error('Il layer trascinato non è leggibile: riprova dal pannello dei servizi.');
+        return;
       }
+      addFeatureLayerAt(ld, position);
       return;
     }
 
@@ -350,7 +362,7 @@ function EstraiEditor() {
     if (!tableName) return;
     const isView = event.dataTransfer.getData('isView') === 'true';
     addNodes(buildTableNode(tableName, isView, position));
-  }, [reactFlowInstance, addNodes, buildTableNode, toast]);
+  }, [reactFlowInstance, addNodes, buildTableNode, toast, addFeatureLayerAt]);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
@@ -592,7 +604,7 @@ function EstraiEditor() {
 
   // afterCanvas slot: QueryPreview overlay sul canvas.
   const afterCanvas = (
-    <QueryPreview nodes={dataNodes} edges={edges} />
+    <QueryPreview />
   );
 
   // modals slot: lazy-loaded modal stack.

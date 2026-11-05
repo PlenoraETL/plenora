@@ -88,6 +88,7 @@ const UNGATED = {
   executeProjectQuery: 'esecuzione del progetto aperto: non distruttiva, regola del backend',
   executeEnrichmentAsync: 'esecuzione del progetto aperto: non distruttiva, regola del backend',
   previewProject: 'anteprima: sola lettura',
+  previewProjectQuery: 'anteprima della query di Estrai sul canvas corrente: sola lettura, non salva (T6, R3.13)',
   pinRun: 'segnalibro su una run, non distruttivo',
   cancelTask: 'annulla un task avviato dall\'utente stesso',
   cleanupTaskCompletely: 'pulizia di un task dell\'utente stesso',

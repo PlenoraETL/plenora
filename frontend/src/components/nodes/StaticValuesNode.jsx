@@ -3,7 +3,6 @@
  * Layout inline: [nome] [valore] [tipo] [×] per ogni campo
  */
 import React, { useState, useCallback, useMemo, useRef, memo } from 'react';
-import { useEffect } from 'react';
 import { useToast } from '../../hooks/useToast';
 import { Position } from '@xyflow/react';
 import { 
@@ -34,7 +33,10 @@ function StaticValuesNode({ id, data }) {
   const toast = useToast();
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
 
-  const [fields, setFields] = useState(data.fields || []);
+  // I campi sono quelli dello store (R1.9): nessuna copia locale che un
+  // Ctrl+Z non riallinea. Ogni modifica parte dai campi CORRENTI dello store
+  // (updateNodeData con funzione, R1.4/N5).
+  const fields = useMemo(() => data.fields || [], [data.fields]);
   const [showAddRow, setShowAddRow] = useState(false);
   const [newName, setNewName]   = useState('');
   const [newValue, setNewValue] = useState('');
@@ -43,12 +45,9 @@ function StaticValuesNode({ id, data }) {
   const [activeFieldId, setActiveFieldId] = useState(null); // quale campo sta editando valore
   const nameRef = useRef(null);
 
-  // Scrive nello store solo se i campi locali differiscono da quelli salvati:
-  // al montaggio coincidono, quindi aprire il canvas non lo rende modificato.
-  useEffect(() => {
-    const saved = useCanvasStore.getState().getNodeById(id)?.data?.fields || [];
-    if (JSON.stringify(saved) !== JSON.stringify(fields)) updateNodeData(id, { fields });
-  }, [fields, id, updateNodeData]);
+  const editFields = useCallback((updater) => {
+    updateNodeData(id, (d) => ({ fields: updater(d.fields || []) }));
+  }, [id, updateNodeData]);
 
   // Calcola schema output (usa field_type se definito, altrimenti auto-detect)
   const outputSchema = useMemo(() => fields.map(f => ({
@@ -62,25 +61,21 @@ function StaticValuesNode({ id, data }) {
       toast.warning('Campo già esistente!');
       return;
     }
-    setFields(prev => [...prev, {
-      id: `field_${Date.now()}`,
-      name: newName.trim(),
-      value: newValue,
-      field_type: newType,
-    }]);
+    const field = { id: `field_${Date.now()}`, name: newName.trim(), value: newValue, field_type: newType };
+    editFields(prev => [...prev, field]);
     setNewName('');
     setNewValue('');
     setNewType('string');
     setShowAddRow(false);
-  }, [newName, newValue, newType, fields, toast]);
+  }, [newName, newValue, newType, fields, toast, editFields]);
 
   const handleRemove = useCallback((fieldId) => {
-    setFields(prev => prev.filter(f => f.id !== fieldId));
-  }, []);
+    editFields(prev => prev.filter(f => f.id !== fieldId));
+  }, [editFields]);
 
   const handleUpdate = useCallback((fieldId, updates) => {
-    setFields(prev => prev.map(f => f.id === fieldId ? { ...f, ...updates } : f));
-  }, []);
+    editFields(prev => prev.map(f => f.id === fieldId ? { ...f, ...updates } : f));
+  }, [editFields]);
 
   const insertVariable = useCallback((varName) => {
     if (activeFieldId) {
