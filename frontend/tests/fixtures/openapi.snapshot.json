@@ -17201,7 +17201,11 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Launch Enrichment Test Run Api Projects  Project Id  Test Run Enrich Post",
+                  "type": "object"
+                }
               }
             },
             "description": "Successful Response"
