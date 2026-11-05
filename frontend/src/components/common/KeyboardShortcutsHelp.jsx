@@ -7,6 +7,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import ModalWrapper from './ModalWrapper';
+import { isShortcutBlocked, isTypingTarget } from '../../utils/dialogStack';
 import './KeyboardShortcutsHelp.css';
 
 // Registro scorciatoie. `keys` = sequenza di tasti mostrati come <kbd>.
@@ -16,16 +17,17 @@ const SHORTCUTS = [
     items: [
       { keys: ['⌘/Ctrl', 'K'], label: 'Apri la palette comandi (vai a…)' },
       { keys: ['?'],            label: 'Mostra questa guida' },
-      { keys: ['Esc'],          label: 'Chiudi modale, palette o guida' },
+      { keys: ['Esc'],          label: 'Chiudi la finestra in primo piano (modale, palette o guida)' },
     ],
   },
   {
     group: 'Canvas (editor)',
     items: [
-      { keys: ['Canc'],            label: 'Elimina il nodo o il collegamento selezionato' },
+      { keys: ['Canc'],            label: 'Elimina il nodo o il collegamento selezionato (chiede conferma)' },
       { keys: ['⌘/Ctrl', 'Z'],     label: 'Annulla (undo) l’ultima modifica' },
       { keys: ['⌘/Ctrl', '⇧', 'Z'], label: 'Ripristina (redo)' },
       { keys: ['⌘/Ctrl', 'Y'],     label: 'Ripristina (redo) — alternativa' },
+      { keys: ['⌘/Ctrl', 'S'],     label: 'Salva il progetto' },
     ],
   },
 ];
@@ -37,10 +39,10 @@ export default function KeyboardShortcutsHelp() {
 
   useEffect(() => {
     const onKey = (e) => {
-      // `?` (Shift+/) quando non si sta scrivendo in un campo.
-      const t = e.target;
-      const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
-      if (!typing && (e.key === '?' || (e.key === '/' && e.shiftKey))) {
+      // `?` (Shift+/) quando non si sta scrivendo in un campo e nessuna
+      // finestra e' aperta (regola unica delle scorciatoie, utils/dialogStack).
+      if (isTypingTarget(e.target) || isShortcutBlocked(e)) return;
+      if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
         e.preventDefault();
         setOpen((v) => !v);
       }

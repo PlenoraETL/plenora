@@ -4,9 +4,16 @@
  * Homegrown (nessuna dipendenza): listener globale Cmd/Ctrl+K apre un overlay
  * con ricerca + lista comandi di navigazione, navigazione da tastiera
  * (↑/↓/Enter/Esc). Va montata DENTRO il Router (usa useNavigate).
+ *
+ * Fase 5, T4: e' una finestra dello stack unico (hooks/useDialog: Esc, Tab,
+ * focus e ritorno del focus); Ctrl+K non si apre sopra un'altra finestra
+ * (utils/dialogStack.isShortcutBlocked) e la navigazione passa dal guard
+ * unico delle modifiche non salvate (components/common/NavigationGuard).
  */
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import useDialog from '../../hooks/useDialog';
+import { isShortcutBlocked } from '../../utils/dialogStack';
 import './CommandPalette.css';
 
 // Destinazioni di navigazione comuni (tutte ProtectedRoute, visibili a ogni
@@ -32,12 +39,17 @@ export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
-  const inputRef = useRef(null);
+  const close = useCallback(() => setOpen(false), []);
+  const dialog = useDialog({ isOpen: open, onClose: close, labelledBy: false });
+  const dialogIdRef = useRef(dialog.id);
+  dialogIdRef.current = dialog.id;
 
-  // Toggle globale Cmd/Ctrl+K.
+  // Toggle globale Cmd/Ctrl+K: non sopra un'altra finestra (regola unica);
+  // con la palette in cima la richiude.
   useEffect(() => {
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        if (isShortcutBlocked(e, { ownDialogId: dialogIdRef.current })) return;
         e.preventDefault();
         setOpen((v) => !v);
       }
@@ -46,13 +58,11 @@ export default function CommandPalette() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Reset + focus all'apertura.
+  // Reset all'apertura (il focus va sul campo: autoFocus, rispettato dallo stack).
   useEffect(() => {
     if (open) {
       setQuery('');
       setActive(0);
-      // focus dopo il mount del campo
-      requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
 
@@ -72,7 +82,6 @@ export default function CommandPalette() {
   }, [navigate]);
 
   const onKeyDown = (e) => {
-    if (e.key === 'Escape') { setOpen(false); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, results.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
     else if (e.key === 'Enter') { e.preventDefault(); go(results[active]); }
@@ -81,18 +90,18 @@ export default function CommandPalette() {
   if (!open) return null;
 
   return (
-    <div className="cmdk__overlay" onClick={() => setOpen(false)}>
+    <div className="cmdk__overlay" {...dialog.overlayProps}>
       <div
+        ref={dialog.ref}
         className="cmdk__panel"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
+        {...dialog.dialogProps}
         aria-label="Palette comandi"
       >
         <div className="cmdk__search">
           <span className="cmdk__search-icon">⌘</span>
           <input
-            ref={inputRef}
+            autoFocus
+            aria-label="Cerca un comando"
             className="cmdk__input"
             placeholder="Vai a… (digita per filtrare)"
             value={query}

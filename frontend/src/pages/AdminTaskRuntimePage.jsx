@@ -49,8 +49,7 @@ function ResolveRunDialog({ request, busy, onCancel, onConfirm }) {
       title={cfg.title}
       icon="⚠️"
       size="sm"
-      closeOnOverlay={!busy}
-      closeOnEsc={!busy}
+      busy={busy}
       footer={(
         <>
           <ModalButton variant="secondary" onClick={onCancel} disabled={busy}>Annulla</ModalButton>

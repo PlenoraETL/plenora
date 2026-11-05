@@ -66,8 +66,7 @@ export default function ChangePasswordModal({ onClose }) {
       title="Cambia password"
       icon="🔑"
       size="sm"
-      closeOnOverlay={!loading && !success}
-      closeOnEsc={!loading && !success}
+      busy={loading || success}
       footer={
         <>
           <ModalButton variant="secondary" onClick={onClose} disabled={loading}>

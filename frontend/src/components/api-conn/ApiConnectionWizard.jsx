@@ -560,6 +560,8 @@ const getCustomHeadersObject = () => {
     },
     {
       label: 'Auth',
+      // R6.2: anche il salto dalla barra degli step e "Salva" passano di qui.
+      validate: () => validateAuthConfig(formData.auth),
       content: (
         <Step3Auth
           formData={formData}

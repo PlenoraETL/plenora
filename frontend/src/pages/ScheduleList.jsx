@@ -22,6 +22,7 @@ import { useConfirmModal } from '../hooks/useConfirmModal';
 import { toastApiError } from '../utils/toastApiError';
 import '../styles/ScheduleList.css';
 import { requestErrorMessage, backendMessage } from '../utils/errorMessages';
+import { goBack } from '../utils/navigation';
 const formatDate = (s) => {
   if (!s) return '—';
   return new Date(s).toLocaleDateString('it-IT', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
@@ -353,7 +354,7 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
       {/* MAIN */}
       <div className="sl__main">
         <header className="sl__topbar">
-          <button type="button" className="sl__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
+          <button type="button" className="sl__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
           <div className="sl__page-title">{projectFilter ? 'Scheduler (filtrato)' : 'Scheduler'}</div>
           <div className="sl__topbar-right">
             {projectFilter && <button type="button" className="sl__btn sl__btn--ghost" onClick={() => navigate('/schedules')}>Mostra tutti</button>}

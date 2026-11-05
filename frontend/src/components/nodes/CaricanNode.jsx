@@ -13,6 +13,7 @@
 import React, { useState, memo } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useConfirmOrDeny } from '../../context/ConfirmContext';
 import { useColumnsOf } from '../../hooks/useColumns';
 import ColumnStatusNote from '../common/ColumnStatusNote';
 import RestDestinationSection, { REST_METHODS } from './carica/RestDestinationSection';
@@ -52,6 +53,7 @@ const CaricanNode = memo(({ data, id }) => {
   const projectId = useCanvasStore(s => s.projectId) || '';
   const _updateNodeData = useCanvasStore(s => s.updateNodeData);
   const readOnly = useCanvasStore(s => s.isReadOnly);
+  const confirm = useConfirmOrDeny();
 
   // Colonne che escono dall'Output (ingresso di questo nodo), con gli id:
   // dalla fonte unica (Blocco A, regola 4), non salvate nel nodo.
@@ -66,7 +68,21 @@ const CaricanNode = memo(({ data, id }) => {
     _updateNodeData(id, updates);
   };
 
-  const handleDestinationTypeChange = (newDestType) => {
+  // R1.11b: passare a REST toglie connessione, schema, tabella e mapping del
+  // DB: con una configurazione presente si chiede (come il DataSourceNode).
+  const handleDestinationTypeChange = async (newDestType) => {
+    if (newDestType === destType) return;
+    const dbConfigured = Boolean(connectionId || schemaName || tableName
+      || columnMappings.length || matchColumns.length);
+    if (newDestType === 'rest' && dbConfigured) {
+      const ok = await confirm({
+        title: 'Passare a REST?',
+        message: 'La destinazione database configurata (connessione, schema, tabella e corrispondenza delle colonne) viene tolta. Puoi annullare con Ctrl+Z.',
+        confirmText: 'Passa a REST',
+        variant: 'warning',
+      });
+      if (!ok) return;
+    }
     handleMultiUpdate({
       dest_type: newDestType,
       ...(newDestType === 'rest'

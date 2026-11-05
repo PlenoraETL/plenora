@@ -344,8 +344,10 @@ function EstraiEditor() {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   }, []);
+  // Uscite: chiede il guard unico (NavigationGuard + useBlocker); il logout
+  // (che svuota la sessione prima di navigare) chiede con lo stesso dialog.
   const { confirmNavigation } = useUnsavedChangesGuard();
-  const handleBack              = () => { if (confirmNavigation()) navigate('/'); };
+  const handleBack              = () => navigate('/');
   const filteredTables          = Object.keys(catalog).filter(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
   const sourceNodes             = nodes.filter(n => n.type === 'tableNode' || n.type === 'source');
   const tablesInCanvas          = new Set(sourceNodes.map(n => n.data.table_name).filter(Boolean));
@@ -389,7 +391,7 @@ function EstraiEditor() {
     ) : null,
     menuItems: [
       // Nome, icona e descrizione di ogni voce dal glossario (regola 10).
-      menuEntry('connections', { onClick: () => { if (confirmNavigation()) navigate('/connections'); } }),
+      menuEntry('connections', { onClick: () => navigate('/connections') }),
       ...(isReadOnly ? [] : [
         { key: 'div0', divider: true },
         menuEntry('runtime_input', { onClick: handleAddProjectInputNode }),
@@ -560,7 +562,7 @@ function EstraiEditor() {
             <button
               type="button"
               className="estrai-sidebar__logout"
-              onClick={() => { if (confirmNavigation()) { logout(); navigate('/login'); } }}
+              onClick={async () => { if (await confirmNavigation()) { logout(); navigate('/login'); } }}
               title="Esci"
             >
               ⏻

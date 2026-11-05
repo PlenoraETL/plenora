@@ -7,12 +7,11 @@
  *
  * Usato in: ArricchisciEditor (come alternativa ai nodi progetto/file)
  */
-import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
-import { useConfirmOrNative } from '../../context/ConfirmContext';
+import { useConfirmOrDeny } from '../../context/ConfirmContext';
 import { listDataSources, listFiles, getFileSchema } from '../../api/datasources';
-import useDialogFocus from '../../hooks/useDialogFocus';
 import ModalWrapper from '../common/ModalWrapper';
 import './DataSourceNode.css';
 import NodeHandle from '../canvas/NodeHandle';
@@ -51,14 +50,12 @@ import { requestErrorMessage } from '../../utils/errorMessages';
 const DataSourceNode = memo(({ id, data }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const isReadOnly     = useCanvasStore(s => s.isReadOnly);
-  const confirm        = useConfirmOrNative();
+  const confirm        = useConfirmOrDeny();
 const [datasources, setDatasources]         = useState([]);
   const [loadingDs, setLoadingDs]             = useState(false);
   const [browserFiles, setBrowserFiles]       = useState([]);
   const [browserPath, setBrowserPath]         = useState('');
   const [showBrowser, setShowBrowser]         = useState(false);
-  const browserDialogRef = useRef(null);
-  useDialogFocus(showBrowser, () => setShowBrowser(false), browserDialogRef);
   const [browserLoading, setBrowserLoading]   = useState(false);
   const [browserError, setBrowserError]       = useState(null);
   const [loadingSchema, setLoadingSchema]     = useState(false);

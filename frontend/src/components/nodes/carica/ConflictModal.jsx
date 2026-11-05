@@ -1,6 +1,6 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
-import useDialogFocus from '../../../hooks/useDialogFocus';
+import useDialog from '../../../hooks/useDialog';
 
 function ConflictModal({
   isOpen,
@@ -11,25 +11,20 @@ function ConflictModal({
   schemaName,
   tableName,
 }) {
-  const dialogRef = useRef(null);
-  useDialogFocus(isOpen, onClose, dialogRef);
+  const dialog = useDialog({ isOpen, onClose });
 
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="carica-conflict-modal__overlay" onClick={onClose}>
+    <div className="carica-conflict-modal__overlay" {...dialog.overlayProps}>
       <div
-        ref={dialogRef}
+        ref={dialog.ref}
         className="carica-conflict-modal"
-        onClick={e => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="ccm-title"
-        tabIndex={-1}
+        {...dialog.dialogProps}
       >
         <div className="carica-conflict-modal__header">
-          <span id="ccm-title">🔍 Rapporto dei conflitti — {schemaName}.{tableName}</span>
-          <button className="carica-conflict-modal__close" onClick={onClose} aria-label="Chiudi">✕</button>
+          <span id={dialog.titleId}>🔍 Rapporto dei conflitti — {schemaName}.{tableName}</span>
+          <button type="button" className="carica-conflict-modal__close" {...dialog.closeButtonProps}>✕</button>
         </div>
         <div className="carica-conflict-modal__body">
           {error ? (
@@ -76,7 +71,7 @@ function ConflictModal({
           ) : null}
         </div>
         <div className="carica-conflict-modal__footer">
-          <button className="carica-node__btn carica-node__btn--secondary" onClick={onClose}>Chiudi</button>
+          <button type="button" className="carica-node__btn carica-node__btn--secondary" onClick={onClose}>Chiudi</button>
         </div>
       </div>
     </div>,

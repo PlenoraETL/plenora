@@ -6,6 +6,9 @@
  * L'hook accetta { enabled, onDeleteNode, onDeleteEdges, nodes, edges }.
  */
 import { useEffect, useCallback, useRef } from 'react';
+import { useOptionalConfirm } from '../context/ConfirmContext';
+import { isShortcutBlocked, isTypingTarget } from '../utils/dialogStack';
+import { confirmCanvasDeletion } from '../utils/canvasDeletion';
 
 /**
  * Hook per gestire gli eventi tastiera sul canvas React Flow
@@ -54,17 +57,18 @@ export function useCanvasKeyboard(options) {
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
+  // Cancellazione: conferma con il dialog del progetto (utils/canvasDeletion).
+  const confirm = useOptionalConfirm();
+  const confirmRef = useRef(confirm);
+  confirmRef.current = confirm;
+  const deletingRef = useRef(false);
+
   const handleKeyDown = useCallback((event) => {
-    // Ignora se siamo in un input/textarea
+    // Ignora se siamo in un campo, o sotto una finestra aperta (regola unica
+    // delle scorciatoie, utils/dialogStack: Ctrl+Z non annulla il canvas
+    // dietro una modale, Canc non cancella sotto una conferma).
     const target = event.target;
-    if (
-      target.tagName === 'INPUT' ||
-      target.tagName === 'TEXTAREA' ||
-      target.tagName === 'SELECT' ||
-      target.isContentEditable
-    ) {
-      return;
-    }
+    if (isTypingTarget(target) || isShortcutBlocked(event)) return;
 
     // Undo/Redo (#24). Cmd/Ctrl+Z = undo; +Shift o Cmd/Ctrl+Y = redo.
     if (event.metaKey || event.ctrlKey) {
@@ -88,24 +92,23 @@ export function useCanvasKeyboard(options) {
       || Boolean(target.closest?.('.react-flow'));
     if ((event.key === 'Delete' || event.key === 'Backspace') && onCanvas) {
       const selectedNodes = nodesRef.current.filter(n => n.selected);
-      const selectedEdges0 = edgesRef.current.filter(e => e.selected);
-      // Snapshot PRE-delete una sola volta se c'è qualcosa da eliminare, così
-      // la cancellazione (nodo o edge) è annullabile con Ctrl+Z.
-      if ((selectedNodes.length > 0 || selectedEdges0.length > 0) && onBeforeDelete) {
-        onBeforeDelete();
-      }
-      // Elimina nodi selezionati
-      if (selectedNodes.length > 0 && onDeleteNode) {
-        selectedNodes.forEach(node => {
-          onDeleteNode(node.id);
-        });
-      }
-
-      // Elimina edges selezionati
       const selectedEdges = edgesRef.current.filter(e => e.selected);
-      if (selectedEdges.length > 0 && onDeleteEdges) {
-        onDeleteEdges(selectedEdges.map(e => e.id));
-      }
+      if ((selectedNodes.length === 0 && selectedEdges.length === 0) || deletingRef.current) return;
+      event.preventDefault();
+      deletingRef.current = true;
+      confirmCanvasDeletion(confirmRef.current, { nodes: selectedNodes, edges: selectedEdges })
+        .then((ok) => {
+          if (!ok) return;
+          // Snapshot PRE-delete una sola volta, così la cancellazione (nodo o
+          // edge) è annullabile con Ctrl+Z.
+          onBeforeDelete?.();
+          if (onDeleteNode) selectedNodes.forEach(node => onDeleteNode(node.id));
+          // Gli archi selezionati non gia' tolti con i loro nodi.
+          const alive = new Set(edgesRef.current.map(e => e.id));
+          const ids = selectedEdges.map(e => e.id).filter(id => alive.has(id));
+          if (ids.length && onDeleteEdges) onDeleteEdges(ids);
+        })
+        .finally(() => { deletingRef.current = false; });
     }
   }, [onDeleteNode, onDeleteEdges, onUndo, onRedo, onBeforeDelete]);
 

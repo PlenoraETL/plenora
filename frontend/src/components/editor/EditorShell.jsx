@@ -81,6 +81,8 @@ import { useOptionalConfirm } from '../../context/ConfirmContext';
 import { CanvasGraphContext } from '../canvas/CanvasGraphContext';
 import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
 import { withFlowEdgeLabels } from '../../utils/glossary';
+import { isShortcutBlocked, isTypingTarget } from '../../utils/dialogStack';
+import { confirmCanvasDeletion } from '../../utils/canvasDeletion';
 
 const EMPTY_OBJ = {};
 
@@ -217,8 +219,9 @@ canvasConfig = EMPTY_OBJ,
       if (e.key !== '/' && e.key !== 'a' && e.key !== 'A') return;
       const t = e.target;
       const onCanvas = t === document.body || t === document.documentElement || Boolean(t?.closest?.('.react-flow'));
-      if (!onCanvas || t?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName || '')) return;
-      if (document.querySelector('[role="dialog"]')) return;
+      if (!onCanvas || isTypingTarget(t)) return;
+      // Regola unica delle scorciatoie: niente sotto una finestra aperta.
+      if (isShortcutBlocked(e)) return;
       e.preventDefault();
       openPaletteFromSelection();
     };
@@ -230,6 +233,13 @@ canvasConfig = EMPTY_OBJ,
   }, [setEditorActions, openPalette, palette, isReadOnly]);
 
   const confirm = useOptionalConfirm();
+  // Tasto destro su un arco = elimina, con la conferma di ogni cancellazione
+  // dal canvas (utils/canvasDeletion, R1.7); poi resta annullabile.
+  const handleEdgeContextMenu = useCallback(async (event, edge) => {
+    event.preventDefault();
+    if (!onEdgeContextMenu || useCanvasStore.getState().isReadOnly) return;
+    if (await confirmCanvasDeletion(confirm, { edges: [edge] })) onEdgeContextMenu(event, edge);
+  }, [onEdgeContextMenu, confirm]);
   // Copia di sicurezza delle modifiche non salvate (Fase 4, M7; Blocco A
   // regola 8: per utente, progetto e scheda).
   const draft = useLocalDraft(toolbar ? projectId : null, loading || Boolean(loadError) || !project, {
@@ -260,8 +270,9 @@ canvasConfig = EMPTY_OBJ,
   useEffect(() => {
     const onKey = (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's') return;
+      const blocked = isShortcutBlocked(e);
       e.preventDefault();
-      if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+      if (blocked) return;
       if (useCanvasStore.getState().isReadOnly || !onSaveRef.current) return;
       // Un campo che conferma all'uscita (titolo, valori) va confermato
       // prima: si esce dal campo e si salva al giro successivo.
@@ -416,7 +427,7 @@ canvasConfig = EMPTY_OBJ,
               onConnect={handleConnect}
               onNodeDragStart={takeSnapshot}
               onEdgeClick={onEdgeClick}
-              onEdgeContextMenu={onEdgeContextMenu}
+              onEdgeContextMenu={onEdgeContextMenu ? handleEdgeContextMenu : undefined}
               onInit={onInit}
               nodeTypes={compactNodeTypes(nodeTypes)}
               edgeTypes={edgeTypes}

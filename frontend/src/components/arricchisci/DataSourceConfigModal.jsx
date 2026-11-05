@@ -39,6 +39,24 @@ const FIELD_LABELS = {
   folder_id:    { label:'Folder ID (opt.)',       placeholder:'1ABC…xyz',                            type:'text' },
 };
 
+// Credenziali facoltative (le altre del tipo sono obbligatorie). Per SFTP
+// basta la password O la chiave privata.
+const OPTIONAL_CREDENTIALS = new Set(['port', 'domain', 'private_key', 'folder_id']);
+const ONE_OF_CREDENTIALS = { sftp: [['password', 'private_key']] };
+
+/** Messaggio della prima credenziale mancante, o null (R6.2). */
+export function missingCredentials(source, credentials = {}) {
+  if (!source) return 'Scegli il tipo di sorgente.';
+  const filled = (k) => String(credentials[k] ?? '').trim() !== '';
+  const groups = ONE_OF_CREDENTIALS[source.id] || [];
+  const inGroup = new Set(groups.flat());
+  const missing = source.fields.find(f => !OPTIONAL_CREDENTIALS.has(f) && !inGroup.has(f) && !filled(f));
+  if (missing) return `Compila «${(FIELD_LABELS[missing] || { label: missing }).label}».`;
+  const emptyGroup = groups.find(g => !g.some(filled));
+  if (emptyGroup) return `Compila «${emptyGroup.map(f => FIELD_LABELS[f]?.label || f).join('» o «')}».`;
+  return null;
+}
+
 const STEPS = ['Tipo', 'Credenziali', 'Percorso', 'Test'];
 const FILE_EXTS = ['.csv','.xlsx','.xls','.json','.xml','.txt'];
 
@@ -92,7 +110,8 @@ function DataSourceConfigModal({ onClose, onSave }) {
     },
     {
       label: STEPS[1],
-      canAdvance: Object.keys(formData.credentials).length > 0,
+      // R6.2: tutte le credenziali obbligatorie del tipo (non "una qualsiasi").
+      validate: () => missingCredentials(selectedSource, formData.credentials),
       content: selectedSource ? (
             <div className="dsm__section">
               <div className="dsm__cred-header">
@@ -120,6 +139,7 @@ function DataSourceConfigModal({ onClose, onSave }) {
     },
     {
       label: STEPS[2],
+      canAdvance: Boolean(formData.path_pattern && formData.path_pattern.trim()),
       content: (
             <div className="dsm__section">
               <div className="dsm__field-group">

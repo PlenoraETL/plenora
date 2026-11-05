@@ -116,7 +116,8 @@ describe('AuthContext contract', () => {
       expect(screen.getByTestId('token')).toHaveTextContent('');
       expect(screen.getByTestId('username')).toHaveTextContent('');
       expect(resetSessionMock).toHaveBeenCalledTimes(1);
-      expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
+      // R7.5: il rimando a /login ricorda la pagina da cui si e' usciti.
+      expect(navigateMock).toHaveBeenCalledWith('/login', expect.objectContaining({ replace: true, state: { from: expect.objectContaining({ pathname: expect.any(String) }) } }));
     });
 
     expect(sessionStorage.getItem('urby_token')).toBeNull();

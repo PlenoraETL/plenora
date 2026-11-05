@@ -372,8 +372,9 @@ const ArricchisciEditorContent = () => {
     if (newNode) addNodes(newNode);
   }, [screenToFlowPosition, addNodes]);
 
-  const { confirmNavigation } = useUnsavedChangesGuard();
-  const handleBack     = () => { if (confirmNavigation()) navigate('/'); };
+  // Uscite: chiede il guard unico (NavigationGuard + useBlocker).
+  useUnsavedChangesGuard();
+  const handleBack     = () => navigate('/');
   const hasResultNode  = nodes.some(n => n.type === 'result');
   const hasCaricanNode = nodes.some(n => n.type === 'carica');
   const hasCaricanArcGISNode = nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis');

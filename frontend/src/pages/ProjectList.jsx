@@ -30,6 +30,7 @@ import { can } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
 import { humanizeErrorMessage } from '../utils/errorMessages';
 import '../styles/ProjectList.css';
+import { projectEditorPath } from '../utils/projectRoutes';
 function ProjectList() {
   const toast    = useToast();
   const confirmModal = useConfirmModal();
@@ -194,11 +195,8 @@ function ProjectList() {
     setShowEsegSelector(true);
   };
 
-  const handleOpenProject = (p) => {
-    if (p.project_type === 'manipola')   navigate(`/editor/manipola/${p.id}`);
-    else if (p.project_type === 'arricchisci') navigate(`/arricchisci/${p.id}`);
-    else navigate(`/project/${p.id}`);
-  };
+  // Mappa unica tipo -> editor (utils/projectRoutes, R7.4).
+  const handleOpenProject = (p) => navigate(projectEditorPath(p));
 
   const openModalForType = (type) => {
     setNewProjectInitialType(type);

@@ -28,6 +28,7 @@ import { can, role } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
 import '../styles/ConnectionManager.css';
 import { requestErrorMessage } from '../utils/errorMessages';
+import { goBack } from '../utils/navigation';
 
 const ALL_TYPES = [
   { value: 'postgres', label: '🐘 PostgreSQL',   color: '#4B8BFF', colorRgb: '75,139,255',  defaultPort: 5432, defaultSchema: 'public', category: 'database' },
@@ -213,7 +214,7 @@ function ConnectionManager() {
 <AppSidebar counts={{ connections: allConnections.length }} />
 <div className="cm__main">
         <header className="cm__topbar">
-          <button type="button" className="cm__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
+          <button type="button" className="cm__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
           <div className="cm__page-title">Connessioni</div>
           <div className="cm__topbar-right">
             <ThemeToggle classPrefix="cm" />
@@ -313,8 +314,7 @@ function ConnectionManager() {
           title={editingConnection ? 'Modifica Connessione' : 'Nuova Connessione'}
           icon={editingConnection ? '✏️' : '＋'}
           size="md"
-          closeOnOverlay={!saving}
-          closeOnEsc={!saving}
+          busy={saving}
           footer={
             <>
               <ModalButton variant="secondary" onClick={handleCloseModal} disabled={saving}>Annulla</ModalButton>

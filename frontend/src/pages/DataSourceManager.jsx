@@ -18,9 +18,10 @@ import ThemeToggle from '../components/common/ThemeToggle';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { toastApiError } from '../utils/toastApiError';
 import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
-import useDialogFocus from '../hooks/useDialogFocus';
+import useDialog from '../hooks/useDialog';
 import { can } from '../utils/permissions';
 import '../styles/DataSourceManager.css';
+import { goBack } from '../utils/navigation';
 const DS_TYPES = [
   { value:'local',      label:'Cartella locale',   icon:'📂', color:'#94A3B8', rgb:'148,163,184', desc:'Disco locale o percorso UNC' },
   { value:'ftp',        label:'FTP',               icon:'📁', color:'#60A5FA', rgb:'96,165,250',  desc:'File Transfer Protocol (FTPS)' },
@@ -72,23 +73,24 @@ export default function DataSourceManager() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [sharingDatasource, setSharingDatasource] = useState(null);  // ds in sharing modal (solo super)
 
-  // Focus management per i 4 dialog inline (a11y batch 5).
-  const editDialogRef    = React.useRef(null);
-  const browserDialogRef = React.useRef(null);
-  const confirmDialogRef = React.useRef(null);
-  const shareDialogRef   = React.useRef(null);
-  useDialogFocus(
-    showModal,
-    () => { setShowModal(false); setEditing(null); setFormError(null); },
-    editDialogRef,
-  );
-  useDialogFocus(
-    !!browserDs,
-    () => { setBrowserDs(null); setBrowserFiles([]); setBrowserPath(''); },
-    browserDialogRef,
-  );
-  useDialogFocus(!!confirmDelete,    () => setConfirmDelete(null),    confirmDialogRef);
-  useDialogFocus(!!sharingDatasource, () => setSharingDatasource(null), shareDialogRef);
+  // I 4 dialog inline passano dallo stack unico delle finestre (hooks/useDialog):
+  // Esc, focus, overlay, scroll e "invio in corso".
+  const editDialog = useDialog({
+    isOpen: showModal,
+    onClose: () => { setShowModal(false); setEditing(null); setFormError(null); },
+    busy: saving,
+  });
+  const browserDialog = useDialog({
+    isOpen: !!browserDs,
+    onClose: () => { setBrowserDs(null); setBrowserFiles([]); setBrowserPath(''); },
+  });
+  const confirmDialog = useDialog({
+    isOpen: !!confirmDelete,
+    onClose: () => setConfirmDelete(null),
+    busy: Boolean(confirmDelete && deletingId === confirmDelete.id),
+    closeOnOverlay: false,
+  });
+  const shareDialog = useDialog({ isOpen: !!sharingDatasource, onClose: () => setSharingDatasource(null) });
 
   const canShare       = can.shareResources(user);
   const canCreateDs    = can.createDataSource(user);
@@ -174,7 +176,7 @@ export default function DataSourceManager() {
       {/* MAIN */}
       <div className="dsm__main">
         <header className="dsm__topbar">
-          <button type="button" className="dsm__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
+          <button type="button" className="dsm__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
           <div className="dsm__page-title">Data Source</div>
           <div className="dsm__topbar-right">
             <ThemeToggle classPrefix="dsm" />
@@ -269,18 +271,15 @@ export default function DataSourceManager() {
 
       {/* MODAL CREA/MODIFICA */}
       {showModal && (
-        <div className="dsm__overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
+        <div className="dsm__overlay" {...editDialog.overlayProps}>
           <div
-            ref={editDialogRef}
+            ref={editDialog.ref}
             className="dsm__modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dsm-edit-title"
-            tabIndex={-1}
+            {...editDialog.dialogProps}
           >
             <div className="dsm__modal-header">
-              <div className="dsm__modal-title" id="dsm-edit-title">{editing ? `Modifica — ${editing.name}` : 'Nuovo Data Source'}</div>
-              <button type="button" className="dsm__modal-close" onClick={closeModal} aria-label="Chiudi">✕</button>
+              <div className="dsm__modal-title" id={editDialog.titleId}>{editing ? `Modifica — ${editing.name}` : 'Nuovo Data Source'}</div>
+              <button type="button" className="dsm__modal-close" {...editDialog.closeButtonProps}>✕</button>
             </div>
             <div className="dsm__modal-body">
 
@@ -409,23 +408,20 @@ export default function DataSourceManager() {
 
       {/* MODAL BROWSER */}
       {browserDs && (
-        <div className="dsm__overlay" onClick={e => e.target === e.currentTarget && closeBrowser()}>
+        <div className="dsm__overlay" {...browserDialog.overlayProps}>
           <div
-            ref={browserDialogRef}
+            ref={browserDialog.ref}
             className="dsm__modal dsm__modal--browser"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dsm-browser-title"
-            tabIndex={-1}
+            {...browserDialog.dialogProps}
           >
             <div className="dsm__modal-header">
-              <div className="dsm__modal-title" id="dsm-browser-title">
+              <div className="dsm__modal-title" id={browserDialog.titleId}>
                 📂 {browserDs.name}
                 {browserPath && <span className="dsm__browser-path"> / {browserPath}</span>}
               </div>
               <div className="dsm__inline-row">
                 <button type="button" className="dsm__btn dsm__btn--ghost dsm__btn--sm" onClick={() => browseFiles(browserDs.id, browserPath)} disabled={browserLoading} aria-label="Aggiorna elenco file">🔄</button>
-                <button type="button" className="dsm__modal-close" onClick={closeBrowser} aria-label="Chiudi">✕</button>
+                <button type="button" className="dsm__modal-close" {...browserDialog.closeButtonProps}>✕</button>
               </div>
             </div>
             <div className="dsm__modal-body">
@@ -481,16 +477,13 @@ export default function DataSourceManager() {
 
       {/* CONFIRM DELETE */}
       {confirmDelete && (
-        <div className="dsm__overlay">
+        <div className="dsm__overlay" {...confirmDialog.overlayProps}>
           <div
-            ref={confirmDialogRef}
+            ref={confirmDialog.ref}
             className="dsm__confirm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dsm-confirm-title"
-            tabIndex={-1}
+            {...confirmDialog.dialogProps}
           >
-            <div className="dsm__confirm-title" id="dsm-confirm-title">Elimina Data Source</div>
+            <div className="dsm__confirm-title" id={confirmDialog.titleId}>Elimina Data Source</div>
             <div className="dsm__confirm-text">Sei sicuro di voler eliminare <strong>{confirmDelete.name}</strong>?</div>
             <div className="dsm__confirm-warn">⚠️ Verranno eliminati anche i dati di scan state associati.</div>
             <div className="dsm__confirm-actions">
@@ -513,19 +506,15 @@ export default function DataSourceManager() {
 
       {/* SHARE MODAL (solo superadmin) */}
       {sharingDatasource && (
-        <div className="dsm__overlay" onClick={() => setSharingDatasource(null)}>
+        <div className="dsm__overlay" {...shareDialog.overlayProps}>
           <div
-            ref={shareDialogRef}
+            ref={shareDialog.ref}
             className="dsm__modal dsm__type-info"
-            onClick={e => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dsm-share-title"
-            tabIndex={-1}
+            {...shareDialog.dialogProps}
           >
             <div className="dsm__modal-header">
-              <div className="dsm__modal-title" id="dsm-share-title">🔗 Condividi Data Source — {sharingDatasource.name}</div>
-              <button type="button" className="dsm__modal-close" onClick={() => setSharingDatasource(null)} aria-label="Chiudi">✕</button>
+              <div className="dsm__modal-title" id={shareDialog.titleId}>🔗 Condividi Data Source — {sharingDatasource.name}</div>
+              <button type="button" className="dsm__modal-close" {...shareDialog.closeButtonProps}>✕</button>
             </div>
             <div className="dsm__modal-body">
               <AllowedGroupsSelector

@@ -528,8 +528,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
       onStepChange={(i) => goToStep(i + 1)}
       steps={steps}
       footer={navFooter}
-      closeOnEsc={!saving}
-      closeOnOverlay={!saving}
+      busy={saving}
     />
   );
 }

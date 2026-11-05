@@ -15,7 +15,7 @@ import {
 } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import { useTaskPolling } from '../../hooks/useTaskPolling';
-import useDialogFocus from '../../hooks/useDialogFocus';
+import useDialog from '../../hooks/useDialog';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { toastApiError } from '../../utils/toastApiError';
 import { humanizeError } from '../../utils/errorMessages';
@@ -60,7 +60,11 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
 
   // Polling task: il hook gestisce single-flight + cleanup unmount.
   const { startPolling } = useTaskPolling({ interval: 1500 });
-  useDialogFocus(true, onClose, dialogRef, { closeOnEsc: !executing });
+  // Stack unico delle finestre: durante l'esecuzione niente Esc, overlay o ×.
+  // Con il manifest la finestra e' quella di ExecutableDynamicRunForm.
+  const dialog = useDialog({
+    isOpen: !(!loading && eseguibile?.manifest), onClose, ref: dialogRef, busy: executing,
+  });
 
   // Load eseguibile details
   useEffect(() => {
@@ -219,23 +223,20 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
   }
 
   return (
-    <div className="esw-overlay" onClick={(e) => e.target === e.currentTarget && !executing && onClose()}>
+    <div className="esw-overlay" {...dialog.overlayProps}>
       <div
         className="esw-modal"
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="esw-title"
-        tabIndex={-1}
+        {...dialog.dialogProps}
       >
         <div className="esw-header">
           <div>
-            <h2 className="esw-title" id="esw-title">▶ {loading ? 'Caricamento...' : eseguibile?.name}</h2>
+            <h2 className="esw-title" id={dialog.titleId}>▶ {loading ? 'Caricamento...' : eseguibile?.name}</h2>
             {eseguibile?.description && (
               <p className="esw-subtitle">{eseguibile.description}</p>
             )}
           </div>
-          <button type="button" className="esw-close" onClick={onClose} disabled={executing} aria-label="Chiudi">×</button>
+          <button type="button" className="esw-close" {...dialog.closeButtonProps}>×</button>
         </div>
 
         {/* Stepper */}

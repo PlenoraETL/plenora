@@ -53,6 +53,8 @@ const NOT_USER_DATA = {
   'utils/localDrafts.js': 'id della scheda e flag di pulizia: le copie locali sono per utente e restano apposta',
   'utils/errorReporting.js': 'client di Sentry registrato all\'avvio: uguale per ogni utente',
   'utils/session.js': 'il registro stesso',
+  'utils/dialogStack.js': 'stack delle finestre aperte (Fase 5, T4): si svuota smontandole, nessun dato',
+  'hooks/useUnsavedChangesGuard.js': 'contatore degli editor montati (Fase 5, T4): si azzera smontandoli, nessun dato',
 };
 
 describe('fine sessione: registro unico (resetSession)', () => {

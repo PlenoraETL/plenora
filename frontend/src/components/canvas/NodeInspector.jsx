@@ -26,7 +26,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
-import { useConfirmOrNative } from '../../context/ConfirmContext';
+import { useConfirmOrDeny } from '../../context/ConfirmContext';
 import { derivedTitle, nodeDescriptor, nodeIcon, nodeTitle, titlePatch, userTitle } from './nodeDescriptors';
 import BranchSection from './BranchSection';
 import './NodeInspector.css';
@@ -107,7 +107,7 @@ function EdgeInspector({ edgeId, edgeInspector, prefix }) {
   const nodes = useCanvasStore(s => s.nodes);
   const onEdgesChange = useCanvasStore(s => s.onEdgesChange);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
-  const confirm = useConfirmOrNative();
+  const confirm = useConfirmOrDeny();
   const byId = new Map(nodes.map(n => [n.id, n]));
   if (!edge || !edgeInspector.matches(edge, byId)) return null;
   const entry = edgeInspector.entry(edge, byId);
@@ -183,7 +183,7 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const canvasView = useCanvasStore(s => s.canvasView);
   const setCanvasView = useCanvasStore(s => s.setCanvasView);
-  const confirm = useConfirmOrNative();
+  const confirm = useConfirmOrDeny();
 
   if (!node) {
     return edgeInspector && edgeId ? <EdgeInspector edgeId={edgeId} edgeInspector={edgeInspector} prefix={prefix} /> : null;

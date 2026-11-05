@@ -6,7 +6,7 @@
  * Manipola, Arricchisci; ricavate dai file degli editor, come
  * compactCanvas.contract) NodeInspector monta il modulo completo e:
  *  - c'e' esattamente un controllo di chiusura e un solo "Elimina passo",
- *    che chiede conferma (window.confirm senza provider) e poi elimina;
+ *    che chiede conferma (dialog del progetto, ConfirmProvider) e poi elimina;
  *  - nel corpo nessun elemento con classe che termina in "__header" e
  *    nessun altro pulsante che elimini il nodo (× o "Elimina nodo");
  *  - il modulo non riceve `selected` forzato;
@@ -21,6 +21,8 @@ import path from 'node:path';
 import React from 'react';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ConfirmProvider } from '../../src/context/ConfirmContext';
+import { answerConfirm } from '../helpers/confirmDialog';
 
 const { canvasStateRef } = vi.hoisted(() => ({ canvasStateRef: { current: { nodes: [], edges: [] } } }));
 
@@ -122,7 +124,7 @@ function mount({ mode, type, component }, { readOnly = false } = {}) {
   const Full = COMPONENTS[component];
   // Il modulo e' avvolto per leggere le props che riceve dal guscio.
   const Spy = (props) => { seenProps = props; return <Full {...props} />; };
-  return render(<NodeInspector fullNodeTypes={{ [type]: Spy }} prefix={mode} />);
+  return render(<ConfirmProvider><NodeInspector fullNodeTypes={{ [type]: Spy }} prefix={mode} /></ConfirmProvider>);
 }
 
 const bodyOf = (container) => container.querySelector('.node-inspector__body');
@@ -130,7 +132,6 @@ const bodyOf = (container) => container.querySelector('.node-inspector__body');
 beforeEach(() => {
   deleteSpy.mockReset();
   seenProps = null;
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 afterEach(() => {
   cleanup();
@@ -173,11 +174,11 @@ describe('Blocco A, regola 6: il guscio possiede intestazione, chiusura ed elimi
 
   it.each(CASES.map(c => [`${c.mode} · ${c.type}`, c]))('%s: "Elimina passo" chiede conferma e poi elimina', async (_, c) => {
     mount(c);
-    window.confirm.mockReturnValueOnce(false);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Elimina passo' })); });
-    expect(window.confirm).toHaveBeenCalledTimes(1);
+    await answerConfirm(false);
     expect(deleteSpy).not.toHaveBeenCalled();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Elimina passo' })); });
+    await answerConfirm(true, { confirmText: 'Elimina' });
     expect(deleteSpy).toHaveBeenCalledWith('n1');
   });
 

@@ -418,8 +418,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
           title="Nuova connessione ArcGIS"
           icon="🌐"
           size="md"
-          closeOnOverlay={!newConnTesting}
-          closeOnEsc={!newConnTesting}
+          busy={newConnTesting}
           footer={
             <>
               <ModalButton variant="secondary" onClick={() => setShowNewConn(false)} disabled={newConnTesting}>

@@ -18,41 +18,46 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 
+/**
+ * R6.9: le richieste sono in CODA. Una seconda `confirm()` mentre la prima
+ * e' aperta non la sovrascrive: si mostra dopo, e ogni promise ha la sua
+ * risposta (prima la promise rimaneva pending per sempre).
+ */
 export function useConfirmModal() {
-  const [isOpen,  setIsOpen]  = useState(false);
-  const [config,  setConfig]  = useState({});
-  const resolveRef = useRef(null);
+  const queueRef = useRef([]); // [{ cfg, resolve }]
+  const [head, setHead] = useState(null);
 
-  const confirm = useCallback((cfg = {}) => {
-    setConfig(cfg);
-    setIsOpen(true);
-    return new Promise(resolve => { resolveRef.current = resolve; });
+  const showHead = useCallback(() => {
+    setHead(queueRef.current[0] || null);
   }, []);
 
-  const handleConfirm = useCallback(() => {
-    setIsOpen(false);
-    resolveRef.current?.(true);
-    resolveRef.current = null;
-  }, []);
+  const confirm = useCallback((cfg = {}) => new Promise((resolve) => {
+    queueRef.current.push({ cfg, resolve });
+    if (queueRef.current.length === 1) showHead();
+  }), [showHead]);
 
-  const handleCancel = useCallback(() => {
-    setIsOpen(false);
-    resolveRef.current?.(false);
-    resolveRef.current = null;
-  }, []);
+  const settle = useCallback((value) => {
+    const current = queueRef.current.shift();
+    current?.resolve(value);
+    showHead();
+  }, [showHead]);
 
-  // Pre-fix (P2 frontend-hooks): se il componente che ospita
-  // ConfirmDialog veniva smontato mentre il modal era aperto (es.
-  // navigazione client-side via React Router), `resolveRef.current`
-  // non veniva mai chiamato → la Promise restava pending. Caller in
-  // useCallback che facevano `await confirmModal.confirm(...)` poi
-  // setState mantenevano la closure viva. Post-fix: cleanup
-  // su unmount risolve con `false` (semantica "annullato") e azzera
-  // il ref per consentire al GC di liberare la closure caller.
+  const handleConfirm = useCallback(() => settle(true), [settle]);
+  const handleCancel = useCallback(() => settle(false), [settle]);
+
+  // Smontato con richieste aperte (navigazione): tutte annullate, nessuna
+  // promise resta pending (P2 frontend-hooks).
   useEffect(() => () => {
-    resolveRef.current?.(false);
-    resolveRef.current = null;
+    const pending = queueRef.current;
+    queueRef.current = [];
+    pending.forEach(p => p.resolve(false));
   }, []);
 
-  return { isOpen, config, confirm, handleConfirm, handleCancel };
+  return {
+    isOpen: Boolean(head),
+    config: head?.cfg || {},
+    confirm,
+    handleConfirm,
+    handleCancel,
+  };
 }

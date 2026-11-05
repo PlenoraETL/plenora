@@ -511,12 +511,10 @@ describe('ApiConnectionManager', () => {
 
     await userEvent.click(screen.getByText('Auth'));
     await userEvent.click(screen.getByLabelText('Bearer'));
+    // R6.2: il salto dalla barra degli step non supera lo step Auth non valido.
     await userEvent.click(screen.getByText('Test'));
-    await userEvent.click(screen.getByRole('button', { name: /salva api/i }));
-
-    await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith('Token richiesto per bearer');
-    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Token richiesto per bearer');
+    expect(screen.queryByRole('button', { name: /salva api/i })).toBeNull();
     expect(httpMock.post).not.toHaveBeenCalled();
   });
 

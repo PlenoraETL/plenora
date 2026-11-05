@@ -39,6 +39,7 @@ import FileCard from './FileManager/FileCard';
 import UploadModal from './FileManager/UploadModal';
 import LayerModal from './FileManager/LayerModal';
 import PreviewModal from './FileManager/PreviewModal';
+import { goBack } from '../utils/navigation';
 
 const FILTER_TABS = [
   { key: 'all',     label: 'Tutti' },
@@ -376,7 +377,7 @@ const resetUploadModal = () => {
 <AppSidebar counts={{ files: files.length }} />
 <div className="fm__main">
         <header className="fm__topbar">
-          <button type="button" className="fm__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
+          <button type="button" className="fm__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
           <div className="fm__page-title">File Manager</div>
           <div className="fm__topbar-right">
             <ThemeToggle classPrefix="fm" />

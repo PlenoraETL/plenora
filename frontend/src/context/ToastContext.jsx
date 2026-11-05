@@ -27,7 +27,7 @@ import ToastContainer from '../components/common/ToastContainer';
 let _nextId = 0;
 const ToastContext = createContext(null);
 /**
- * ToastProvider — da inserire una volta sola in App.jsx, dentro BrowserRouter.
+ * ToastProvider — da inserire una volta sola in App.jsx, dentro il router (RootLayout).
  * Renderizza <ToastContainer> internamente: le pagine non devono più farlo.
  */
 export function ToastProvider({ children }) {

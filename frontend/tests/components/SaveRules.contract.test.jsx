@@ -179,7 +179,7 @@ describe('every exit from the editor asks first', () => {
   it('each logout() in the editors goes through the unsaved-changes question', () => {
     const editorFiles = ['components/panels/EditorSidebar.jsx', 'pages/EstraiEditor.jsx', 'pages/ManipolaEditor.jsx', 'pages/ArricchisciEditor.jsx'];
     const offenders = editorFiles.flatMap(f => code(path.join(SRC, f)).split(/\r?\n/)
-      .filter(l => /\blogout\(\)/.test(l) && !/confirm(LeaveWithUnsaved|Navigation)\(\)/.test(l))
+      .filter(l => /\blogout\(\)/.test(l) && !/confirm(Leave\(confirm\)|Navigation\(\))/.test(l))
       .map(l => `${f}: ${l.trim()}`));
     expect(offenders).toEqual([]);
   });

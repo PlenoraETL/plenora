@@ -30,7 +30,11 @@
  *
  * Mount: il <ConfirmDialog /> e' montato UNA SOLA VOLTA per Provider
  * (non per ogni nodo). Tutti i nodi figli condividono lo stesso modal
- * tramite la promise-based API di useConfirmModal.
+ * tramite la promise-based API di useConfirmModal (richieste in coda).
+ *
+ * Fase 5, T4 (R6.10): un ConfirmProvider avvolge TUTTA l'app (App.jsx),
+ * quindi ogni componente ha il dialog del progetto; niente piu' ripiego su
+ * window.confirm (test: tests/shared/noNativeDialogs.contract.test.js).
  */
 
 import React, { createContext, useContext } from 'react';
@@ -74,17 +78,14 @@ export function useOptionalConfirm() {
   return useContext(ConfirmContext);
 }
 
-// Senza provider: window.confirm (assente o rifiutato = non confermato).
-const nativeConfirm = (config = {}) => Promise.resolve(
-  typeof window !== 'undefined' && typeof window.confirm === 'function'
-    && window.confirm(config.message || config.title || 'Confermi?'),
-);
+// Senza provider (componente montato da solo, es. nei test) nessuna azione
+// che chiede conferma procede: fail-closed, mai window.confirm (R6.10).
+const denyWithoutProvider = () => Promise.resolve(false);
 
 /**
- * Conferma sempre disponibile: il ConfirmDialog del provider o, senza
- * provider (test, componenti montati da soli), window.confirm.
+ * Conferma del dialog del progetto; senza provider rifiuta.
  * @returns {(config: object) => Promise<boolean>}
  */
-export function useConfirmOrNative() {
-  return useContext(ConfirmContext) || nativeConfirm;
+export function useConfirmOrDeny() {
+  return useContext(ConfirmContext) || denyWithoutProvider;
 }

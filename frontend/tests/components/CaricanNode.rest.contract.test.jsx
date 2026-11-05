@@ -1,8 +1,10 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import CaricanNode from '../../src/components/nodes/CaricanNode';
+import { ConfirmProvider } from '../../src/context/ConfirmContext';
+import { answerConfirm } from '../helpers/confirmDialog';
 import useColumnStore from '../../src/store/useColumnStore';
 
 const {
@@ -65,10 +67,12 @@ function renderNode(data = {}) {
   });
 
   return render(
-    <CaricanNode
-      id="carica-1"
-      data={{ ...data }}
-    />,
+    <ConfirmProvider>
+      <CaricanNode
+        id="carica-1"
+        data={{ ...data }}
+      />
+    </ConfirmProvider>,
   );
 }
 
@@ -129,15 +133,21 @@ describe('CaricanNode REST destination controls', () => {
     await screen.findByText('Connettore API: Gestionale');
   });
 
-  it('switches an existing DB node to REST without keeping DB destination fields active', () => {
+  it('switches an existing DB node to REST without keeping DB destination fields active', async () => {
     renderNode({
       connection_id: '',
       schema_name: 'public',
       table_name: 'cities',
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'REST' }));
+    // R1.11b: con una destinazione DB configurata il cambio chiede conferma.
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'REST' })); });
+    expect(screen.getByRole('dialog').textContent).toMatch(/destinazione database configurata/);
+    await answerConfirm(false);
+    expect(updateNodeDataMock).not.toHaveBeenCalledWith('carica-1', expect.objectContaining({ dest_type: 'rest' }));
 
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'REST' })); });
+    await answerConfirm(true, { confirmText: 'Passa a REST' });
     expect(updateNodeDataMock).toHaveBeenCalledWith('carica-1', expect.objectContaining({
       dest_type: 'rest',
       connection_id: '',

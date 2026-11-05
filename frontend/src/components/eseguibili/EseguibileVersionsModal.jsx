@@ -66,8 +66,7 @@ function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
       title={`Versioni - ${eseguibile.name}`}
       icon="V"
       size="md"
-      closeOnOverlay={!busy}
-      closeOnEsc={!busy}
+      busy={busy}
       footer={(
         <>
           <ModalButton variant="secondary" onClick={onClose} disabled={busy}>Chiudi</ModalButton>

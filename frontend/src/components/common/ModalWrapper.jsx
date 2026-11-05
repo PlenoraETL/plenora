@@ -2,12 +2,10 @@
  * ModalWrapper - Componente base per tutte le modali
  * 
  * Fornisce struttura comune:
- * - Overlay con click per chiudere
- * - Container con stopPropagation
  * - Header opzionale con titolo e close button
  * - Footer opzionale con pulsanti azione
- * - Gestione ESC per chiudere
- * - Focus trap (accessibilità)
+ * - Esc, overlay, focus, scroll, id del titolo e `busy`: dallo stack unico
+ *   delle finestre (hooks/useDialog, utils/dialogStack)
  * 
  * @example
  * <ModalWrapper
@@ -26,9 +24,9 @@
  * </ModalWrapper>
  */
 
-import React, { useEffect, useCallback, useRef } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
-import useDialogFocus from '../../hooks/useDialogFocus';
+import useDialog from '../../hooks/useDialog';
 import './ModalWrapper.css';
 
 function ModalWrapper({
@@ -45,33 +43,16 @@ function ModalWrapper({
   showCloseButton = true,
   closeOnOverlay = true,
   closeOnEsc = true,
+  // Invio in corso (Fase 5, T4): niente Esc, niente overlay, × disabilitata.
+  busy = false,
+  // Chiede prima di chiudere (Esc, overlay, ×): false = resta aperta.
+  beforeClose = null,
   loading = false,
   loadingText = 'Caricamento...'
 }) {
-  const modalRef = useRef(null);
-
-  // Focus management (initial focus, Tab trap, Escape close, restore)
-  // gestito dall'hook condiviso. Sostituisce la doppia gestione ESC +
-  // initial focus che era inline qui.
-  useDialogFocus(isOpen, onClose, modalRef, { closeOnEsc });
-
-  // Blocca scroll body quando modale aperta
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
-
-  const handleOverlayClick = useCallback((e) => {
-    if (closeOnOverlay && e.target === e.currentTarget) {
-      onClose();
-    }
-  }, [closeOnOverlay, onClose]);
+  // Stack unico delle finestre (hooks/useDialog): Esc, focus, overlay,
+  // scroll, id del titolo.
+  const dialog = useDialog({ isOpen, onClose, closeOnEsc, closeOnOverlay, busy, beforeClose, labelledBy: Boolean(title) });
 
   if (!isOpen) return null;
 
@@ -81,30 +62,26 @@ function ModalWrapper({
   return createPortal(
     <div 
       className={`modal-wrapper__overlay ${variantClass}`} 
-      onClick={handleOverlayClick}
+      {...dialog.overlayProps}
     >
       <div 
-        ref={modalRef}
+        ref={dialog.ref}
         className={`modal-wrapper ${sizeClass} ${className}`}
-        onClick={(e) => e.stopPropagation()}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={title ? 'modal-title' : undefined}
+        {...dialog.dialogProps}
       >
         {/* Header */}
         {(title || showCloseButton) && (
           <div className="modal-wrapper__header">
             <div className="modal-wrapper__title-group">
               {icon && <span className="modal-wrapper__icon">{icon}</span>}
-              {title && <h3 id="modal-title" className="modal-wrapper__title">{title}</h3>}
+              {title && <h3 id={dialog.titleId} className="modal-wrapper__title">{title}</h3>}
               {subtitle && <span className="modal-wrapper__subtitle">{subtitle}</span>}
             </div>
             {showCloseButton && (
-              <button type="button" 
-                className="modal-wrapper__close" 
-                onClick={onClose}
-                aria-label="Chiudi"
+              <button
+                type="button"
+                className="modal-wrapper__close"
+                {...dialog.closeButtonProps}
               >
                 ×
               </button>

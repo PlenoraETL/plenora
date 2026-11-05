@@ -7,17 +7,20 @@
  * Route: /login
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { role } from '../utils/permissions';
 import { useTheme } from '../hooks/useTheme';
 import PlenoraLogo from '../components/common/PlenoraLogo';
 import { isMfaRequired, loginErrorMessage } from '../utils/loginErrors';
+import { returnPathAfterLogin } from '../utils/navigation';
 import '../styles/LoginPage.css';
 
 // Helper: dove mandare l'utente dopo il login in base al ruolo.
 // Esecutore → /run (kiosk), tutti gli altri → / (dashboard normale).
 const landingPathFor = (user) => (role.isEsecutore(user) ? '/run' : '/');
+// R7.5: dopo il login (anche dopo un 401) si torna alla pagina richiesta.
+const afterLoginPath = (user, from) => returnPathAfterLogin(from, landingPathFor(user), { esecutore: role.isEsecutore(user) });
 function drawHexTransition(canvas) {
   if (!canvas) return;
 
@@ -88,6 +91,7 @@ function drawHexTransition(canvas) {
 export default function LoginPage() {
   const { login, token, user } = useAuth();
   const navigate         = useNavigate();
+  const from             = useLocation().state?.from || null;
   const canvasRef        = useRef(null);
 
   const { theme, toggleTheme } = useTheme();
@@ -121,7 +125,7 @@ export default function LoginPage() {
   }, [token]);
 
   // Già autenticato → landing in base al ruolo (esecutore va su /run, altri su /)
-  if (token) return <Navigate to={landingPathFor(user)} replace />;
+  if (token) return <Navigate to={afterLoginPath(user, from)} replace />;
 
   async function handleSubmit(e) {
     if (e?.preventDefault) e.preventDefault();
@@ -132,7 +136,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const userData = await login(username, password, mfaCode.trim() || null);
-      navigate(landingPathFor(userData), { replace: true });
+      navigate(afterLoginPath(userData, from), { replace: true });
     } catch (err) {
       // Testo dal codice del backend (utils/loginErrors): il 401 del login
       // non passa dal percorso di uscita (api/http).

@@ -15,6 +15,7 @@ import { hasUnsavedChanges } from '../../store/saveState';
 import PlenoraLogo from '../common/PlenoraLogo';
 import { ColumnSyncBadge } from '../common/ColumnStatusNote';
 import { term } from '../../utils/glossary';
+import { isShortcutBlocked } from '../../utils/dialogStack';
 import './EditorToolbar.css';
 
 const MODE_LABEL = { estrai: 'ESTRAI', manipola: 'MANIPOLA', arricchisci: 'ARRICCHISCI' };
@@ -57,7 +58,8 @@ function OverflowMenu({ items }) {
     if (!open) return undefined;
     listRef.current?.querySelector('[role="menuitem"]:not(:disabled)')?.focus();
     const outside = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === 'Escape') { e.preventDefault(); setOpen(false); buttonRef.current?.focus(); } };
+    // Esc chiude il menu, non una finestra aperta sopra (regola unica, utils/dialogStack).
+    const esc = (e) => { if (e.key === 'Escape' && !isShortcutBlocked(e)) { e.preventDefault(); setOpen(false); buttonRef.current?.focus(); } };
     document.addEventListener('mousedown', outside);
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', esc); };

@@ -67,8 +67,7 @@ function NewProjectModal({
       title={`Nuovo progetto ${meta.label}`}
       icon={meta.icon}
       size="md"
-      closeOnOverlay={!creating}
-      closeOnEsc={!creating}
+      busy={creating}
       footer={
         <>
           <ModalButton variant="secondary" onClick={onClose} disabled={creating}>Annulla</ModalButton>

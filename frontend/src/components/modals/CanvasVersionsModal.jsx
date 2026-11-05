@@ -6,9 +6,18 @@
  * sovrascrive il canvas lato server (passa per update_canvas → reset
  * canvas_validated + cascata), condizionato alla versione della scheda, e
  * ricarica l'editor per mostrarlo.
+ *
+ * Ripristino (Fase 5, T4, N8): chiede sempre con il dialog del progetto e,
+ * con modifiche non salvate, dice che verranno sostituite. Dalla conferma al
+ * ricaricamento la finestra resta aperta e occupata (`restoring`): nessun
+ * secondo ripristino, nessuna chiusura, nessuna scorciatoia sul canvas
+ * dietro (stack unico delle finestre), quindi nessuna modifica persa nella
+ * pausa prima del reload.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import ConfirmDialog from '../common/ConfirmDialog';
+import { useConfirmModal } from '../../hooks/useConfirmModal';
 import { useToast } from '../../hooks/useToast';
 import useCanvasStore from '../../store/useCanvasStore';
 import { hasUnsavedChanges } from '../../store/saveState';
@@ -34,7 +43,9 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [label, setLabel] = useState('');
-  const [confirmId, setConfirmId] = useState(null); // versione in attesa di conferma ripristino
+  const [restoring, setRestoring] = useState(null); // id della versione in ripristino
+  const restoringRef = useRef(false);
+  const confirmModal = useConfirmModal();
   // Una versione fotografa il canvas SALVATO (Fase 4, M7): con modifiche
   // non salvate si chiede di salvare prima, per non perderle di vista.
   const unsaved = useCanvasStore(hasUnsavedChanges);
@@ -53,7 +64,7 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
     }
   }, [projectId, toast]);
 
-  useEffect(() => { if (isOpen) { setConfirmId(null); load(); } }, [isOpen, load]);
+  useEffect(() => { if (isOpen) load(); }, [isOpen, load]);
 
   const handleSave = async () => {
     if (unsaved || isReadOnly) return;
@@ -70,9 +81,20 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
     }
   };
 
-  const handleRestore = async (versionId) => {
-    if (isReadOnly) return;
-    if (confirmId !== versionId) { setConfirmId(versionId); return; }
+  const handleRestore = async (version) => {
+    if (isReadOnly || restoringRef.current) return;
+    restoringRef.current = true;
+    const name = version.label || fmtDate(version.created_at) || 'la versione scelta';
+    const ok = await confirmModal.confirm({
+      title: 'Ripristinare questa versione?',
+      message: unsaved
+        ? `Ci sono modifiche non salvate: il ripristino di «${name}» le scarta (non restano nemmeno come copia di sicurezza). Per tenerle, annulla e salva prima.`
+        : `Il canvas salvato viene sostituito da «${name}» e l'editor si ricarica.`,
+      confirmText: unsaved ? 'Ripristina e scarta le modifiche' : 'Ripristina',
+      variant: unsaved ? 'danger' : 'warning',
+    });
+    if (!ok) { restoringRef.current = false; return; }
+    setRestoring(version.id);
     try {
       // Scrittura condizionata alla versione della scheda (Blocco A, regola
       // 8): se il server e' andato oltre, niente ripristino e l'avviso
@@ -80,12 +102,14 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
       // QUESTA scheda non vale piu' (le altre restano e vengono avvisate) e
       // l'editor si ricarica dal percorso normale di apertura
       // (utils/serverActions.restoreVersion).
-      await restoreVersion(versionId);
-      toast.success('Versione ripristinata, ricarico l’editor…');
+      const response = await restoreVersion(version.id);
+      // Riuscito: si resta occupati fino al ricaricamento della pagina.
+      if (response) { toast.success('Versione ripristinata, ricarico l’editor…'); return; }
     } catch (err) {
       toastApiError(toast, err, 'Errore ripristino versione');
-      setConfirmId(null);
     }
+    restoringRef.current = false;
+    setRestoring(null);
   };
 
   if (!isOpen) return null;
@@ -97,7 +121,8 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
       title="Versioni del canvas"
       icon="🕘"
       size="md"
-      footer={<ModalButton variant="secondary" onClick={onClose}>Chiudi</ModalButton>}
+      busy={Boolean(restoring)}
+      footer={<ModalButton variant="secondary" onClick={onClose} disabled={Boolean(restoring)}>Chiudi</ModalButton>}
     >
       <div className="cv-versions">
         {unsaved && !isReadOnly && (
@@ -140,17 +165,18 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
                 </div>
                 {!isReadOnly && <button
                   type="button"
-                  className={`cv-versions__restore${confirmId === v.id ? ' cv-versions__restore--confirm' : ''}`}
-                  onClick={() => handleRestore(v.id)}
-                  onBlur={() => confirmId === v.id && setConfirmId(null)}
+                  className={`cv-versions__restore${restoring === v.id ? ' cv-versions__restore--confirm' : ''}`}
+                  onClick={() => handleRestore(v)}
+                  disabled={Boolean(restoring)}
                 >
-                  {confirmId === v.id ? 'Confermi? (sovrascrive)' : '↩ Ripristina'}
+                  {restoring === v.id ? 'Ripristino…' : '↩ Ripristina'}
                 </button>}
               </li>
             ))}
           </ul>
         )}
       </div>
+      <ConfirmDialog {...confirmModal} />
     </ModalWrapper>
   );
 }

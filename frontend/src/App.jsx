@@ -9,14 +9,22 @@
  * Route protette:   /, /project/:id, /editor/manipola/:id,
  *                   /arricchisci/:id, /connections, /external-connectors,
  *                   /files, /schedules, /logs, /datasources
+ *
+ * Fase 5, T4: data router (createBrowserRouter) per il guard di navigazione
+ * unico (NavigationGuard: useBlocker su link, Indietro del browser e Ctrl+K);
+ * un ConfirmProvider per tutta l'app (dialog del progetto, mai
+ * window.confirm); il rimando a /login ricorda la pagina richiesta
+ * (`state.from`); pagina 404 invece del ritorno muto alla home.
  */
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppErrorBoundary, RouteErrorBoundary } from './components/common/ErrorBoundary';
 import { ToastProvider } from './context/ToastContext';
+import { ConfirmProvider } from './context/ConfirmContext';
 import CommandPalette from './components/common/CommandPalette';
 import KeyboardShortcutsHelp from './components/common/KeyboardShortcutsHelp';
+import NavigationGuard from './components/common/NavigationGuard';
 import { role, can } from './utils/permissions';
 
 // Lazy loading: ogni pagina viene caricata solo quando la route viene visitata.
@@ -44,6 +52,14 @@ const EseguibiliList       = React.lazy(() => import('./pages/EseguibiliList'));
 const EsecutoreHome        = React.lazy(() => import('./pages/EsecutoreHome'));
 const TicketsList          = React.lazy(() => import('./pages/TicketsList'));
 const TicketDetail         = React.lazy(() => import('./pages/TicketDetail'));
+const OpenProjectPage      = React.lazy(() => import('./pages/OpenProjectPage'));
+const NotFoundPage         = React.lazy(() => import('./pages/NotFoundPage'));
+
+/** Rimando a /login che ricorda dove si voleva andare (R7.5). */
+function ToLogin() {
+  const location = useLocation();
+  return <Navigate to="/login" replace state={{ from: location }} />;
+}
 
 /**
  * ProtectedRoute — guard di base: richiede token JWT valido.
@@ -55,7 +71,7 @@ const TicketDetail         = React.lazy(() => import('./pages/TicketDetail'));
 function ProtectedRoute({ children }) {
   const { token, user } = useAuth();
   const location = useLocation();
-  if (!token) return <Navigate to="/login" replace />;
+  if (!token) return <ToLogin />;
   // Esecutore può vedere SOLO /run. Tutto il resto → redirect.
   if (role.isEsecutore(user) && !location.pathname.startsWith('/run')) {
     return <Navigate to="/run" replace />;
@@ -70,7 +86,7 @@ function ProtectedRoute({ children }) {
  */
 function EsecutoreRoute({ children }) {
   const { token, user } = useAuth();
-  if (!token) return <Navigate to="/login" replace />;
+  if (!token) return <ToLogin />;
   if (!role.isEsecutore(user)) return <Navigate to="/" replace />;
   return children;
 }
@@ -83,7 +99,7 @@ function EsecutoreRoute({ children }) {
 function AdminRoute({ children }) {
   const { token, user } = useAuth();
   const location = useLocation();
-  if (!token) return <Navigate to="/login" replace />;
+  if (!token) return <ToLogin />;
   if (role.isEsecutore(user) && !location.pathname.startsWith('/run')) {
     return <Navigate to="/run" replace />;
   }
@@ -98,7 +114,7 @@ function AdminRoute({ children }) {
 function SuperadminRoute({ children }) {
   const { token, user } = useAuth();
   const location = useLocation();
-  if (!token) return <Navigate to="/login" replace />;
+  if (!token) return <ToLogin />;
   if (role.isEsecutore(user) && !location.pathname.startsWith('/run')) {
     return <Navigate to="/run" replace />;
   }
@@ -120,6 +136,7 @@ function AppRoutes() {
 
       <Route path="/" element={<ProtectedRoute><ProjectList /></ProtectedRoute>} />
       <Route path="/project/:projectId" element={<ProtectedRoute><EstraiEditor /></ProtectedRoute>} />
+      <Route path="/open/:projectId" element={<ProtectedRoute><OpenProjectPage /></ProtectedRoute>} />
       <Route path="/connections" element={<ProtectedRoute><ConnectionManager /></ProtectedRoute>} />
       {/* Param `:projectId` (coerente con /project/:projectId e
           /arricchisci/:projectId). Pre-fix era `:id`, costringendo
@@ -145,27 +162,46 @@ function AppRoutes() {
           perché ProtectedRoute redirigerebbe in loop su /run */}
       <Route path="/run" element={<EsecutoreRoute><EsecutoreHome /></EsecutoreRoute>} />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<ProtectedRoute><NotFoundPage /></ProtectedRoute>} />
     </Routes>
     </React.Suspense>
     </RouteErrorBoundary>
   );
 }
 
-function App() {
+/** Layout radice dentro il data router: provider, guard, palette, pagine. */
+function RootLayout() {
   return (
     <AppErrorBoundary>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <AuthProvider>
-          <ToastProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <ConfirmProvider>
             <div className="app">
+              <NavigationGuard />
               <CommandPalette />
               <KeyboardShortcutsHelp />
               <AppRoutes />
             </div>
-          </ToastProvider>
-        </AuthProvider>
-      </BrowserRouter>
+          </ConfirmProvider>
+        </ToastProvider>
+      </AuthProvider>
+    </AppErrorBoundary>
+  );
+}
+
+const ROUTER_FUTURE = { v7_relativeSplatPath: true };
+
+export function createAppRouter() {
+  return createBrowserRouter([{ path: '*', element: <RootLayout /> }], { future: ROUTER_FUTURE });
+}
+
+function App() {
+  // Un router per montaggio dell'app (non a livello di modulo: importare
+  // App nei test non crea una history).
+  const [router] = useState(createAppRouter);
+  return (
+    <AppErrorBoundary>
+      <RouterProvider router={router} future={{ v7_startTransition: true }} />
     </AppErrorBoundary>
   );
 }

@@ -9,6 +9,16 @@
  *
  * Complementare a ModalWrapper (che resta la base dei modal NON-stepper).
  *
+ * Regole (Fase 5, T4):
+ *   - R6.2 si va avanti (Avanti o barra degli step) solo attraverso step
+ *     validi; Completa controlla TUTTI gli step (`stepError`);
+ *   - R6.3 un solo invio: `onComplete` puo' restituire una promise; finche'
+ *     non finisce, Completa, Indietro, la barra, ×, Esc e overlay sono spenti;
+ *   - R6.4/N7 chiudere (Esc, overlay, ×, Annulla) con dati inseriti chiede
+ *     conferma; l'overlay chiude solo con un clic iniziato e finito fuori
+ *     (stack unico delle finestre, hooks/useDialog);
+ *   - tornando indietro lo stato resta (e' del chiamante, non si azzera).
+ *
  * @example
  * <Wizard
  *   isOpen={open} onClose={onClose} title="Nuovo Connettore"
@@ -21,10 +31,44 @@
  *   onComplete={handleSave} completeLabel="💾 Salva" completeDisabled={!name}
  * />
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import useDialogFocus from '../../hooks/useDialogFocus';
+import useDialog from '../../hooks/useDialog';
+import { useConfirmModal } from '../../hooks/useConfirmModal';
+import ConfirmDialog from './ConfirmDialog';
 import './Wizard.css';
+
+export const STEP_INCOMPLETE = 'Completa questo passo prima di proseguire.';
+
+/**
+ * Errore di uno step (null = valido): il messaggio di `validate()` o
+ * `canAdvance === false`. Regola UNICA per Avanti, salto dalla barra e Completa.
+ */
+export function stepError(s) {
+  if (!s) return null;
+  if (typeof s.validate === 'function') {
+    const err = s.validate();
+    if (err) return err;
+  }
+  if (s.canAdvance === false) return STEP_INCOMPLETE;
+  return null;
+}
+
+/** Primo step non valido prima di `upTo` (escluso), o -1. */
+export function firstInvalidStep(steps, upTo) {
+  for (let k = 0; k < Math.min(upTo, steps.length); k += 1) {
+    if (stepError(steps[k])) return k;
+  }
+  return -1;
+}
+
+export const WIZARD_DISCARD_DIALOG = {
+  title: 'Chiudere senza salvare?',
+  message: 'I dati inseriti in questa procedura andranno persi.',
+  confirmText: 'Chiudi senza salvare',
+  cancelText: 'Continua a compilare',
+  variant: 'warning',
+};
 
 export default function Wizard({
   isOpen,
@@ -48,111 +92,156 @@ export default function Wizard({
   footer,
   closeOnEsc = true,
   closeOnOverlay = true,
+  // Invio in corso deciso dal chiamante (es. upload): come `completing`.
+  busy = false,
+  // Dati inseriti: chiudere chiede conferma. Default: l'utente ha scritto o
+  // scelto qualcosa nella finestra, oppure e' oltre il primo step.
+  dirty,
   className = '',
 }) {
-  const dialogRef = useRef(null);
-  const [stepError, setStepError] = useState(null);
-  useDialogFocus(isOpen, onClose, dialogRef, { closeOnEsc });
+  const [stepErrorText, setStepErrorText] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const [touched, setTouched] = useState(false);
+  const discard = useConfirmModal();
 
-  // Reset dell'errore di step ad ogni cambio step (gestito centralmente qui,
-  // non piu' duplicato dentro ogni step content).
-  useEffect(() => { setStepError(null); }, [step]);
+  useEffect(() => { if (isOpen) setTouched(false); }, [isOpen]);
+  // Errore di step: si azzera a ogni cambio step (gestito centralmente qui,
+  // non piu' duplicato dentro ogni step content), salvo quello dello step
+  // non valido su cui il wizard si e' appena fermato.
+  const pendingErrorRef = useRef(null);
+  useEffect(() => {
+    setStepErrorText(pendingErrorRef.current);
+    pendingErrorRef.current = null;
+  }, [step]);
+
+  const isBusy = Boolean(busy || completing || submitting);
+  const hasInput = dirty !== undefined ? Boolean(dirty) : (touched || step > 0);
+  const confirmDiscard = discard.confirm;
+  const beforeClose = useCallback(
+    () => (hasInput ? confirmDiscard(WIZARD_DISCARD_DIALOG) : true),
+    [hasInput, confirmDiscard],
+  );
+  const dialog = useDialog({ isOpen, onClose, closeOnEsc, closeOnOverlay, busy: isBusy, beforeClose });
 
   if (!isOpen) return null;
 
   const current = steps[step] || {};
   const isLast = step >= steps.length - 1;
 
-  const goTo = (i) => { setStepError(null); onStepChange(i); };
-  const goBack = () => (step === 0 ? onClose() : goTo(step - 1));
-  const goNext = () => {
-    // validate(): ritorna una stringa d'errore per BLOCCARE l'avanzamento,
-    // oppure null/undefined per procedere.
-    if (typeof current.validate === 'function') {
-      const err = current.validate();
-      if (err) { setStepError(err); return; }
-    }
-    goTo(step + 1);
+  const show = (i, err = null) => {
+    if (i === step) { setStepErrorText(err); return; }
+    pendingErrorRef.current = err;
+    onStepChange(i);
   };
+  // R6.2: avanti (anche dalla barra degli step) solo attraverso step validi;
+  // il primo non valido si apre con il suo errore.
+  const goTo = (i) => {
+    if (isBusy || i === step) return;
+    if (i < step) { show(i); return; }
+    const bad = firstInvalidStep(steps, i);
+    if (bad !== -1) { show(bad, stepError(steps[bad])); return; }
+    show(i);
+  };
+  const goBack = () => (step === 0 ? dialog.requestClose('button') : goTo(step - 1));
+  const goNext = () => goTo(step + 1);
+  // R6.3: un solo invio alla volta; Completa solo con TUTTI gli step validi.
+  const complete = async () => {
+    if (submittingRef.current || isBusy || completeDisabled) return;
+    const bad = firstInvalidStep(steps, steps.length);
+    if (bad !== -1) { show(bad, stepError(steps[bad])); return; }
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      await onComplete?.();
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
+  // Qualsiasi modifica dentro la finestra la rende "con dati inseriti".
+  const markTouched = () => { if (!touched) setTouched(true); };
 
   return createPortal(
-    <div className={`wizard__overlay ${className}`} onClick={closeOnOverlay ? onClose : undefined}>
-      <div
-        ref={dialogRef}
-        className="wizard__dialog"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="wizard-title"
-        tabIndex={-1}
-      >
-        <div className="wizard__header">
-          <div className="wizard__header-left">
-            {icon && <span className="wizard__header-icon">{icon}</span>}
-            <div className="wizard__title-group">
-              <div className="wizard__title" id="wizard-title">{title}</div>
-              {subtitle && <div className="wizard__subtitle">{subtitle}</div>}
+    <>
+      <div className={`wizard__overlay ${className}`} {...dialog.overlayProps}>
+        <div
+          ref={dialog.ref}
+          className="wizard__dialog"
+          {...dialog.dialogProps}
+          onChangeCapture={markTouched}
+          onInputCapture={markTouched}
+        >
+          <div className="wizard__header">
+            <div className="wizard__header-left">
+              {icon && <span className="wizard__header-icon">{icon}</span>}
+              <div className="wizard__title-group">
+                <div className="wizard__title" id={dialog.titleId}>{title}</div>
+                {subtitle && <div className="wizard__subtitle">{subtitle}</div>}
+              </div>
             </div>
+            <button type="button" className="wizard__close" {...dialog.closeButtonProps}>✕</button>
           </div>
-          <button type="button" className="wizard__close" onClick={onClose} aria-label="Chiudi">✕</button>
-        </div>
 
-        <div className="wizard__steps">
-          {steps.map((s, i) => (
-            <button
-              type="button"
-              key={i}
-              className={`wizard__step${step === i ? ' wizard__step--active' : ''}${step > i ? ' wizard__step--done' : ''}`}
-              onClick={() => (allowJump ? goTo(i) : undefined)}
-              disabled={!allowJump}
-            >
-              <span className="wizard__step-num">{step > i ? '✓' : i + 1}</span>
-              <span className="wizard__step-label">{s.label}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="wizard__body">
-          {stepError && (
-            <div className="wizard__step-error" role="alert">
-              <span>⚠️</span><span>{stepError}</span>
-            </div>
-          )}
-          {current.content}
-        </div>
-
-        {footer !== null && (
-        <div className="wizard__footer">
-          {footer !== undefined ? footer : (
-            <>
-              <button type="button" className="wizard__btn wizard__btn--ghost" onClick={goBack}>
-                {step === 0 ? cancelLabel : '← Indietro'}
+          <div className="wizard__steps">
+            {steps.map((s, i) => (
+              <button
+                type="button"
+                key={i}
+                className={`wizard__step${step === i ? ' wizard__step--active' : ''}${step > i ? ' wizard__step--done' : ''}`}
+                onClick={() => (allowJump ? goTo(i) : undefined)}
+                disabled={!allowJump || isBusy}
+                aria-current={step === i ? 'step' : undefined}
+              >
+                <span className="wizard__step-num">{step > i ? '✓' : i + 1}</span>
+                <span className="wizard__step-label">{s.label}</span>
               </button>
-              {isLast ? (
-                <button
-                  type="button"
-                  className="wizard__btn wizard__btn--ok"
-                  onClick={onComplete}
-                  disabled={completeDisabled || completing}
-                >
-                  {completing ? 'Attendere…' : completeLabel}
+            ))}
+          </div>
+
+          <div className="wizard__body">
+            {stepErrorText && (
+              <div className="wizard__step-error" role="alert">
+                <span>⚠️</span><span>{stepErrorText}</span>
+              </div>
+            )}
+            {current.content}
+          </div>
+
+          {footer !== null && (
+          <div className="wizard__footer">
+            {footer !== undefined ? footer : (
+              <>
+                <button type="button" className="wizard__btn wizard__btn--ghost" onClick={goBack} disabled={isBusy}>
+                  {step === 0 ? cancelLabel : '← Indietro'}
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  className="wizard__btn wizard__btn--primary"
-                  onClick={goNext}
-                  disabled={current.canAdvance === false}
-                >
-                  Avanti →
-                </button>
-              )}
-            </>
+                {isLast ? (
+                  <button
+                    type="button"
+                    className="wizard__btn wizard__btn--ok"
+                    onClick={complete}
+                    disabled={completeDisabled || isBusy}
+                  >
+                    {isBusy ? 'Attendere…' : completeLabel}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="wizard__btn wizard__btn--primary"
+                    onClick={goNext}
+                    disabled={current.canAdvance === false || isBusy}
+                  >
+                    Avanti →
+                  </button>
+                )}
+              </>
+            )}
+          </div>
           )}
         </div>
-        )}
       </div>
-    </div>,
+      <ConfirmDialog {...discard} />
+    </>,
     document.body
   );
 }

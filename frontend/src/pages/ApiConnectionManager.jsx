@@ -11,7 +11,7 @@
  *  - sharing modal (superadmin);
  *  - dispatch del wizard via prop `seed` (new / edit / template).
  */
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../hooks/useToast';
 import { toastApiError } from '../utils/toastApiError';
 import { useNavigate } from 'react-router-dom';
@@ -25,7 +25,7 @@ import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
-import useDialogFocus from '../hooks/useDialogFocus';
+import useDialog from '../hooks/useDialog';
 import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
@@ -40,6 +40,7 @@ import { can } from '../utils/permissions';
 import '../styles/ApiConnectionManager.css';
 import '../components/panels/ResponseConfigBuilder.css';
 import { requestErrorMessage } from '../utils/errorMessages';
+import { goBack } from '../utils/navigation';
 const CATEGORIES = [
   { id:'all',        label:'Tutte',       icon:'🔗' },
   { id:'geocoding',  label:'Geocoding',   icon:'🌍' },
@@ -118,14 +119,11 @@ function ApiConnectionManager() {
   const [sharingApi, setSharingApi] = useState(null);
   const canCreateApi    = can.createApiConnection(user);
 
-  // Focus management per i 3 dialog inline residui in page (a11y).
-  // Il wizard gestisce internamente il proprio focus.
-  const quickTestInputDialogRef  = useRef(null);
-  const quickTestResultDialogRef = useRef(null);
-  const shareDialogRef           = useRef(null);
-  useDialogFocus(!!quickTestInput,  () => setQuickTestInput(null),  quickTestInputDialogRef);
-  useDialogFocus(!!quickTestResult, () => setQuickTestResult(null), quickTestResultDialogRef);
-  useDialogFocus(!!sharingApi,      () => setSharingApi(null),      shareDialogRef);
+  // I 3 dialog inline passano dallo stack unico delle finestre (hooks/useDialog).
+  // Il wizard usa lo stesso stack attraverso <Wizard>.
+  const quickTestInputDialog  = useDialog({ isOpen: !!quickTestInput,  onClose: () => setQuickTestInput(null) });
+  const quickTestResultDialog = useDialog({ isOpen: !!quickTestResult, onClose: () => setQuickTestResult(null) });
+  const shareDialog           = useDialog({ isOpen: !!sharingApi,      onClose: () => setSharingApi(null) });
 
   useEffect(() => { loadApiConnections(); }, []);
   useEffect(() => {
@@ -236,7 +234,7 @@ const openWizardForNew = () => {
       {/* MAIN */}
       <div className="acm__main">
         <header className="acm__topbar">
-          <button type="button" className="acm__back-btn" onClick={()=>navigate(-1)}>← Indietro</button>
+          <button type="button" className="acm__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
           <div className="acm__page-title">Connettori Esterni</div>
           <div className="acm__topbar-right">
             <ThemeToggle classPrefix="acm" />
@@ -376,19 +374,15 @@ const openWizardForNew = () => {
         onSaved={handleWizardSaved}
       />
 {quickTestInput && (
-        <div className="acm__overlay" onClick={()=>setQuickTestInput(null)}>
+        <div className="acm__overlay" {...quickTestInputDialog.overlayProps}>
           <div
-            ref={quickTestInputDialogRef}
+            ref={quickTestInputDialog.ref}
             className="acm__modal acm__modal--sm"
-            onClick={e=>e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="acm-quicktest-input-title"
-            tabIndex={-1}
+            {...quickTestInputDialog.dialogProps}
           >
             <div className="acm__wizard-header">
-              <div className="acm__wizard-title" id="acm-quicktest-input-title">🚀 Test — {quickTestInput.api.name}</div>
-              <button type="button" className="acm__modal-close" onClick={()=>setQuickTestInput(null)} aria-label="Chiudi">✕</button>
+              <div className="acm__wizard-title" id={quickTestInputDialog.titleId}>🚀 Test — {quickTestInput.api.name}</div>
+              <button type="button" className="acm__modal-close" {...quickTestInputDialog.closeButtonProps}>✕</button>
             </div>
             <div className="acm__wizard-body">
               <div className="acm__qt-help">Inserisci valori di test per i parametri mappabili:</div>
@@ -407,19 +401,15 @@ const openWizardForNew = () => {
         </div>
       )}
 {quickTestResult && (
-        <div className="acm__overlay" onClick={()=>setQuickTestResult(null)}>
+        <div className="acm__overlay" {...quickTestResultDialog.overlayProps}>
           <div
-            ref={quickTestResultDialogRef}
+            ref={quickTestResultDialog.ref}
             className="acm__modal"
-            onClick={e=>e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="acm-quicktest-result-title"
-            tabIndex={-1}
+            {...quickTestResultDialog.dialogProps}
           >
             <div className="acm__wizard-header">
-              <div className="acm__wizard-title" id="acm-quicktest-result-title">{quickTestResult.result.success?'✅':'❌'} Test — {quickTestResult.api.name}</div>
-              <button type="button" className="acm__modal-close" onClick={()=>setQuickTestResult(null)} aria-label="Chiudi">✕</button>
+              <div className="acm__wizard-title" id={quickTestResultDialog.titleId}>{quickTestResult.result.success?'✅':'❌'} Test — {quickTestResult.api.name}</div>
+              <button type="button" className="acm__modal-close" {...quickTestResultDialog.closeButtonProps}>✕</button>
             </div>
             <div className="acm__wizard-body">
               {quickTestResult.result.success ? (<>
@@ -454,19 +444,15 @@ const openWizardForNew = () => {
         </div>
       )}
 {sharingApi && (
-        <div className="acm__overlay" onClick={()=>setSharingApi(null)}>
+        <div className="acm__overlay" {...shareDialog.overlayProps}>
           <div
-            ref={shareDialogRef}
+            ref={shareDialog.ref}
             className="acm__wizard acm__share-modal"
-            onClick={e=>e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="acm-share-title"
-            tabIndex={-1}
+            {...shareDialog.dialogProps}
           >
             <div className="acm__wizard-header">
-              <div className="acm__wizard-title" id="acm-share-title">🔗 Condividi Connettore — {sharingApi.name}</div>
-              <button type="button" className="acm__modal-close" onClick={()=>setSharingApi(null)} aria-label="Chiudi">✕</button>
+              <div className="acm__wizard-title" id={shareDialog.titleId}>🔗 Condividi Connettore — {sharingApi.name}</div>
+              <button type="button" className="acm__modal-close" {...shareDialog.closeButtonProps}>✕</button>
             </div>
             <div className="acm__wizard-body acm__share-modal-body">
               <AllowedGroupsSelector

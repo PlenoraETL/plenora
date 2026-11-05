@@ -17,6 +17,8 @@ import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import { can } from '../utils/permissions';
 import '../styles/LogViewer.css';
+import { goBack } from '../utils/navigation';
+import { openProjectPath } from '../utils/projectRoutes';
 
 const LEVELS   = ['INFO', 'WARNING', 'ERROR'];
 const MODULES  = ['estrai', 'manipola', 'arricchisci', 'carica', 'orchestrator', 'scheduler', 'connections', 'projects', 'files', 'services', 'db', 'utils', 'workers'];
@@ -150,7 +152,7 @@ function LogViewer() {
       {/* MAIN */}
       <div className="lv__main">
         <header className="lv__topbar">
-          <button type="button" className="lv__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
+          <button type="button" className="lv__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
           <div className="lv__page-title">{canSeeTechnicalLog ? 'Log di Sistema' : 'Cronologia Esecuzioni'}</div>
           <div className="lv__topbar-right">
             {/* Live: aggiorna sia i log tecnici che le run, utile su entrambi i tab */}
@@ -319,7 +321,7 @@ function LogViewer() {
                         <td className="lv__td lv__td--project">
                           {entry.project_id ? (
                             <span className="lv__project-link"
-                              onClick={e => { e.stopPropagation(); navigate(`/project/${entry.project_id}`); }}
+                              onClick={e => { e.stopPropagation(); navigate(openProjectPath(entry.project_id)); }}
                               title={entry.project_id}>
                               {truncateProjectId(entry.project_id)}
                             </span>

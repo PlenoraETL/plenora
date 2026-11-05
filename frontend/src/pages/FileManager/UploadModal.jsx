@@ -146,7 +146,7 @@ function UploadModal({
 
   const footer = (
     <>
-      <button type="button" className="fm__modal-btn fm__modal-btn--cancel" onClick={onClose}>Annulla</button>
+      <button type="button" className="fm__modal-btn fm__modal-btn--cancel" onClick={onClose} disabled={uploading}>Annulla</button>
       {step === 1 && (
         <button type="button" className="fm__modal-btn fm__modal-btn--submit" onClick={onNext} disabled={loadingColumns}>
           {loadingColumns ? 'Lettura...' : 'Avanti →'}
@@ -154,7 +154,7 @@ function UploadModal({
       )}
       {step === 2 && !isMultiLayerFile && (
         <>
-          <button type="button" className="fm__modal-btn fm__modal-btn--ghost" onClick={onPrev}>← Indietro</button>
+          <button type="button" className="fm__modal-btn fm__modal-btn--ghost" onClick={onPrev} disabled={uploading}>← Indietro</button>
           <button type="button" className="fm__modal-btn fm__modal-btn--submit" onClick={onUpload} disabled={uploading}>
             {uploading ? '⏳ Caricamento...' : '↑ Carica'}
           </button>
@@ -162,7 +162,7 @@ function UploadModal({
       )}
       {step === 2 && isMultiLayerFile && (
         <>
-          <button type="button" className="fm__modal-btn fm__modal-btn--ghost" onClick={onPrev}>← Indietro</button>
+          <button type="button" className="fm__modal-btn fm__modal-btn--ghost" onClick={onPrev} disabled={uploading}>← Indietro</button>
           <button type="button" className="fm__modal-btn fm__modal-btn--submit" onClick={onMultiUpload} disabled={uploading}>
             {uploading ? '⏳ Caricamento...' : '↑ Carica layer selezionati'}
           </button>
@@ -180,6 +180,7 @@ function UploadModal({
       step={Math.max(0, step - 1)}
       onStepChange={() => {}}
       allowJump={false}
+      busy={uploading}
       steps={steps}
       footer={footer}
     />

@@ -77,7 +77,9 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     authBus.onUnauthorized = () => {
       logout({ expired: true });
-      navigate('/login', { replace: true });
+      // R7.5: dopo il nuovo login si torna qui.
+      const { pathname, search, hash } = window.location;
+      navigate('/login', { replace: true, state: { from: { pathname, search, hash } } });
     };
     return () => { authBus.onUnauthorized = null; };
   }, [logout, navigate]);

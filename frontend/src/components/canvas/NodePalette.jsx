@@ -8,6 +8,7 @@
  * e' stata aperta la palette, gia' collegato.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import useDialog from '../../hooks/useDialog';
 import { displayIcon } from './nodeDescriptors';
 import './NodePalette.css';
 
@@ -58,11 +59,12 @@ export function filterPalette(groups, query) {
 export default function NodePalette({ open, context, groups = [], onPick, onClose }) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
-  const inputRef = useRef(null);
   const listRef = useRef(null);
+  // Finestra dello stack unico (N14): Esc, Tab, focus e ritorno del focus.
+  const dialog = useDialog({ isOpen: open, onClose, labelledBy: false });
 
   useEffect(() => {
-    if (open) { setQuery(''); setActive(0); setTimeout(() => inputRef.current?.focus(), 0); }
+    if (open) { setQuery(''); setActive(0); }
   }, [open]);
 
   const filtered = useMemo(() => filterPalette(groups, query), [groups, query]);
@@ -80,17 +82,16 @@ export default function NodePalette({ open, context, groups = [], onPick, onClos
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(flat.length - 1, a + 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(0, a - 1)); }
     else if (e.key === 'Enter') { e.preventDefault(); pick(flat[active]); }
-    else if (e.key === 'Escape') { e.preventDefault(); onClose(); }
   };
 
   let index = -1;
   return (
-    <div className="npal__scrim" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="npal" role="dialog" aria-modal="true" aria-label="Aggiungi un passo">
+    <div className="npal__scrim" {...dialog.overlayProps}>
+      <div ref={dialog.ref} className="npal" {...dialog.dialogProps} aria-label="Aggiungi un passo">
         <div className="npal__search">
           <span aria-hidden="true">🔎</span>
           <input
-            ref={inputRef}
+            autoFocus
             value={query}
             onChange={e => { setQuery(e.target.value); setActive(0); }}
             onKeyDown={onKeyDown}

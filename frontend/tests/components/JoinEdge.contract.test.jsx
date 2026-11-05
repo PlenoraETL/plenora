@@ -17,9 +17,11 @@
  */
 import React from 'react';
 import { render, screen, fireEvent, cleanup, act, renderHook, within } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import useCanvasStore from '../../src/store/useCanvasStore';
+import { ConfirmProvider } from '../../src/context/ConfirmContext';
+import { answerConfirm } from '../helpers/confirmDialog';
 import NodeInspector from '../../src/components/canvas/NodeInspector';
 import StepsView from '../../src/components/canvas/StepsView';
 import JoinEdgePanel from '../../src/components/canvas/JoinEdgePanel';
@@ -68,11 +70,7 @@ const withGraph = (ui) => {
   const { nodes, edges } = st();
   return <CanvasGraphContext.Provider value={{ key: structureKey(nodes, edges), ...analyzeCanvas(nodes, edges) }}>{ui}</CanvasGraphContext.Provider>;
 };
-const inspector = () => render(<NodeInspector fullNodeTypes={FULL} prefix="estrai" edgeInspector={edgeInspector} />);
-
-beforeEach(() => {
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
-});
+const inspector = () => render(<ConfirmProvider><NodeInspector fullNodeTypes={FULL} prefix="estrai" edgeInspector={edgeInspector} /></ConfirmProvider>);
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -273,11 +271,11 @@ describe('JoinEdgePanel', () => {
     expect(screen.getByText(/Join/, { selector: '.node-inspector__kind' })).toBeTruthy();
     expect(screen.getByText('Join con clienti')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: 'Chiudi pannello' })).toHaveLength(1);
-    window.confirm.mockReturnValueOnce(false);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Elimina Join' })); });
-    expect(window.confirm).toHaveBeenCalledTimes(1);
+    await answerConfirm(false);
     expect(edgeById('j1')).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Elimina Join' })); });
+    await answerConfirm(true, { confirmText: 'Elimina' });
     expect(edgeById('j1')).toBeUndefined();
     act(() => { st().undo(); });
     expect(edgeById('j1')).toBeTruthy();

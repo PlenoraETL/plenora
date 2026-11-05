@@ -7,7 +7,8 @@ import React from 'react';
 import ProjectsSidebar from './ProjectsSidebar';
 import FilesSidebar from './FilesSidebar';
 import { useAuth } from '../../context/AuthContext';
-import { confirmLeaveWithUnsaved } from '../../hooks/useUnsavedChangesGuard';
+import { confirmLeave } from '../../hooks/useUnsavedChangesGuard';
+import { useConfirmOrDeny } from '../../context/ConfirmContext';
 import { useNavigate } from 'react-router-dom';
 
 function EditorSidebar({
@@ -23,6 +24,7 @@ function EditorSidebar({
 }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const confirm = useConfirmOrDeny();
 
   const accentColors = {
     manipola:   { project: '#9B6DFF', file: '#4B8BFF' },
@@ -64,7 +66,7 @@ function EditorSidebar({
         <button
           type="button"
           className="editor-sidebar__logout"
-          onClick={() => { if (confirmLeaveWithUnsaved()) { logout(); navigate('/login'); } }}
+          onClick={async () => { if (await confirmLeave(confirm)) { logout(); navigate('/login'); } }}
           title="Esci"
         >⏻</button>
       </div>

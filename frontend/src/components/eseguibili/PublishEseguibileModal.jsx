@@ -58,8 +58,7 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
       title="Pubblica come Eseguibile"
       icon="📢"
       size="md"
-      closeOnOverlay={!submitting}
-      closeOnEsc={!submitting}
+      busy={submitting}
       footer={
         <>
           <ModalButton variant="secondary" onClick={onClose} disabled={submitting}>Annulla</ModalButton>

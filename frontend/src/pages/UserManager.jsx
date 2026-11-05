@@ -90,12 +90,13 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
     <ModalWrapper
       isOpen={true}
       onClose={onClose}
+      busy={loading}
       title={isEdit ? 'Modifica utente' : 'Nuovo utente'}
       icon={isEdit ? '✏️' : '👤'}
       size="md"
       footer={
         <>
-          <ModalButton variant="secondary" onClick={onClose}>Annulla</ModalButton>
+          <ModalButton variant="secondary" onClick={onClose} disabled={loading}>Annulla</ModalButton>
           <ModalButton variant="primary" onClick={handleSubmit} loading={loading}>
             {isEdit ? 'Salva' : 'Crea utente'}
           </ModalButton>
@@ -188,12 +189,13 @@ function ResetPasswordModal({ user, onClose, onSave }) {
     <ModalWrapper
       isOpen={true}
       onClose={onClose}
+      busy={loading}
       title={`Reset password — ${user.username}`}
       icon="🔑"
       size="sm"
       footer={
         <>
-          <ModalButton variant="secondary" onClick={onClose}>Annulla</ModalButton>
+          <ModalButton variant="secondary" onClick={onClose} disabled={loading}>Annulla</ModalButton>
           <ModalButton variant="primary" onClick={handleSubmit} loading={loading}>
             Reimposta password
           </ModalButton>
@@ -230,12 +232,13 @@ function GroupModal({ onClose, onSave }) {
     <ModalWrapper
       isOpen={true}
       onClose={onClose}
+      busy={loading}
       title="Nuovo gruppo"
       icon="🏢"
       size="md"
       footer={
         <>
-          <ModalButton variant="secondary" onClick={onClose}>Annulla</ModalButton>
+          <ModalButton variant="secondary" onClick={onClose} disabled={loading}>Annulla</ModalButton>
           <ModalButton variant="primary" onClick={handleSubmit} loading={loading}>
             Crea gruppo
           </ModalButton>
@@ -280,12 +283,13 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
     <ModalWrapper
       isOpen={true}
       onClose={onClose}
+      busy={loading}
       title={title}
       icon="⚠️"
       size="sm"
       footer={
         <>
-          <ModalButton variant="secondary" onClick={onClose}>Annulla</ModalButton>
+          <ModalButton variant="secondary" onClick={onClose} disabled={loading}>Annulla</ModalButton>
           <ModalButton variant="danger" onClick={handleConfirm} loading={loading}>
             Elimina
           </ModalButton>
@@ -367,8 +371,7 @@ function ConfirmDeleteGroupModal({ group, onClose, onConfirm }) {
       title={`Elimina gruppo — ${group.name}`}
       icon="🗑️"
       size="md"
-      closeOnOverlay={!deleting}
-      closeOnEsc={!deleting}
+      busy={deleting}
       footer={
         <ModalButton variant="secondary" onClick={onClose} disabled={deleting}>Annulla</ModalButton>
       }

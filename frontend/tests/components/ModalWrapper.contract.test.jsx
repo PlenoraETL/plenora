@@ -119,9 +119,12 @@ describe('ModalWrapper', () => {
       </ModalWrapper>
     );
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveAttribute('aria-labelledby', 'modal-title');
+    // R6.1: id unico per finestra (stack unico, hooks/useDialog), non 'modal-title'.
+    const id = dialog.getAttribute('aria-labelledby');
+    expect(id).toBeTruthy();
+    expect(id).not.toBe('modal-title');
     // e il titolo ha l'id corrispondente
-    expect(screen.getByText('Titolino')).toHaveAttribute('id', 'modal-title');
+    expect(screen.getByText('Titolino')).toHaveAttribute('id', id);
   });
 });
 

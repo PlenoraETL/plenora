@@ -9,11 +9,11 @@
  *   - severity: low/medium/high/critical (default medium)
  *   - category: enum da meta
  */
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 
 import { createTicket } from '../api/tickets';
 import { useToast } from '../hooks/useToast';
-import useDialogFocus from '../hooks/useDialogFocus';
+import useDialog from '../hooks/useDialog';
 import { toastApiError } from '../utils/toastApiError';
 import { can } from '../utils/permissions';
 
@@ -22,10 +22,6 @@ export default function TicketCreateModal({ meta, user, onClose, onCreated }) {
   const toast = useToast();
   // Il tipo 'debito tecnico' e' degli admin (stessa regola della gestione).
   const isAdmin = can.manageTickets(user);
-  const dialogRef = useRef(null);
-  // Il componente e' montato solo quando aperto (controlled dal caller),
-  // quindi useDialogFocus(true, ...) per tutto il lifecycle.
-  useDialogFocus(true, onClose, dialogRef);
 
   const [form, setForm] = useState({
     kind: 'user_support',
@@ -35,6 +31,9 @@ export default function TicketCreateModal({ meta, user, onClose, onCreated }) {
     category: 'other',
   });
   const [submitting, setSubmitting] = useState(false);
+  // Montato solo quando aperto. Durante l'invio niente ×, Esc o Annulla
+  // (N6: la risposta non deve arrivare a una finestra chiusa).
+  const dialog = useDialog({ isOpen: true, onClose, busy: submitting, closeOnOverlay: false });
 
   const handle = (k, v) => setForm((s) => ({ ...s, [k]: v }));
 
@@ -62,18 +61,15 @@ export default function TicketCreateModal({ meta, user, onClose, onCreated }) {
   };
 
   return (
-    <div className="tk-modal__overlay">
+    <div className="tk-modal__overlay" {...dialog.overlayProps}>
       <div
-        ref={dialogRef}
+        ref={dialog.ref}
         className="tk-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="tk-modal-title"
-        tabIndex={-1}
+        {...dialog.dialogProps}
       >
         <header className="tk-modal__header">
-          <h2 id="tk-modal-title">Nuovo ticket</h2>
-          <button type="button" className="tk-modal__close" onClick={onClose} aria-label="Chiudi">×</button>
+          <h2 id={dialog.titleId}>Nuovo ticket</h2>
+          <button type="button" className="tk-modal__close" {...dialog.closeButtonProps}>×</button>
         </header>
 
         <form onSubmit={handleSubmit} className="tk-modal__form">

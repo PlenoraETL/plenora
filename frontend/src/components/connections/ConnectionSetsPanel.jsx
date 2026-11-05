@@ -196,8 +196,7 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
           title={editing ? 'Modifica Connection Set' : 'Nuovo Connection Set'}
           icon="⇄"
           size="lg"
-          closeOnOverlay={!saving}
-          closeOnEsc={!saving}
+          busy={saving}
           footer={(
             <>
               <ModalButton variant="secondary" onClick={close} disabled={saving}>Annulla</ModalButton>
