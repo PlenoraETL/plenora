@@ -114,7 +114,7 @@ const ArricchisciEditorContent = () => {
   const {
     nodes, edges, onNodesChange, onEdgesChange,
     loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
-    nodesRef, edgesRef, updateNodeData, deleteNode,
+    nodesRef, edgesRef, updateNodeData,
     getViewportCenter,
     isReadOnly, readOnlyProps
   } = useCanvasCore(projectId, { mode: 'arricchisci' });

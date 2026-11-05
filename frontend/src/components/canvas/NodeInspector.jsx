@@ -80,6 +80,24 @@ function InspectorFrame({ prefix, label, icon, kind, title, summary, onClose, sw
   );
 }
 
+/**
+ * Il form di un passo o di un arco (Fase 5, unione T5+T6, R1.10). Regola
+ * unica della sola lettura nel pannello: il form sta in un
+ * `<fieldset disabled>`, quindi OGNI controllo nativo (input, select,
+ * textarea, button, compresi FieldInput, SchemaFields e i controlli dei
+ * sotto-componenti) e' spento davvero, non solo ignorato dallo store. Fuori
+ * dal form restano la navigazione del pannello (chiudi, vista, archi del
+ * passo) e i rami, che decidono da soli. Le finestre aperte dal form non si
+ * aprono: il loro pulsante e' spento.
+ */
+function ReadOnlyForm({ readOnly, children }) {
+  return (
+    <fieldset className="node-inspector__form" disabled={readOnly}>
+      {children}
+    </fieldset>
+  );
+}
+
 /** Archi di un nodo (es. i join di una tabella), ognuno apribile nel pannello. */
 function EdgeLinks({ nodeId, edgeInspector }) {
   const nodes = useNodesContent();
@@ -137,7 +155,11 @@ function EdgeInspector({ edgeId, edgeInspector, prefix }) {
       title={<div className="node-inspector__title node-inspector__title--static">{entry.title}</div>}
       summary={entry.summary}
       onClose={() => onEdgesChange([{ id: edge.id, type: 'select', selected: false }])}
-      body={<Panel key={edge.id} edge={edge} sourceNode={byId.get(edge.source)} targetNode={byId.get(edge.target)} disabled={isReadOnly} />}
+      body={(
+        <ReadOnlyForm readOnly={isReadOnly}>
+          <Panel key={edge.id} edge={edge} sourceNode={byId.get(edge.source)} targetNode={byId.get(edge.target)} disabled={isReadOnly} />
+        </ReadOnlyForm>
+      )}
       deleteLabel={`Elimina ${what}`}
       onDelete={canDelete ? deleteEdge : null}
     />
@@ -240,7 +262,11 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
           {/* key per nodo: bozze, ricerche e fuoco di un form non passano al
               nodo selezionato dopo. */}
           {Full
-            ? <Full key={node.id} id={node.id} type={node.type} data={node.data || {}} />
+            ? (
+              <ReadOnlyForm readOnly={isReadOnly}>
+                <Full key={node.id} id={node.id} type={node.type} data={node.data || {}} />
+              </ReadOnlyForm>
+            )
             : <div className="node-inspector__empty">Nessuna configurazione per questo nodo.</div>}
         </>
       )}

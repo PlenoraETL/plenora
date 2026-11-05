@@ -11,7 +11,7 @@
  *     vecchia; si usa `updateNodeData(id, d => ...)` o `patchNodeConfig`.
  *  3. nessun `useCanvasStore(s => s.nodes)` (tutti i nodi con le posizioni)
  *     nei componenti: un trascinamento li ridisegna a ogni frame (R9-U N6).
- * Eccezioni dichiarate: ProjectInputNode (tranche T5, form dei campi).
+ * Eccezioni: nessuna (dopo l'unione con T5 anche ProjectInputNode rispetta le regole).
  */
 import React from 'react';
 import fs from 'node:fs';
@@ -31,7 +31,7 @@ const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => 
 const COMPONENTS = walk(path.join(SRC, 'components')).concat(walk(path.join(SRC, 'pages')));
 const rel = (p) => path.relative(SRC, p).replace(/\\/g, '/');
 const code = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-const T5_EXCEPTIONS = new Set(['components/nodes/ProjectInputNode.jsx']);
+const T5_EXCEPTIONS = new Set(); // unione T5+T6: nessuna eccezione (ProjectInputNode rientra nelle regole)
 
 describe('regole enumerate su tutti i componenti', () => {
   it('nessuna copia locale dei dati del nodo (useState(data.x) / useState(config.x))', () => {

@@ -31,10 +31,25 @@ import { FRONTEND_ENV } from '../config/runtimeEnv';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
-// Coalesce leading-edge: edit rapidi entro questa finestra (es. digitazione in
-// un campo del nodo) producono UNA sola snapshot (pre-burst), non una per
-// keystroke. lastSnapshotTs vive dentro lo store (uno per istanza).
-const SNAPSHOT_COALESCE_MS = 350;
+// Undo raggruppato per AZIONE, non per tempo (Fase 5, unione T5+T6, R1.6).
+// Regola: uno snapshot per azione dell'utente, dove un'azione e'
+//  (a) un gesto: tutte le mutazioni utente dello stesso turno sincrono (un
+//      clic, un tasto, il `perform` di una conferma) sono un solo Ctrl+Z;
+//  (b) una digitazione: mutazioni consecutive con la stessa chiave di gruppo
+//      (`group`: stesso nodo e stessi campi) restano un solo Ctrl+Z finche'
+//      non interviene un'altra azione, un undo/redo o un caricamento.
+// Nessuna finestra di tempo: due azioni diverse a pochi ms l'una dall'altra
+// restano due Ctrl+Z (prima: una finestra globale di 350 ms).
+const queueTurnEnd = typeof queueMicrotask === 'function'
+  ? queueMicrotask
+  : (fn) => Promise.resolve().then(fn);
+
+/** Chiave di gruppo di una patch dei dati: nodo + campi toccati. */
+export function patchGroup(scope, nodeId, updates) {
+  if (!updates || typeof updates !== 'object') return null;
+  const keys = Object.keys(updates).filter(k => k !== '_lastUpdate').sort();
+  return keys.length ? `${scope}:${nodeId}:${keys.join(',')}` : null;
+}
 
 /**
  * Crea un'istanza dello store. L'app ne usa una sola (default export); i
@@ -44,7 +59,11 @@ const SNAPSHOT_COALESCE_MS = 350;
 export const createCanvasStore = () => create(
   devtools(
     (set, get) => {
-      let lastSnapshotTs = 0;
+      // Azione in corso (turno sincrono) e chiave dell'ultima azione.
+      let turnOpen = false;
+      let turnGroup = null;
+      let lastGroup = null;
+      const endAction = () => { turnOpen = false; turnGroup = null; lastGroup = null; };
 
       // Helper privato: user-edit marca dirty E svuota gli highlight
       // di validazione post-validation (amber borders). Evita churn
@@ -371,16 +390,25 @@ export const createCanvasStore = () => create(
       /** Registra lo stato corrente nello stack `past` (da chiamare PRIMA di
        *  mutare). Dedup per reference: se lo stato non è cambiato dall'ultimo
        *  snapshot, no-op. Svuota `future` (nuovo ramo). No-op in sola lettura. */
-      takeSnapshot: () => {
+      takeSnapshot: (group = null) => {
         const { nodes, edges, past, isReadOnly } = get();
         if (isReadOnly) return;
+        if (turnOpen) {
+          // Stesso gesto: nessuno snapshot nuovo. Un gesto che mescola
+          // azioni diverse non continua una digitazione dopo di se'.
+          if (group !== turnGroup) { turnGroup = null; lastGroup = null; }
+          return;
+        }
+        turnOpen = true;
+        turnGroup = group;
+        queueTurnEnd(() => { turnOpen = false; turnGroup = null; });
+        // Digitazione nello stesso campo: continua l'azione precedente.
+        const continues = group !== null && group === lastGroup;
+        lastGroup = group;
+        if (continues) return;
         const top = past[past.length - 1];
         // dedup per reference: nessuna modifica dall'ultima snapshot.
         if (top && top.nodes === nodes && top.edges === edges) return;
-        // coalesce: burst di edit rapidi (digitazione) → una sola snapshot.
-        const now = Date.now();
-        if (now - lastSnapshotTs < SNAPSHOT_COALESCE_MS) return;
-        lastSnapshotTs = now;
         set({ past: [...past, { nodes, edges }].slice(-HISTORY_LIMIT), future: [] }, false, 'takeSnapshot');
       },
 
@@ -388,7 +416,7 @@ export const createCanvasStore = () => create(
       undo: () => {
         const { past, isReadOnly } = get();
         if (isReadOnly || past.length === 0) return;
-        lastSnapshotTs = 0;  // il prossimo edit dopo un undo deve poter snapshottare subito
+        endAction();  // il prossimo edit dopo un undo e' un'azione nuova
         set(
           state => {
             const previous = state.past[state.past.length - 1];
@@ -409,7 +437,7 @@ export const createCanvasStore = () => create(
       redo: () => {
         const { future, isReadOnly } = get();
         if (isReadOnly || future.length === 0) return;
-        lastSnapshotTs = 0;
+        endAction();
         set(
           state => {
             const next = state.future[0];
@@ -548,7 +576,7 @@ export const createCanvasStore = () => create(
        * `updatedAt`, orario del server per la copia di sicurezza.
        */
       loadGraph: (nodes, edges, { canvasVersion = null, updatedAt = null } = {}) => {
-        lastSnapshotTs = 0;
+        endAction();
         // Collegamenti doppi dei canvas vecchi: tolti al caricamento; la
         // correzione parte col prossimo salvataggio (pendingSync).
         const unique = uniqueDataEdges(edges);
@@ -798,10 +826,12 @@ export const createCanvasStore = () => create(
         // `updates` puo' essere una patch o una funzione (data) => patch sui
         // dati CORRENTI dello store (Fase 5 T6, R1.4/N5): chi aggiorna un
         // campo annidato dopo un await non parte mai dalla copia del render.
+        // opts.group: chiave della digitazione per le patch-funzione (le
+        // patch-oggetto la ricavano dai campi: `patchGroup`), R1.6.
         const derived = opts.derived === true;
         if (!derived) {
           if (get().isReadOnly) return;
-          get().takeSnapshot();
+          get().takeSnapshot(opts.group ?? patchGroup('data', nodeId, updates));
         }
         set(
           state => ({
@@ -830,7 +860,7 @@ export const createCanvasStore = () => create(
         const derived = opts.derived === true;
         if (!derived) {
           if (get().isReadOnly) return;
-          get().takeSnapshot();
+          get().takeSnapshot(opts.group ?? patchGroup('config', nodeId, patch));
         }
         set(
           state => ({
@@ -1034,7 +1064,7 @@ export const createCanvasStore = () => create(
         const past = hasUnsavedChanges(st) && server !== current
           ? [server, current]
           : [current];
-        lastSnapshotTs = 0;
+        endAction();
         set(
           { nodes, edges, graphLoaded: true, isDirty: true, past, future: [], validationHighlights: [], lastValidationSummary: null },
           false,

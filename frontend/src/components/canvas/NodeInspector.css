@@ -51,11 +51,15 @@
 }
 /* I form dei nodi nascono per il canvas (larghezza fissa): nel pannello
    occupano la larghezza disponibile. */
-.node-inspector__body > * {
+.node-inspector__body > *,
+.node-inspector__form > * {
   width: 100% !important;
   max-width: none !important;
   box-sizing: border-box;
 }
+/* Il form del passo (R1.10): in sola lettura il fieldset spegne TUTTI i
+   controlli; da solo non disegna nulla. */
+.node-inspector__form { border: 0; margin: 0; padding: 0; min-width: 0; }
 .node-inspector__empty { color: var(--plen-text-dim, #8a93a6); font-size: 13px; padding: 12px; }
 /* L'unica eliminazione del pannello (regola 6 del Blocco A). */
 .node-inspector__foot {

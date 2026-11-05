@@ -17,6 +17,9 @@ import { INPUT_KIND_LABELS, termName } from '../../utils/glossary';
 import FieldInput from '../common/FieldInput';
 import * as codecs from '../../utils/fieldCodecs';
 import { runtimeInputCodec } from '../../utils/runtimeInputKinds';
+import { useNodesContent } from '../../hooks/useColumns';
+import { useConfirmOrDeny } from '../../context/ConfirmContext';
+import { requestCanvasDeletion } from '../../utils/canvasDeletion';
 
 const INPUT_TYPES = Object.entries(INPUT_KIND_LABELS);
 
@@ -53,9 +56,11 @@ export function mergeExpectedColumns(previous, names) {
 
 function ProjectInputNode({ id, data }) {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
-  const nodes = useCanvasStore(s => s.nodes);
+  // Nodi senza posizioni (R9-U N6): un trascinamento non ridisegna il form.
+  const nodes = useNodesContent();
   const edges = useCanvasStore(s => s.edges);
-  const removeEdges = useCanvasStore(s => s.removeEdges);
+  const editGraph = useCanvasStore(s => s.editGraph);
+  const confirm = useConfirmOrDeny();
   const updateEdge = useCanvasStore(s => s.updateEdge);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const mode = useCanvasStore(s => s.mode);
@@ -75,6 +80,9 @@ function ProjectInputNode({ id, data }) {
   );
 
 
+  // Undo per azione (R1.6): una patch-oggetto e' raggruppata per campo dallo
+  // store (digitare nell'etichetta = un Ctrl+Z); le azioni composte passano
+  // da editGraph (una sola azione).
   const update = changes => updateNodeData(id, changes);
   const updateBinding = (edgeId, targetField) => {
     const target = bindingEdges.find(edge => edge.id === edgeId)?.target;
@@ -94,13 +102,41 @@ function ProjectInputNode({ id, data }) {
       },
     }));
   };
-  const removeBinding = edgeId => {
-    if (isReadOnly) return;
-    removeEdges(edgeId);
+  // La × e' una cancellazione dal canvas: regola unica (utils/canvasDeletion),
+  // conferma e niente in sola lettura.
+  const removeBinding = edge => {
+    const targetNode = nodes.find(node => node.id === edge.target);
+    const targetLabel = targetNode ? nodeTitle(targetNode.type, targetNode.data) : edge.target;
+    return requestCanvasDeletion({
+      confirm,
+      edges: [edge],
+      dialog: {
+        title: 'Rimuovi collegamento',
+        message: `Rimuovere il collegamento di questo input a «${targetLabel}»? Il parametro torna al valore scritto nel passo. Puoi annullare con Ctrl+Z.`,
+        confirmText: 'Elimina',
+        variant: 'danger',
+      },
+      perform: () => useCanvasStore.getState().removeEdges(edge.id),
+    });
   };
-  const updateValidation = changes => update({
-    validation: { ...(data.validation || {}), ...changes },
-  });
+  // Cambio di tipo: i collegamenti del tipo vecchio si tolgono nella STESSA
+  // azione del cambio (un Ctrl+Z ripristina tipo e collegamenti, R1.12/R1.6).
+  const changeKind = nextKind => editGraph(({ nodes: all, edges: allEdges }) => ({
+    edges: allEdges.filter(edge => edge.source !== id),
+    nodes: all.map(node => (node.id !== id ? node : {
+      ...node,
+      data: {
+        ...node.data,
+        input_kind: nextKind,
+        bindings: [],
+        connection_set_id: nextKind === 'connection' ? (node.data?.connection_set_id || '') : null,
+      },
+    })),
+  }));
+  // Dai dati CORRENTI dello store; gruppo = campo della validazione (R1.6).
+  const updateValidation = changes => updateNodeData(id, d => ({
+    validation: { ...(d.validation || {}), ...changes },
+  }), { group: `validation:${id}:${Object.keys(changes).sort().join(',')}` });
   const sizeMb = data.validation?.max_size_bytes ? Math.round(data.validation.max_size_bytes / 1048576) : null;
   // Il valore predefinito passa dal convertitore del tipo dell'input (la
   // stessa regola dell'esecuzione: limiti, opzioni, espressione regolare).
@@ -129,18 +165,7 @@ function ProjectInputNode({ id, data }) {
       </label>
       <label className="pin__field">
         <span>Tipo</span>
-        <select className="nodrag" value={kind} disabled={isReadOnly} onChange={event => {
-          if (isReadOnly) return;
-          const nextKind = event.target.value;
-          // removeEdges fa lo snapshot PRIMA di togliere i binding: l'undo
-          // del cambio tipo li ripristina (audit R1.12).
-          removeEdges(edge => edge.source === id);
-          update({
-            input_kind: nextKind,
-            bindings: [],
-            connection_set_id: nextKind === 'connection' ? (data.connection_set_id || '') : null,
-          });
-        }}>
+        <select className="nodrag" value={kind} disabled={isReadOnly} onChange={event => changeKind(event.target.value)}>
           {/* Solo i tipi che questa modalita' esegue (utils/runtimeInputKinds);
               un tipo gia' scelto resta visibile per poterlo cambiare. */}
           {INPUT_TYPES.filter(([value]) => value === kind || acceptsInputKind(mode, value))
@@ -301,7 +326,7 @@ function ProjectInputNode({ id, data }) {
                   <div className="pin__binding-target">
                     <span>Destinazione</span>
                     <strong>{targetLabel}</strong>
-                    <button type="button" className="nodrag" disabled={isReadOnly} onClick={() => removeBinding(edge.id)} title="Rimuovi collegamento">×</button>
+                    <button type="button" className="nodrag" disabled={isReadOnly} onClick={() => removeBinding(edge)} title="Rimuovi collegamento">×</button>
                   </div>
                   <label className="pin__field">
                     <span>Parametro configurabile</span>

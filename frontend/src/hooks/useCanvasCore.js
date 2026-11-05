@@ -174,7 +174,8 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     loadGraph,
     addNodes,
     addEdges,
-    removeEdges,
+    // removeEdges e deleteNode non si espongono: le cancellazioni dell'utente
+    // passano solo da utils/canvasDeletion (qui: Canc/Backspace).
     editNodes,
     editEdges,
     insertNode,
@@ -185,7 +186,6 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     applyDerivedNodes,
     applyDerivedEdges,
     updateNodeData,
-    deleteNode,
 
     // Undo/redo (#24)
     undo,

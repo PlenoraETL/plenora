@@ -45,8 +45,9 @@ function StaticValuesNode({ id, data }) {
   const [activeFieldId, setActiveFieldId] = useState(null); // quale campo sta editando valore
   const nameRef = useRef(null);
 
-  const editFields = useCallback((updater) => {
-    updateNodeData(id, (d) => ({ fields: updater(d.fields || []) }));
+  // `group`: la digitazione nello stesso campo e' un solo Ctrl+Z (R1.6).
+  const editFields = useCallback((updater, group = null) => {
+    updateNodeData(id, (d) => ({ fields: updater(d.fields || []) }), { group });
   }, [id, updateNodeData]);
 
   // Calcola schema output (usa field_type se definito, altrimenti auto-detect)
@@ -74,7 +75,8 @@ function StaticValuesNode({ id, data }) {
   }, [editFields]);
 
   const handleUpdate = useCallback((fieldId, updates) => {
-    editFields(prev => prev.map(f => f.id === fieldId ? { ...f, ...updates } : f));
+    editFields(prev => prev.map(f => f.id === fieldId ? { ...f, ...updates } : f),
+      `static:${id}:${fieldId}:${Object.keys(updates).sort().join(',')}`);
   }, [editFields]);
 
   const insertVariable = useCallback((varName) => {

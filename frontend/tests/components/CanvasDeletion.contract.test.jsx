@@ -31,6 +31,11 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => vi.fn() };
 });
 vi.mock('../../src/utils/validateRouteParam', () => ({ isValidProjectId: () => true }));
+vi.mock('../../src/utils/transformRegistry', () => ({
+  fetchTransformRegistry: vi.fn(() => new Promise(() => {})),
+  getCachedTransformRegistry: () => ({ categories: {}, transforms: {} }),
+  isMultiInputOp: () => false,
+}));
 vi.mock('../../src/components/common/ErrorBoundary', () => ({
   CanvasErrorBoundary: ({ children }) => <div>{children}</div>,
 }));
@@ -41,6 +46,7 @@ import useCanvasKeyboard from '../../src/hooks/useCanvasKeyboard';
 import EditorShell from '../../src/components/editor/EditorShell';
 import NodeInspector from '../../src/components/canvas/NodeInspector';
 import AnnotationNode from '../../src/components/nodes/AnnotationNode';
+import ProjectInputNode from '../../src/components/nodes/ProjectInputNode';
 import { answerConfirm } from '../helpers/confirmDialog';
 
 const wrapper = ({ children }) => <ConfirmProvider>{children}</ConfirmProvider>;
@@ -49,13 +55,15 @@ const NODE = { id: 'n1', type: 'transform', position: { x: 0, y: 0 }, data: { la
 const OTHER = { id: 'n2', type: 'transform', position: { x: 0, y: 0 }, data: { label: 'Altro' } };
 const EDGE = { id: 'e1', source: 'n1', target: 'n2' };
 const GROUP = { id: 'g1', type: 'comment', position: { x: 0, y: 0 }, data: { title: 'Area' } };
+const INPUT = { id: 'in1', type: 'project_input', position: { x: 0, y: 0 }, data: { input_key: 'anno', label: 'Anno', input_kind: 'text' } };
+const BINDING = { id: 'b1', source: 'in1', target: 'n2', sourceHandle: 'parameter', data: { edge_kind: 'parameter_binding', target_field: 'config.x' } };
 
 function seed({ readOnly, selectNode = false, selectEdge = false }) {
   const st = useCanvasStore.getState();
   st.reset();
   useCanvasStore.setState({
-    nodes: [{ ...NODE, selected: selectNode }, OTHER, GROUP],
-    edges: [{ ...EDGE, selected: selectEdge }],
+    nodes: [{ ...NODE, selected: selectNode }, OTHER, GROUP, INPUT],
+    edges: [{ ...EDGE, selected: selectEdge }, BINDING],
   });
   st.setReadOnly(readOnly);
 }
@@ -142,6 +150,17 @@ const GESTURES = {
     },
     deleted: () => !state().edges.some(e => e.id === 'e1'),
   },
+  '× «Rimuovi collegamento» (input runtime)': {
+    selection: {},
+    async run() {
+      render(<ConfirmProvider><ProjectInputNode id="in1" data={INPUT.data} /></ConfirmProvider>);
+      const btn = screen.queryByTitle('Rimuovi collegamento');
+      if (!btn) return false;
+      await act(async () => { fireEvent.click(btn); });
+      return true;
+    },
+    deleted: () => !state().edges.some(e => e.id === 'b1'),
+  },
   '✕ del gruppo': {
     selection: {},
     async run() {
@@ -194,6 +213,7 @@ describe('cancellazione dal canvas: un solo punto (statico)', () => {
     'components/editor/EditorShell.jsx',
     'components/canvas/NodeInspector.jsx',
     'components/nodes/AnnotationNode.jsx',
+    'components/nodes/ProjectInputNode.jsx',
   ];
   it('le cancellazioni dell\'utente stanno dentro requestCanvasDeletion({... perform })', () => {
     for (const rel of FILES) {
@@ -201,6 +221,86 @@ describe('cancellazione dal canvas: un solo punto (statico)', () => {
       expect(src, rel).toMatch(/requestCanvasDeletion\(/);
       expect(src, rel).not.toMatch(/confirmCanvasDeletion|\.isReadOnly\)\s*return/);
     }
+  });
+
+  // Enumerazione su TUTTO src (unione T5+T6): ogni chiamata di removeEdges,
+  // deleteNode o deleteEdge e' il `perform` di requestCanvasDeletion, oppure
+  // sta in una funzione dichiarata qui che si chiama SOLO come perform.
+  const strip = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
+    const p = path.join(dir, e.name);
+    return e.isDirectory() ? walk(p) : (/\.(jsx?|tsx?)$/.test(e.name) ? [p] : []);
+  });
+  // Chi definisce le azioni e la regola.
+  const OWNERS = new Set(['store/useCanvasStore.js', 'utils/canvasDeletion.js']);
+  const ALL = walk(ROOT).map(p => path.relative(ROOT, p).replace(/\\/g, '/')).filter(r => !OWNERS.has(r));
+  // file -> perche' la chiamata e' comunque dentro un perform (verificato sotto).
+  const PERFORM_TARGETS = {
+    'hooks/useEdgeHandlers.js': 'onEdgeContextMenu: EditorShell lo chiama solo come perform',
+  };
+  // file che tengono il riferimento all'azione dello store senza chiamarla.
+  const REFERENCE_HOLDERS = {
+    'hooks/useCanvasCore.js': 'lo passa a useCanvasKeyboard (onDeleteNode/onDeleteEdges), chiamati nel perform',
+  };
+  const CALL = /\b(removeEdges|deleteNode|deleteEdge)\s*\(/;
+  const PERFORM = /perform:\s*\(\)\s*=>/;
+
+  it('in tutto src ogni removeEdges/deleteNode/deleteEdge(...) e\' un perform di requestCanvasDeletion', () => {
+    const offenders = [];
+    const seen = new Set();
+    for (const rel of ALL) {
+      const src = strip(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+      for (const line of src.split('\n')) {
+        if (!CALL.test(line)) continue;
+        seen.add(rel);
+        if (PERFORM_TARGETS[rel]) continue;
+        if (!PERFORM.test(line) || !/requestCanvasDeletion\(/.test(src)) offenders.push(`${rel}: ${line.trim()}`);
+      }
+    }
+    // La scansione vede davvero i chiamanti (pannello, gruppo, input runtime, archi).
+    expect([...seen].sort()).toEqual(expect.arrayContaining([
+      'components/canvas/NodeInspector.jsx',
+      'components/nodes/AnnotationNode.jsx',
+      'components/nodes/ProjectInputNode.jsx',
+      'hooks/useEdgeHandlers.js',
+    ]));
+    expect(offenders).toEqual([]);
+  });
+
+  it('i riferimenti alle azioni di cancellazione dello store finiscono solo in un perform', () => {
+    const offenders = [];
+    for (const rel of ALL) {
+      const src = strip(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+      if (!/\b(removeEdges|deleteNode)\b/.test(src)) continue;
+      if (REFERENCE_HOLDERS[rel] || PERFORM_TARGETS[rel]) continue;
+      // Nome locale preso dallo store (selettore o destrutturazione): ogni
+      // suo uso e' nel perform.
+      const locals = [
+        ...[...src.matchAll(/const\s+(\w+)\s*=\s*useCanvasStore\(\s*\(?\s*(?:s|state)\s*\)?\s*=>\s*(?:s|state)\.(?:removeEdges|deleteNode)\s*\)/g)].map(m => m[1]),
+        ...[...src.matchAll(/\{[^}]*\b(removeEdges|deleteNode)\b[^}]*\}\s*=/g)].map(m => m[1]),
+      ];
+      for (const name of locals) {
+        const uses = src.split('\n').filter(l => new RegExp(`\\b${name}\\b`).test(l) && !/useCanvasStore\(/.test(l) && !/\}\s*=/.test(l));
+        for (const l of uses) if (!PERFORM.test(l)) offenders.push(`${rel}: ${l.trim()}`);
+        if (uses.length === 0) offenders.push(`${rel}: ${name} preso e mai usato`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('le eccezioni dichiarate sono davvero dentro un perform', () => {
+    const shell = fs.readFileSync(path.join(ROOT, 'components/editor/EditorShell.jsx'), 'utf8');
+    expect(shell).toMatch(/requestCanvasDeletion\(\{[^}]*perform:\s*\(\)\s*=>\s*onEdgeContextMenu\(/);
+    const core = strip(fs.readFileSync(path.join(ROOT, 'hooks/useCanvasCore.js'), 'utf8'));
+    const coreUses = core.split('\n').filter(l => /\b(removeEdges|deleteNode)\b/.test(l) && !/useCanvasStore\(/.test(l)).map(l => l.trim());
+    expect(coreUses).toEqual(['onDeleteNode: deleteNode,', 'onDeleteEdges: removeEdges,']);
+    const keyboard = strip(fs.readFileSync(path.join(ROOT, 'hooks/useCanvasKeyboard.js'), 'utf8'));
+    const start = keyboard.indexOf('perform: () => {');
+    const end = keyboard.indexOf('}).finally', start);
+    expect(start).toBeGreaterThan(0);
+    const calls = [...keyboard.matchAll(/\b(onDeleteNode|onDeleteEdges)\s*\(/g)];
+    expect(calls.length).toBeGreaterThan(0);
+    for (const m of calls) expect(m.index > start && m.index < end, m[0]).toBe(true);
   });
   it('nessun componente del canvas confronta isReadOnly per decidere un\'eliminazione', () => {
     const dirs = ['components/canvas', 'components/nodes', 'components/editor', 'components/transforms'];

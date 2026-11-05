@@ -203,3 +203,53 @@ describe('Blocco A, regola 6: il guscio possiede intestazione, chiusura ed elimi
     expect(after.past.length).toBe(before.past.length);
   });
 });
+
+// Fase 5, unione T5+T6, R1.10: in sola lettura i controlli del form sono
+// spenti DAVVERO (fieldset disabled del pannello), per ogni pannello di ogni
+// editor; fuori dal form restano solo la navigazione del pannello.
+describe('R1.10: in sola lettura ogni controllo del form del passo e\' disabilitato', () => {
+  const CONTROLS = 'input, select, textarea, button';
+  let total = 0;
+
+  it.each(CASES.map(c => [`${c.mode} · ${c.type}`, c]))('%s: nessun controllo attivo nel form', (_, c) => {
+    const { container } = mount(c, { readOnly: true });
+    const form = container.querySelector('.node-inspector__form');
+    expect(form).toBeTruthy();
+    expect(form.disabled).toBe(true);
+    const controls = [...form.querySelectorAll(CONTROLS)];
+    total += controls.length;
+    const active = controls.filter(el => !el.matches(':disabled')).map(el => el.outerHTML.slice(0, 120));
+    expect(active).toEqual([]);
+  });
+
+  it.each(CASES.map(c => [`${c.mode} · ${c.type}`, c]))('%s: modificabile, il form non e\' spento', (_, c) => {
+    const { container } = mount(c);
+    expect(container.querySelector('.node-inspector__form').disabled).toBe(false);
+  });
+
+  it('la verifica ha visto dei controlli (i pannelli si sono montati)', () => {
+    expect(total).toBeGreaterThan(CASES.length);
+  });
+
+  it('il form dell\'arco (join) e\' spento allo stesso modo', () => {
+    const store = useCanvasStore.getState();
+    store.reset();
+    store.init('p1', 'estrai');
+    store.setReadOnly(true);
+    store.loadGraph([
+      { id: 'a', type: 'tableNode', position: { x: 0, y: 0 }, data: {} },
+      { id: 'b', type: 'tableNode', position: { x: 0, y: 0 }, data: {} },
+    ], [{ id: 'e1', source: 'a', target: 'b', selected: true, data: {} }]);
+    const edgeInspector = {
+      kind: 'join', icon: '🔗', matches: () => true,
+      entry: () => ({ title: 'Join', summary: '' }),
+      Panel: () => <div><input aria-label="campo" /><select aria-label="scelta"><option>x</option></select><button type="button">Azione</button></div>,
+    };
+    const { container } = render(<ConfirmProvider><NodeInspector fullNodeTypes={{}} edgeInspector={edgeInspector} /></ConfirmProvider>);
+    const form = container.querySelector('.node-inspector__form');
+    expect(form).toBeTruthy();
+    expect([...form.querySelectorAll(CONTROLS)].every(el => el.matches(':disabled'))).toBe(true);
+    // La navigazione del pannello resta usabile.
+    expect(screen.getByRole('button', { name: 'Chiudi pannello' }).disabled).toBe(false);
+  });
+});
