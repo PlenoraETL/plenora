@@ -54,7 +54,8 @@ Options:
       Do not rebuild images. Recreate containers with existing local images.
 
   --frontend-api-url URL
-      Sets FRONTEND_VITE_API_URL for the frontend build.
+      Sets FRONTEND_VITE_API_URL for the frontend build (only a relative path such as /api:
+      the Docker image CSP allows same-origin only).
 
   --worker-replicas N
       Number of worker containers to run. Default: current running
@@ -266,6 +267,9 @@ compose_update() {
     log_step "Compose config"
     run_docker compose config --quiet
 
+    # P31: stessa regola del frontend/Dockerfile, controllata subito (prima della build).
+    case "$FRONTEND_VITE_API_URL" in ""|/*) ;; *) die "La CSP dell'immagine Docker ammette solo lo stesso origin (connect-src 'self'): FRONTEND_VITE_API_URL assoluto e Sentry nel frontend non sono supportati in Docker. Usa /api same-origin oppure l'installer Windows (FRONTEND_SENTRY_DSN nel backend/.env)." ;; esac
+    if [ -n "${FRONTEND_VITE_SENTRY_DSN:-}" ]; then die "La CSP dell'immagine Docker ammette solo lo stesso origin (connect-src 'self'): FRONTEND_VITE_API_URL assoluto e Sentry nel frontend non sono supportati in Docker. Usa /api same-origin oppure l'installer Windows (FRONTEND_SENTRY_DSN nel backend/.env)."; fi
     if [ -n "$FRONTEND_VITE_API_URL" ]; then
         export FRONTEND_VITE_API_URL
         log "Using FRONTEND_VITE_API_URL=${FRONTEND_VITE_API_URL}"

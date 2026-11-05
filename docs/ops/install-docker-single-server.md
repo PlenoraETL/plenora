@@ -116,8 +116,12 @@ Review `.env.docker` before continuing. Do not commit it.
 Do not set `FRONTEND_VITE_API_URL` for a single-server install. The frontend
 uses same-origin `/api`, and its nginx container proxies requests to the
 backend service. This works unchanged with localhost, an IP address, or DNS.
-Use `FRONTEND_VITE_API_URL` only when frontend and backend are intentionally
-published on different origins.
+In Docker `FRONTEND_VITE_API_URL` accepts only a relative path (for example
+`/api`): the image Content-Security-Policy (`connect-src 'self'`) allows
+same-origin requests only, so a backend on a different origin and frontend
+Sentry are not supported here and the installer stops with a clear message.
+Use the Windows installer for those cases (`FRONTEND_SENTRY_DSN` and
+`-FrontendApiUrl`).
 
 Interactive installs ask for the first superadmin credentials. The username
 defaults to `admin`; the password is not written to `.env.docker`.

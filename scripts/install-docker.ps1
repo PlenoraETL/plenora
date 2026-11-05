@@ -500,6 +500,13 @@ if ($Check) {
 Ensure-DockerEnv
 Collect-AdminBootstrapCredentials
 
+# P31: stessa regola del frontend/Dockerfile, controllata subito (prima della build).
+if (-not [string]::IsNullOrWhiteSpace($FrontendApiUrl) -and -not $FrontendApiUrl.StartsWith('/')) {
+    throw "La CSP dell'immagine Docker ammette solo lo stesso origin (connect-src 'self'): FRONTEND_VITE_API_URL assoluto e Sentry nel frontend non sono supportati in Docker. Usa /api same-origin oppure l'installer Windows (FRONTEND_SENTRY_DSN nel backend/.env)."
+}
+if (-not [string]::IsNullOrWhiteSpace($env:FRONTEND_VITE_SENTRY_DSN)) {
+    throw "La CSP dell'immagine Docker ammette solo lo stesso origin (connect-src 'self'): FRONTEND_VITE_API_URL assoluto e Sentry nel frontend non sono supportati in Docker. Usa /api same-origin oppure l'installer Windows (FRONTEND_SENTRY_DSN nel backend/.env)."
+}
 if (-not [string]::IsNullOrWhiteSpace($FrontendApiUrl)) {
     $env:FRONTEND_VITE_API_URL = $FrontendApiUrl
     Write-Host "Using FRONTEND_VITE_API_URL=$FrontendApiUrl"
