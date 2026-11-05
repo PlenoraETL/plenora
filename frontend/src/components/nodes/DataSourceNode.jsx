@@ -21,6 +21,7 @@ import { requestErrorMessage } from '../../utils/errorMessages';
 import OptionSelect from '../common/OptionSelect';
 import FieldInput from '../common/FieldInput';
 import { integer } from '../../utils/fieldCodecs';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 // Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
 const FILE_OFFSET = integer({ min: 0 });
@@ -198,7 +199,7 @@ const selectedDs = datasources.find(d => d.id === dsId);
         {dsResource.status === 'error' && (
           <div className="dsn__loading-inline" role="alert">
             ⚠️ {dsResource.stale ? 'Connettori non aggiornati' : 'Connettori non caricati'}: {dsResource.error}{' '}
-            <button type="button" className="nodrag list-state__retry" onClick={() => dsResource.reload()}>Riprova</button>
+            <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => dsResource.reload()}>Riprova</button>
           </div>
         )}
         {dsResource.hasData && (
@@ -404,7 +405,7 @@ return (
                     ) : schemaError ? (
                       <div className="dsn__columns-empty dsn__columns-empty--err" role="alert">
                         ⚠️ Schema non disponibile: {schemaResource.error}{' '}
-                        <button type="button" className="nodrag list-state__retry" onClick={() => schemaResource.reload()}>Riprova</button>
+                        <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => schemaResource.reload()}>Riprova</button>
                       </div>
                     ) : data.columns?.length > 0 ? (
                       data.columns.map((col, i) => (

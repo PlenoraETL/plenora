@@ -27,23 +27,6 @@ import { outputReferencesPatch } from '../../../../utils/columnPlans';
 import ColumnsGrid from '../../../transforms/panels/ColumnsGrid';
 import { gridConfig, gridRows, savedSelectionError } from '../../../transforms/panels/panelConfig';
 
-/**
- * Undo per azione (R1.6): scrivere l'etichetta della stessa colonna e' una
- * digitazione (un solo Ctrl+Z); ogni altro cambio della griglia e' un'azione.
- */
-export function labelEditGroup(nodeId, before, next) {
-  if (!Array.isArray(before) || !Array.isArray(next) || before.length !== next.length) return null;
-  const same = (x, y) => x === y || JSON.stringify(x) === JSON.stringify(y);
-  const changed = next.map((row, i) => i).filter(i => !same(next[i], before[i]));
-  if (changed.length !== 1) return null;
-  const a = before[changed[0]];
-  const b = next[changed[0]];
-  if (a.name !== b.name) return null;
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-  const diff = [...keys].filter(k => !same(a[k], b[k]));
-  return diff.length === 1 && diff[0] === 'label' ? `output:${nodeId}:label:${b.name}` : null;
-}
-
 export function PipelineOutputColumns({ id, data, mode = 'manipola', upstreamColumns, disabled }) {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   // Per id solo dove il backend di questo tipo di progetto risolve per id
@@ -55,10 +38,13 @@ export function PipelineOutputColumns({ id, data, mode = 'manipola', upstreamCol
   const onChange = (next) => {
     const outputColumns = gridConfig(next, upstreamColumns, { withIds: byId });
     // Dai dati CORRENTI dello store (T6, regola degli aggiornamenti funzionali).
+    // Undo: scrivere un'etichetta e' una digitazione (un Ctrl+Z), ogni
+    // casella o spostamento e' un'azione: lo decide lo store dal campo
+    // (store/typingAction), non la forma della patch.
     updateNodeData(id, (d) => ({
       ...outputReferencesPatch({ ...d, output_columns: outputColumnsAsRead(d.output_columns, mode) }, upstreamColumns, outputColumns),
       output_columns: outputColumns,
-    }), { group: labelEditGroup(id, rows, next) });
+    }));
   };
   return (
     <div className="result-node__section result-node__section--bordered">

@@ -28,6 +28,7 @@ import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import './CaricanArcGISNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import AutoRunNote from './carica/autoRunNote';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 const CaricanArcGISNode = memo(({ data, id }) => {
   const [showMapping, setShowMapping] = useState(false);
@@ -470,7 +471,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
 
           {/* Errori ArcGIS */}
           {arcgisError && retryArcgis && (
-            <button type="button" className="nodrag list-state__retry" onClick={() => retryArcgis()}>Riprova</button>
+            <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => retryArcgis()}>Riprova</button>
           )}
           {arcgisError && (
             <div className="carica-arcgis-node__warning carica-arcgis-node__warning--err">

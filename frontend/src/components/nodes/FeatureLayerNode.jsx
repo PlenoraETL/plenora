@@ -22,6 +22,7 @@ import { featureLayerColumns } from '../../utils/featureLayers';
 import { isColumnVisible } from '../../utils/columnUtils';
 import './FeatureLayerNode.css';
 import NodeHandle from '../canvas/NodeHandle';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 const FIELD_ICONS = {
   'int': '🔢',
@@ -227,7 +228,7 @@ const FeatureLayerNode = memo(({ data, id }) => {
             {schemaResource.status === 'error' && (
               <div className="fl-node__empty" role="alert">
                 {displayColumns.length > 0 ? 'Campi del layer non aggiornati' : 'Campi del layer non caricati'}: {schemaResource.error}{' '}
-                <button type="button" className="nodrag list-state__retry" onClick={() => schemaResource.reload()}>Riprova</button>
+                <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => schemaResource.reload()}>Riprova</button>
               </div>
             )}
             {displayColumns.length === 0 && schemaResource.status === 'error' ? null : displayColumns.length === 0 ? (

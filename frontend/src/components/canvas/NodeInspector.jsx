@@ -33,6 +33,7 @@ import BranchSection from './BranchSection';
 import './NodeInspector.css';
 import { term } from '../../utils/glossary';
 import { useNodesContent } from '../../hooks/useColumns';
+import { useReadOnlyLock } from '../common/readOnlySafe';
 
 // Id del nodo da ispezionare: esattamente un nodo selezionato, note escluse.
 const selectInspectedId = (s) => {
@@ -81,20 +82,25 @@ function InspectorFrame({ prefix, label, icon, kind, title, summary, onClose, sw
 }
 
 /**
- * Il form di un passo o di un arco (Fase 5, unione T5+T6, R1.10). Regola
- * unica della sola lettura nel pannello: il form sta in un
- * `<fieldset disabled>`, quindi OGNI controllo nativo (input, select,
- * textarea, button, compresi FieldInput, SchemaFields e i controlli dei
- * sotto-componenti) e' spento davvero, non solo ignorato dallo store. Fuori
- * dal form restano la navigazione del pannello (chiudi, vista, archi del
- * passo) e i rami, che decidono da soli. Le finestre aperte dal form non si
- * aprono: il loro pulsante e' spento.
+ * Il form di un passo o di un arco (Fase 5, T5+T6, correzione dopo la
+ * conferma). REGOLA della sola lettura nel pannello: si spengono SOLO i
+ * controlli che modificano il canvas. `useReadOnlyLock` spegne davvero ogni
+ * controllo nativo del form (input, select, textarea, button, compresi
+ * FieldInput, SchemaFields, i sotto-componenti e quelli montati dopo) tranne
+ * le AZIONI DI LETTURA dichiarate con `{...READ_ONLY_SAFE}`
+ * (common/readOnlySafe: Cronologia esecuzioni, Valida/Anteprima/Esegui,
+ * Ricarica/Espandi dell'anteprima, Riprova degli elenchi, Cerca colonna).
+ * Prima un `<fieldset disabled>` spegneva anche queste. Fuori dal form
+ * restano la navigazione del pannello (chiudi, vista, archi del passo) e i
+ * rami, che decidono da soli.
  */
 function ReadOnlyForm({ readOnly, children }) {
+  const ref = useRef(null);
+  useReadOnlyLock(ref, readOnly);
   return (
-    <fieldset className="node-inspector__form" disabled={readOnly}>
+    <div ref={ref} className="node-inspector__form" data-readonly={readOnly ? 'true' : undefined}>
       {children}
-    </fieldset>
+    </div>
   );
 }
 

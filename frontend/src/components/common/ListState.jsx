@@ -22,6 +22,7 @@
  */
 import React from 'react';
 import './ListState.css';
+import { READ_ONLY_SAFE } from './readOnlySafe';
 
 export const STALE_TITLE = 'Dati non aggiornati';
 export const STALE_NOTE = "Sono mostrati i dati dell'ultimo caricamento riuscito.";
@@ -49,7 +50,7 @@ export function ResourceError({ resource = null, title = 'Caricamento non riusci
         {stale && <span className="list-state__error-note">{STALE_NOTE}</span>}
       </div>
       {onRetry && (
-        <button type="button" className="list-state__retry" onClick={() => onRetry()}>Riprova</button>
+        <button type="button" {...READ_ONLY_SAFE} className="list-state__retry" onClick={() => onRetry()}>Riprova</button>
       )}
     </div>
   );

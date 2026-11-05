@@ -17,6 +17,7 @@ import React, { useMemo, useState } from 'react';
 import useDraftList from './useDraftList';
 import { gridError, prettyName, stripJoinSuffix } from './panelConfig';
 import './panels.css';
+import { READ_ONLY_SAFE } from '../../common/readOnlySafe';
 
 const sourceName = (r) => (r.display ? r.display.split('.').pop() : r.name);
 // Confronto delle righe senza i campi solo di presentazione.
@@ -68,7 +69,7 @@ export default function ColumnsGrid({
       </div>
       <div className="pgrid__tools">
         <input
-          className="ppanel__input pgrid__search"
+          {...READ_ONLY_SAFE} className="ppanel__input pgrid__search"
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Cerca colonna…"

@@ -24,16 +24,23 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConfirmProvider } from '../../src/context/ConfirmContext';
 import { answerConfirm } from '../helpers/confirmDialog';
 
-const { canvasStateRef } = vi.hoisted(() => ({ canvasStateRef: { current: { nodes: [], edges: [] } } }));
+const { canvasStateRef, httpMode } = vi.hoisted(() => ({
+  canvasStateRef: { current: { nodes: [], edges: [] } },
+  // 'pending': nessuna risposta; 'reject': ogni richiesta fallisce (gli
+  // elenchi mostrano «Riprova»).
+  httpMode: { current: 'pending' },
+}));
 
 vi.mock('@xyflow/react', () => ({
   ...globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef, showRoot: false }),
   // Fuori dal canvas: NodeHandle non disegna nulla, come nel pannello vero.
   useNodeId: () => null,
 }));
-// Nessuna risposta del server: i moduli restano nel loro stato di caricamento.
+// Nessuna risposta del server (o un errore, con httpMode 'reject').
 vi.mock('../../src/api/http', () => {
-  const pending = () => new Promise(() => {});
+  const pending = () => (httpMode.current === 'reject'
+    ? Promise.reject(Object.assign(new Error('Servizio non raggiungibile'), { response: { status: 503, data: { detail: 'Servizio non raggiungibile' } } }))
+    : new Promise(() => {}));
   return {
     default: {
       get: pending, post: pending, put: pending, patch: pending, delete: pending,
@@ -60,71 +67,23 @@ vi.mock('../../src/utils/transformRegistry', () => ({
 
 import useCanvasStore from '../../src/store/useCanvasStore';
 import NodeInspector from '../../src/components/canvas/NodeInspector';
-import TableNode from '../../src/components/nodes/TableNode';
-import FeatureLayerNode from '../../src/components/nodes/FeatureLayerNode';
-import DataSourceNode from '../../src/components/nodes/DataSourceNode';
-import StaticValuesNode from '../../src/components/nodes/StaticValuesNode';
-import ProjectInputNode from '../../src/components/nodes/ProjectInputNode';
-import ProjectSourceNode from '../../src/components/nodes/ProjectSourceNode';
-import FileSourceNode from '../../src/components/nodes/FileSourceNode';
-import ResultNode from '../../src/components/nodes/ResultNode';
-import CaricanNode from '../../src/components/nodes/CaricanNode';
-import CaricanArcGISNode from '../../src/components/nodes/CaricanArcGISNode';
-import AnnotationNode from '../../src/components/nodes/AnnotationNode';
-import TransformNode from '../../src/components/transforms/TransformNode';
-import MultiJoinNode from '../../src/components/transforms/MultiJoinNode';
-import ApiEnrichNode from '../../src/components/panels/ApiEnrichNode';
-
-// Nome del componente nel file dell'editor -> componente.
-const COMPONENTS = {
-  TableNode, FeatureLayerNode, DataSourceNode, StaticValuesNode, ProjectInputNode,
-  ProjectSourceNode, FileSourceNode, ResultNode, CaricanNode, CaricanArcGISNode,
-  AnnotationNode, TransformNode, MultiJoinNode, ApiEnrichNode,
-};
-
-const EDITORS = [
-  ['estrai', 'EstraiEditor.jsx'],
-  ['manipola', 'ManipolaEditor.jsx'],
-  ['arricchisci', 'ArricchisciEditor.jsx'],
-];
-const pages = path.resolve(import.meta.dirname, '../../src/pages');
-const editorMaps = EDITORS.map(([mode, file]) => {
-  const src = fs.readFileSync(path.join(pages, file), 'utf-8');
-  const body = src.match(/const nodeTypes = \{([\s\S]*?)\n\};/)[1].replace(/\/\/[^\n]*/g, '');
-  const pairs = [...body.matchAll(/\b(\w+):\s*(\w+)/g)].map(m => [m[1], m[2]]);
-  return { mode, file, pairs };
-});
-
-// Dati minimi per tipo: quanto basta perche' il modulo si monti.
-const SAMPLE = {
-  transform: { transform_op: 'filter', config: {} },
-  datasourceNode: { mode: 'source', columns: [] },
-  datasource_node: { mode: 'source', columns: [] },
-  resultNode: { fileName: 'output', format: 'csv', columns: [] },
-  result: { fileName: 'output', format: 'csv', columns: [], isManipulate: true },
-  multi_join: { config: { join_keys: [] }, columns: [] },
-};
-
-// Ogni tipo di ogni editor, note escluse (restano libere sul canvas).
-const CASES = editorMaps.flatMap(({ mode, file, pairs }) => pairs
-  .filter(([type]) => type !== 'comment')
-  .map(([type, component]) => ({ mode, file, type, component })));
+import ResultInlinePreview from '../../src/components/nodes/result/ResultInlinePreview';
+import { ResourceError } from '../../src/components/common/ListState';
+import { READ_ONLY_SAFE, isReadOnlySafe } from '../../src/components/common/readOnlySafe';
+import { CASES, COMPONENTS, editorMaps, mountInspector } from '../helpers/inspectorHarness';
 
 const deleteSpy = vi.fn();
 let seenProps;
 
-function mount({ mode, type, component }, { readOnly = false } = {}) {
-  const store = useCanvasStore.getState();
-  store.reset();
-  store.init('p1', mode);
-  store.setReadOnly(readOnly);
-  store.loadGraph([{ id: 'n1', type, position: { x: 0, y: 0 }, selected: true, data: { ...(SAMPLE[type] || {}) } }], []);
-  useCanvasStore.setState({ deleteNode: deleteSpy });
-  canvasStateRef.current = useCanvasStore.getState();
-  const Full = COMPONENTS[component];
+function mount(c, { readOnly = false, ...opts } = {}) {
   // Il modulo e' avvolto per leggere le props che riceve dal guscio.
-  const Spy = (props) => { seenProps = props; return <Full {...props} />; };
-  return render(<ConfirmProvider><NodeInspector fullNodeTypes={{ [type]: Spy }} prefix={mode} /></ConfirmProvider>);
+  return mountInspector(c, {
+    readOnly,
+    canvasStateRef,
+    storePatch: { deleteNode: deleteSpy },
+    wrap: (Full) => (props) => { seenProps = props; return <Full {...props} />; },
+    ...opts,
+  });
 }
 
 const bodyOf = (container) => container.querySelector('.node-inspector__body');
@@ -136,6 +95,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  httpMode.current = 'pending';
 });
 
 describe('Blocco A, regola 6: il guscio possiede intestazione, chiusura ed eliminazione', () => {
@@ -204,34 +164,141 @@ describe('Blocco A, regola 6: il guscio possiede intestazione, chiusura ed elimi
   });
 });
 
-// Fase 5, unione T5+T6, R1.10: in sola lettura i controlli del form sono
-// spenti DAVVERO (fieldset disabled del pannello), per ogni pannello di ogni
-// editor; fuori dal form restano solo la navigazione del pannello.
-describe('R1.10: in sola lettura ogni controllo del form del passo e\' disabilitato', () => {
+// Fase 5, T5+T6, correzione dopo la conferma. REGOLA della sola lettura: si
+// spengono SOLO i controlli che modificano il canvas; le azioni di lettura,
+// dichiarate in UN punto (`{...READ_ONLY_SAFE}`, common/readOnlySafe),
+// restano attive. Per ogni pannello di ogni editor.
+describe('Sola lettura: spenti i controlli di modifica, attive le azioni di lettura', () => {
   const CONTROLS = 'input, select, textarea, button';
+  // Le sole azioni di lettura ammesse (etichetta, titolo o valore).
+  const READ_ACTIONS = /Cronologia esecuzioni|Valida|Anteprima|Esegui|Ricarica anteprima|Apri anteprima completa|Riprova|Cerca colonna|^cache$|^recalculate$/;
+  // Azioni di lettura che il viewer aveva a 8461197c, per tipo di nodo
+  // (stessi dati minimi; sonda del giro di conferma su 8461197c).
+  const VIEWER_8461197C = {
+    'arricchisci · api_enrich': ['Cronologia esecuzioni'],
+    'arricchisci · result': ['Cerca colonna', 'cache', 'recalculate', 'Valida', 'Cronologia esecuzioni'],
+    'estrai · resultNode': ['Valida', 'Cronologia esecuzioni'],
+    'manipola · multi_join': ['Cronologia esecuzioni'],
+    'manipola · result': ['Cerca colonna', 'cache', 'recalculate', 'Valida', 'Cronologia esecuzioni'],
+    'manipola · transform': ['Cronologia esecuzioni'],
+  };
+  const labelOf = (el) => [el.getAttribute('aria-label'), el.textContent, el.getAttribute('title'), el.value]
+    .map(x => (x || '').trim().replace(/\s+/g, ' ')).filter(Boolean).join(' | ');
+  const named = (el) => {
+    const text = labelOf(el);
+    const m = text.match(READ_ACTIONS);
+    return m ? m[0] : text;
+  };
+  const editsActive = (controls) => controls
+    .filter(el => !isReadOnlySafe(el) && !el.matches(':disabled')).map(el => el.outerHTML.slice(0, 120));
   let total = 0;
 
-  it.each(CASES.map(c => [`${c.mode} · ${c.type}`, c]))('%s: nessun controllo attivo nel form', (_, c) => {
+  it.each(CASES.map(c => [`${c.mode} · ${c.type}`, c]))('%s: controlli di modifica spenti, azioni di lettura attive', (name, c) => {
     const { container } = mount(c, { readOnly: true });
     const form = container.querySelector('.node-inspector__form');
     expect(form).toBeTruthy();
-    expect(form.disabled).toBe(true);
+    expect(form.dataset.readonly).toBe('true');
     const controls = [...form.querySelectorAll(CONTROLS)];
     total += controls.length;
-    const active = controls.filter(el => !el.matches(':disabled')).map(el => el.outerHTML.slice(0, 120));
-    expect(active).toEqual([]);
+    expect(editsActive(controls)).toEqual([]);
+    const safe = controls.filter(isReadOnlySafe);
+    expect(safe.map(labelOf).filter(l => !READ_ACTIONS.test(l))).toEqual([]);
+    const activeReads = safe.filter(el => !el.disabled).map(named);
+    expect(activeReads).toEqual(expect.arrayContaining(VIEWER_8461197C[name] || []));
   });
 
-  it.each(CASES.map(c => [`${c.mode} · ${c.type}`, c]))('%s: modificabile, il form non e\' spento', (_, c) => {
+  it.each(CASES.map(c => [`${c.mode} · ${c.type}`, c]))('%s: modificabile, il pannello non spegne nulla', (_, c) => {
     const { container } = mount(c);
-    expect(container.querySelector('.node-inspector__form').disabled).toBe(false);
+    expect(container.querySelector('.node-inspector__form').dataset.readonly).toBeUndefined();
   });
 
   it('la verifica ha visto dei controlli (i pannelli si sono montati)', () => {
     expect(total).toBeGreaterThan(CASES.length);
   });
 
-  it('il form dell\'arco (join) e\' spento allo stesso modo', () => {
+  it.each(CASES.map(c => [`${c.mode} · ${c.type}`, c]))('%s: con il server in errore i «Riprova» restano attivi', async (_, c) => {
+    globalThis.__frontendConsolePolicy.allowError = true;
+    httpMode.current = 'reject';
+    const { container } = mount(c, { readOnly: true });
+    await act(async () => { for (let i = 0; i < 5; i += 1) await new Promise(r => setTimeout(r, 0)); });
+    const controls = [...container.querySelector('.node-inspector__form').querySelectorAll(CONTROLS)];
+    expect(editsActive(controls)).toEqual([]);
+    const retries = controls.filter(el => /Riprova/.test(labelOf(el)));
+    expect(retries.filter(el => el.disabled).map(el => el.outerHTML.slice(0, 120))).toEqual([]);
+    retriesSeen += retries.length;
+  });
+  let retriesSeen = 0;
+  it('la verifica in errore ha visto dei «Riprova»', () => {
+    expect(retriesSeen).toBeGreaterThan(0);
+  });
+
+  it('Output: Valida, Anteprima, Esegui e Cronologia attivi per il viewer', () => {
+    const c = CASES.find(x => x.mode === 'manipola' && x.type === 'result');
+    mount(c, { readOnly: true, storePatch: { deleteNode: deleteSpy, editorActionsRef: { current: { onPreview: vi.fn(), onExecute: vi.fn() } } } });
+    for (const name of [/Valida/, /Anteprima/, /Esegui/, /Cronologia esecuzioni/]) {
+      const button = screen.getAllByRole('button').find(b => name.test(b.textContent));
+      expect(button, String(name)).toBeTruthy();
+      expect(button.disabled).toBe(false);
+    }
+  });
+
+  const mountPanel = (Panel) => {
+    const store = useCanvasStore.getState();
+    store.reset(); store.init('p1', 'manipola'); store.setReadOnly(true);
+    store.loadGraph([{ id: 'n1', type: 'x', position: { x: 0, y: 0 }, selected: true, data: {} }], []);
+    return render(<ConfirmProvider><NodeInspector fullNodeTypes={{ x: Panel }} /></ConfirmProvider>);
+  };
+
+  it('anteprima del risultato ed elenchi in errore: Ricarica, Espandi e Riprova attivi; i controlli di modifica no', () => {
+    mountPanel(() => (
+      <div>
+        <ResultInlinePreview state={{ status: 'success', data: { columns: [{ name: 'a' }], rows: [{ a: 1 }] } }} onRefresh={() => {}} onExpand={() => {}} />
+        <ResourceError message="errore" onRetry={() => {}} />
+        <input aria-label="campo" />
+        <button type="button">Aggiungi</button>
+        <button type="button" {...READ_ONLY_SAFE}>Valida</button>
+      </div>
+    ));
+    expect(screen.getByTitle('Ricarica anteprima').disabled).toBe(false);
+    expect(screen.getByTitle('Apri anteprima completa').disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Riprova' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Valida' }).disabled).toBe(false);
+    expect(screen.getByLabelText('campo').disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Aggiungi' }).disabled).toBe(true);
+  });
+
+  it('i controlli montati dopo (stato che cambia) sono spenti anche loro', async () => {
+    const Later = () => {
+      const [shown, setShown] = React.useState(false);
+      React.useEffect(() => { setShown(true); }, []);
+      return <div>{shown && <input aria-label="dopo" />}</div>;
+    };
+    mountPanel(Later);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText('dopo').disabled).toBe(true);
+  });
+
+  it('statico: ogni «Riprova» e ogni «Cronologia esecuzioni» dei pannelli e\' un\'azione di lettura dichiarata', () => {
+    const src = path.resolve(import.meta.dirname, '../../src/components');
+    const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (
+      e.isDirectory() ? walk(path.join(dir, e.name)) : (/\.jsx$/.test(e.name) ? [path.join(dir, e.name)] : [])));
+    const files = ['nodes', 'panels', 'transforms', 'common'].flatMap(d => walk(path.join(src, d)));
+    const offenders = [];
+    let seen = 0;
+    for (const file of files) {
+      const text = fs.readFileSync(file, 'utf-8');
+      for (const m of text.matchAll(/<button\b([^>]*)>([\s\S]{0,200}?)<\/button>/g)) {
+        const isRead = /list-state__retry|colstatus__retry|setIsRunHistoryOpen\(true\)|__history-btn/.test(m[1]) || /^\s*Riprova\s*$/.test(m[2]);
+        if (!isRead) continue;
+        seen += 1;
+        if (!m[1].includes('{...READ_ONLY_SAFE}')) offenders.push(`${path.basename(file)}: ${m[0].slice(0, 90)}`);
+      }
+    }
+    expect(seen).toBeGreaterThan(10);
+    expect(offenders).toEqual([]);
+  });
+
+  it('il form dell\'arco (join) segue la stessa regola', () => {
     const store = useCanvasStore.getState();
     store.reset();
     store.init('p1', 'estrai');

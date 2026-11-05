@@ -56,6 +56,7 @@ const NOT_USER_DATA = {
   'utils/session.js': 'il registro stesso',
   'utils/dialogStack.js': 'stack delle finestre aperte (Fase 5, T4): si svuota smontandole, nessun dato',
   'hooks/useUnsavedChangesGuard.js': 'contatore degli editor montati (Fase 5, T4): si azzera smontandoli, nessun dato',
+  'store/typingAction.js': 'contatore delle sessioni di fuoco, WeakMap con chiave i campi e ultimo evento di digitazione (Fase 5, T5+T6): nessun dato dell utente',
 };
 
 describe('fine sessione: registro unico (resetSession)', () => {

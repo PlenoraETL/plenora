@@ -16,21 +16,31 @@ non intera) e una riga null, compreso l'ingresso vuoto.
   se ogni riga corrisponde, decimale con un null): ``certain=False`` e le
   alternative possibili; la previsione e' il tipo dell'ingresso con tutti i
   casi insieme.
+
+Costo (Fase 5, T5+T6, correzione dopo la conferma): la previsione dipende dai
+TIPI dei valori della mappa, non dal loro numero. Il piano gira su una MAPPA
+RIDOTTA rappresentativa (``representative_plan``, regola sotto) e i log di
+``op_lookup`` durante le prove scendono a DEBUG (``_quiet_probes``): una
+mappa di 50.000 chiavi costa una lettura lineare, non 17 esecuzioni.
 """
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import datetime as _dt
 import itertools
 import json
+import logging
 from functools import lru_cache
-from typing import Any, NamedTuple
+from typing import Any, Iterator, NamedTuple
 
 from app.core.dataframes.schema import typed_probe_frame
 from app.core.manipola.canvas_schema_runtime import build_columns_with_types
 from app.core.manipola.transforms.analysis import op_lookup
 from app.core.manipola.types import JsonObject
 from app.shared.execution.lookup_mapping import (
+    lookup_is_numeric,
     lookup_value_text,
     normalize_lookup_mapping,
 )
@@ -50,6 +60,37 @@ _UNMATCHED = {
     "date": ["1999-12-31"],
     "datetime": ["1999-12-31 10:30:00"],
 }
+
+
+# ── Log delle prove: DEBUG, solo nel percorso di previsione ─────────────────
+# Le esecuzioni di prova di ``op_lookup`` non sono esecuzioni dell'utente: le
+# loro righe (``Lookup: 1/1 valori mappati``, errori di config non valide)
+# scendono a DEBUG. Il ContextVar le distingue dalle esecuzioni vere anche con
+# piu' thread o richieste in parallelo (nessun livello globale cambiato).
+_PREDICTING: contextvars.ContextVar[bool] = contextvars.ContextVar("lookup_type_plan_predicting", default=False)
+
+
+class _ProbeLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if _PREDICTING.get() and record.levelno > logging.DEBUG:
+            record.levelno = logging.DEBUG
+            record.levelname = logging.getLevelName(logging.DEBUG)
+        return True
+
+
+_PROBE_LOGGER = logging.getLogger(op_lookup.__module__)
+_PROBE_FILTER = _ProbeLogFilter()
+if not any(isinstance(f, _ProbeLogFilter) for f in _PROBE_LOGGER.filters):
+    _PROBE_LOGGER.addFilter(_PROBE_FILTER)
+
+
+@contextlib.contextmanager
+def _quiet_probes() -> Iterator[None]:
+    token = _PREDICTING.set(True)
+    try:
+        yield
+    finally:
+        _PREDICTING.reset(token)
 
 
 def _key_candidates(family: str, keys: list[Any]) -> list[Any]:
@@ -80,14 +121,15 @@ def _key_candidates(family: str, keys: list[Any]) -> list[Any]:
             continue
         if lookup_value_text(value) == text:
             out.append(value)
+            break
     return out[:1]
 
 
-def _unmatched_values(family: str, keys: list[Any]) -> list[Any]:
-    texts = {lookup_value_text(k) for k in keys} | {k for k in keys if isinstance(k, str)}
+def _unmatched_values(family: str, present: set[Any]) -> list[Any]:
+    """Valori che non corrispondono a nessuna chiave; ``present``: testi delle chiavi."""
     if family == "bool":
-        return [v for v in (True, False) if str(v) not in texts][:1]
-    return [v for v in _UNMATCHED.get(family, []) if lookup_value_text(v) not in texts and v not in texts]
+        return [v for v in (True, False) if str(v) not in present][:1]
+    return [v for v in _UNMATCHED.get(family, []) if lookup_value_text(v) not in present and v not in present]
 
 
 def _probe_type(column: str, column_type: str, values: list[Any], params: JsonObject) -> str | None:
@@ -104,38 +146,123 @@ def _probe_type(column: str, column_type: str, values: list[Any], params: JsonOb
 
 
 @lru_cache(maxsize=512)
-def _plan(column_type: str, config_json: str) -> LookupTypePlan:
-    config = json.loads(config_json)
+def _plan(column_type: str, plan_json: str) -> LookupTypePlan:
+    plan = json.loads(plan_json)
     column = "c"
     params = {
-        "mapping": config.get("mapping"),
-        "default": config.get("default"),
-        "unmatched": config.get("unmatched"),
-        "output_column": "out" if config.get("output_column") else None,
+        "mapping": plan["mapping"],
+        "default": plan["default"],
+        "unmatched": plan["unmatched"],
+        "output_column": "out" if plan["output_column"] else None,
     }
     family = type_family(column_type) or "str"
     try:
         keys = list(normalize_lookup_mapping(params["mapping"]).keys())
     except ValueError:
         keys = []
-    groups = [_key_candidates(family, keys), _unmatched_values(family, keys), [None]]
+    groups = [_key_candidates(family, keys), plan["unmatched_probe"], [None]]
     pool = [value for group in groups for value in group]
     observed: list[str] = []
-    for size in range(len(pool) + 1):
-        for combo in itertools.combinations(pool, size):
-            kind = _probe_type(column, column_type, list(combo), params)
-            if kind is not None and kind not in observed:
-                observed.append(kind)
-    full = _probe_type(column, column_type, pool, params)
+    with _quiet_probes():
+        for size in range(len(pool) + 1):
+            for combo in itertools.combinations(pool, size):
+                kind = _probe_type(column, column_type, list(combo), params)
+                if kind is not None and kind not in observed:
+                    observed.append(kind)
+        full = _probe_type(column, column_type, pool, params)
     predicted = full or (observed[0] if observed else column_type)
     return LookupTypePlan(predicted, len(observed) <= 1, tuple(observed))
 
 
+# ── Mappa ridotta rappresentativa ───────────────────────────────────────────
+# REGOLA: il piano gira su una mappa ridotta con lo stesso esito di tipo della
+# mappa intera. Si tengono, nell'ordine della mappa:
+#  (a) per ogni classe (tipo della chiave, tipo del valore) la PRIMA voce:
+#      stesse famiglie di valori -> stesso dtype della serie dei valori che
+#      ``op_lookup`` usa con ``map``; e la prima chiave che corrisponde alla
+#      colonna resta la prima (le voci precedenti non corrispondono);
+#  (b) TUTTE le voci la cui chiave corrisponde a un valore di prova (stesso
+#      testo, o uguale per Python: 1 == True) -> stesse righe trovate e
+#      stesso valore mappato;
+#  (c) se la mappa intera esclude la conversione numerica, il primo valore
+#      non numerico (``lookup_is_numeric`` da' lo stesso esito);
+#  (d) i valori «non mappati» di prova si scelgono sulla mappa INTERA.
+# Eccezione dichiarata: se la forma di testo fonde o scarta chiavi (due chiavi
+# con lo stesso testo, una chiave null) il piano usa la mappa intera: la
+# fusione puo' togliere una famiglia di valori e la riduzione non sarebbe
+# esatta. Garanzia: tests2/contracts/test_lookup_types_parity.py (piano
+# ridotto == piano sulla mappa intera su tutta la matrice e su mappe miste).
+
+_INT64 = (-(2 ** 63), 2 ** 63)
+_UINT64 = 2 ** 64
+
+
+def _kind(value: Any) -> Any:
+    """Classe di un valore per la riduzione: il tipo e, per gli interi, l'ampiezza."""
+    kind = type(value)
+    if kind is int:
+        return (_INT64[0] <= value < _INT64[1], 0 <= value < _UINT64)
+    return kind
+
+
+def _plan_config(column_type: str, config: JsonObject, *, reduce: bool) -> JsonObject:
+    unmatched = config.get("unmatched")
+    default = config.get("default")
+    family = type_family(column_type) or "str"
+    base = {"default": default, "unmatched": unmatched, "output_column": bool(config.get("output_column"))}
+    try:
+        mapping = normalize_lookup_mapping(config.get("mapping"))
+    except ValueError:
+        # Mappa non valida: passa com'e' (op_lookup decide come prima).
+        return {**base, "mapping": config.get("mapping"), "unmatched_probe": _unmatched_values(family, set())}
+    keys = list(mapping)
+    texts = [key if type(key) is str else lookup_value_text(key) for key in keys]
+    present = set(texts) | {key for key in keys if isinstance(key, str)}
+    unmatched_probe = _unmatched_values(family, present)
+    lossy = None in present or len(set(texts)) != len(texts)
+    if not reduce or lossy:
+        chosen = list(range(len(keys)))
+    else:
+        probes = _key_candidates(family, keys) + unmatched_probe
+        probe_texts = {lookup_value_text(v) for v in probes}
+        probe_values = set(probes)  # 1 == True: l'uguaglianza di Python, come dict/isin
+        seen: set[tuple] = set()
+        chosen = []
+        for index, key in enumerate(keys):
+            kind = (_kind(key), _kind(mapping[key]))
+            hit = texts[index] in probe_texts or key in probe_values
+            if hit or kind not in seen:
+                seen.add(kind)
+                chosen.append(index)
+        if not lookup_is_numeric(mapping, unmatched, default):
+            for index, key in enumerate(keys):
+                if not lookup_is_numeric({key: mapping[key]}, "null", None):
+                    if index not in chosen:
+                        chosen = sorted([*chosen, index])
+                    break
+    pairs = [{"from": keys[i], "to": mapping[keys[i]]} for i in chosen]
+    return {**base, "mapping": pairs, "unmatched_probe": unmatched_probe}
+
+
+def representative_plan(column_type: str, config: JsonObject) -> JsonObject:
+    """Configurazione del piano sulla mappa ridotta (vedi la REGOLA sopra)."""
+    return _plan_config(column_type, config, reduce=True)
+
+
+def _run(column_type: str, plan: JsonObject) -> LookupTypePlan:
+    return _plan(column_type, json.dumps(plan, sort_keys=True, default=str))
+
+
+def full_mapping_type_plan(column_type: str | None, config: JsonObject) -> LookupTypePlan:
+    """Piano sulla mappa INTERA: solo riferimento dei test di parita'."""
+    column_type = str(column_type or "str")
+    return _run(column_type, _plan_config(column_type, config, reduce=False))
+
+
 def lookup_type_plan(column_type: str | None, config: JsonObject) -> LookupTypePlan:
     """Tipo della colonna di uscita del Lookup sul tipo ``column_type`` in ingresso."""
-    key = json.dumps({k: config.get(k) for k in ("mapping", "default", "unmatched", "output_column")},
-                     sort_keys=True, default=str)
-    return _plan(str(column_type or "str"), key)
+    column_type = str(column_type or "str")
+    return _run(column_type, representative_plan(column_type, config))
 
 
-__all__ = ["LookupTypePlan", "lookup_type_plan"]
+__all__ = ["LookupTypePlan", "full_mapping_type_plan", "lookup_type_plan", "representative_plan"]

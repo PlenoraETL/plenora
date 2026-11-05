@@ -15,6 +15,7 @@ import RunHistoryModal from '../modals/RunHistoryModal';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import NodeHandle from '../canvas/NodeHandle';
 import { term } from '../../utils/glossary';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 const MultiJoinNode = memo(({ data, id }) => {
   
@@ -334,7 +335,7 @@ const MultiJoinNode = memo(({ data, id }) => {
       <div className="multi-join-node__footer">
         <button
           type="button"
-          className="multi-join-node__history-btn"
+          {...READ_ONLY_SAFE} className="multi-join-node__history-btn"
           onClick={(e) => { e.stopPropagation(); setIsRunHistoryOpen(true); }} onMouseDown={(e) => e.stopPropagation()}
           title={term('run_history').description}
         >

@@ -28,27 +28,32 @@ import { derivedColumnsForSave } from './useColumnStore';
 import { requestErrorMessage } from '../utils/errorMessages';
 import { registerSessionReset } from '../utils/session';
 import { FRONTEND_ENV } from '../config/runtimeEnv';
+import { currentTypingKey, onEndTyping } from './typingAction';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
-// Undo raggruppato per AZIONE, non per tempo (Fase 5, unione T5+T6, R1.6).
-// Regola: uno snapshot per azione dell'utente, dove un'azione e'
-//  (a) un gesto: tutte le mutazioni utente dello stesso turno sincrono (un
-//      clic, un tasto, il `perform` di una conferma) sono un solo Ctrl+Z;
-//  (b) una digitazione: mutazioni consecutive con la stessa chiave di gruppo
-//      (`group`: stesso nodo e stessi campi) restano un solo Ctrl+Z finche'
-//      non interviene un'altra azione, un undo/redo o un caricamento.
-// Nessuna finestra di tempo: due azioni diverse a pochi ms l'una dall'altra
-// restano due Ctrl+Z (prima: una finestra globale di 350 ms).
+// Undo per AZIONE (Fase 5, T5+T6, correzione dopo la conferma). REGOLA
+// (dettagli in store/typingAction): un Ctrl+Z annulla un'azione, dove
+//  (a) un gesto composto = tutte le mutazioni utente dello stesso turno
+//      sincrono (un clic, un tasto, il `perform` di una conferma);
+//  (b) una digitazione = mutazioni nate dall'evento di un campo di testo,
+//      stesso campo nella stessa sessione di fuoco, stesso nodo e stessi
+//      campi dei dati: resta un solo Ctrl+Z finche' il campo ha il fuoco;
+//  (c) ogni altra azione (casella, scelta, pulsante, Applica) e' una sua
+//      azione anche se tocca lo stesso campo dei dati della precedente;
+//  (d) Salva, cambio della selezione, apertura/chiusura di un pannello,
+//      undo/redo e caricamenti chiudono qualunque gruppo.
+// Nessuna finestra di tempo e nessuna chiave dedotta dai soli campi della
+// patch (prima: «nodo + campi» fondeva azioni discrete sullo stesso campo).
 const queueTurnEnd = typeof queueMicrotask === 'function'
   ? queueMicrotask
   : (fn) => Promise.resolve().then(fn);
 
-/** Chiave di gruppo di una patch dei dati: nodo + campi toccati. */
-export function patchGroup(scope, nodeId, updates) {
-  if (!updates || typeof updates !== 'object') return null;
-  const keys = Object.keys(updates).filter(k => k !== '_lastUpdate').sort();
-  return keys.length ? `${scope}:${nodeId}:${keys.join(',')}` : null;
+/** Ambito di una mutazione dei dati: nodo + campi toccati (patch-funzione: `fn`). */
+function patchScope(scope, nodeId, updates) {
+  if (typeof updates === 'function') return `${scope}:${nodeId}:fn`;
+  const keys = Object.keys(updates || {}).filter(k => k !== '_lastUpdate').sort();
+  return `${scope}:${nodeId}:${keys.join(',')}`;
 }
 
 /**
@@ -59,11 +64,43 @@ export function patchGroup(scope, nodeId, updates) {
 export const createCanvasStore = () => create(
   devtools(
     (set, get) => {
-      // Azione in corso (turno sincrono) e chiave dell'ultima azione.
+      // Azione in corso (turno sincrono) e chiave dell'ultima digitazione.
       let turnOpen = false;
       let turnGroup = null;
       let lastGroup = null;
       const endAction = () => { turnOpen = false; turnGroup = null; lastGroup = null; };
+      // Chiude la digitazione senza spezzare il gesto in corso (selezione,
+      // pannello, Salva dentro lo stesso turno restano nel gesto).
+      const closeTyping = () => { turnGroup = null; lastGroup = null; };
+      onEndTyping(closeTyping);
+
+      /**
+       * Registra lo stato PRE-mutazione (regola in testa al file).
+       * `scope`: ambito della mutazione (nodo + campi); conta solo se la
+       * mutazione nasce dalla digitazione di un campo di testo.
+       */
+      const snapshot = (scope = null) => {
+        const { nodes, edges, past, isReadOnly } = get();
+        if (isReadOnly) return;
+        const typing = currentTypingKey();
+        const group = typing ? `${typing}|${scope || 'canvas'}` : null;
+        if (turnOpen) {
+          // Stesso gesto: nessuno snapshot nuovo. Un gesto che mescola
+          // azioni diverse non continua una digitazione dopo di se'.
+          if (group !== turnGroup) { turnGroup = null; lastGroup = null; }
+          return;
+        }
+        turnOpen = true;
+        turnGroup = group;
+        queueTurnEnd(() => { turnOpen = false; turnGroup = null; });
+        const continues = group !== null && group === lastGroup;
+        lastGroup = group;
+        if (continues) return;
+        const top = past[past.length - 1];
+        // dedup per reference: nessuna modifica dall'ultima snapshot.
+        if (top && top.nodes === nodes && top.edges === edges) return;
+        set({ past: [...past, { nodes, edges }].slice(-HISTORY_LIMIT), future: [] }, false, 'takeSnapshot');
+      };
 
       // Helper privato: user-edit marca dirty E svuota gli highlight
       // di validazione post-validation (amber borders). Evita churn
@@ -119,6 +156,8 @@ export const createCanvasStore = () => create(
       // Prossimo salvataggio senza base: "Sovrascrivi" dopo un conflitto.
       let forceNext = false;
       const saveCanvasSerialized = async () => {
+        // Salva chiude la digitazione: quello che si scrive dopo e' un'azione nuova.
+        closeTyping();
         saveRequested = true;
         if (saveInFlight) return saveInFlight;
 
@@ -373,7 +412,7 @@ export const createCanvasStore = () => create(
 
       canvasView: 'canvas',
       focusNodeId: null,
-      setCanvasView: (view, focusNodeId = null) => set({ canvasView: view, focusNodeId }, false, 'setCanvasView'),
+      setCanvasView: (view, focusNodeId = null) => { closeTyping(); set({ canvasView: view, focusNodeId }, false, 'setCanvasView'); },
 
       /** Imposta la modalità sola lettura. Chiamata da useCanvasCore in base al ruolo. */
       setReadOnly: (value) => set({ isReadOnly: !!value }, false, 'setReadOnly'),
@@ -390,27 +429,7 @@ export const createCanvasStore = () => create(
       /** Registra lo stato corrente nello stack `past` (da chiamare PRIMA di
        *  mutare). Dedup per reference: se lo stato non è cambiato dall'ultimo
        *  snapshot, no-op. Svuota `future` (nuovo ramo). No-op in sola lettura. */
-      takeSnapshot: (group = null) => {
-        const { nodes, edges, past, isReadOnly } = get();
-        if (isReadOnly) return;
-        if (turnOpen) {
-          // Stesso gesto: nessuno snapshot nuovo. Un gesto che mescola
-          // azioni diverse non continua una digitazione dopo di se'.
-          if (group !== turnGroup) { turnGroup = null; lastGroup = null; }
-          return;
-        }
-        turnOpen = true;
-        turnGroup = group;
-        queueTurnEnd(() => { turnOpen = false; turnGroup = null; });
-        // Digitazione nello stesso campo: continua l'azione precedente.
-        const continues = group !== null && group === lastGroup;
-        lastGroup = group;
-        if (continues) return;
-        const top = past[past.length - 1];
-        // dedup per reference: nessuna modifica dall'ultima snapshot.
-        if (top && top.nodes === nodes && top.edges === edges) return;
-        set({ past: [...past, { nodes, edges }].slice(-HISTORY_LIMIT), future: [] }, false, 'takeSnapshot');
-      },
+      takeSnapshot: () => snapshot(null),
 
       /** Annulla l'ultima modifica strutturale del canvas. */
       undo: () => {
@@ -487,6 +506,8 @@ export const createCanvasStore = () => create(
 
       // Gestiscono drag, resize, selezione — delegano ad applyNodeChanges/applyEdgeChanges
       onNodesChange: (changes) => {
+        // Cambio della selezione (= pannello aperto/chiuso): chiude la digitazione.
+        if (changes.some(c => c.type === 'select')) closeTyping();
         // In sola lettura accettiamo solo i changes innocui (select) per
         // permettere all'utente di selezionare i nodi e ispezionarli.
         if (get().isReadOnly) {
@@ -525,6 +546,7 @@ export const createCanvasStore = () => create(
       },
 
       onEdgesChange: (changes) => {
+        if (changes.some(c => c.type === 'select')) closeTyping();
         if (get().isReadOnly) {
           const safeChanges = changes.filter(c => c.type === 'select');
           if (safeChanges.length === 0) return;
@@ -826,12 +848,10 @@ export const createCanvasStore = () => create(
         // `updates` puo' essere una patch o una funzione (data) => patch sui
         // dati CORRENTI dello store (Fase 5 T6, R1.4/N5): chi aggiorna un
         // campo annidato dopo un await non parte mai dalla copia del render.
-        // opts.group: chiave della digitazione per le patch-funzione (le
-        // patch-oggetto la ricavano dai campi: `patchGroup`), R1.6.
         const derived = opts.derived === true;
         if (!derived) {
           if (get().isReadOnly) return;
-          get().takeSnapshot(opts.group ?? patchGroup('data', nodeId, updates));
+          snapshot(patchScope('data', nodeId, updates));
         }
         set(
           state => ({
@@ -860,7 +880,7 @@ export const createCanvasStore = () => create(
         const derived = opts.derived === true;
         if (!derived) {
           if (get().isReadOnly) return;
-          get().takeSnapshot(opts.group ?? patchGroup('config', nodeId, patch));
+          snapshot(patchScope('config', nodeId, patch));
         }
         set(
           state => ({
@@ -1048,7 +1068,7 @@ export const createCanvasStore = () => create(
        * caricati dal backend. In questo modo handleSaveQuiet non farà PUT
        * inutili finché l'utente non modifica davvero qualcosa.
        */
-      markClean: () => set({ isDirty: false, pendingSync: false }, false, 'markClean'),
+      markClean: () => { closeTyping(); set({ isDirty: false, pendingSync: false }, false, 'markClean'); },
 
       /**
        * Carica un canvas che NON e' sul server (copia di sicurezza del

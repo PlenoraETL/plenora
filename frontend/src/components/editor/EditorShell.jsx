@@ -425,7 +425,7 @@ canvasConfig = EMPTY_OBJ,
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={handleConnect}
-              onNodeDragStart={takeSnapshot}
+              onNodeDragStart={() => takeSnapshot()}
               onEdgeClick={onEdgeClick}
               onEdgeContextMenu={onEdgeContextMenu ? handleEdgeContextMenu : undefined}
               onInit={onInit}

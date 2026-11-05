@@ -1,14 +1,20 @@
 /**
- * Fase 5, unione T5+T6, R1.6 — undo raggruppato per AZIONE, non per tempo.
+ * Undo per AZIONE (Fase 5, T5+T6, correzione dopo la conferma).
  *
- * Regola (store/useCanvasStore, takeSnapshot):
- *  (a) un gesto = tutte le mutazioni utente dello stesso turno sincrono:
- *      un solo Ctrl+Z;
- *  (b) una digitazione = mutazioni consecutive con la stessa chiave di gruppo
- *      (stesso nodo e stessi campi): un solo Ctrl+Z finche' non interviene
- *      un'altra azione, un undo/redo o un caricamento;
- *  (c) nessuna finestra di tempo: due azioni diverse a pochi ms restano due.
- * Enumerata su ogni azione utente dello store e su ProjectInputNode.
+ * Regola (store/typingAction, store/useCanvasStore takeSnapshot):
+ *  (a) un gesto composto = tutte le mutazioni utente dello stesso turno
+ *      sincrono: un solo Ctrl+Z;
+ *  (b) una digitazione DICHIARATA = mutazioni nate dall'evento di un campo
+ *      di testo, stesso campo nella stessa sessione di fuoco (e stesso nodo
+ *      e campi): un solo Ctrl+Z finche' il campo ha il fuoco;
+ *  (c) ogni azione discreta (casella, scelta, radio, pulsante, Applica) e'
+ *      una sua azione, anche sullo stesso campo dei dati della precedente;
+ *  (d) Salva, cambio della selezione, apertura/chiusura di un pannello,
+ *      undo/redo e caricamenti chiudono qualunque gruppo;
+ *  (e) nessuna finestra di tempo.
+ * Casi del giro di conferma: (a) mostra colonna A poi B, (b) Applica i
+ * filtri due volte, (c) digita, Salva, digita. Enumerazione: ogni azione
+ * dello store e ogni controllo discreto dei pannelli dei tre editor.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,16 +22,38 @@ import React from 'react';
 import { act, render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const { canvasStateRef } = vi.hoisted(() => ({ canvasStateRef: { current: { nodes: [], edges: [] } } }));
+
 vi.mock('../../src/utils/transformRegistry', () => ({
   fetchTransformRegistry: vi.fn(() => new Promise(() => {})),
   getCachedTransformRegistry: () => ({ categories: {}, transforms: {} }),
   isMultiInputOp: () => false,
 }));
+// Banco dei pannelli (tests/helpers/inspectorHarness): come InspectorShell.
+vi.mock('@xyflow/react', () => ({
+  ...globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef, showRoot: false }),
+  useNodeId: () => null,
+}));
+vi.mock('../../src/api/http', () => {
+  const pending = () => new Promise(() => {});
+  return {
+    default: {
+      get: pending, post: pending, put: pending, patch: pending, delete: pending,
+      interceptors: { request: { use: () => {} }, response: { use: () => {} } },
+      defaults: { headers: { common: {} } },
+    },
+  };
+});
+vi.mock('../../src/hooks/useToast', () => ({
+  useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
+}));
+vi.mock('../../src/components/modals/RunHistoryModal', () => ({ default: () => null }));
 
-import useCanvasStore, { patchGroup } from '../../src/store/useCanvasStore';
+import useCanvasStore from '../../src/store/useCanvasStore';
 import ProjectInputNode from '../../src/components/nodes/ProjectInputNode';
-import { labelEditGroup } from '../../src/components/nodes/result/standard/OutputColumnsSection';
+import ModalWrapper from '../../src/components/common/ModalWrapper';
 import { ConfirmProvider } from '../../src/context/ConfirmContext';
+import { CASES, mountInspector } from '../helpers/inspectorHarness';
 
 const st = () => useCanvasStore.getState();
 // Fine del turno sincrono (= fine del gesto).
@@ -91,59 +119,227 @@ describe('R1.6: due azioni diverse sono due Ctrl+Z, senza finestra di tempo', ()
     expect(st().edges.map(e => e.id)).toEqual(['e1']);
   });
 
-  it('digitazione nello stesso campo (turni diversi): un solo Ctrl+Z', async () => {
-    for (const label of ['A', 'An', 'Ann', 'Anno']) {
-      st().updateNodeData('a', { label });
-      await nextTurn();
-    }
-    expect(st().past).toHaveLength(1);
-    st().undo();
-    expect(st().nodes[0].data.label).toBe('A');
-  });
-
-  it('campo diverso, nodo diverso o un\'altra azione chiudono la digitazione', async () => {
-    st().updateNodeData('a', { label: 'x' }); await nextTurn();
-    st().updateNodeData('a', { label: 'xy' }); await nextTurn();
-    st().updateNodeData('a', { title: 't' }); await nextTurn();
-    st().updateNodeData('b', { title: 't' }); await nextTurn();
-    st().addEdges({ id: 'e2', source: 'b', target: 'a' }); await nextTurn();
-    st().updateNodeData('b', { title: 'tt' }); await nextTurn();
-    expect(undoCount()).toBe(5);
-  });
-
-  it('dopo un undo la digitazione nello stesso campo e\' un\'azione nuova', async () => {
-    st().updateNodeData('a', { label: 'x' }); await nextTurn();
-    st().undo();
-    st().updateNodeData('a', { label: 'y' }); await nextTurn();
-    st().updateNodeData('a', { label: 'yz' }); await nextTurn();
-    expect(st().past).toHaveLength(1);
-  });
-
-  it('le patch-funzione senza gruppo sono azioni; con `group` si raggruppano', async () => {
-    st().updateNodeData('a', d => ({ n: (d.n || 0) + 1 })); await nextTurn();
-    st().updateNodeData('a', d => ({ n: (d.n || 0) + 1 })); await nextTurn();
-    expect(st().past).toHaveLength(2);
-    seed();
-    st().updateNodeData('a', () => ({ v: 'a' }), { group: 'g' }); await nextTurn();
-    st().updateNodeData('a', () => ({ v: 'ab' }), { group: 'g' }); await nextTurn();
-    expect(st().past).toHaveLength(1);
-  });
-
-  it('chiave di gruppo: nodo e campi della patch, mai il tempo', () => {
-    expect(patchGroup('data', 'a', { label: 'x', _lastUpdate: 1 })).toBe('data:a:label');
-    expect(patchGroup('data', 'a', { b: 1, a: 2 })).toBe('data:a:a,b');
-    expect(patchGroup('data', 'a', () => ({}))).toBeNull();
-    const rows = [{ name: 'x', keep: true, label: '' }, { name: 'y', keep: true, label: '' }];
-    expect(labelEditGroup('o', rows, [{ ...rows[0], label: 'X' }, rows[1]])).toBe('output:o:label:x');
-    expect(labelEditGroup('o', rows, [{ ...rows[0], keep: false }, rows[1]])).toBeNull();
-    expect(labelEditGroup('o', rows, [rows[1], rows[0]])).toBeNull();
-  });
-
   it('statico: nessuna finestra di tempo nello store', () => {
     const src = fs.readFileSync(path.resolve(import.meta.dirname, '../../src/store/useCanvasStore.js'), 'utf-8');
     expect(src).not.toMatch(/SNAPSHOT_COALESCE_MS|lastSnapshotTs/);
-    const body = src.slice(src.indexOf('takeSnapshot: (group'), src.indexOf("'takeSnapshot');"));
+    const body = src.slice(src.indexOf('const snapshot = (scope'), src.indexOf("'takeSnapshot');"));
+    expect(body.length).toBeGreaterThan(100);
     expect(body).not.toMatch(/Date\.now|setTimeout|performance\.now/);
+  });
+});
+
+// Campi di prova: testo, area di testo, caselle, scelta, pulsante, campo
+// con scrittura ritardata (timer).
+function Fields({ nodeId = 'a' }) {
+  const data = useCanvasStore(s => s.nodes.find(n => n.id === nodeId)?.data) || {};
+  const update = useCanvasStore(s => s.updateNodeData);
+  const cols = data.columns || [{ name: 'A', visible: true }, { name: 'B', visible: true }];
+  return (
+    <div>
+      <input aria-label="alias" value={data.alias || ''} onChange={e => update(nodeId, { alias: e.target.value })} />
+      <input aria-label="altro" value={data.other || ''} onChange={e => update(nodeId, { other: e.target.value })} />
+      <textarea aria-label="nota" value={data.note || ''} onChange={e => update(nodeId, { note: e.target.value })} />
+      {cols.map((c, i) => (
+        <input key={c.name} type="checkbox" aria-label={`colonna ${c.name}`} checked={c.visible}
+          onChange={() => update(nodeId, { columns: cols.map((x, j) => (j === i ? { ...x, visible: !x.visible } : x)) })} />
+      ))}
+      <select aria-label="formato" value={data.alias ? 'json' : (data.format || 'csv')} onChange={e => update(nodeId, { alias: e.target.value })}>
+        <option value="csv">csv</option><option value="json">json</option><option value="xlsx">xlsx</option>
+      </select>
+      <button type="button" onClick={() => update(nodeId, { filters: [...(data.filters || []), { column: 'A' }] })}>Applica filtri</button>
+      <input aria-label="ritardato" onChange={e => { const v = e.target.value; setTimeout(() => update(nodeId, { slow: v }), 0); }} />
+    </div>
+  );
+}
+
+const field = (name) => screen.getByLabelText(name);
+async function type(el, values, { focus = true } = {}) {
+  if (focus) act(() => { el.focus(); });
+  for (const v of values) {
+    await act(async () => { fireEvent.change(el, { target: { value: v } }); });
+    await nextTurn();
+  }
+}
+async function click(el) {
+  await act(async () => { fireEvent.click(el); });
+  await nextTurn();
+}
+
+describe('Undo per azione: digitazione dichiarata dal campo, azioni discrete separate', () => {
+  it('(a) mostra colonna A poi colonna B: due Ctrl+Z', async () => {
+    render(<Fields />);
+    await click(field('colonna A'));
+    await click(field('colonna B'));
+    expect(st().past).toHaveLength(2);
+    act(() => st().undo());
+    expect(st().nodes[0].data.columns.map(c => c.visible)).toEqual([false, true]);
+  });
+
+  it('(a) la stessa casella due volte: due Ctrl+Z', async () => {
+    render(<Fields />);
+    await click(field('colonna A'));
+    await click(field('colonna A'));
+    expect(st().past).toHaveLength(2);
+  });
+
+  it('(a) dallo store, senza campo di testo: due patch dello stesso campo sono due azioni', async () => {
+    st().updateNodeData('a', { columns: [{ name: 'A', visible: false }] }); await nextTurn();
+    st().updateNodeData('a', { columns: [{ name: 'A', visible: true }] }); await nextTurn();
+    expect(st().past).toHaveLength(2);
+  });
+
+  it('(b) Applica i filtri due volte: due Ctrl+Z', async () => {
+    render(<Fields />);
+    await click(screen.getByRole('button', { name: 'Applica filtri' }));
+    await click(screen.getByRole('button', { name: 'Applica filtri' }));
+    expect(st().past).toHaveLength(2);
+    act(() => st().undo());
+    expect(st().nodes[0].data.filters).toHaveLength(1);
+  });
+
+  it('(c) digita, Salva, digita: due Ctrl+Z (markClean e handleSaveQuiet)', async () => {
+    render(<Fields />);
+    await type(field('alias'), ['x', 'xy', 'xyz']);
+    act(() => st().markClean());
+    await type(field('alias'), ['xyzw'], { focus: false });
+    expect(st().past).toHaveLength(2);
+    act(() => st().undo());
+    expect(st().nodes[0].data.alias).toBe('xyz');
+    act(() => { seed(); useCanvasStore.setState({ projectId: null }); });
+    await type(field('alias'), ['p', 'pq']);
+    await act(async () => { await st().handleSaveQuiet(); });
+    await type(field('alias'), ['pqr'], { focus: false });
+    expect(st().past).toHaveLength(2);
+  });
+
+  it('digitazione nello stesso campo: un solo Ctrl+Z (input e textarea)', async () => {
+    render(<Fields />);
+    await type(field('alias'), ['A', 'An', 'Ann', 'Anno']);
+    expect(st().past).toHaveLength(1);
+    await type(field('nota'), ['n', 'no', 'not']);
+    expect(st().past).toHaveLength(2);
+    act(() => st().undo());
+    act(() => st().undo());
+    expect(st().nodes[0].data.alias).toBeUndefined();
+  });
+
+  it('uscita dal campo e nuovo fuoco: un\'azione nuova', async () => {
+    render(<Fields />);
+    await type(field('alias'), ['a', 'ab']);
+    act(() => { field('alias').blur(); });
+    await type(field('alias'), ['abc']);
+    expect(st().past).toHaveLength(2);
+  });
+
+  it('un\'azione discreta in mezzo chiude la digitazione anche senza perdere il fuoco', async () => {
+    render(<Fields />);
+    await type(field('alias'), ['a', 'ab']);
+    await act(async () => { fireEvent.change(field('formato'), { target: { value: 'xlsx' } }); });
+    await nextTurn();
+    await type(field('alias'), ['abc'], { focus: false });
+    expect(st().past).toHaveLength(3);
+  });
+
+  it('cambio della selezione, cambio di vista e apertura di una finestra chiudono la digitazione', async () => {
+    render(<Fields />);
+    await type(field('alias'), ['a']);
+    act(() => st().onNodesChange([{ id: 'b', type: 'select', selected: true }]));
+    await type(field('alias'), ['ab'], { focus: false });
+    act(() => st().setCanvasView('steps'));
+    await type(field('alias'), ['abc'], { focus: false });
+    const { unmount } = render(<ModalWrapper isOpen onClose={() => {}} title="Finestra"><p>x</p></ModalWrapper>);
+    await type(field('alias'), ['abcd'], { focus: false });
+    unmount();
+    await type(field('alias'), ['abcde'], { focus: false });
+    expect(st().past).toHaveLength(5);
+  });
+
+  it('una scrittura dopo un timer non e\' digitazione: ogni scrittura e\' un\'azione', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<Fields />);
+      act(() => { field('ritardato').focus(); });
+      for (const v of ['r', 'ri']) {
+        act(() => { fireEvent.change(field('ritardato'), { target: { value: v } }); });
+        await act(async () => { vi.runAllTimers(); await Promise.resolve(); });
+      }
+      expect(st().past).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drag-start e cancellazione da tastiera non passano l\'evento come gruppo', async () => {
+    const shell = fs.readFileSync(path.resolve(import.meta.dirname, '../../src/components/editor/EditorShell.jsx'), 'utf-8');
+    const core = fs.readFileSync(path.resolve(import.meta.dirname, '../../src/hooks/useCanvasCore.js'), 'utf-8');
+    expect(shell).not.toMatch(/onNodeDragStart=\{takeSnapshot\}/);
+    expect(core).not.toMatch(/onBeforeDelete:\s*takeSnapshot\b/);
+    // Anche con un argomento, takeSnapshot e' un'azione a se'.
+    st().takeSnapshot({ type: 'mousedown' });
+    st().editNodes(ns => ns.map(n => ({ ...n, position: { x: 5, y: 5 } })));
+    await nextTurn();
+    st().takeSnapshot({ type: 'mousedown' });
+    st().editNodes(ns => ns.map(n => ({ ...n, position: { x: 9, y: 9 } })));
+    await nextTurn();
+    expect(st().past).toHaveLength(2);
+  });
+
+  it('statico: nessun gruppo passato dai componenti, nessuna chiave dai soli campi della patch', () => {
+    const store = fs.readFileSync(path.resolve(import.meta.dirname, '../../src/store/useCanvasStore.js'), 'utf-8');
+    expect(store).not.toMatch(/opts\.group|patchGroup/);
+    const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (
+      e.isDirectory() ? walk(path.join(dir, e.name)) : (/\.jsx?$/.test(e.name) ? [path.join(dir, e.name)] : [])));
+    const offenders = walk(path.resolve(import.meta.dirname, '../../src'))
+      .filter(f => /(updateNodeData|patchNodeConfig)\([^;]*\{\s*group:/s.test(fs.readFileSync(f, 'utf-8')));
+    expect(offenders).toEqual([]);
+  });
+});
+
+// Enumerazione: ogni controllo DISCRETO (casella, radio, scelta, pulsante)
+// del pannello di ogni tipo di nodo dei tre editor. Ogni attivazione che
+// modifica il canvas e' esattamente UN Ctrl+Z, anche ripetuta sullo stesso
+// controllo o su controlli che scrivono lo stesso campo.
+describe('Undo per azione: le azioni discrete dei pannelli sono una ciascuna', () => {
+  const DISCRETE = 'input[type="checkbox"], input[type="radio"], select, button';
+  const SKIP = /Elimina|Chiudi|×|Cronologia|Valida|Anteprima|Esegui|Vedi /;
+  let effective = 0;
+
+  it.each(CASES.map(c => [`${c.mode} · ${c.type}`, c]))('%s', async (_, c) => {
+    globalThis.__frontendConsolePolicy.allowError = true;
+    const { container } = mountInspector(c, { canvasStateRef });
+    const form = () => container.querySelector('.node-inspector__form');
+    const controls = [...form().querySelectorAll(DISCRETE)]
+      .filter(el => !el.disabled && !SKIP.test(`${el.textContent} ${el.getAttribute('aria-label') || ''} ${el.title || ''}`));
+    for (const el of controls) {
+      for (let round = 0; round < 2; round += 1) {
+        if (!el.isConnected || el.disabled) break;
+        useCanvasStore.setState({ isDirty: false });
+        const before = st().past.length;
+        await act(async () => {
+          if (el.tagName === 'SELECT') {
+            const options = [...el.options].filter(o => !o.disabled && o.value !== el.value);
+            if (!options.length) return;
+            fireEvent.change(el, { target: { value: options[round % options.length].value } });
+          } else {
+            fireEvent.click(el);
+          }
+        });
+        await nextTurn();
+        const delta = st().past.length - before;
+        const label = `${el.tagName} ${el.textContent.trim().slice(0, 30)} ${el.getAttribute('aria-label') || ''}`;
+        if (st().isDirty) {
+          effective += 1;
+          expect(delta, label).toBe(1);
+        } else {
+          expect(delta, label).toBe(0);
+        }
+      }
+    }
+    cleanup();
+  });
+
+  it('l\'enumerazione ha attivato azioni che modificano il canvas', () => {
+    expect(effective).toBeGreaterThan(10);
   });
 });
 

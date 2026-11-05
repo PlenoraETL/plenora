@@ -13,6 +13,7 @@ import React from 'react';
 import { isGeometryType } from '../../../utils/columnUtils';
 import { formatNumber } from '../../../utils/previewFormat';
 import { term } from '../../../utils/glossary';
+import { READ_ONLY_SAFE } from '../../common/readOnlySafe';
 
 const MAX_ROWS = 5;
 const MAX_COLS = 6;
@@ -59,7 +60,7 @@ export default function ResultInlinePreview({ state, onExpand, onRefresh }) {
           {onRefresh && (
             <button
               type="button"
-              className="result-node__preview-inline-btn"
+              {...READ_ONLY_SAFE} className="result-node__preview-inline-btn"
               onClick={onRefresh}
               disabled={status === 'loading'}
               title="Ricarica anteprima"
@@ -70,7 +71,7 @@ export default function ResultInlinePreview({ state, onExpand, onRefresh }) {
           {onExpand && (status === 'success' || status === 'empty') && (
             <button
               type="button"
-              className="result-node__preview-inline-btn result-node__preview-inline-btn--expand"
+              {...READ_ONLY_SAFE} className="result-node__preview-inline-btn result-node__preview-inline-btn--expand"
               onClick={onExpand}
               title="Apri anteprima completa"
             >

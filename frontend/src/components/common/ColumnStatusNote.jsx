@@ -21,6 +21,7 @@ import { refreshColumns } from '../../hooks/useColumns';
 import useColumnStore from '../../store/useColumnStore';
 import '../transforms/panels/panels.css';
 import './ColumnStatusNote.css';
+import { READ_ONLY_SAFE } from './readOnlySafe';
 
 /** Stato del nodo, in parole: [{ kind: 'pending'|'uncertain'|'error', label, title }]. */
 export function columnStatusItems(result) {
@@ -52,7 +53,7 @@ export default function ColumnStatusNote({ result }) {
           {item.kind === 'error' && (
             <>
               {' '}
-              <button type="button" className="ppanel__mini colstatus__retry" onClick={refreshColumns}>Riprova</button>
+              <button type="button" {...READ_ONLY_SAFE} className="ppanel__mini colstatus__retry" onClick={refreshColumns}>Riprova</button>
             </>
           )}
         </span>

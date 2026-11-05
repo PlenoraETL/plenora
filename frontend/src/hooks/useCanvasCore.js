@@ -113,7 +113,7 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     onDeleteEdges: removeEdges,
     onUndo: undo,
     onRedo: redo,
-    onBeforeDelete: takeSnapshot,
+    onBeforeDelete: () => takeSnapshot(),
   });
 
 

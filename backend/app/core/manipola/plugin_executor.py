@@ -8,7 +8,6 @@ import json as _json
 
 import json
 import importlib
-import re
 from pathlib import Path
 from typing import Any, Callable, List, Optional
 
@@ -16,6 +15,7 @@ from app.shared.execution.registry_types import LIST_PARAM_TYPES, require_known_
 from app.shared.execution.lookup_mapping import normalize_lookup_mapping
 from app.core.manipola.preparation import prepare_operation
 from app.shared.execution.config_column_refs import resolve_config_column_refs
+from app.shared.execution.expression_refs import rewrite_expression_refs
 from app.core.dataframes.ports import FrameLike
 from app.core.manipola.types import (
     JsonObject,
@@ -408,24 +408,21 @@ class PluginExecutor:
         refs: list[Any],
         id_to_name: StringMap,
     ) -> str:
-        rewritten = expression
+        """Nomi correnti delle colonne citate per id (``<campo>_column_refs``).
+
+        Regola unica dei riferimenti (app/shared/execution/expression_refs,
+        Fase 5 T5+T6): si riscrivono SOLO i token che il motore delle formule
+        legge come colonne; letterali, attributi, funzioni e argomenti no.
+        """
+        renames: StringMap = {}
         for ref in refs:
             if not isinstance(ref, dict):
                 continue
             old_name = str(ref.get("name") or "")
             new_name = id_to_name.get(str(ref.get("id") or ""))
-            if not old_name or not new_name or old_name == new_name:
-                continue
-            rewritten = rewritten.replace(f"`{old_name}`", f"`{new_name}`")
-            rewritten = rewritten.replace(f"['{old_name}']", f"['{new_name}']")
-            rewritten = rewritten.replace(f'["{old_name}"]', f'["{new_name}"]')
-            if old_name.isidentifier():
-                rewritten = re.sub(
-                    rf"\b{re.escape(old_name)}\b",
-                    new_name,
-                    rewritten,
-                )
-        return rewritten
+            if old_name and new_name and old_name != new_name:
+                renames.setdefault(old_name, new_name)
+        return rewrite_expression_refs(expression, renames)
 
     def _converti_valore(self, value: Any, param_type: Optional[str]) -> Any:
         """

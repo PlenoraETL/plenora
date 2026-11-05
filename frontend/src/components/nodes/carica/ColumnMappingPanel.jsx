@@ -3,6 +3,7 @@ import { postCaricaAutoMapping } from '../../../api/carica';
 import { requestErrorMessage } from '../../../utils/errorMessages';
 import { useBusy } from '../../../hooks/useBusy';
 import '../../common/ListState.css';
+import { READ_ONLY_SAFE } from '../../common/readOnlySafe';
 
 function ColumnMappingPanel({
   columnMappings,
@@ -78,7 +79,7 @@ function ColumnMappingPanel({
           {autoError && (
             <div className="carica-node__hint carica-node__hint--warn" role="alert">
               Mappatura automatica non riuscita: {autoError}{' '}
-              <button type="button" className="nodrag list-state__retry" onClick={loadAutoMapping}>Riprova</button>
+              <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={loadAutoMapping}>Riprova</button>
             </div>
           )}
           <div className="carica-node__mapping-actions">

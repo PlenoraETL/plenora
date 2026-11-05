@@ -25,6 +25,7 @@ import { useTransformRegistry } from '../../hooks/useTransformRegistry';
 import { ResourceError } from '../common/ListState';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import { term } from '../../utils/glossary';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 
 const TransformNode = memo(({ data, id }) => {
@@ -204,7 +205,7 @@ const TransformNode = memo(({ data, id }) => {
         <div className="ppanel__hint">Questo passo ha input runtime collegati ai parametri: si usa il modulo completo.</div>
       )}
       <div className="transform-inspector__foot">
-        <button type="button" className="ppanel__btn" onClick={() => setIsRunHistoryOpen(true)} title={term('run_history').description}>{term('run_history').icon} {term('run_history').name}</button>
+        <button type="button" {...READ_ONLY_SAFE} className="ppanel__btn" onClick={() => setIsRunHistoryOpen(true)} title={term('run_history').description}>{term('run_history').icon} {term('run_history').name}</button>
       </div>
       <RunHistoryModal
         isOpen={isRunHistoryOpen}

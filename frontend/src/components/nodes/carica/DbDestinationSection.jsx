@@ -9,6 +9,7 @@ import ConflictModal from './ConflictModal';
 import { dataFlowEdges } from '../../../utils/runtimeBindingEdges';
 import useCanvasStore from '../../../store/useCanvasStore';
 import { requestErrorMessage } from '../../../utils/errorMessages';
+import { READ_ONLY_SAFE } from '../../common/readOnlySafe';
 
 // Labels e descrizioni sono UX, restano locali. I `value` arrivano da
 // `canvasTypes.WRITE_MODES` (single source of truth allineata col BE);
@@ -209,7 +210,7 @@ function DbDestinationSection({
           {schemasError && (
             <div className="carica-node__hint carica-node__hint--warn" role="alert">
               Schemi non caricati: {schemasError}{' '}
-              <button type="button" className="nodrag list-state__retry" onClick={() => reloadSchemas()}>Riprova</button>
+              <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => reloadSchemas()}>Riprova</button>
             </div>
           )}
         </div>
@@ -245,7 +246,7 @@ function DbDestinationSection({
           {tablesError && writeMode !== 'create' && writeMode !== 'replace' && (
             <div className="carica-node__hint carica-node__hint--warn" role="alert">
               Tabelle non caricate: {tablesError}{' '}
-              <button type="button" className="nodrag list-state__retry" onClick={() => reloadTables()}>Riprova</button>
+              <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => reloadTables()}>Riprova</button>
             </div>
           )}
         </div>

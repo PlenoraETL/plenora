@@ -13,14 +13,17 @@ divergevano). Per ogni caso:
 from __future__ import annotations
 
 import itertools
+import logging
+import time
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 
 from app.core.manipola.canvas_schema_runtime import build_columns_with_types
-from app.core.manipola.lookup_type_plan import lookup_type_plan
+from app.core.manipola.lookup_type_plan import _plan, full_mapping_type_plan, lookup_type_plan, representative_plan
 from app.core.manipola.plugin_executor import get_executor
+from app.core.manipola.transforms.analysis import op_lookup
 from app.core.projects.schema_inference import SchemaInferenceService
 from app.shared.execution.schema_types import ColumnSchema
 
@@ -84,3 +87,73 @@ def test_prediction_is_certain_where_values_do_not_matter():
     # La grande maggioranza dei casi e' certa; solo la conversione numerica
     # dell'uscita dipende dai valori (intero o decimale).
     assert sum(certain) >= len(certain) * 3 // 4
+
+
+# ── Fase 5, T5+T6, correzione dopo la conferma: costo della previsione ──────
+# REGOLA: la previsione dipende dai TIPI dei valori della mappa, non dal loro
+# numero. Il piano gira su una mappa ridotta rappresentativa
+# (``representative_plan``) con lo STESSO esito del piano sulla mappa intera.
+
+MIXED = {
+    "misti": [{"from": 1, "to": "X"}, {"from": "1", "to": 5}, {"from": True, "to": 2.5}, {"from": None, "to": "n"}],
+    "stesso_testo": [{"from": "1", "to": "X"}, {"from": "2", "to": "Y"}, {"from": 1, "to": 5}],
+    "intero_enorme": [{"from": "a", "to": 2 ** 70}, {"from": "b", "to": 3}],
+    "numeri_e_testo": [{"from": str(i), "to": (i if i % 3 else f"{i}.5")} for i in range(60)] + [{"from": "x", "to": "abc"}],
+    "chiavi_booleane": [{"from": 1, "to": "uno"}, {"from": 0, "to": "zero"}, {"from": "True", "to": 9}],
+    "dizionario": {str(i): f"v{i}" for i in range(40)},
+    "valori_composti": [{"from": "a", "to": [1, 2]}, {"from": "b", "to": {"k": 1}}],
+    "date": [{"from": "2024-01-05", "to": "A"}, {"from": "2024-01-05 10:30:00", "to": 3}],
+    "non_valida": "boh",
+    "vuota_testo": "",
+}
+PARITY = list(itertools.product(
+    ["int", "real", "str", "bool", "date", "datetime", "integer"],
+    {**MAPPINGS, **MIXED}, UNMATCHED, OUTPUTS,
+))
+
+
+@pytest.mark.parametrize("col_type,mapping,unmatched,output", PARITY)
+def test_reduced_plan_equals_full_mapping_plan(col_type, mapping, unmatched, output):
+    config = {"column": "c", "mapping": {**MAPPINGS, **MIXED}[mapping], "unmatched": unmatched,
+              "default": "0" if unmatched == "value" else None}
+    if output:
+        config["output_column"] = output
+    assert lookup_type_plan(col_type, config) == full_mapping_type_plan(col_type, config)
+
+
+def test_reduced_mapping_is_small_for_a_large_map():
+    config = {"mapping": [{"from": str(i), "to": f"v{i}"} for i in range(50_000)], "unmatched": "null"}
+    plan = representative_plan("int", config)
+    assert len(plan["mapping"]) <= 3
+
+
+def test_large_map_prediction_under_100ms():
+    config = {"mapping": {str(i): f"v{i}" for i in range(50_000)}, "unmatched": "keep", "default": None}
+    best = float("inf")
+    for _ in range(3):
+        _plan.cache_clear()
+        start = time.perf_counter()
+        lookup_type_plan("int", config)
+        best = min(best, time.perf_counter() - start)
+    assert best < 0.1, f"{best * 1000:.0f} ms"
+
+
+def test_prediction_logs_nothing_at_info():
+    probe_logger = logging.getLogger(op_lookup.__module__)
+    records: list[logging.LogRecord] = []
+
+    class Collect(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    handler = Collect(level=logging.INFO)
+    probe_logger.addHandler(handler)
+    try:
+        _plan.cache_clear()
+        lookup_type_plan("int", {"mapping": MAPPINGS["numeri"], "unmatched": "null"})
+        assert records == []
+        # L'esecuzione vera continua a scrivere le sue righe INFO.
+        op_lookup(pd.DataFrame({"c": ["a"]}), column="c", mapping={"a": "X"})
+        assert [r.levelno for r in records] == [logging.INFO]
+    finally:
+        probe_logger.removeHandler(handler)

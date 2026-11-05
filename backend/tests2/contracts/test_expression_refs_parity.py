@@ -74,3 +74,58 @@ def test_canvas_sync_uses_the_same_rule():
     out = canvas_sync._sync_expression_config(config, columns)
     assert out["formula"] == "status == 'stato'"
     assert canvas_sync._expression_has_token("x == 'y'", "y") is False
+
+
+# ── Fase 5, T5+T6, correzione dopo la conferma: UN solo tokenizzatore ───────
+# Frontend (copia JS sul corpus), canvas_sync e plugin_executor riscrivono i
+# riferimenti con app/shared/execution/expression_refs. Prima plugin_executor
+# aveva una terza copia con ``\bnome\b`` che riscriveva anche i letterali.
+
+def _executor_rewrite(expression: str, old: str, new: str) -> str:
+    from app.core.manipola.plugin_executor import get_executor
+
+    return get_executor()._rewrite_expression_refs(expression, [{"id": "c1", "name": old}], {"c1": new})
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c["expression"] or "<vuota>")
+def test_plugin_executor_uses_the_same_rule(case):
+    for rw in case["rewrites"]:
+        assert _executor_rewrite(case["expression"], rw["old"], rw["new"]) == rw["expected"]
+
+
+def test_plugin_executor_renames_simultaneously():
+    from app.core.manipola.plugin_executor import get_executor
+
+    out = get_executor()._rewrite_expression_refs(
+        "a + b == 'a'", [{"id": "1", "name": "a"}, {"id": "2", "name": "b"}], {"1": "b", "2": "a"},
+    )
+    assert out == "b + a == 'a'"
+
+
+# Riscritture di nomi con espressioni regolari (``\b{re.escape(nome)}\b``,
+# ``.replace(f"`{nome}`"...)``) fuori dal tokenizzatore: vietate. Eccezione
+# dichiarata: il traduttore SQL rinomina colonne in testo SQL (altro
+# linguaggio, non le espressioni delle formule).
+_REGEX_REWRITE = (r"\b{re.escape(", "\\b{re.escape(", 'replace(f"`{', "replace(f'`{")
+_ALLOWED = {"app/db/sql_translator.py": "testo SQL, non espressioni delle formule"}
+
+
+def test_no_other_regex_rewrite_of_column_refs():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    offenders = []
+    for path in (root / "app").rglob("*.py"):
+        rel = path.relative_to(root).as_posix()
+        if rel in _ALLOWED or rel == "app/shared/execution/expression_refs.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        if any(pattern in text for pattern in _REGEX_REWRITE):
+            offenders.append(rel)
+    assert offenders == []
+    front = root.parent / "frontend" / "src"
+    if front.is_dir():
+        js_offenders = [p.relative_to(front).as_posix() for p in front.rglob("*.js*")
+                        if "\\b${" in p.read_text(encoding="utf-8") and p.name != "QueryPreview.jsx"
+                        and p.name != "expressionRefs.js"]
+        assert js_offenders == []

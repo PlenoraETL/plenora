@@ -32,6 +32,7 @@ import { nodeTitle } from '../canvas/nodeDescriptors';
 import { term } from '../../utils/glossary';
 import FieldInput from '../common/FieldInput';
 import { integer } from '../../utils/fieldCodecs';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 // Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
 const MAX_ERRORS = integer({ min: 0 });
@@ -411,7 +412,7 @@ const handleExecParamChange = (key, value) => {
         {apiResource.status === 'error' && (
           <div className="api-enrich-node__loading" role="alert">
             ⚠️ Connettore non caricato: {apiResource.error}{' '}
-            <button type="button" className="nodrag list-state__retry" onClick={() => apiResource.reload()}>Riprova</button>
+            <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => apiResource.reload()}>Riprova</button>
           </div>
         )}
 
@@ -659,7 +660,7 @@ const handleExecParamChange = (key, value) => {
       <div className="api-enrich-node__footer">
         <button
           type="button"
-          className="api-enrich-node__history-btn"
+          {...READ_ONLY_SAFE} className="api-enrich-node__history-btn"
           onClick={(e) => { e.stopPropagation(); setIsRunHistoryOpen(true); }} onMouseDown={(e) => e.stopPropagation()}
           title={term('run_history').description}
         >

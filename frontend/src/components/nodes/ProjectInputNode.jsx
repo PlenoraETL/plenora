@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useRef } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { acceptsInputKind } from '../../utils/runtimeInputKinds';
@@ -20,6 +20,7 @@ import { runtimeInputCodec } from '../../utils/runtimeInputKinds';
 import { useNodesContent } from '../../hooks/useColumns';
 import { useConfirmOrDeny } from '../../context/ConfirmContext';
 import { requestCanvasDeletion } from '../../utils/canvasDeletion';
+import { READ_ONLY_SAFE, useReadOnlyLock } from '../common/readOnlySafe';
 
 const INPUT_TYPES = Object.entries(INPUT_KIND_LABELS);
 
@@ -133,21 +134,26 @@ function ProjectInputNode({ id, data }) {
       },
     })),
   }));
-  // Dai dati CORRENTI dello store; gruppo = campo della validazione (R1.6).
+  // Dai dati CORRENTI dello store. Undo: la digitazione in un limite e' un
+  // solo Ctrl+Z (lo decide lo store dal campo di testo, store/typingAction).
   const updateValidation = changes => updateNodeData(id, d => ({
     validation: { ...(d.validation || {}), ...changes },
-  }), { group: `validation:${id}:${Object.keys(changes).sort().join(',')}` });
+  }));
   const sizeMb = data.validation?.max_size_bytes ? Math.round(data.validation.max_size_bytes / 1048576) : null;
   // Il valore predefinito passa dal convertitore del tipo dell'input (la
   // stessa regola dell'esecuzione: limiti, opzioni, espressione regolare).
   const defaultCodec = runtimeInputCodec({ input_kind: kind, validation: data.validation || {} });
+  // N11 + regola della sola lettura (common/readOnlySafe): spenti i controlli
+  // di modifica, attivi i «Riprova».
+  const lockRef = useRef(null);
+  useReadOnlyLock(lockRef, isReadOnly);
 
   return (
     <div className="pin">
       {/* Titolo, chiusura ed eliminazione sono del pannello (NodeInspector,
-          regola 6 del Blocco A). N11: in sola lettura TUTTI i controlli sono
-          spenti davvero (fieldset disabled), non solo i select. */}
-      <fieldset className="pin__fieldset" disabled={isReadOnly}>
+          regola 6 del Blocco A). N11: in sola lettura i controlli di modifica
+          sono spenti davvero (useReadOnlyLock), non solo i select. */}
+      <div ref={lockRef} className="pin__fieldset" data-readonly={isReadOnly ? 'true' : undefined}>
 
       <label className="pin__field">
         <span>Etichetta</span>
@@ -353,7 +359,7 @@ function ProjectInputNode({ id, data }) {
                   {awaitingRegistry && registryStatus === 'error' && (
                     <p className="pin__binding-hint pin__binding-hint--error">
                       Impossibile caricare l'elenco dei parametri.{' '}
-                      <button type="button" className="nodrag list-state__retry" onClick={() => registryResource.reload()}>Riprova</button>
+                      <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => registryResource.reload()}>Riprova</button>
                     </p>
                   )}
                   {targetNode && !awaitingRegistry && options.length === 0 && (
@@ -373,7 +379,7 @@ function ProjectInputNode({ id, data }) {
         </>
       )}
 
-      </fieldset>
+      </div>
 
       {kind !== 'connection' && (
         <NodeHandle

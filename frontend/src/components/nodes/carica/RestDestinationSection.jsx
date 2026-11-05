@@ -11,6 +11,7 @@ import {
 } from '../../../constants/canvasTypes';
 import FieldInput from '../../common/FieldInput';
 import { integer } from '../../../utils/fieldCodecs';
+import { READ_ONLY_SAFE } from '../../common/readOnlySafe';
 
 // Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
 const REST_BATCH = integer({ min: 1, max: 10000 });
@@ -137,7 +138,7 @@ function RestDestinationSection({
         </select>
         <div className="carica-node__hint">
           {connectors.status === 'error'
-            ? <>Elenco dei connettori non disponibile: {connectors.error} <button type="button" className="nodrag list-state__retry" onClick={() => connectors.reload()}>Riprova</button></>
+            ? <>Elenco dei connettori non disponibile: {connectors.error} <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => connectors.reload()}>Riprova</button></>
             : 'Le credenziali restano nel connettore API, cifrate sul server, e partono solo verso l’indirizzo del connettore: il canvas ne salva solo il riferimento.'}
         </div>
         {secretNames.length > 0 && (

@@ -30,6 +30,7 @@ import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import {
   getFocusable, isTopDialog, pushDialog, removeDialog, topDialogElement,
 } from '../utils/dialogStack';
+import { endTyping } from '../store/typingAction';
 
 export const CLOSE_REASONS = ['esc', 'overlay', 'button'];
 
@@ -80,6 +81,9 @@ export default function useDialog({
   useEffect(() => {
     if (!isOpen) return undefined;
     const opener = openerRef.current;
+    // Apertura e chiusura di una finestra chiudono la digitazione in corso
+    // (undo per azione, store/typingAction).
+    endTyping();
     pushDialog({ id, getEl: () => ref.current, onEsc: () => { requestClose('esc'); } });
     const el = ref.current;
     if (el && !el.contains(document.activeElement)) {
@@ -91,6 +95,7 @@ export default function useDialog({
       try { target.focus?.(); } catch { /* noop */ }
     }
     return () => {
+      endTyping();
       removeDialog(id);
       try {
         if (opener && opener !== document.body && document.contains(opener) && typeof opener.focus === 'function') {

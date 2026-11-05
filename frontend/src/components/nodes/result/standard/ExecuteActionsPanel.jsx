@@ -26,6 +26,7 @@ import { useBusy } from '../../../../hooks/useBusy';
 import RunHistoryModal from '../../../modals/RunHistoryModal';
 import useCanvasStore from '../../../../store/useCanvasStore';
 import { term } from '../../../../utils/glossary';
+import { READ_ONLY_SAFE } from '../../../common/readOnlySafe';
 
 export default function ExecuteActionsPanel({
   data,
@@ -65,7 +66,7 @@ export default function ExecuteActionsPanel({
               value="cache"
               checked={executionMode === 'cache'}
               onChange={(e) => setExecutionMode(e.target.value)}
-              className="result-node__execution-radio"
+              {...READ_ONLY_SAFE} className="result-node__execution-radio"
             />
             <div className="result-node__execution-content">
               <div className="result-node__execution-title">
@@ -86,7 +87,7 @@ export default function ExecuteActionsPanel({
               value="recalculate"
               checked={executionMode === 'recalculate'}
               onChange={(e) => setExecutionMode(e.target.value)}
-              className="result-node__execution-radio"
+              {...READ_ONLY_SAFE} className="result-node__execution-radio"
             />
             <div className="result-node__execution-content">
               <div className="result-node__execution-title">
@@ -107,7 +108,7 @@ export default function ExecuteActionsPanel({
           onClick={() => reads.run('validate', () => onValidate())}
           disabled={validating}
           aria-busy={validating}
-          className="result-node__validate-btn"
+          {...READ_ONLY_SAFE} className="result-node__validate-btn"
           title={term('validate').description}
         >
           <span aria-hidden="true">{term('validate').icon}</span>
@@ -119,7 +120,7 @@ export default function ExecuteActionsPanel({
             onClick={() => reads.run('preview', () => onPreview())}
             disabled={previewing}
             aria-busy={previewing}
-            className={`result-node__preview-btn result-node__preview-btn--${nodeVariant}`}
+            {...READ_ONLY_SAFE} className={`result-node__preview-btn result-node__preview-btn--${nodeVariant}`}
           >
             <span className="result-node__preview-icon" aria-hidden="true">{term('preview').icon}</span>
             <span>{term('preview').name}</span>
@@ -130,7 +131,7 @@ export default function ExecuteActionsPanel({
           <button type="button"
             onClick={() => onExecute()}
             disabled={busy}
-            className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
+            {...READ_ONLY_SAFE} className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
           >
             <span className="result-node__execute-icon" aria-hidden="true">{busy ? '⏳' : term('run').icon}</span>
             <span>{busy ? term('run').busyName : term('run').name}</span>
@@ -142,7 +143,7 @@ export default function ExecuteActionsPanel({
         <button type="button"
           onClick={(e) => { e.stopPropagation(); setIsRunHistoryOpen(true); }}
           onMouseDown={(e) => e.stopPropagation()}
-          className="result-node__history-btn"
+          {...READ_ONLY_SAFE} className="result-node__history-btn"
           title={term('run_history').description}
         >
           <span aria-hidden="true">{term('run_history').icon}</span>

@@ -24,6 +24,7 @@ import {
   getLayerSchema,
 } from '../../api/features';
 import './FeatureServicePanel.css';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 const GEOM_ICONS = {
   'geometry:point': '📍',
@@ -267,7 +268,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
       {error && (
         <div className="fs-panel__error" role="alert">
           ⚠️ {error}{' '}
-          <button type="button" className="list-state__retry" onClick={() => current.reload()}>Riprova</button>
+          <button type="button" {...READ_ONLY_SAFE} className="list-state__retry" onClick={() => current.reload()}>Riprova</button>
         </div>
       )}
 

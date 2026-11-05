@@ -162,14 +162,20 @@ def _render_ref(token: ExpressionToken, new_name: str) -> str:
     return f"`{new_name}`" if token.kind == "backtick" else new_name
 
 
-def rewrite_expression_ref(expression: str, old_name: str, new_name: str) -> str:
-    """Sostituisce ``old_name`` con ``new_name`` solo nei riferimenti a colonna."""
-    if not expression or not old_name or not new_name or old_name == new_name:
+def rewrite_expression_refs(expression: str, renames: dict[str, str]) -> str:
+    """Rinomina simultanea: ``renames`` {vecchio: nuovo}, solo nei riferimenti.
+
+    Ogni riferimento si legge UNA volta sull'espressione di partenza, quindi
+    gli scambi (a->b, b->a) e le catene non si ripassano.
+    """
+    renames = {old: new for old, new in (renames or {}).items() if old and new and old != new}
+    if not expression or not renames:
         return expression
     out: list[str] = []
     cursor = 0
     for token in expression_tokens(expression):
-        if token.ref != old_name:
+        new_name = renames.get(token.ref) if token.ref is not None else None
+        if new_name is None:
             continue
         out.append(expression[cursor:token.start])
         out.append(_render_ref(token, new_name))
@@ -180,10 +186,16 @@ def rewrite_expression_ref(expression: str, old_name: str, new_name: str) -> str
     return "".join(out)
 
 
+def rewrite_expression_ref(expression: str, old_name: str, new_name: str) -> str:
+    """Sostituisce ``old_name`` con ``new_name`` solo nei riferimenti a colonna."""
+    return rewrite_expression_refs(expression, {old_name: new_name})
+
+
 __all__ = [
     "ExpressionToken",
     "expression_column_refs",
     "expression_has_ref",
     "expression_tokens",
     "rewrite_expression_ref",
+    "rewrite_expression_refs",
 ]

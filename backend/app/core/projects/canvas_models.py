@@ -70,6 +70,11 @@ class AggregationConfig(BaseModel):
     column: str
     function: Literal["COUNT", "SUM", "AVG", "MIN", "MAX"] = "COUNT"
     alias: Optional[str] = None
+    # 'user' quando l'alias e' scritto dall'utente (GroupOrderHavingPanel):
+    # da li' non si rigenera. Prima `extra="ignore"` lo scartava e al reload
+    # l'alias con forma generata tornava generato (Fase 5, T5+T6, conferma).
+    # Contratto: tests2/contracts/canvas_subobject_fields.json.
+    alias_source: Optional[Literal["user"]] = None
 
 
 class OrderByConfig(BaseModel):
