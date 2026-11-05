@@ -297,7 +297,9 @@ def _resolve_into(
         raw_value = values.get(definition.key, definition.default_value)
         bindings = bindings_by_key.get(definition.key, [])
         if definition.kind == "file":
-            if raw_value is None:
+            # Nessun file = assente, null o lista vuota (regola unica con
+            # router._trusted_run_inputs).
+            if raw_value is None or (isinstance(raw_value, list) and not raw_value):
                 if definition.required:
                     raise ValueError(f"Input obbligatorio mancante: {definition.label}")
                 continue

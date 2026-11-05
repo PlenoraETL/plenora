@@ -128,7 +128,11 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     if (editId) onClose();
   }, [formResource.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Scelte dell'utente (anche i clic sulle card, che non sono eventi
+  // change/input): contano come dati inseriti per la conferma di chiusura.
+  const [userEdited, setUserEdited] = useState(false);
   const updateForm = (field, value) => {
+    setUserEdited(true);
     setForm(prev => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }));
   };
@@ -520,6 +524,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
       onComplete={handleSubmit}
       completeLabel={editId ? '💾 Salva Modifiche' : '✅ Crea Schedule'}
       busy={saving}
+      dirty={userEdited || step > 1}
     />
   );
 }

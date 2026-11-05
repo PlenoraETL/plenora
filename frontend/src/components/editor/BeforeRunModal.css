@@ -19,3 +19,4 @@
 [data-theme='light'] .before-run__field,
 [data-theme='light'] .before-run__node { background: #F4F7FD; border-color: rgba(0,0,0,0.10); color: #0F1729; }
 [data-theme='light'] .before-run__label { color: #0F1729; }
+.before-run__link { background: none; border: 0; padding: 0; color: var(--plen-accent, #4C8DFF); font: inherit; text-decoration: underline; cursor: pointer; }

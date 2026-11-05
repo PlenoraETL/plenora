@@ -19,7 +19,7 @@ export const runtimeInputKind = (node) => String(node?.data?.input_kind || 'file
  * percorso progetto si usa il file gia' nel canvas; il caricamento di un
  * file vale solo negli Eseguibili).
  */
-export function buildRuntimeInputDefinitions(nodes, connectionSets = [], connectionSetsError = null) {
+export function buildRuntimeInputDefinitions(nodes, connectionSets = [], connectionSetsError = null, retryConnectionSets = null) {
   return (nodes || [])
     .filter(node => node.type === 'project_input' && runtimeInputKind(node) !== 'file')
     .map((node) => {
@@ -28,7 +28,10 @@ export function buildRuntimeInputDefinitions(nodes, connectionSets = [], connect
         const set = connectionSets.find(item => item.id === definition.connection_set_id);
         // Set non caricati: l'errore arriva alla finestra (mai una scelta
         // vuota senza motivo; regola di hooks/useResource).
-        if (connectionSetsError) definition.connection_options_error = connectionSetsError;
+        if (connectionSetsError) {
+          definition.connection_options_error = connectionSetsError;
+          if (retryConnectionSets) definition.retry_connection_options = retryConnectionSets;
+        }
         definition.connection_options = (set?.members || [])
           .filter(member => member.active)
           .map(member => ({ key: member.selector_key, label: member.label }));
@@ -46,13 +49,14 @@ export default function useRuntimeInputDefinitions(nodes) {
   const inputsKey = JSON.stringify(inputNodes.map(n => [n.id, n.data]));
   // Set di connessioni condivisi (utils/connectionSets) dall'hook comune
   // (Fase 5 T2): chiesti solo se un input e' di tipo connessione; un errore
-  // si riprova al prossimo cambio degli input (la chiave cambia).
+  // si riprova con «Riprova» nella finestra (reload) o cambiando gli input.
   const sets = useResource(loadSharedConnectionSets, { key: ['connection-sets', inputsKey], enabled: needsSets, keepPreviousData: true });
   const connectionSets = sets.data || EMPTY;
   const setsError = sets.status === 'error' ? sets.error : null;
+  const reloadSets = sets.reload;
 
   return useMemo(
-    () => buildRuntimeInputDefinitions(JSON.parse(inputsKey).map(([id, data]) => ({ id, type: 'project_input', data })), connectionSets, setsError),
-    [inputsKey, connectionSets, setsError],
+    () => buildRuntimeInputDefinitions(JSON.parse(inputsKey).map(([id, data]) => ({ id, type: 'project_input', data })), connectionSets, setsError, reloadSets),
+    [inputsKey, connectionSets, setsError, reloadSets],
   );
 }

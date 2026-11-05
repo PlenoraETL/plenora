@@ -627,8 +627,10 @@ def _trusted_run_inputs(
                     status_code=400,
                     detail=f"Input obbligatorio mancante: {definition.label}",
                 )
-            if definition.key not in trusted_inputs or raw is None:
-                continue
+            # Facoltativo senza file (assente, null o lista vuota) = nessun
+            # file: stessa regola di runtime.resolve_runtime_inputs.
+            trusted_inputs.pop(definition.key, None)
+            continue
         raw_files = raw if isinstance(raw, list) else [raw]
         if definition.multiple and not isinstance(raw, list):
             raise HTTPException(

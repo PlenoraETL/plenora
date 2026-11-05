@@ -91,7 +91,13 @@ function InputField({ definition, value, onChange }) {
       {control}
       {definition.connection_options_error && (
         <span className="before-run__hint before-run__notice--error" role="alert">
-          Set di connessioni non caricato: {definition.connection_options_error}. Chiudi e riapri la finestra per riprovare.
+          Set di connessioni non caricato: {definition.connection_options_error}.
+          {definition.retry_connection_options && (
+            <>
+              {' '}
+              <button type="button" className="before-run__link" onClick={definition.retry_connection_options}>Riprova</button>
+            </>
+          )}
         </span>
       )}
       {definition.description && <span className="before-run__hint">{definition.description}</span>}

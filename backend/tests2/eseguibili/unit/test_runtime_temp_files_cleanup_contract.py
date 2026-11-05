@@ -29,7 +29,7 @@ from tests2.helpers.builders import build_current_user
 pytestmark = [pytest.mark.unit, pytest.mark.eseguibili, pytest.mark.contract]
 
 
-def _manifest_dict(*, second_multiple: bool = False, second_target: str = "src2") -> dict:
+def _manifest_dict(*, second_multiple: bool = False, second_target: str = "src2", second_required: bool = True) -> dict:
     return {
         "schema_version": 2,
         "project_type": "arricchisci",
@@ -37,7 +37,7 @@ def _manifest_dict(*, second_multiple: bool = False, second_target: str = "src2"
         "inputs": [
             {"key": "primo", "label": "Primo", "kind": "file", "required": True, "order": 1},
             {
-                "key": "secondo", "label": "Secondo", "kind": "file", "required": True,
+                "key": "secondo", "label": "Secondo", "kind": "file", "required": second_required,
                 "order": 2, "multiple": second_multiple,
             },
         ],
@@ -248,4 +248,24 @@ def test_execute_versioned_removes_temp_files_when_it_fails_after_resolving():
                 task_id="task-1",
             )
     assert files.created == ["tmp-1", "tmp-2"]
+    assert files.remaining == []
+
+
+@pytest.mark.parametrize("multiple", [False, True])
+@pytest.mark.parametrize("empty", ["assente", "null", "lista vuota"])
+def test_optional_file_input_without_file_is_accepted(multiple, empty):
+    """Regola unica: un input file FACOLTATIVO senza file (assente, null o
+    lista vuota) e' "nessun file" sia nella verifica degli upload sia nella
+    risoluzione (rilettura T2+T4, punto 4)."""
+    manifest = _manifest_dict(second_multiple=multiple, second_required=False)
+    inputs = {"primo": FILE}
+    if empty == "null":
+        inputs["secondo"] = None
+    elif empty == "lista vuota":
+        inputs["secondo"] = []
+    files = _TempFiles()
+    client = build_client(build_current_user())
+    with _Ctx(_endpoint_patches(manifest, files)):
+        response = client.post("/api/eseguibili/exe-1/preflight", json={"version_id": "version-1", "inputs": inputs})
+    assert response.status_code == 200, response.text
     assert files.remaining == []
