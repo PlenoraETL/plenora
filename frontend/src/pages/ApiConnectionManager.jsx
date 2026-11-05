@@ -239,7 +239,7 @@ const openWizardForNew = () => {
                     </button>
                     <button type="button" className="acm__dropdown-item" onClick={()=>{setShowOpenAPIImport(true);setShowNewApiDropdown(false);}}>
                       <span className="acm__dropdown-icon">📋</span>
-                      <div><div className="acm__dropdown-label">Importa OpenAPI</div><div className="acm__dropdown-sub">Da URL o file JSON</div></div>
+                      <div><div className="acm__dropdown-label">Importa OpenAPI</div><div className="acm__dropdown-sub">Da URL o file JSON/YAML</div></div>
                     </button>
                     <button type="button" className="acm__dropdown-item" onClick={openWizardForNew}>
                       <span className="acm__dropdown-icon">✏️</span>

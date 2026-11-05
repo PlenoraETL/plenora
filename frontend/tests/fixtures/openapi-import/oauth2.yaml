@@ -1,0 +1,51 @@
+openapi: 3.0.1
+info:
+  title: Anagrafe con OAuth2
+  version: '3'
+servers:
+  - url: https://anagrafe.example.org/rest
+paths:
+  /persone:
+    get:
+      summary: Elenco persone
+      security:
+        - oauth:
+            - persone.read
+            - persone.search
+      parameters:
+        - name: cognome
+          in: query
+          schema: {type: string}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        codiceFiscale: {type: string}
+                        nascita: {type: string, format: date}
+components:
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: https://anagrafe.example.org/.well-known/openid-configuration
+    oauth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://anagrafe.example.org/oauth/authorize
+          tokenUrl: /oauth/token
+          scopes:
+            persone.read: lettura
+        clientCredentials:
+          tokenUrl: /oauth/token
+          scopes:
+            persone.read: lettura
+            persone.search: ricerca

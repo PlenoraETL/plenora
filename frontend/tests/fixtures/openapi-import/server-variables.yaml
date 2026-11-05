@@ -1,0 +1,72 @@
+openapi: 3.0.3
+info:
+  title: Meteo con server variabili
+  version: '1'
+servers:
+  - url: https://{environment}.meteo.example.com:{port}/{basePath}
+    description: Produzione o staging
+    variables:
+      environment:
+        default: api
+        enum: [api, staging]
+      port:
+        enum: ['8443', '443']
+        default: '8443'
+      basePath:
+        default: v2
+  - url: http://localhost:8080
+paths:
+  /forecast:
+    get:
+      summary: Previsioni
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema: {type: number}
+        - name: lon
+          in: query
+          required: true
+          schema: {type: number}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  temperature: {type: number}
+                  wind:
+                    type: object
+                    properties:
+                      speed: {type: number}
+                      direction: {type: string}
+  /alerts:
+    servers:
+      - url: https://alerts.meteo.example.com/{version}
+        variables:
+          version:
+            default: v1
+    get:
+      summary: Allerte
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    level: {type: integer}
+                    text: {type: string}
+  /status:
+    get:
+      summary: Stato
+      servers:
+        - url: https://status.example.com/{undefinedVar}
+      responses:
+        '200':
+          description: ok

@@ -1,12 +1,19 @@
 /**
  * OpenAPIImportModal.jsx — Importazione schema OpenAPI/Swagger
  * Redesign Plenora design system
+ *
+ * Lettura e normalizzazione della specifica (OpenAPI 3.x e Swagger 2.0, JSON
+ * o YAML, da URL, file o testo): solo `utils/openapiImport` (Fase 5, P10).
+ * Questo componente sceglie endpoint, campi e autenticazione.
  */
 import React, { useState } from 'react';
 import { fetchOpenApiSchema } from '../../api/apiConnections';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { humanizeError } from '../../utils/errorMessages';
+import { normalizeOpenApi, buildConnectionPayloads, needsBaseUrl, IMPORT_AUTH_OPTIONS } from '../../utils/openapiImport';
 import './OpenAPIImportModal.css';
+
+const NO_AUTH = { type: 'none' };
 
 function OpenAPIImportModal({ onClose, onImport }) {
   const [importMode, setImportMode] = useState('url');
@@ -19,107 +26,28 @@ function OpenAPIImportModal({ onClose, onImport }) {
   const [expandedEndpoint, setExpandedEndpoint] = useState(null);
   const [selectedFields, setSelectedFields] = useState({});
   const [manualBaseUrl, setManualBaseUrl] = useState('');
-  const [authConfig, setAuthConfig] = useState({ type: 'none', key_name: 'X-API-Key', key_value: '', location: 'header' });
-const parseOpenAPISchema = (schema) => {
-    try {
-      const spec = typeof schema === 'string' ? JSON.parse(schema) : schema;
-      const baseUrl = spec.servers?.[0]?.url || '';
-      const apiName = spec.info?.title || 'API Importata';
-      const apiDescription = spec.info?.description || '';
+  const [authConfig, setAuthConfig] = useState(NO_AUTH);
 
-      const resolveRef = (obj) => {
-        if (!obj || typeof obj !== 'object') return obj;
-        if (obj['$ref']) {
-          const path = obj['$ref'].replace('#/', '').split('/');
-          let resolved = spec;
-          for (const part of path) resolved = resolved?.[part];
-          return resolved || obj;
-        }
-        return obj;
-      };
-
-      const extractOutputFields = (schema, prefix, fields, depth = 0) => {
-        if (depth > 5 || !schema) return;
-        schema = resolveRef(schema);
-        if (schema.type === 'object' && schema.properties) {
-          Object.entries(schema.properties).forEach(([name, prop]) => {
-            prop = resolveRef(prop);
-            const path = prefix ? `${prefix}.${name}` : name;
-            if (prop.type === 'object' || prop.properties) { extractOutputFields(prop, path, fields, depth + 1); }
-            else if (prop.type === 'array' && prop.items) {
-              const arrayPath = `${path}[*]`;
-              const items = resolveRef(prop.items);
-              if (items.type === 'object' || items.properties) extractOutputFields(items, arrayPath, fields, depth + 1);
-              else fields.push({ path: arrayPath, name, type: items.type || 'string' });
-            } else { fields.push({ path, name, type: prop.type || 'string' }); }
-          });
-        } else if (schema.type === 'array' && schema.items) {
-          extractOutputFields(schema.items, `${prefix}[*]`, fields, depth + 1);
-        }
-      };
-
-      const endpoints = [];
-      Object.entries(spec.paths || {}).forEach(([path, methods]) => {
-        Object.entries(methods).forEach(([method, details]) => {
-          if (!['get','post','put','delete'].includes(method.toLowerCase())) return;
-          const parameters = [];
-          (details.parameters || []).forEach(p => parameters.push({ name:p.name, type:p.schema?.type||'string', required:p.required||false, location:p.in, description:p.description||'' }));
-          if (details.requestBody?.content?.['application/json']?.schema) {
-            const bs = details.requestBody.content['application/json'].schema;
-            if (bs.properties) Object.entries(bs.properties).forEach(([pn, ps]) => parameters.push({ name:pn, type:ps.type||'string', required:(bs.required||[]).includes(pn), location:'body', description:ps.description||'' }));
-          }
-          const outputFields = [];
-          let rs = details.responses?.['200']?.content?.['application/json']?.schema;
-          if (rs) { rs = resolveRef(rs); extractOutputFields(rs, '', outputFields); }
-          endpoints.push({ id:`${method.toUpperCase()}_${path}`, path, method:method.toUpperCase(), summary:details.summary||`${method.toUpperCase()} ${path}`, description:details.description||'', parameters, outputFields, selected:false });
-        });
-      });
-      return { baseUrl, apiName, apiDescription, endpoints, securitySchemes: spec.components?.securitySchemes||{} };
-    } catch (e) { throw new Error('Errore parsing OpenAPI: lo schema non è un documento OpenAPI leggibile.', { cause: e }); }
-  };
-
-  const autoDetectAuth = (schemes, baseUrl) => {
-    for (const key of Object.keys(schemes)) {
-      const s = schemes[key];
-      if (s.type === 'oauth2') {
-        const flow = s.flows?.password || s.flows?.clientCredentials;
-        if (flow) {
-          let tokenUrl = flow.tokenUrl || '';
-          if (tokenUrl && !tokenUrl.startsWith('http') && baseUrl) {
-            const base = baseUrl.endsWith('/') ? baseUrl.slice(0,-1) : baseUrl;
-            tokenUrl = `${base}${tokenUrl.startsWith('/')?tokenUrl:'/'+tokenUrl}`;
-          }
-          setAuthConfig(prev => ({ ...prev, type: s.flows?.password ? 'oauth2_password' : 'oauth2_client_credentials', token_url: tokenUrl }));
-          return;
-        }
-      }
-      if (s.type === 'apiKey') { setAuthConfig(prev => ({ ...prev, type:'api_key', key_name:s.name||'X-API-Key' })); return; }
-      if (s.type === 'http' && s.scheme === 'basic') { setAuthConfig(prev => ({ ...prev, type:'basic_auth' })); return; }
-    }
+  // Stessa strada per URL, file e testo: la specifica normalizzata, con la
+  // sua proposta di autenticazione.
+  const applySpec = (spec) => {
+    setParsedSpec(spec);
+    setSelectedEndpoints([]);
+    setSelectedFields({});
+    setAuthConfig(spec.auth);
   };
 
   const handleFetchSchema = async () => {
     setLoading(true); setError(null); setParsedSpec(null);
     try {
-      let schema;
       if (importMode === 'url') {
         if (!url) throw new Error('Inserisci un URL');
-        schema = await fetchOpenApiSchema(url);
+        applySpec(normalizeOpenApi(await fetchOpenApiSchema(url), { sourceUrl: url }));
       } else {
         if (!pastedSchema) throw new Error('Incolla lo schema OpenAPI');
-        schema = JSON.parse(pastedSchema);
+        applySpec(normalizeOpenApi(pastedSchema));
       }
-      const parsed = parseOpenAPISchema(schema);
-      if (importMode === 'url') {
-        try {
-          const origin = new URL(url).origin;
-          if (!parsed.baseUrl) parsed.baseUrl = origin;
-          else if (!parsed.baseUrl.startsWith('http')) parsed.baseUrl = `${origin}${parsed.baseUrl}`;
-        } catch(_) {}
-      }
-      setParsedSpec(parsed); setSelectedEndpoints([]);
-      autoDetectAuth(parsed.securitySchemes||{}, parsed.baseUrl);
-    } catch(e) { setError(humanizeError(e).message); }
+    } catch (e) { setError(humanizeError(e).message); }
     finally { setLoading(false); }
   };
 
@@ -127,10 +55,8 @@ const parseOpenAPISchema = (schema) => {
     const file = e.target.files[0]; if (!file) return;
     setLoading(true); setError(null);
     try {
-      const schema = JSON.parse(await file.text());
-      const parsed = parseOpenAPISchema(schema);
-      setParsedSpec(parsed); setSelectedEndpoints([]);
-    } catch(e) { setError('File non valido: assicurati che sia un file JSON OpenAPI corretto.'); }
+      applySpec(normalizeOpenApi(await file.text()));
+    } catch (err) { setError(`File «${file.name}» non valido: ${humanizeError(err).message}`); }
     finally { setLoading(false); }
   };
 
@@ -147,11 +73,23 @@ const parseOpenAPISchema = (schema) => {
   const toggleField = (eid, path) => setSelectedFields(prev => { const s = new Set(prev[eid]||[]); s.has(path)?s.delete(path):s.add(path); return {...prev,[eid]:s}; });
   const selectAllEndpoints = () => selectedEndpoints.length===parsedSpec.endpoints.length ? setSelectedEndpoints([]) : setSelectedEndpoints(parsedSpec.endpoints.map(e=>e.id));
 
+  const chooseAuth = (option) => setAuthConfig(
+    parsedSpec?.auth.type === option.type ? parsedSpec.auth : { type: option.type, ...option.blank },
+  );
+  const setAuth = (patch) => setAuthConfig(prev => ({ ...prev, ...patch }));
+
+  const baseUrlMissing = !!parsedSpec && parsedSpec.endpoints
+    .some(ep => selectedEndpoints.includes(ep.id) && needsBaseUrl(ep)) && !manualBaseUrl.trim();
+  const showManualBase = !!parsedSpec && parsedSpec.endpoints.some(needsBaseUrl);
+  const proposedFrom = parsedSpec?.authCandidates.find(c => c.auth)?.name;
+
   const handleImport = () => {
-    if (!parsedSpec || !selectedEndpoints.length) return;
-    onImport(parsedSpec.endpoints.filter(ep => selectedEndpoints.includes(ep.id)).map(ep => {
-      const chosen = selectedFields[ep.id] || new Set(ep.outputFields.map(f=>f.path));
-      return { name:ep.summary||`${ep.method} ${ep.path}`, description:ep.description||`Endpoint da ${parsedSpec.apiName}`, api_type:'enricher', category:'custom', connection_type:'openapi', url:`${parsedSpec.baseUrl||manualBaseUrl}${ep.path}`, method:ep.method, auth:authConfig, parameters:ep.parameters.map(p=>({name:p.name,type:p.type==='integer'?'number':p.type,required:p.required,mode:'mapped',location:p.location})), static_parameters:{}, schema_fields:ep.outputFields.map(f=>({path:f.path,name:f.name,type:f.type})), output_mapping:ep.outputFields.filter(f=>chosen.has(f.path)).map(f=>({path:f.path,column:f.name,type:f.type})), options:{rate_limit:5,timeout:30,retry_on_error:true,retry_max:3} };
+    if (!parsedSpec || !selectedEndpoints.length || baseUrlMissing) return;
+    onImport(buildConnectionPayloads(parsedSpec, {
+      endpointIds: selectedEndpoints,
+      fieldsByEndpoint: selectedFields,
+      auth: authConfig,
+      manualBaseUrl: manualBaseUrl.trim(),
     }));
   };
 
@@ -162,7 +100,7 @@ const parseOpenAPISchema = (schema) => {
       isOpen={true}
       onClose={onClose}
       title="Import da OpenAPI Schema"
-      subtitle="Importa endpoint da schema OpenAPI 3.0 / Swagger"
+      subtitle="Importa endpoint da OpenAPI 3.x o Swagger 2.0 (JSON o YAML)"
       icon="📋"
       size="lg"
       footer={
@@ -174,7 +112,7 @@ const parseOpenAPISchema = (schema) => {
           )}
           <ModalButton variant="secondary" onClick={onClose}>Annulla</ModalButton>
           {parsedSpec && (
-            <ModalButton variant="primary" onClick={handleImport} disabled={!selectedEndpoints.length}>
+            <ModalButton variant="primary" onClick={handleImport} disabled={!selectedEndpoints.length || baseUrlMissing}>
               📥 Importa {selectedEndpoints.length} endpoint
             </ModalButton>
           )}
@@ -185,7 +123,7 @@ const parseOpenAPISchema = (schema) => {
 {!parsedSpec ? (
             <div className="oai__section">
               <div className="oai__tabs">
-                {[['url','🌐','Da URL'],['file','📁','Da File'],['paste','📋','Incolla JSON']].map(([id,icon,label])=>(
+                {[['url','🌐','Da URL'],['file','📁','Da File'],['paste','📋','Incolla JSON/YAML']].map(([id,icon,label])=>(
                   <button key={id} type="button" className={`oai__tab${importMode===id?' oai__tab--active':''}`} onClick={()=>setImportMode(id)}>
                     {icon} {label}
                   </button>
@@ -213,7 +151,7 @@ const parseOpenAPISchema = (schema) => {
               {importMode === 'paste' && (
                 <div className="oai__field-group">
                   <div className="oai__label">Incolla schema OpenAPI</div>
-                  <textarea className="oai__textarea oai__textarea--tall" value={pastedSchema} onChange={e=>setPastedSchema(e.target.value)} placeholder={'{\n  "openapi": "3.0.0",\n  ...\n}'} rows={10}/>
+                  <textarea className="oai__textarea oai__textarea--tall" value={pastedSchema} onChange={e=>setPastedSchema(e.target.value)} placeholder={'openapi: 3.0.0\ninfo:\n  title: …\npaths: …'} rows={10}/>
                 </div>
               )}
 
@@ -232,53 +170,75 @@ const parseOpenAPISchema = (schema) => {
 
               {/* Spec info */}
               <div className="oai__spec-card">
-                <div className="oai__spec-name">{parsedSpec.apiName}</div>
-                {parsedSpec.apiDescription && <div className="oai__spec-desc">{parsedSpec.apiDescription}</div>}
-                {parsedSpec.baseUrl ? (
+                <div className="oai__spec-name">{parsedSpec.title}</div>
+                {parsedSpec.description && <div className="oai__spec-desc">{parsedSpec.description}</div>}
+                {parsedSpec.baseUrl && !needsBaseUrl({ server: parsedSpec.baseUrl }) && (
                   <div className="oai__spec-url"><span className="oai__spec-url-label">Base URL</span><code>{parsedSpec.baseUrl}</code></div>
-                ) : (
+                )}
+                {showManualBase && (
                   <div className="oai__field-group oai__field-group--mt-md">
-                    <div className="oai__label">⚠ Base URL non rilevata — inserisci manualmente</div>
-                    <input className="oai__input oai__input--mono" value={manualBaseUrl} onChange={e=>setManualBaseUrl(e.target.value)} placeholder="https://api.example.com"/>
+                    <label className="oai__label" htmlFor="oai-manual-base">⚠ Base URL non rilevata — inserisci manualmente</label>
+                    <input id="oai-manual-base" className="oai__input oai__input--mono" value={manualBaseUrl} onChange={e=>setManualBaseUrl(e.target.value)} placeholder="https://api.example.com"/>
+                    {parsedSpec.baseUrl && <div className="oai__hint">Il server della specifica è relativo: <code>{parsedSpec.baseUrl}</code></div>}
                   </div>
                 )}
               </div>
 
+              {parsedSpec.warnings.length > 0 && (
+                <ul className="oai__warnings" aria-label="Avvisi sulla specifica">
+                  {parsedSpec.warnings.map(w => <li key={w}>{w}</li>)}
+                </ul>
+              )}
+
               {/* Auth */}
               <div className="oai__auth-box">
                 <div className="oai__section-title">🔐 Autenticazione</div>
+                {proposedFrom && authConfig.type === parsedSpec.auth.type && <div className="oai__hint">Proposta dallo schema di sicurezza «{proposedFrom}» della specifica.</div>}
                 <div className="oai__auth-opts">
-                  {[['none','🔓','Nessuna'],['api_key','🔑','API Key'],['basic_auth','👤','Username/Pass'],['oauth2_password','🔐','OAuth2 Pwd'],['oauth2_client_credentials','🏢','OAuth2 CC']].map(([v,icon,label])=>(
-                    <label key={v} className={`oai__auth-opt${authConfig.type===v?' oai__auth-opt--on':''}`}>
-                      <input type="radio" name="oai-auth" checked={authConfig.type===v} onChange={()=>setAuthConfig({...authConfig,type:v})}/>
-                      <span>{icon}</span> {label}
+                  {IMPORT_AUTH_OPTIONS.map(opt=>(
+                    <label key={opt.type} className={`oai__auth-opt${authConfig.type===opt.type?' oai__auth-opt--on':''}`}>
+                      <input type="radio" name="oai-auth" checked={authConfig.type===opt.type} onChange={()=>chooseAuth(opt)}/>
+                      <span>{opt.icon}</span> {opt.label}
                     </label>
                   ))}
                 </div>
                 {authConfig.type==='api_key' && (
                   <div className="oai__auth-fields">
-                    <input className="oai__input" value={authConfig.key_name} onChange={e=>setAuthConfig({...authConfig,key_name:e.target.value})} placeholder="Nome header"/>
-                    <input type="password" className="oai__input" value={authConfig.key_value} onChange={e=>setAuthConfig({...authConfig,key_value:e.target.value})} placeholder="API Key"/>
+                    <input className="oai__input" value={authConfig.key_name||''} onChange={e=>setAuth({key_name:e.target.value})} placeholder="Nome chiave" aria-label="Nome chiave"/>
+                    <input type="password" className="oai__input" value={authConfig.key_value||''} onChange={e=>setAuth({key_value:e.target.value})} placeholder="API Key" aria-label="API Key"/>
+                    <div className="oai__auth-opts" role="radiogroup" aria-label="Posizione della chiave">
+                      {[['header','Header'],['query','Query param']].map(([loc,label])=>(
+                        <label key={loc} className={`oai__auth-opt${(authConfig.location||'header')===loc?' oai__auth-opt--on':''}`}>
+                          <input type="radio" name="oai-key-location" checked={(authConfig.location||'header')===loc} onChange={()=>setAuth({location:loc})}/> {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {authConfig.type==='bearer' && (
+                  <div className="oai__auth-fields">
+                    <input type="password" className="oai__input" value={authConfig.token||''} onChange={e=>setAuth({token:e.target.value})} placeholder="Bearer token" aria-label="Bearer token"/>
                   </div>
                 )}
                 {authConfig.type==='basic_auth' && (
                   <div className="oai__auth-fields">
-                    <input className="oai__input" value={authConfig.username||''} onChange={e=>setAuthConfig({...authConfig,username:e.target.value})} placeholder="Username"/>
-                    <input type="password" className="oai__input" value={authConfig.password||''} onChange={e=>setAuthConfig({...authConfig,password:e.target.value})} placeholder="Password"/>
+                    <input className="oai__input" value={authConfig.username||''} onChange={e=>setAuth({username:e.target.value})} placeholder="Username" aria-label="Username"/>
+                    <input type="password" className="oai__input" value={authConfig.password||''} onChange={e=>setAuth({password:e.target.value})} placeholder="Password" aria-label="Password"/>
                   </div>
                 )}
                 {authConfig.type==='oauth2_password' && (
                   <div className="oai__auth-fields">
-                    <input className="oai__input oai__input--mono" value={authConfig.token_url||''} onChange={e=>setAuthConfig({...authConfig,token_url:e.target.value})} placeholder="Token URL"/>
-                    <input className="oai__input" value={authConfig.username||''} onChange={e=>setAuthConfig({...authConfig,username:e.target.value})} placeholder="Username"/>
-                    <input type="password" className="oai__input" value={authConfig.password||''} onChange={e=>setAuthConfig({...authConfig,password:e.target.value})} placeholder="Password"/>
+                    <input className="oai__input oai__input--mono" value={authConfig.token_url||''} onChange={e=>setAuth({token_url:e.target.value})} placeholder="Token URL" aria-label="Token URL"/>
+                    <input className="oai__input" value={authConfig.username||''} onChange={e=>setAuth({username:e.target.value})} placeholder="Username" aria-label="Username"/>
+                    <input type="password" className="oai__input" value={authConfig.password||''} onChange={e=>setAuth({password:e.target.value})} placeholder="Password" aria-label="Password"/>
                   </div>
                 )}
                 {authConfig.type==='oauth2_client_credentials' && (
                   <div className="oai__auth-fields">
-                    <input className="oai__input oai__input--mono" value={authConfig.token_url||''} onChange={e=>setAuthConfig({...authConfig,token_url:e.target.value})} placeholder="Token URL"/>
-                    <input className="oai__input" value={authConfig.client_id||''} onChange={e=>setAuthConfig({...authConfig,client_id:e.target.value})} placeholder="Client ID"/>
-                    <input type="password" className="oai__input" value={authConfig.client_secret||''} onChange={e=>setAuthConfig({...authConfig,client_secret:e.target.value})} placeholder="Client Secret"/>
+                    <input className="oai__input oai__input--mono" value={authConfig.token_url||''} onChange={e=>setAuth({token_url:e.target.value})} placeholder="Token URL" aria-label="Token URL"/>
+                    <input className="oai__input" value={authConfig.client_id||''} onChange={e=>setAuth({client_id:e.target.value})} placeholder="Client ID" aria-label="Client ID"/>
+                    <input type="password" className="oai__input" value={authConfig.client_secret||''} onChange={e=>setAuth({client_secret:e.target.value})} placeholder="Client Secret" aria-label="Client Secret"/>
+                    <input className="oai__input" value={authConfig.scope||''} onChange={e=>setAuth({scope:e.target.value})} placeholder="Scope (opzionale)" aria-label="Scope"/>
                   </div>
                 )}
               </div>
@@ -301,7 +261,7 @@ const parseOpenAPISchema = (schema) => {
                       <div className="oai__endpoint-row" role="button" tabIndex={0}
                         onClick={()=>toggleEndpoint(ep.id)}
                         onKeyDown={e=>(e.key==='Enter'||e.key===' ')&&toggleEndpoint(ep.id)}>
-                        <input type="checkbox" checked={isSel} onChange={()=>{}} onClick={e=>e.stopPropagation()}/>
+                        <input type="checkbox" checked={isSel} aria-label={`Seleziona ${ep.method} ${ep.path}`} onChange={()=>toggleEndpoint(ep.id)} onClick={e=>e.stopPropagation()}/>
                         <span className={`oai__method ${METHOD_COLOR[ep.method]||''}`}>{ep.method}</span>
                         <span className="oai__ep-path">{ep.path}</span>
                         <span className="oai__ep-summary">{ep.summary}</span>
@@ -325,9 +285,9 @@ const parseOpenAPISchema = (schema) => {
                           </div>
                           <div className="oai__fields-grid">
                             {ep.outputFields.map(f => (
-                              <label key={f.path} className="oai__field-item">
+                              <label key={f.path} className="oai__field-item" title={f.path}>
                                 <input type="checkbox" checked={fieldSet.has(f.path)} onChange={()=>toggleField(ep.id,f.path)}/>
-                                <span className="oai__field-name">{f.name}</span>
+                                <span className="oai__field-name">{f.column}</span>
                                 <span className={`oai__field-type oai__ft--${f.type}`}>{f.type}</span>
                               </label>
                             ))}
@@ -339,7 +299,7 @@ const parseOpenAPISchema = (schema) => {
                 })}
               </div>
 
-              <button type="button" className="oai__back-btn" onClick={()=>{ setParsedSpec(null); setSelectedEndpoints([]); setSelectedFields({}); setManualBaseUrl(''); setAuthConfig({type:'none',key_name:'X-API-Key',key_value:'',location:'header'}); }}>
+              <button type="button" className="oai__back-btn" onClick={()=>{ setParsedSpec(null); setSelectedEndpoints([]); setSelectedFields({}); setManualBaseUrl(''); setAuthConfig(NO_AUTH); }}>
                 ← Torna indietro
               </button>
             </div>

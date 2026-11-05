@@ -167,7 +167,7 @@ const stripComments = (code) => code
 
 // Eccezioni dichiarate: NON testo di un campo, oppure di un'altra tranche.
 const PARSE_ALLOWED = {
-  'components/modals/PreviewModal.jsx': 'esadecimale -> byte (radice 16) di un contenuto binario, nessun campo',
+  'utils/geometry.js': 'WKB esadecimale -> byte (radice 16) di una geometria, nessun campo',
   'components/nodes/AnnotationNode.jsx': 'colore esadecimale (radice 16) dal selettore di colore',
   'components/panels/response-config/responseConfigEngine.js': 'motore di trasformazione dei valori della risposta API (dati, non campi del form)',
   'components/nodes/CaricanArcGISNode.jsx': 'T6 (nodo Carica ArcGIS): source_srid di un input numerico, vuoto = null (nessun default silenzioso); passa a codecs.srid con il resto del nodo',

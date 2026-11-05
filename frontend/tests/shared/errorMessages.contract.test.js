@@ -23,11 +23,11 @@ const ALLOWED_RAW = [
   { file: 'api/http.js', match: 'error.message = message', motivo: "l'interceptor scrive in err.message il testo gia' normalizzato" },
   { file: 'utils/errorMessages.js', match: 'err.message', motivo: "e' la normalizzazione: legge il testo di un errore locale dell'app" },
   { file: 'components/common/ErrorBoundary.jsx', match: 'error.message', motivo: "dettaglio tecnico mostrato solo nella build di sviluppo (FRONTEND_ENV.isDev)" },
+  { file: 'utils/openapiImport.js', match: 'exec(e.message)', motivo: "legge solo la posizione dell'errore di JSON.parse per dire riga e colonna; il messaggio mostrato e' in italiano" },
 ];
 
 const ALLOWED_MUTE = [
   { file: 'pages/EstraiEditor.jsx', match: "Il layer trascinato non è leggibile", motivo: "JSON.parse dei dati del trascinamento (fase 5 T2, N10): il testo fisso e' il motivo esatto, non un errore del server" },
-  { file: 'components/arricchisci/OpenAPIImportModal.jsx', match: "setError('File non valido", motivo: "errore di lettura del file scelto dall'utente (JSON.parse/schema): il testo fisso e' il motivo esatto" },
 ];
 
 function listSources(dir) {

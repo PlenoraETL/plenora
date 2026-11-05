@@ -1,0 +1,113 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Catalogo con riferimenti annidati", "version": "2.0" },
+  "servers": [{ "url": "https://catalogo.example.com/api/" }],
+  "paths": {
+    "/nodes/{nodeId}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/NodeId" },
+        { "name": "lang", "in": "query", "schema": { "type": "string" }, "description": "lingua del path item" },
+        { "name": "session", "in": "cookie", "schema": { "type": "string" } }
+      ],
+      "get": {
+        "operationId": "getNode",
+        "parameters": [
+          { "name": "lang", "in": "query", "required": true, "schema": { "type": ["string", "null"] }, "description": "lingua dell'operazione" },
+          { "name": "X-Trace", "in": "header", "schema": { "$ref": "#/components/schemas/TraceId" } }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "ok",
+            "content": {
+              "application/vnd.catalogo+json": { "schema": { "$ref": "#/components/schemas/Alias" } }
+            }
+          }
+        }
+      }
+    },
+    "/items": {
+      "$ref": "#/components/pathItems/Items"
+    },
+    "/broken": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "missing": { "$ref": "#/components/schemas/DoesNotExist" },
+                    "external": { "$ref": "common.yaml#/components/schemas/Money" },
+                    "loop": { "$ref": "#/components/schemas/LoopA" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "NodeId": { "name": "nodeId", "in": "path", "required": true, "schema": { "type": "integer" } }
+    },
+    "schemas": {
+      "TraceId": { "type": "string", "format": "uuid" },
+      "Alias": { "$ref": "#/components/schemas/AliasTarget" },
+      "AliasTarget": { "$ref": "#/components/schemas/Node" },
+      "Node": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "label": { "type": "string" },
+          "owner": {
+            "allOf": [
+              { "$ref": "#/components/schemas/Entity" },
+              { "type": "object", "properties": { "email": { "type": "string" } } }
+            ]
+          },
+          "children": { "type": "array", "items": { "$ref": "#/components/schemas/Node" } },
+          "parent": { "$ref": "#/components/schemas/Node" }
+        }
+      },
+      "Entity": {
+        "type": "object",
+        "required": ["id"],
+        "properties": { "id": { "type": "string" }, "name": { "type": "string" } }
+      },
+      "Item": {
+        "type": "object",
+        "properties": {
+          "sku": { "type": "string" },
+          "price": { "oneOf": [{ "$ref": "#/components/schemas/Amount" }, { "type": "number" }] }
+        }
+      },
+      "Amount": {
+        "type": "object",
+        "properties": { "value": { "type": "number" }, "currency": { "type": "string" } }
+      },
+      "LoopA": { "$ref": "#/components/schemas/LoopB" },
+      "LoopB": { "$ref": "#/components/schemas/LoopA" }
+    },
+    "pathItems": {
+      "Items": {
+        "post": {
+          "summary": "Crea un articolo",
+          "requestBody": {
+            "required": true,
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Item" } } }
+          },
+          "responses": {
+            "201": {
+              "description": "creato",
+              "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Item" } } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

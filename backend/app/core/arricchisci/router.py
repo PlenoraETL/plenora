@@ -151,6 +151,13 @@ def _check_project_ownership(project_id: str, current_user: CurrentUser) -> Json
 class FetchSchemaRequest(BaseModel):
     url: str
 
+
+# Specifiche OpenAPI/Swagger in JSON o YAML.
+_OPENAPI_ACCEPT = (
+    "application/json, application/yaml, application/x-yaml, text/yaml, "
+    "application/vnd.oai.openapi+json, application/vnd.oai.openapi, */*;q=0.5"
+)
+
 def _validate_external_url(url: str) -> None:
     """Anti-SSRF: wrapper che converte ValueError in HTTPException."""
     try:
@@ -171,12 +178,16 @@ async def fetch_openapi_schema(body: FetchSchemaRequest, _user: CurrentUser = De
         cloud, servizi interni, Redis, Postgres, ecc.)
       - SSL verification ATTIVA (impedisce MITM su certificati invalidi)
     """
+    # Risposta: il documento JSON gia' letto, oppure il testo cosi' com'e'
+    # (una specifica YAML). Il frontend lo normalizza con l'unico importatore
+    # (frontend/src/utils/openapiImport.js, Fase 5 P10): il backend non
+    # interpreta la specifica.
     try:
         # verify=True (default) — niente più MITM via certificati invalidi
         r = await run_in_threadpool(
             lambda: request_pinned(
                 "GET", body.url,
-                headers={"Accept": "application/json"},
+                headers={"Accept": _OPENAPI_ACCEPT},
                 timeout=15,
                 verify=True,
                 max_response_bytes=8 * 1024 * 1024,
@@ -184,7 +195,10 @@ async def fetch_openapi_schema(body: FetchSchemaRequest, _user: CurrentUser = De
         )
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=f"HTTP {r.status_code}")
-        return r.json()
+        try:
+            return r.json()
+        except ValueError:
+            return r.text
     except HTTPException:
         raise
     except Exception as e:

@@ -17,163 +17,13 @@ import { formatCellNumber } from '../../utils/previewFormat';
 import { formatNumber } from '../../utils/format';
 import './PreviewModal.css';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
-
-const parseWKB = (hex) => {
-  // EWKB/WKB hex string (PostGIS default output)
-  try {
-    const buf = new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
-    let pos = 0;
-
-    const readByte  = () => buf[pos++];
-    const readUint32LE = () => { const v = buf[pos]|(buf[pos+1]<<8)|(buf[pos+2]<<16)|(buf[pos+3]<<24); pos+=4; return v>>>0; };
-    const readUint32BE = () => { const v = (buf[pos]<<24)|(buf[pos+1]<<16)|(buf[pos+2]<<8)|buf[pos+3]; pos+=4; return v>>>0; };
-    const readFloat64LE = () => {
-      const dv = new DataView(buf.buffer, buf.byteOffset + pos, 8); pos += 8;
-      return dv.getFloat64(0, true);
-    };
-    const readFloat64BE = () => {
-      const dv = new DataView(buf.buffer, buf.byteOffset + pos, 8); pos += 8;
-      return dv.getFloat64(0, false);
-    };
-
-    let le, readU32, readF64;
-
-    const readGeom = () => {
-      le = readByte() === 1;
-      readU32  = le ? readUint32LE  : readUint32BE;
-      readF64  = le ? readFloat64LE : readFloat64BE;
-
-      let type = readU32();
-      const hasZ    = !!(type & 0x80000000);
-      const hasSRID = !!(type & 0x20000000);
-      type = type & 0x0FFFFFFF;
-      if (type > 1000 && type < 2000) type -= 1000; // Z variants
-      if (type > 2000 && type < 3000) type -= 2000; // M variants
-      if (type > 3000) type -= 3000;                // ZM variants
-
-      if (hasSRID) readU32(); // skip SRID
-
-      const readCoord = () => {
-        const x = readF64(), y = readF64();
-        if (hasZ) readF64(); // skip Z
-        return [x, y];
-      };
-      const readCoordList = (n) => Array.from({length: n}, readCoord);
-      const readRing = () => readCoordList(readU32());
-
-      switch (type) {
-        case 1: return { type: 'Point', coordinates: readCoord() };
-        case 2: return { type: 'LineString', coordinates: readCoordList(readU32()) };
-        case 3: { const n = readU32(); return { type: 'Polygon', coordinates: Array.from({length:n}, readRing) }; }
-        case 4: { const n = readU32(); return { type: 'MultiPoint', coordinates: Array.from({length:n}, () => { readByte(); readU32(); return readCoord(); }) }; }
-        case 5: { const n = readU32(); return { type: 'MultiLineString', coordinates: Array.from({length:n}, () => { le=readByte()===1; readU32=le?readUint32LE:readUint32BE; readF64=le?readFloat64LE:readFloat64BE; readU32(); return readCoordList(readU32()); }) }; }
-        case 6: { const n = readU32(); const polys = []; for(let i=0;i<n;i++){ le=readByte()===1; readU32=le?readUint32LE:readUint32BE; readF64=le?readFloat64LE:readFloat64BE; readU32(); const nr=readU32(); polys.push(Array.from({length:nr},readRing)); } return { type:'MultiPolygon', coordinates: polys }; }
-        case 7: { const n = readU32(); return { type:'GeometryCollection', geometries: Array.from({length:n}, readGeom) }; }
-        default: return null;
-      }
-    };
-
-    return readGeom();
-  } catch { return null; }
-};
-const parseWKT = (wkt) => {
-  if (!wkt) return null;
-  const s = wkt.trim();
-
-  // Strip SRID prefix: SRID=4326;POINT(...)
-  const clean = s.replace(/^SRID=\d+;/i, '');
-
-  // GeoJSON passthrough
-  if (clean.startsWith('{')) {
-    try { return JSON.parse(clean); } catch { return null; }
-  }
-
-  const upper = clean.toUpperCase();
-
-  // Tokenizer helpers
-  const readCoord = (str) => {
-    const parts = str.trim().split(/\s+/).map(Number);
-    // Accept 2D or 3D (drop Z)
-    return [parts[0], parts[1]];
-  };
-
-  const readCoordList = (str) =>
-    str.trim().split(/\s*,\s*/).map(readCoord);
-
-  const readRings = (str) => {
-    // Split on '),' boundary
-    const ringStrs = str.split(/\)\s*,\s*\(/);
-    return ringStrs.map(r => readCoordList(r.replace(/[()]/g, '')));
-  };
-
-  try {
-    if (upper.startsWith('POINT')) {
-      const m = clean.match(/POINT\s*Z?\s*\(([^)]+)\)/i);
-      if (!m) return null;
-      return { type: 'Point', coordinates: readCoord(m[1]) };
-    }
-
-    if (upper.startsWith('LINESTRING')) {
-      const m = clean.match(/LINESTRING\s*Z?\s*\(([^)]+)\)/i);
-      if (!m) return null;
-      return { type: 'LineString', coordinates: readCoordList(m[1]) };
-    }
-
-    if (upper.startsWith('POLYGON')) {
-      const m = clean.match(/POLYGON\s*Z?\s*\((.+)\)\s*$/i);
-      if (!m) return null;
-      return { type: 'Polygon', coordinates: readRings(m[1]) };
-    }
-
-    if (upper.startsWith('MULTIPOINT')) {
-      const m = clean.match(/MULTIPOINT\s*Z?\s*\((.+)\)\s*$/i);
-      if (!m) return null;
-      const pts = m[1].split(/\)\s*,\s*\(/).map(p => readCoord(p.replace(/[()]/g, '')));
-      return { type: 'MultiPoint', coordinates: pts };
-    }
-
-    if (upper.startsWith('MULTILINESTRING')) {
-      const m = clean.match(/MULTILINESTRING\s*Z?\s*\((.+)\)\s*$/i);
-      if (!m) return null;
-      const lines = m[1].split(/\)\s*,\s*\(/).map(l => readCoordList(l.replace(/[()]/g, '')));
-      return { type: 'MultiLineString', coordinates: lines };
-    }
-
-    if (upper.startsWith('MULTIPOLYGON')) {
-      const m = clean.match(/MULTIPOLYGON\s*Z?\s*\((.+)\)\s*$/i);
-      if (!m) return null;
-      // Each polygon is wrapped in an extra ()
-      const polyStrs = m[1].split(/\)\s*\)\s*,\s*\(\s*\(/).map(p =>
-        p.replace(/^\s*\(/, '').replace(/\)\s*$/, '')
-      );
-      const polys = polyStrs.map(p => readRings(p));
-      return { type: 'MultiPolygon', coordinates: polys };
-    }
-
-    if (upper.startsWith('GEOMETRYCOLLECTION')) {
-      // Basic: return null, too complex for inline
-      return null;
-    }
-  } catch { /* */ }
-
-  return null;
-};
+import { parseGeometry, drawableGeometry, geometryLabel, UNREADABLE_GEOMETRY } from '../../utils/geometry';
 
 /** Ritorna true se il tipo colonna è geometrico */
 const isGeoType = (type) =>
   type?.startsWith('geometry') || type?.startsWith('geography') ||
   type === 'geom' || type === 'geometry' ||
   type === 'geojson' || type === 'geo';
-
-/** Estrai tipo geometria leggibile dal valore WKT/WKB */
-const extractGeomType = (val) => {
-  if (!val) return 'GEOMETRY';
-  const str = String(val).toUpperCase();
-  for (const t of ['MULTIPOLYGON','POLYGON','MULTILINESTRING','LINESTRING','MULTIPOINT','POINT','GEOMETRYCOLLECTION']) {
-    if (str.startsWith(t)) return t;
-  }
-  return 'GEOMETRY';
-};
 
 /** Palette colori per colore-per su mappa */
 const PROV_COLORS = ['#4B8BFF','#34C17A','#9B6DFF','#F5A623','#F87171','#2DD4BF',
@@ -187,6 +37,7 @@ const MapTab = memo(({ rows, columns, active }) => {
   const [basemap, setBasemap] = useState('dark');
   const [featureCount, setFeatureCount] = useState(0);
   const [geomType, setGeomType] = useState('');
+  const [unreadableCount, setUnreadableCount] = useState(0);
 
   // Colonne numeriche/stringa disponibili per colorare
   const colorCols = useMemo(() =>
@@ -304,20 +155,15 @@ const MapTab = memo(({ rows, columns, active }) => {
 
     if (geoLayer.current) { map.removeLayer(geoLayer.current); geoLayer.current = null; }
 
-    // Converti rows in GeoJSON
+    // Converti rows in GeoJSON: un solo lettore (utils/geometry, P7). Un
+    // valore non leggibile si conta e non entra nella mappa.
+    let unreadable = 0;
     const features = rows
-      .filter(r => r[geomCol.name])
+      .filter(r => r[geomCol.name] != null && r[geomCol.name] !== '')
       .map(r => {
-        let geom = null;
-        try {
-          const raw = String(r[geomCol.name]).trim();
-          // Detect WKB hex: starts with 00 or 01 followed by hex chars, no spaces
-          if (/^[0-9a-fA-F]{10,}$/.test(raw)) {
-            geom = parseWKB(raw);
-          } else {
-            geom = parseWKT(raw);
-          }
-        } catch { /* skip */ }
+        const parsed = parseGeometry(r[geomCol.name]);
+        if (!parsed) { unreadable += 1; return null; }
+        const geom = drawableGeometry(parsed);
         if (!geom) return null;
         const props = { ...r };
         delete props[geomCol.name];
@@ -325,6 +171,7 @@ const MapTab = memo(({ rows, columns, active }) => {
       })
       .filter(Boolean);
 
+    setUnreadableCount(unreadable);
     if (!features.length) return;
     setFeatureCount(features.length);
     setGeomType(features[0]?.geometry?.type || '');
@@ -416,6 +263,7 @@ const MapTab = memo(({ rows, columns, active }) => {
         <div className="pm-map-chip">
           <span className="pm-map-chip-dot" />
           {featureCount > 0 ? `${featureCount} elementi` : rows.length + ' righe'}{geomType ? ` · ${geomType}` : ''}
+          {unreadableCount > 0 ? ` · ${UNREADABLE_GEOMETRY}: ${unreadableCount}` : ''}
         </div>
 
         {colorCols.length > 0 && (
@@ -463,7 +311,7 @@ const StatsTab = memo(({ rows, columns }) => {
       const nonNull = vals.filter(v => v != null && v !== '');
 
       if (isGeoType(col.type)) {
-        const types = [...new Set(nonNull.map(v => extractGeomType(v)))];
+        const types = [...new Set(nonNull.map(v => geometryLabel(v)))];
         return { col, nullCount, geomTypes: types };
       }
 
@@ -637,17 +485,17 @@ const PreviewModal = memo(({
   const formatCellValue = (value, type) => {
     if (value == null)
       return <span className="preview-modal__null">NULL</span>;
+    // Geometria (anche GeoJSON come oggetto): tipo letto dal lettore unico.
+    if (isGeoType(type)) {
+      const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      return <span className="preview-modal__geom-pill" title={str}>{geometryLabel(value)}</span>;
+    }
     // Oggetti/array → JSON string (evita crash React "Objects are not valid as child")
     if (typeof value === 'object') {
       const json = JSON.stringify(value);
       return json.length > 100
         ? <span title={json} className="preview-modal__json">{json.substring(0, 97)}…</span>
         : <span className="preview-modal__json">{json}</span>;
-    }
-    if (isGeoType(type)) {
-      const str = String(value);
-      const geomType = extractGeomType(str);
-      return <span className="preview-modal__geom-pill" title={str}>{geomType}</span>;
     }
     if (type === 'bool') return value ? '✔' : '✗';
     if (type === 'date' || type === 'datetime')

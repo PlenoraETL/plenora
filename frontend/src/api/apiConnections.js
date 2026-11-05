@@ -98,11 +98,12 @@ export const testApiConnection = async (apiId, payload) => {
 };
 
 /**
- * Scarica e parsifica uno schema OpenAPI/Swagger da un URL pubblico.
+ * Scarica uno schema OpenAPI/Swagger da un URL pubblico (non lo interpreta:
+ * lo normalizza utils/openapiImport).
  * Backend: POST /api-connections/fetch-openapi-schema.
  *
  * @param {string} url — URL di uno schema OpenAPI raggiungibile
- * @returns {Promise<Object>} schema OpenAPI grezzo cosi' come ritornato dal BE
+ * @returns {Promise<Object|string>} il documento JSON, o il testo YAML com'e'
  */
 export const fetchOpenApiSchema = async (url) => {
   const response = await http.post('/api-connections/fetch-openapi-schema', { url });
