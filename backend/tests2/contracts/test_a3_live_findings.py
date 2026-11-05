@@ -108,3 +108,39 @@ def test_formula_unknown_column_still_rejected_after_one_row_retry():
                                 "transform_op": "formula", "config": config})
     issues = ManipolaNodeValidator().validate_node(node, upstream=upstream, inputs=[upstream])
     assert any(i.severity == "error" for i in issues)
+
+
+@pytest.mark.parametrize("formula,output_type,expected", [
+    ("utente.str.slice(1, 4) + '_IS'", None, "str"),     # collaudo dal vivo: prima "real"
+    ("'IS_' + utente", None, "str"),
+    ("n * 2", None, "int"),
+    ("n / 2", None, "real"),
+    ("n > 0", None, "bool"),
+    ("utente + '_IS'", "real", "str"),                    # output_type non letto dall'esecuzione
+    ("n * 2", "real", "int"),
+])
+def test_formula_predicted_type_matches_execution(formula, output_type, expected):
+    """Regola: il tipo previsto di una colonna calcolata dalla Formula e' quello
+    dell'esecuzione su una riga rappresentativa (manipola/formula_type_plan);
+    output_type non e' letto dall'esecuzione e non decide."""
+    from app.core.dataframes.schema import series_to_canvas_type
+    from app.core.manipola.formula_type_plan import formula_column_types
+
+    config = {"formula": formula, "new_column": "calc"}
+    if output_type:
+        config["output_type"] = output_type
+    rows = pd.DataFrame({"utente": ["E1121"], "n": [3]})
+    executed = series_to_canvas_type(get_executor().execute_with_params("formula", [rows], config)["calc"])
+    assert formula_column_types([{"name": "utente", "type": "str"}, {"name": "n", "type": "int"}], config) == {"calc": executed}
+    assert executed == expected
+    canvas = CanvasState.model_validate({"nodes": [
+        {"id": "s", "type": "file_source", "position": {"x": 0, "y": 0}, "data": {"columns": [
+            {"name": "utente", "type": "str", "id": "c-u"}, {"name": "n", "type": "int", "id": "c-n"}]}},
+        {"id": "f", "type": "transform", "position": {"x": 0, "y": 1}, "transform_op": "formula", "config": config},
+    ], "edges": [{"id": "e1", "source": "s", "target": "f"}]})
+    service = SchemaInferenceService(SimpleNamespace(
+        get_project_canvas=lambda _: canvas,
+        get_project_metadata=lambda _: SimpleNamespace(project_type="manipola", default_connection_id=None),
+    ))
+    predicted = {col["name"]: col["type"] for col in service.infer_node_schema_typed("p", "f").columns}
+    assert predicted["calc"] == expected

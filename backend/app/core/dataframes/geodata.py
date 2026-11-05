@@ -159,8 +159,8 @@ def empty_frame_from_schema(
 # configurazione valida fallisce solo perche' le colonne sono vuote (es. una
 # Formula che unisce testo: su zero righe pandas non deduce il tipo).
 _SAMPLE_BY_DTYPE = {
-    "int64": 0,
-    "float64": 0.0,
+    "int64": 1,
+    "float64": 0.5,
     "bool": False,
     "datetime64[ns]": pd.Timestamp("2000-01-01"),
     "str": "a",

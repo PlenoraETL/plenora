@@ -12,6 +12,7 @@ from copy import copy
 from types import SimpleNamespace
 from app.core.manipola.plugin_executor import get_executor
 from app.core.manipola.lookup_type_plan import lookup_type_plan
+from app.core.manipola.formula_type_plan import formula_column_types
 from app.core.manipola.schema_source_plans import static_columns, unique_source_names
 from app.shared.execution.source_column_plan import source_column_plan
 from app.shared.execution.join_preparation import multi_join_renames, normalize_key_list as _normalize_key_list, normalize_join_pairs as _normalize_join_pairs
@@ -778,6 +779,14 @@ class SchemaInferenceService:
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
             return self._transform_handlers.schema_passthrough(input_schemas, node.id)
         schema = handler(input_schemas, config, node.id)
+        if transform_op == "formula" and input_schemas:
+            # Tipo delle colonne calcolate = quello dell'esecuzione su una riga
+            # rappresentativa (manipola/formula_type_plan). output_type non e'
+            # letto dall'esecuzione: e' un'etichetta, non decide il tipo.
+            produced = formula_column_types([col.to_dict() for col in input_schemas[0]], config)
+            schema = [replace(col, type=produced[col.name])
+                      if col.is_calculated and col.source_node == node.id and col.name in produced else col
+                      for col in schema]
         if transform_op in {"cross_join", "sjoin", "geo_nearest", "geo_overlay", "geo_union",
                             "geo_intersection", "geo_symmetric_difference"}:
             schema = self._merge_schema_identities(schema, input_schemas)
