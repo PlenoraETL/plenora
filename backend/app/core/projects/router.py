@@ -8,6 +8,7 @@ from app.core.manipola.canvas_data_preparation import CanvasDataPreparation, PRE
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.runtime_inputs import apply_identity_inputs, apply_project_runtime_inputs
 from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError, identity_input_nodes
+from app.shared.execution.runtime_bound_fields import strip_runtime_bound_fields
 from app.core.orchestrator.carica_payload_validation import assert_canvas_rest_auth_usable
 from app.core.projects.canvas_validation import _StaticCanvasService
 from app.core.projects.canvas_validation import validate_project_chain
@@ -717,6 +718,9 @@ def _prepare_canvas_for_owner(
     una regola del SALVATAGGIO (for_save): mentre l'utente ricollega i nodi
     gli schemi del resto del canvas devono continuare ad aggiornarsi.
     """
+    # I campi scritti solo dalla risoluzione degli input runtime non arrivano
+    # mai dal client (shared.execution.runtime_bound_fields).
+    strip_runtime_bound_fields(canvas)
     # Verifica i riferimenti prima di leggere gli schemi dei progetti sorgente.
     _assert_canvas_refs_visible_for_owner(
         canvas,

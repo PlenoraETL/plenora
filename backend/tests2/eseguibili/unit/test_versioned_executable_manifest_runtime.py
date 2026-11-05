@@ -60,8 +60,10 @@ def _multi_input_canvas() -> dict:
                 },
             },
             {
+                # Tabella di Estrai: l'unico tipo di nodo i cui filtri sono
+                # letti dall'esecuzione (binding_capabilities.NODE_TARGET_FAMILIES).
                 "id": "filter",
-                "type": "filter",
+                "type": "source",
                 "data": {"filters": [{"column": "country", "value": "IT"}]},
             },
             {"id": "result", "type": "result", "data": {}},

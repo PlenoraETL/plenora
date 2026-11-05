@@ -228,4 +228,6 @@
 /* Fase 5 T5 (R8.5): campi dallo schema unico, due colonne. */
 .dsm__schema-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 12px; margin-top: 12px; }
 .dsm__schema-grid .dsm__check-label { align-self: end; }
+/* SchemaFields compone `${c.field}--${f.width}`: campo a tutta riga. */
+.dsm__schema-grid .dsm__field--wide { grid-column: 1 / -1; }
 @media (max-width: 600px) { .dsm__schema-grid { grid-template-columns: 1fr; } }

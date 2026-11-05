@@ -17,6 +17,7 @@ import { useStoreDraft } from '../../hooks/useStoreDraft';
 import './TableNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { pressable } from '../../utils/pressable';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 /**
  * Componente nodo tabella personalizzato
@@ -173,8 +174,12 @@ const TableNode = memo(({ data, id }) => {
         {columns.length > 3 && (
           <div className="table-node__toolbar">
             <div className="table-node__search">
+              {/* Ricerca e Mostra tutte: stato di VISTA locale, azioni di
+                  lettura (attive in sola lettura, common/readOnlySafe). */}
               <input
                 type="text"
+                {...READ_ONLY_SAFE}
+                aria-label="Cerca colonne"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="🔍 Cerca colonne..."
@@ -183,6 +188,8 @@ const TableNode = memo(({ data, id }) => {
               {searchTerm && (
                 <button
                   type="button"
+                  {...READ_ONLY_SAFE}
+                  aria-label="Cancella ricerca"
                   className="table-node__search-clear"
                   onClick={() => setSearchTerm('')}
                 >
@@ -295,6 +302,7 @@ const TableNode = memo(({ data, id }) => {
         {hasMoreColumns && (
           <button
             type="button"
+            {...READ_ONLY_SAFE}
             onClick={() => setIsExpanded(!isExpanded)}
             className="table-node__expand-btn"
           >

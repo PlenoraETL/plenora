@@ -16,6 +16,7 @@ import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { formatCellNumber } from '../../utils/previewFormat';
 import { formatNumber } from '../../utils/format';
 import './PreviewModal.css';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 const parseWKB = (hex) => {
   // EWKB/WKB hex string (PostGIS default output)
@@ -717,7 +718,7 @@ const PreviewModal = memo(({
       {!loading && !error && rows.length > 0 && (
         <div className="pm-layout">
 <div className="pm-tabs">
-            <button
+            <button {...READ_ONLY_SAFE}
               type="button"
               className={`pm-tab${activeTab === 'table' ? ' active' : ''}`}
               onClick={() => setActiveTab('table')}
@@ -726,7 +727,7 @@ const PreviewModal = memo(({
             </button>
 
             {hasGeo && (
-              <button
+              <button {...READ_ONLY_SAFE}
                 type="button"
                 className={`pm-tab pm-tab--map${activeTab === 'map' ? ' active' : ''}`}
                 onClick={() => setActiveTab('map')}
@@ -736,7 +737,7 @@ const PreviewModal = memo(({
               </button>
             )}
 
-            <button
+            <button {...READ_ONLY_SAFE}
               type="button"
               className={`pm-tab${activeTab === 'stats' ? ' active' : ''}`}
               onClick={() => setActiveTab('stats')}

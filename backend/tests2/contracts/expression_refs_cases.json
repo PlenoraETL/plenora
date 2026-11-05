@@ -10,7 +10,13 @@
         "new": "status",
         "expected": "status == 'stato'"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "stato": "status"
+      },
+      "expected": "status == 'stato'"
+    }
   },
   {
     "expression": "stato == \"stato\"",
@@ -23,7 +29,13 @@
         "new": "status",
         "expected": "status == \"stato\""
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "stato": "status"
+      },
+      "expected": "status == \"stato\""
+    }
   },
   {
     "expression": "'stato' + stato + \"stato\"",
@@ -36,7 +48,13 @@
         "new": "status",
         "expected": "'stato' + status + \"stato\""
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "stato": "status"
+      },
+      "expected": "'stato' + status + \"stato\""
+    }
   },
   {
     "expression": "stato == 'l\\'stato'",
@@ -49,7 +67,13 @@
         "new": "status",
         "expected": "status == 'l\\'stato'"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "stato": "status"
+      },
+      "expected": "status == 'l\\'stato'"
+    }
   },
   {
     "expression": "stato == r'stato'",
@@ -62,7 +86,13 @@
         "new": "status",
         "expected": "status == r'stato'"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "stato": "status"
+      },
+      "expected": "status == r'stato'"
+    }
   },
   {
     "expression": "stato == b'stato'",
@@ -75,7 +105,13 @@
         "new": "status",
         "expected": "status == b'stato'"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "stato": "status"
+      },
+      "expected": "status == b'stato'"
+    }
   },
   {
     "expression": "stato == '''stato'''",
@@ -88,7 +124,13 @@
         "new": "status",
         "expected": "status == '''stato'''"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "stato": "status"
+      },
+      "expected": "status == '''stato'''"
+    }
   },
   {
     "expression": "stato == \"\"\"stato ' stato\"\"\"",
@@ -101,7 +143,13 @@
         "new": "status",
         "expected": "status == \"\"\"stato ' stato\"\"\""
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "stato": "status"
+      },
+      "expected": "status == \"\"\"stato ' stato\"\"\""
+    }
   },
   {
     "expression": "prezzo * quantita",
@@ -120,7 +168,14 @@
         "new": "pezzi",
         "expected": "prezzo * pezzi"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "prezzo": "costo",
+        "quantita": "pezzi"
+      },
+      "expected": "costo * pezzi"
+    }
   },
   {
     "expression": "prezzo*quantita+prezzo",
@@ -134,7 +189,13 @@
         "new": "costo",
         "expected": "costo*quantita+costo"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "prezzo": "costo"
+      },
+      "expected": "costo*quantita+costo"
+    }
   },
   {
     "expression": "round(round)",
@@ -147,7 +208,13 @@
         "new": "arrotonda",
         "expected": "round(arrotonda)"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "round": "arrotonda"
+      },
+      "expected": "round(arrotonda)"
+    }
   },
   {
     "expression": "round(x, ndigits=2)",
@@ -165,7 +232,14 @@
         "new": "y",
         "expected": "round(y, ndigits=2)"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "ndigits": "cifre",
+        "x": "y"
+      },
+      "expected": "round(y, ndigits=2)"
+    }
   },
   {
     "expression": "abs (x)",
@@ -183,7 +257,14 @@
         "new": "y",
         "expected": "abs (y)"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "abs": "assoluto",
+        "x": "y"
+      },
+      "expected": "abs (y)"
+    }
   },
   {
     "expression": "nome.str.upper()",
@@ -206,7 +287,15 @@
         "new": "su",
         "expected": "nome.str.upper()"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "nome": "name",
+        "str": "testo",
+        "upper": "su"
+      },
+      "expected": "name.str.upper()"
+    }
   },
   {
     "expression": "nome . str . lower ( )",
@@ -224,7 +313,14 @@
         "new": "giu",
         "expected": "nome . str . lower ( )"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "nome": "name",
+        "lower": "giu"
+      },
+      "expected": "name . str . lower ( )"
+    }
   },
   {
     "expression": "x == 1e5",
@@ -242,7 +338,14 @@
         "new": "y",
         "expected": "y == 1e5"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "e5": "esp",
+        "x": "y"
+      },
+      "expected": "y == 1e5"
+    }
   },
   {
     "expression": "x + 0x1F + 1_000 + 2.5j + .5",
@@ -260,7 +363,14 @@
         "new": "z",
         "expected": "x + 0x1F + 1_000 + 2.5j + .5"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "y",
+        "x1F": "z"
+      },
+      "expected": "y + 0x1F + 1_000 + 2.5j + .5"
+    }
   },
   {
     "expression": "x if y else z",
@@ -280,7 +390,14 @@
         "new": "b",
         "expected": "x if b else z"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "a",
+        "y": "b"
+      },
+      "expected": "a if b else z"
+    }
   },
   {
     "expression": "a and b or not c",
@@ -300,7 +417,14 @@
         "new": "z",
         "expected": "a and b or not z"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "a": "x",
+        "c": "z"
+      },
+      "expected": "x and b or not z"
+    }
   },
   {
     "expression": "x is None",
@@ -313,7 +437,13 @@
         "new": "y",
         "expected": "y is None"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "y"
+      },
+      "expected": "y is None"
+    }
   },
   {
     "expression": "True + flag",
@@ -331,7 +461,14 @@
         "new": "bandiera",
         "expected": "True + bandiera"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "True": "Vero",
+        "flag": "bandiera"
+      },
+      "expected": "True + bandiera"
+    }
   },
   {
     "expression": "`nome completo` + nome",
@@ -350,7 +487,14 @@
         "new": "name",
         "expected": "`nome completo` + name"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "nome completo": "full name",
+        "nome": "name"
+      },
+      "expected": "`full name` + name"
+    }
   },
   {
     "expression": "`nome` * 2",
@@ -363,7 +507,13 @@
         "new": "name",
         "expected": "`name` * 2"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "nome": "name"
+      },
+      "expected": "`name` * 2"
+    }
   },
   {
     "expression": "città * 2",
@@ -376,7 +526,13 @@
         "new": "comune",
         "expected": "comune * 2"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "città": "comune"
+      },
+      "expected": "comune * 2"
+    }
   },
   {
     "expression": "perché + città_2",
@@ -395,7 +551,14 @@
         "new": "c2",
         "expected": "perché + c2"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "perché": "motivo",
+        "città_2": "c2"
+      },
+      "expected": "motivo + c2"
+    }
   },
   {
     "expression": "x  # commento con x",
@@ -408,7 +571,13 @@
         "new": "y",
         "expected": "y  # commento con x"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "y"
+      },
+      "expected": "y  # commento con x"
+    }
   },
   {
     "expression": "x == 'non chiusa",
@@ -421,7 +590,13 @@
         "new": "y",
         "expected": "y == 'non chiusa"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "y"
+      },
+      "expected": "y == 'non chiusa"
+    }
   },
   {
     "expression": "pd.to_numeric(valore)",
@@ -440,7 +615,14 @@
         "new": "pandas",
         "expected": "pandas.to_numeric(valore)"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "valore": "importo",
+        "pd": "pandas"
+      },
+      "expected": "pandas.to_numeric(importo)"
+    }
   },
   {
     "expression": "valore.fillna(0).astype(int)",
@@ -459,7 +641,14 @@
         "new": "intero",
         "expected": "valore.fillna(0).astype(intero)"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "valore": "importo",
+        "int": "intero"
+      },
+      "expected": "importo.fillna(0).astype(intero)"
+    }
   },
   {
     "expression": "(a+b)*(a-b)",
@@ -473,7 +662,13 @@
         "new": "x",
         "expected": "(x+b)*(x-b)"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "a": "x"
+      },
+      "expected": "(x+b)*(x-b)"
+    }
   },
   {
     "expression": "aa + a + a_a",
@@ -488,7 +683,13 @@
         "new": "x",
         "expected": "aa + x + a_a"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "a": "x"
+      },
+      "expected": "aa + x + a_a"
+    }
   },
   {
     "expression": "-x ** 2",
@@ -501,7 +702,13 @@
         "new": "y",
         "expected": "-y ** 2"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "y"
+      },
+      "expected": "-y ** 2"
+    }
   },
   {
     "expression": "x != x",
@@ -514,7 +721,13 @@
         "new": "y",
         "expected": "y != y"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "y"
+      },
+      "expected": "y != y"
+    }
   },
   {
     "expression": "x==y",
@@ -528,7 +741,13 @@
         "new": "y",
         "expected": "y==y"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "y"
+      },
+      "expected": "y==y"
+    }
   },
   {
     "expression": "f(x)(y)",
@@ -547,7 +766,14 @@
         "new": "b",
         "expected": "f(x)(b)"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "a",
+        "y": "b"
+      },
+      "expected": "f(a)(b)"
+    }
   },
   {
     "expression": "x + `",
@@ -560,7 +786,13 @@
         "new": "y",
         "expected": "y + `"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "y"
+      },
+      "expected": "y + `"
+    }
   },
   {
     "expression": "",
@@ -571,7 +803,13 @@
         "new": "y",
         "expected": ""
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "y"
+      },
+      "expected": ""
+    }
   },
   {
     "expression": "'solo testo'",
@@ -582,7 +820,13 @@
         "new": "y",
         "expected": "'solo testo'"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "solo": "y"
+      },
+      "expected": "'solo testo'"
+    }
   },
   {
     "expression": "nome + ' ' + cognome",
@@ -601,7 +845,14 @@
         "new": "c",
         "expected": "nome + ' ' + c"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "nome": "n",
+        "cognome": "c"
+      },
+      "expected": "n + ' ' + c"
+    }
   },
   {
     "expression": "concat_ws('-', a, b)",
@@ -620,7 +871,14 @@
         "new": "x",
         "expected": "concat_ws('-', x, b)"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "concat_ws": "c",
+        "a": "x"
+      },
+      "expected": "concat_ws('-', x, b)"
+    }
   },
   {
     "expression": "x\n+ y",
@@ -634,6 +892,175 @@
         "new": "z",
         "expected": "x\n+ z"
       }
-    ]
+    ],
+    "simultaneous": {
+      "renames": {
+        "y": "z"
+      },
+      "expected": "x\n+ z"
+    }
+  },
+  {
+    "expression": "a + b == 'a'",
+    "refs": [
+      "a",
+      "b"
+    ],
+    "rewrites": [
+      {
+        "old": "a",
+        "new": "b",
+        "expected": "b + b == 'a'"
+      },
+      {
+        "old": "b",
+        "new": "a",
+        "expected": "a + a == 'a'"
+      }
+    ],
+    "simultaneous": {
+      "renames": {
+        "a": "b",
+        "b": "a"
+      },
+      "expected": "b + a == 'a'"
+    }
+  },
+  {
+    "expression": "a * b - `a`",
+    "refs": [
+      "a",
+      "b"
+    ],
+    "rewrites": [
+      {
+        "old": "a",
+        "new": "b",
+        "expected": "b * b - `b`"
+      },
+      {
+        "old": "b",
+        "new": "a",
+        "expected": "a * a - `a`"
+      }
+    ],
+    "simultaneous": {
+      "renames": {
+        "a": "b",
+        "b": "a"
+      },
+      "expected": "b * a - `b`"
+    }
+  },
+  {
+    "expression": "a + b",
+    "refs": [
+      "a",
+      "b"
+    ],
+    "rewrites": [
+      {
+        "old": "a",
+        "new": "b",
+        "expected": "b + b"
+      },
+      {
+        "old": "b",
+        "new": "c",
+        "expected": "a + c"
+      }
+    ],
+    "simultaneous": {
+      "renames": {
+        "a": "b",
+        "b": "c"
+      },
+      "expected": "b + c"
+    }
+  },
+  {
+    "expression": "b + a",
+    "refs": [
+      "b",
+      "a"
+    ],
+    "rewrites": [
+      {
+        "old": "b",
+        "new": "c",
+        "expected": "c + a"
+      },
+      {
+        "old": "a",
+        "new": "b",
+        "expected": "b + b"
+      }
+    ],
+    "simultaneous": {
+      "renames": {
+        "b": "c",
+        "a": "b"
+      },
+      "expected": "c + b"
+    }
+  },
+  {
+    "expression": "x + y + z",
+    "refs": [
+      "x",
+      "y",
+      "z"
+    ],
+    "rewrites": [
+      {
+        "old": "x",
+        "new": "y",
+        "expected": "y + y + z"
+      },
+      {
+        "old": "y",
+        "new": "z",
+        "expected": "x + z + z"
+      },
+      {
+        "old": "z",
+        "new": "x",
+        "expected": "x + y + x"
+      }
+    ],
+    "simultaneous": {
+      "renames": {
+        "x": "y",
+        "y": "z",
+        "z": "x"
+      },
+      "expected": "y + z + x"
+    }
+  },
+  {
+    "expression": "round(a, ndigits=b) + 'b'",
+    "refs": [
+      "a",
+      "b"
+    ],
+    "rewrites": [
+      {
+        "old": "a",
+        "new": "b",
+        "expected": "round(b, ndigits=b) + 'b'"
+      },
+      {
+        "old": "b",
+        "new": "a",
+        "expected": "round(a, ndigits=a) + 'b'"
+      }
+    ],
+    "simultaneous": {
+      "renames": {
+        "a": "b",
+        "b": "a"
+      },
+      "expected": "round(b, ndigits=a) + 'b'"
+    }
   }
 ]

@@ -93,6 +93,55 @@ def test_plugin_executor_uses_the_same_rule(case):
         assert _executor_rewrite(case["expression"], rw["old"], rw["new"]) == rw["expected"]
 
 
+# ── Fase 5, T5+T6, seconda correzione: rinomina SIMULTANEA ovunque ─────────
+# REGOLA: tutte le rinomine di un'espressione in UN passaggio
+# (rewrite_expression_refs). I tre percorsi (plugin_executor, canvas_sync e il
+# frontend rewriteExpressionRefs, nel test JS) danno il risultato del corpus
+# su ogni caso, scambi e catene compresi.
+
+def _refs_and_columns(renames: dict[str, str]):
+    refs = [{"id": f"c{i}", "name": old} for i, old in enumerate(renames)]
+    columns = [{"id": f"c{i}", "name": new} for i, new in enumerate(renames.values())]
+    return refs, columns
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c["expression"] or "<vuota>")
+def test_simultaneous_rename_same_on_backend_paths(case):
+    from app.core.manipola.plugin_executor import get_executor
+
+    sim = case["simultaneous"]
+    refs, columns = _refs_and_columns(sim["renames"])
+    id_to_name = {c["id"]: c["name"] for c in columns}
+    assert get_executor()._rewrite_expression_refs(case["expression"], refs, id_to_name) == sim["expected"]
+    config = {"formula": case["expression"], "formula_column_refs": refs}
+    out = canvas_sync._sync_expression_config(config, columns)
+    assert out.get("formula", case["expression"]) == sim["expected"]
+
+
+def test_corpus_has_swaps_and_chains():
+    def kind(renames):
+        olds, news = set(renames), set(renames.values())
+        if any(renames.get(new) == old for old, new in renames.items()):
+            return "swap"
+        return "chain" if olds & news else "plain"
+    kinds = {kind(c["simultaneous"]["renames"]) for c in CASES}
+    assert {"swap", "chain"} <= kinds
+    swap = next(c for c in CASES if c["expression"] == "a + b == 'a'")
+    assert swap["simultaneous"]["expected"] == "b + a == 'a'"
+    chain = next(c for c in CASES if c["expression"] == "a + b")
+    assert chain["simultaneous"]["expected"] == "b + c"
+
+
+def test_canvas_sync_migrations_rename_simultaneously():
+    """Senza riferimenti salvati (progetti vecchi): rinomine dalle migrazioni."""
+    migrations = {"name:a": {"id": "c1", "name": "b"}, "name:b": {"id": "c2", "name": "a"}}
+    assert canvas_sync._name_map_from_migrations(migrations) == {"a": "b", "b": "a"}
+    out = canvas_sync._sync_expression_config(
+        {"formula": "a - b"}, [{"id": "c1", "name": "b"}, {"id": "c2", "name": "a"}], column_migrations=migrations,
+    )
+    assert out["formula"] == "b - a"
+
+
 def test_plugin_executor_renames_simultaneously():
     from app.core.manipola.plugin_executor import get_executor
 

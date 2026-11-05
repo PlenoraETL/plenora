@@ -20,6 +20,33 @@ ROLES_ABOVE_VIEWER: tuple[str, ...] = ("user", "admin", "superadmin")
 ROLES_KIOSK_ONLY: tuple[str, ...] = ("esecutore",)
 
 
+# REGOLA degli username (input «Utente che esegue», correzione dopo la
+# conferma, punto 2). Lo username e' un'identita' che finisce nei filtri delle
+# catene (``shared.execution.runtime_identity``) e si usa ESATTO, senza
+# trasformazioni. Quindi in OGNI scrittura di un utente (``auth.db.create_user``:
+# API di creazione, bootstrap dell'amministratore degli installer, seed):
+# - forma: niente spazi iniziali o finali, niente caratteri di controllo,
+#   non vuoto (:func:`username_form_error`);
+# - unicita' sulla forma normalizzata (trim + casefold,
+#   :func:`normalized_username`): «Mario» e «mario » non possono coesistere,
+#   perche' molti database confrontano senza maiuscole o senza spazi finali.
+
+
+def normalized_username(username: str) -> str:
+    return str(username).strip().casefold()
+
+
+def username_form_error(username: object) -> str | None:
+    """Motivo per cui ``username`` non e' accettabile, ``None`` se lo e'."""
+    if not isinstance(username, str) or not username.strip():
+        return "Lo username non puo' essere vuoto"
+    if username != username.strip():
+        return "Lo username non puo' iniziare o finire con spazi"
+    if any(ord(char) < 32 or ord(char) == 127 or 0x80 <= ord(char) < 0xA0 for char in username):
+        return "Lo username non puo' contenere caratteri di controllo"
+    return None
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str

@@ -1,0 +1,84 @@
+/* ═══════════════════════════════════════════════════════════════
+   EditorShell — impaginazione comune dei tre editor (Estrai, Manipola,
+   Arricchisci). Classi statiche messe da EditorShell.jsx accanto a quelle
+   con prefisso (`estrai-canvas`...): il layout non dipende da nomi
+   composti a runtime. I ritocchi del singolo editor (colori degli archi,
+   controlli) restano nei CSS di ciascun editor sulle classi con prefisso.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Radice: tutta l'altezza della finestra, in colonna (barra, avvisi, main). */
+.editor-shell {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--plen-bg);
+  color: var(--plen-text);
+  font-family: var(--plen-font-body);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* Main: lo spazio restante, in riga (sidebar | canvas). */
+.editor-shell__main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Canvas: lo spazio restante del main, base posizionata per gli strati. */
+.editor-shell__canvas {
+  flex: 1;
+  position: relative;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--plen-bg);
+}
+
+/* Strato esagonale sotto il grafo: non intercetta il mouse. */
+.editor-shell__hex {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Il grafo sta sopra lo strato esagonale e lo lascia vedere. */
+.editor-shell__canvas .react-flow {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.editor-shell__canvas .react-flow__renderer,
+.editor-shell__canvas .react-flow__pane { background: transparent !important; }
+
+/* Schermata d'errore (caricamento fallito, progetto non trovato). */
+.editor-shell__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 14px;
+  background: var(--plen-bg);
+  color: var(--plen-err);
+  padding: 24px;
+  text-align: center;
+}
+.editor-shell__error-message { font-size: 15px; margin: 0; }
+.editor-shell__error-btn {
+  padding: 8px 20px;
+  background: var(--plen-err);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--plen-font-body);
+}
+.editor-shell__error-btn:hover { filter: brightness(1.08); }

@@ -65,12 +65,50 @@
 /* ── Hex canvas ───────────────────────────────────────────────── */
 
 /* ── Canvas background & ReactFlow overrides ──────────────────── */
+/* Impaginazione (radice, main, canvas, strato esagonale, errore):
+   components/editor/EditorShell.css. Qui solo i ritocchi di questo editor. */
 
 /* Rende il pattern dot semitrasparente → esagoni visibili sotto */
-
-/* Il renderer ReactFlow deve essere trasparente */
+.arricchisci-canvas .react-flow__background { opacity: 0.35; }
 
 /* Controls */
+.arricchisci-canvas .react-flow__controls {
+  background: var(--plen-surface-2, #111525) !important;
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11)) !important;
+  border-radius: 7px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+}
+[data-theme='light'] .arricchisci-canvas .react-flow__controls {
+  background: #FFFFFF !important;
+  border-color: rgba(0,0,0,0.11) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
+}
+.arricchisci-canvas .react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--plen-border, rgba(255,255,255,0.06)) !important;
+  color: var(--plen-text-sub, #7D8BA8) !important;
+  width: 28px !important;
+  height: 28px !important;
+  transition: all 0.12s;
+}
+.arricchisci-canvas .react-flow__controls-button:hover {
+  background: rgba(245,166,35,0.1) !important;
+  color: #F5A623 !important;
+}
+.arricchisci-canvas .react-flow__controls-button:last-child { border-bottom: none !important; }
+.arricchisci-canvas .react-flow__controls-button svg { fill: currentColor !important; }
+[data-theme='light'] .arricchisci-canvas .react-flow__controls-button {
+  color: #4A5568 !important;
+  border-bottom-color: rgba(0,0,0,0.07) !important;
+}
 
 /* Edges — arancio arricchisci */
+.arricchisci-canvas .react-flow__edge-path {
+  stroke: #F5A623;
+  stroke-opacity: 0.6;
+}
+.arricchisci-canvas .react-flow__edge.selected .react-flow__edge-path { stroke-opacity: 1; }
+.arricchisci-canvas .react-flow__arrowhead path { fill: #F5A623; }
 

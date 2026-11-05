@@ -1,5 +1,6 @@
 """Risoluzione condivisa degli input progetto prima dell'invio al worker."""
 
+import copy
 from collections.abc import Mapping
 
 from app.core.eseguibili.manifest import compile_manifest
@@ -8,7 +9,7 @@ from app.core.eseguibili.runtime import resolve_runtime_inputs
 from app.core.eseguibili.service import resolve_runtime_connection_id
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.shared.execution.runtime_identity import RuntimeIdentity, identity_input_nodes
-from app.shared.execution.runtime_input_kinds import is_server_injected
+from app.shared.execution.runtime_input_kinds import node_value, project_input_role
 
 
 def _project_manifest(execution_contract: PipelineExecutionContract) -> ExecutableManifest:
@@ -85,23 +86,75 @@ def apply_identity_inputs(
     """Anteprime dell'editor: valorizza SOLO gli input «Utente che esegue»
     (con lo username di prova) e lascia gli altri input come oggi.
 
+    REGOLA (correzione dopo la conferma, punto 4): la presenza di un input
+    «Utente che esegue» cambia SOLO quell'input. Il manifest si compila sul
+    canvas senza gli ALTRI nodi «Input di progetto» (un altro input mal
+    configurato non blocca l'anteprima) e quei nodi, con i loro archi,
+    tornano nel canvas risolto come erano: anteprima e valori distinti li
+    trattano esattamente come in un canvas senza il nodo utente.
+
     Canvas senza input di tipo server: invariato.
     """
 
-    if not identity_input_nodes(execution_contract.canvas):
+    canvas = execution_contract.canvas
+    if not identity_input_nodes(canvas):
         return execution_contract
-    manifest = _project_manifest(execution_contract)
-    identity_keys = {item.key for item in manifest.inputs if is_server_injected(item.kind)}
-    manifest = manifest.model_copy(update={
-        "inputs": [item for item in manifest.inputs if item.key in identity_keys],
-        "bindings": [item for item in manifest.bindings if item.input_key in identity_keys],
-    })
+    identity_ids = {str(node_value(node, "id") or "") for node in identity_input_nodes(canvas)}
+    nodes = list(canvas.get("nodes") or [])
+    edges = list(canvas.get("edges") or [])
+    other_input_ids = {
+        str(node.get("id"))
+        for node in nodes
+        if isinstance(node, Mapping) and node.get("type") == "project_input"
+        and str(node.get("id")) not in identity_ids
+    }
+
+    # Un input «Utente che esegue» non collegato a nessun campo non cambia
+    # nulla: in anteprima si toglie come farebbe la risoluzione (un input
+    # testo non collegato, qui, non blocca: nemmeno questo).
+    unlinked_ids = {
+        str(node.get("id"))
+        for node in nodes
+        if isinstance(node, Mapping) and str(node.get("id")) in identity_ids
+        and project_input_role(node) == "parameter"
+        and not any(isinstance(b, Mapping) and b.get("target_field")
+                    for b in (node_value(node, "bindings") or []))
+    }
+    dropped = other_input_ids | unlinked_ids
+    identity_only = {
+        **canvas,
+        "nodes": [node for node in nodes if not (isinstance(node, Mapping) and str(node.get("id")) in dropped)],
+        "edges": [edge for edge in edges if not (isinstance(edge, Mapping) and (
+            str(edge.get("source")) in dropped or str(edge.get("target")) in dropped))],
+    }
+    contract = execution_contract.model_copy(update={"canvas": identity_only})
+    manifest = _project_manifest(contract)
     resolved_canvas, _, _summary = resolve_runtime_inputs(
         eseguibile_id=execution_contract.project_id,
-        canvas=execution_contract.canvas,
+        canvas=identity_only,
         manifest=manifest,
         values={},
         group_id=execution_contract.group_id,
         identity=identity,
     )
+    # Gli altri input tornano come erano (stesso ordine del canvas).
+    resolved_by_id = {
+        str(node.get("id")): node for node in resolved_canvas.get("nodes") or [] if isinstance(node, Mapping)
+    }
+    resolved_canvas["nodes"] = [
+        copy.deepcopy(node) if str(node.get("id")) in other_input_ids else resolved_by_id[str(node.get("id"))]
+        for node in nodes
+        if isinstance(node, Mapping)
+        and (str(node.get("id")) in other_input_ids or str(node.get("id")) in resolved_by_id)
+    ]
+    removed_ids = {
+        str(node.get("id")) for node in nodes if isinstance(node, Mapping)
+    } - other_input_ids - set(resolved_by_id)
+    resolved_canvas["edges"] = [
+        copy.deepcopy(edge)
+        for edge in edges
+        if not (isinstance(edge, Mapping) and (
+            str(edge.get("source")) in removed_ids or str(edge.get("target")) in removed_ids
+        ))
+    ]
     return execution_contract.model_copy(update={"canvas": resolved_canvas})

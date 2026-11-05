@@ -45,6 +45,7 @@ from app.shared.execution.runtime_identity import (
     assert_identity_resolved,
     resolve_identity_inputs,
 )
+from app.shared.execution.runtime_bound_fields import runtime_static_parameters
 from app.shared.execution.runtime_input_kinds import (
     RUNTIME_INPUT_KIND_NAMES,
     SERVER_INJECTED_KINDS,
@@ -119,7 +120,9 @@ def _bound_value(canvas: dict, project_type: str):
         return nodes["t"]["filters"][0]["value"]
     if project_type == "manipola":
         return nodes["f"]["config"]["value"]
-    return nodes["api"]["static_parameters"]["utente"]
+    # Nodo API: il bersaglio static_parameters.<nome> si scrive nel campo che
+    # l'esecuzione legge (shared.execution.runtime_bound_fields).
+    return runtime_static_parameters(nodes["api"])["utente"]
 
 
 # ---------------------------------------------------------------- 1. tabella
@@ -202,8 +205,13 @@ def test_preview_identity_is_the_test_username_only():
     other = copy.deepcopy(two["nodes"][-1])
     other["id"], other["data"]["preview_username"] = "utente2", "b"
     two["nodes"].append(other)
-    with pytest.raises(RuntimeIdentityError):
-        RuntimeIdentity.preview_of(two)
+    # La factory non solleva (regola del punto 3): il blocco nasce nella
+    # risoluzione, dentro il mappatore degli errori di preparazione.
+    conflict = RuntimeIdentity.preview_of(two)
+    assert (conflict.username, conflict.reason) == (None, "preview_conflict")
+    with pytest.raises(RuntimeIdentityError) as err:
+        resolve_identity_inputs(DEFS, identity=conflict, client_values={})
+    assert err.value.code == REQUIRED and "diversi" in err.value.message
 
 
 def test_canvases_without_server_inputs_are_untouched():

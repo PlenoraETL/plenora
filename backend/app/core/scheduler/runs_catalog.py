@@ -19,6 +19,7 @@ from app.core.scheduler.run_archive_store import (
     schedule_short,
 )
 from app.core.scheduler.run_log_store import ScheduleRunLogStore
+from app.shared.utc_time import utc_stamp
 
 
 class ScheduleRunsCatalog:
@@ -85,7 +86,8 @@ class ScheduleRunsCatalog:
         if ts is None:
             return None
         if not isinstance(ts, str):
-            ts = ts.strftime("%Y%m%d_%H%M%S")
+            # Token della run in UTC, come timestamp_str (app/shared/utc_time).
+            ts = utc_stamp(ts)
 
         result_id, file_info = self._result_file_for_log(
             entry,

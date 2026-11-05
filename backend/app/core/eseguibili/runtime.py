@@ -19,6 +19,11 @@ from app.shared.execution.runtime_identity import (
     identity_source_fields,
     resolve_identity_inputs,
 )
+from app.shared.execution.runtime_bound_fields import (
+    RUNTIME_BOUND_FIELDS,
+    execution_path,
+    strip_runtime_bound_fields,
+)
 from app.shared.execution.runtime_input_kinds import is_server_injected, project_input_role
 
 from . import db as eseguibili_db
@@ -122,7 +127,15 @@ def _set_existing_path(
         raise ValueError(f"Campo binding non scrivibile: {path}")
 
 
+# Contenitori che la risoluzione crea se mancano: ``config`` dei passi e i
+# campi scritti solo dalla risoluzione (runtime_bound_fields).
+_CREATABLE_HEADS = frozenset({"config"}) | RUNTIME_BOUND_FIELDS
+
+
 def _apply_scalar_binding(node: dict[str, Any], path: str, value: Any) -> None:
+    # Il bersaglio offerto (binding_capabilities) puo' essere letto
+    # dall'esecuzione in un campo dedicato: si scrive li'.
+    path = execution_path(path)
     data = node.get("data")
     applied = False
     if isinstance(data, dict) and path.split(".", 1)[0] in data:
@@ -131,9 +144,10 @@ def _apply_scalar_binding(node: dict[str, Any], path: str, value: Any) -> None:
     if path.split(".", 1)[0] in node:
         _set_existing_path(node, path, value, allow_missing_leaf=True)
         applied = True
-    if not applied and path.split(".", 1)[0] == "config":
+    head = path.split(".", 1)[0]
+    if not applied and head in _CREATABLE_HEADS:
         container = data if isinstance(data, dict) else node
-        container["config"] = {}
+        container[head] = {}
         _set_existing_path(container, path, value, allow_missing_leaf=True)
         applied = True
     if not applied:
@@ -407,6 +421,9 @@ def resolve_runtime_inputs(
     values = {**values, **identity_values}
 
     resolved_canvas = copy.deepcopy(dict(canvas))
+    # I campi scritti dalla risoluzione partono vuoti: li valorizzano solo i
+    # binding qui sotto (mai un valore salvato nel canvas).
+    strip_runtime_bound_fields(resolved_canvas)
     nodes = resolved_canvas.get("nodes") or []
     nodes_by_id = {
         str(node.get("id")): node

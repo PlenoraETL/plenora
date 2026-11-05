@@ -178,6 +178,51 @@ describe('CSS', () => {
       .map(([name, locs]) => `${name} @ ${locs[0]}`);
     expect(dead).toEqual([]);
   });
+
+  // T7, correzione dopo la conferma: T7 aveva tolto le regole di
+  // `${prefix}-canvas`, `${c.field}--${f.width}`... perché il controllo
+  // vedeva solo i prefissi letterali. Ora ogni composizione dinamica
+  // assegnata a una classe (className, …ClassName, sizeClass) deve produrre
+  // ALMENO UNA classe che ha una regola CSS, per un valore noto
+  // dell'espressione (o un'eccezione dichiarata, col motivo).
+  const COMPOSITION_OK = {
+    'components/canvas/NodeInspector.jsx:`${prefix}-inspector`': 'aggancio per editor senza regole: l\'inspector ha lo stesso aspetto nei tre editor (node-inspector)',
+    'components/editor/EditorToolbar.jsx:`etb--${mode}`': 'aggancio per editor senza regole: il colore del modo è su etb__mode--*',
+  };
+  const usage = cssUsage();
+  const names = [...usage.defined.keys()];
+  const source = (c) => '`' + c.parts.map(p => (p.lit != null ? p.lit : `\${${p.expr.trim()}}`)).join('') + '`';
+  const classComps = usage.compositions.filter(c => /class/i.test(c.attr));
+
+  it('trova le composizioni di classi (prefisso, suffisso, in mezzo, concatenazione)', () => {
+    const ids = classComps.map(c => `${c.file}:${source(c)}`);
+    expect(ids).toEqual(expect.arrayContaining([
+      'components/editor/EditorShell.jsx:`${prefix}-canvas${isReadOnly ? \' canvas-readonly\' : \'\'}`',
+      'components/common/SchemaFields.jsx:`${c.field}--${f.width}`',
+      'pages/TicketsList.jsx:`tk__status--${value}`',
+    ]));
+    expect(classComps.length).toBeGreaterThan(100);
+    // Il valore noto di una variabile in testa viene dalle assegnazioni.
+    expect(usage.isUsed('estrai-canvas')).toBe(true);
+    expect(usage.isUsed('dsm__field--wide')).toBe(true);
+    expect(usage.isUsed('nessuno-canvas')).toBe(false);
+  });
+
+  it('ogni composizione di classi produce almeno una classe con una regola CSS', () => {
+    const bad = classComps
+      .map(c => ({ c, id: `${c.file}:${source(c)}` }))
+      .filter(({ c, id }) => !COMPOSITION_OK[id] && !(c.re && names.some(n => c.re.test(n))))
+      .map(({ c, id }) => `${id} (riga ${c.line}${c.re ? '' : ', variabile in testa senza valori noti'})`);
+    expect(bad).toEqual([]);
+  });
+  it('nessuna eccezione di composizione superata', () => {
+    const ids = new Map(classComps.map(c => [`${c.file}:${source(c)}`, c]));
+    const stale = Object.keys(COMPOSITION_OK).filter(id => {
+      const c = ids.get(id);
+      return !c || (c.re && names.some(n => c.re.test(n)));
+    });
+    expect(stale).toEqual([]);
+  });
 });
 
 // --------------------------------------------------------- 3. codice morto ---
@@ -284,6 +329,9 @@ describe('pagine: layout unico (G1), vuoto unico (G2), distruttive a parte (G3)'
     fireEvent.click(screen.getByRole('button', { name: 'Azioni' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Elimina' }));
     expect(removed).toBe(1);
+    // Scelta una voce, il focus torna al pulsante del menu (non al body).
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Azioni' }));
   });
 
   it('card della dashboard e degli eseguibili, Object Storage: Elimina mai a vista accanto alla primaria (DB1, S7)', () => {

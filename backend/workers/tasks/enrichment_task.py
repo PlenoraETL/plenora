@@ -40,6 +40,7 @@ from app.shared.contracts.payloads import JsonObject
 from app.shared.execution import carica_dispatcher
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.runtime_identity import assert_identity_resolved
+from app.shared.execution.runtime_bound_fields import with_runtime_static_parameters
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.utils import debug_payload_builder as debug_payload_builder_module
 from app.core.arricchisci.enrichment_service import (
@@ -570,9 +571,6 @@ def execute_enrichment_task(
                     "error_report_result_id": error_report_result_id,
                 })
             api_name = api_config.get("name", api_id)
-            if api_config.get("api_type", "enricher") == "generator" or input_df is None:
-                return api_connection_service._execute_api_generator(api_config, input_df)
-
             merged = {
                 **{
                     k: v for k, v in node_data.items()
@@ -580,6 +578,11 @@ def execute_enrichment_task(
                 },
                 **(node_data.get("data") or {}),
             }
+            # Input runtime collegati ai parametri statici del nodo
+            # (shared.execution.runtime_bound_fields): anche per il generatore.
+            api_config = with_runtime_static_parameters(api_config, merged)
+            if api_config.get("api_type", "enricher") == "generator" or input_df is None:
+                return api_connection_service._execute_api_generator(api_config, input_df)
 
             def _progress(_percent: int, message: str):
                 update_task_progress(self, 50, message, task_id=task_id)

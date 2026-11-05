@@ -15,6 +15,7 @@ from typing_extensions import TypedDict
 
 from app.db.pg_connection import unit_of_work
 from app.db.sql_safety import safe_set_clause
+from app.shared.utc_time import utc_stamp
 
 
 def execute(sql: str, args: tuple | None = None):
@@ -433,9 +434,10 @@ def list_schedule_logs(
     for r in rows:
         d = cast(ScheduleLogRow, dict(r))
         # Convenienza per i caller filesystem-style: stringa
-        # YYYYMMDD_HHMMSS dal timestamp DB.
+        # YYYYMMDD_HHMMSS dal timestamp DB, in UTC (il TIMESTAMPTZ arriva
+        # nel fuso della sessione PG; regola in app/shared/utc_time).
         ts = d.get("timestamp")
         if isinstance(ts, datetime):
-            d["timestamp_str"] = ts.strftime("%Y%m%d_%H%M%S")
+            d["timestamp_str"] = utc_stamp(ts)
         out.append(d)
     return out

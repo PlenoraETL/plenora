@@ -196,6 +196,29 @@ const CANVAS_VERSION_TRANSITIONS = {
     expect(server.puts.at(-1).base_canvas_version).toBe('c1:v3');
   },
 
+  '"Sovrascrivi" su canvas tornato uguale': async () => {
+    // B modifica, il salvataggio è superato, poi B annulla fino allo stato
+    // che aveva aperto: il canvas è uguale all'ultimo salvato DA B, ma il
+    // server ha quello di A. «Sovrascrivi» deve scrivere comunque.
+    const A = openTab();
+    const B = openTab(useCanvasStore);
+    A.edit('di-A'); await A.save();
+    const opened = serverLabel();
+    B.edit('di-B');
+    await expect(B.save()).rejects.toBeTruthy();
+    expect(useCanvasStore.getState().savedGraph).toBe(null);
+    act(() => { useCanvasStore.getState().undo(); });
+    expect(useCanvasStore.getState().nodes.find(x => x.id === 's').data.label).toBeUndefined();
+    const puts = server.puts.length;
+    await overwriteServer();
+    expect(server.puts.length).toBe(puts + 1);
+    expect(server.puts.at(-1)).not.toHaveProperty('base_canvas_version');
+    expect(serverLabel()).not.toBe(opened);
+    expect(useCanvasStore.getState().saveConflict).toBe(null);
+    expect(useCanvasStore.getState().canvasVersion).toBe(server.version);
+    expect(useCanvasStore.getState().isDirty).toBe(false);
+  },
+
   '"Ricarica la versione del server"': async () => {
     const A = openTab();
     const B = openTab(useCanvasStore);

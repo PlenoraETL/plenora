@@ -6,7 +6,10 @@ from typing import Any, Mapping
 
 from app.core.output_contract.service import node_columns_from_contract
 from app.shared.execution.canvas_column import Column
-from app.shared.execution.expression_refs import expression_has_ref, rewrite_expression_ref
+from app.shared.execution.expression_refs import (
+    expression_has_ref,
+    rewrite_expression_refs,
+)
 from app.shared.execution.config_column_refs import (
     LIST_COLUMN_CONFIG_KEYS,
     SCALAR_COLUMN_CONFIG_KEYS,
@@ -361,7 +364,10 @@ def _sync_expression_config(
         expr = out.get(expr_key)
         if not isinstance(expr, str):
             continue
-        next_expr = expr
+        # Rinomina SIMULTANEA (Fase 5, T5+T6, seconda correzione): ogni
+        # riferimento si legge sull'espressione di partenza, una volta sola
+        # (scambi a<->b e catene a->b, b->c come plugin_executor e frontend).
+        renames: dict[str, str] = {}
         next_refs = []
         removed_ref_seen = False
         columns_by_name = _columns_by_current_name(columns)
@@ -394,12 +400,10 @@ def _sync_expression_config(
                 next_refs.append(ref)
                 continue
             current_id = current.get("id") or current.get("column_id") or ref.get("id")
-            next_expr = _rewrite_expression_token(
-                next_expr,
-                str(ref.get("name") or ""),
-                str(current["name"]),
-            )
+            if ref_name and ref_name != str(current["name"]):
+                renames.setdefault(ref_name, str(current["name"]))
             next_refs.append({"id": current_id, "name": current["name"]})
+        next_expr = rewrite_expression_refs(expr, renames)
         if removed_ref_seen:
             next_expr = ""
             next_refs = []
@@ -417,10 +421,8 @@ def _sync_expression_config(
         refs_key = f"{expr_key}_column_refs"
         if isinstance(out.get(refs_key), list) and out[refs_key]:
             continue
-        next_expr = expr
         renamed_columns = _name_map_from_migrations(column_migrations or {})
-        for old_name, current_name in renamed_columns.items():
-            next_expr = _rewrite_expression_token(next_expr, old_name, current_name)
+        next_expr = rewrite_expression_refs(expr, renamed_columns)
         if any(
             _expression_has_token(next_expr, removed_name)
             for removed_name in _removed_name_tokens_from_migrations(column_migrations or {})
@@ -948,10 +950,8 @@ def _collect_expression_refs(
 # Riferimenti nelle espressioni: regola unica (shared/execution/expression_refs,
 # Fase 5 T6 R3.12): solo i token che il motore delle formule legge come
 # colonne, mai i letterali tra apici, i nomi di funzione o gli attributi.
-def _rewrite_expression_token(expression: str, old_name: str, new_name: str) -> str:
-    return rewrite_expression_ref(expression, old_name, new_name)
-
-
+# La rinomina e' SIMULTANEA (rewrite_expression_refs, una chiamata per
+# espressione): niente riscritture una alla volta.
 def _expression_has_token(expression: str, token: str) -> bool:
     return expression_has_ref(expression, token)
 

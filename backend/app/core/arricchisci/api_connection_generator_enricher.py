@@ -44,6 +44,8 @@ from app.core.arricchisci.success_evaluator import (
 )
 from app.core.arricchisci.types import JsonObject, JsonRows
 from app.core.artifacts.static_parameters import process_static_fields
+from app.shared.execution.runtime_bound_fields import RUNTIME_STATIC_PARAMETERS
+from app.core.arricchisci.url_path_params import substitute_path_params
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
@@ -287,33 +289,14 @@ class ApiConnectionGeneratorEnricherMixin:
         return all_rows
 
     @staticmethod
-    def _substitute_url_path_params(
-        url: str, params: JsonObject, *, safe: str = "-._~:@!$&'()*+,=;/"
-    ) -> tuple:
-        """Sostituisce placeholder `{name}` nel URL con i valori da `params`.
-
-        Ritorna `(updated_url, query_params)` dove `query_params` contiene
-        solo le chiavi che NON erano placeholder nel URL (vanno in
-        querystring). I valori sostituiti nel path sono URL-encoded.
-
-        `safe` controlla quali caratteri NON vengono percent-encodati:
-        - default `"-._~:@!$&'*+,=;/"`: permissivo, preserva slash/virgola
-          (usato da `test_api_connection` — alcuni endpoint si aspettano
-          `lat,lon` non encoded nel path).
-        - `""`: stretto, encoda tutto (usato da `_execute_api_generator`).
+    def _substitute_url_path_params(url: str, params: JsonObject) -> tuple:
+        """Sostituisce i segnaposto ``{name}`` del URL: regola unica di
+        ``url_path_params`` (valore codificato per intero, ``.``/``..``/vuoto
+        rifiutati). Ritorna ``(updated_url, query_params)``.
 
         Usato da `_execute_api_generator` e `test_api_connection`.
         """
-        target_url = url
-        query_params: JsonObject = {}
-        for pname, pvalue in params.items():
-            placeholder = f'{{{pname}}}'
-            if placeholder in target_url:
-                encoded = requests.utils.quote(str(pvalue), safe=safe)
-                target_url = target_url.replace(placeholder, encoded)
-            else:
-                query_params[pname] = pvalue
-        return target_url, query_params
+        return substitute_path_params(url, params)
 
     def _call_generator_endpoint(
         self,
@@ -341,10 +324,8 @@ class ApiConnectionGeneratorEnricherMixin:
         Solleva `ValueError` su HTTP error.
         """
         target_url = call_url or url
-        # Generator: encoding stretto (safe='') — i path param vengono
-        # encoded interamente, niente eccezioni per slash/virgola
         target_url, query_params = self._substitute_url_path_params(
-            target_url, call_params, safe=''
+            target_url, call_params
         )
 
         logger.info(f"Generator API call: {method} {target_url}")
@@ -438,6 +419,10 @@ class ApiConnectionGeneratorEnricherMixin:
                 f"Generator usando static_parameters (processed): "
                 f"{sanitize_for_log(base_params, auth)}"
             )
+
+        # Valori scritti dagli input runtime nel nodo (runtime_bound_fields):
+        # sempre inviati, senza elaborare i segnaposto {{...}}.
+        base_params.update(api_config.get(RUNTIME_STATIC_PARAMETERS) or {})
 
         if auth.get('type') == 'api_key' and auth.get('location') == 'query':
             base_params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')

@@ -21,6 +21,7 @@ from app.core.arricchisci.parallel import (
     should_execute_node,
 )
 from app.core.arricchisci.enrichment_service import build_enrichment_executor
+from app.shared.execution.runtime_bound_fields import with_runtime_static_parameters
 from app.core.arricchisci.types import JsonObject, JsonObjectById, JsonRows
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.canvas_node import CanvasNode
@@ -197,6 +198,8 @@ def run_single_enricher(
     api_config = api_conns.get(api_id)
     if not api_config:
         raise ValueError(f"API '{api_id}' non trovata")
+    # Input runtime collegati ai parametri statici del nodo (runtime_bound_fields).
+    api_config = with_runtime_static_parameters(api_config, _merge_node_data(node_data))
     if api_config.get("api_type", "enricher") == "generator":
         return svc._execute_api_generator(api_config, in_df)
     if in_df is None:

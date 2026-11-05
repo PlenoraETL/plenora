@@ -69,7 +69,7 @@ import useCanvasStore from '../../src/store/useCanvasStore';
 import NodeInspector from '../../src/components/canvas/NodeInspector';
 import ResultInlinePreview from '../../src/components/nodes/result/ResultInlinePreview';
 import { ResourceError } from '../../src/components/common/ListState';
-import { READ_ONLY_SAFE, isReadOnlySafe } from '../../src/components/common/readOnlySafe';
+import { READ_ONLY_SAFE, isReadOnlySafe, useReadOnlyLock } from '../../src/components/common/readOnlySafe';
 import { CASES, COMPONENTS, editorMaps, mountInspector } from '../helpers/inspectorHarness';
 
 const deleteSpy = vi.fn();
@@ -171,7 +171,9 @@ describe('Blocco A, regola 6: il guscio possiede intestazione, chiusura ed elimi
 describe('Sola lettura: spenti i controlli di modifica, attive le azioni di lettura', () => {
   const CONTROLS = 'input, select, textarea, button';
   // Le sole azioni di lettura ammesse (etichetta, titolo o valore).
-  const READ_ACTIONS = /Cronologia esecuzioni|Valida|Anteprima|Esegui|Ricarica anteprima|Apri anteprima completa|Riprova|Cerca colonna|^cache$|^recalculate$/;
+  // Seconda correzione: anche le azioni di VISTA locale (ricerca, «Mostra
+  // tutte»/«Nascondi», espandi) sono azioni di lettura.
+  const READ_ACTIONS = /Cronologia esecuzioni|Valida|Anteprima|Esegui|Ricarica anteprima|Apri anteprima completa|Riprova|Cerca colonna|Cerca campi|Cancella ricerca|Mostra tutt|Nascondi|Espandi|^cache$|^recalculate$/;
   // Azioni di lettura che il viewer aveva a 8461197c, per tipo di nodo
   // (stessi dati minimi; sonda del giro di conferma su 8461197c).
   const VIEWER_8461197C = {
@@ -318,5 +320,195 @@ describe('Sola lettura: spenti i controlli di modifica, attive le azioni di lett
     expect([...form.querySelectorAll(CONTROLS)].every(el => el.matches(':disabled'))).toBe(true);
     // La navigazione del pannello resta usabile.
     expect(screen.getByRole('button', { name: 'Chiudi pannello' }).disabled).toBe(false);
+  });
+});
+
+// Fase 5, T5+T6, seconda correzione. REGOLA: un controllo che cambia SOLO lo
+// stato di VISTA locale (ricerca, filtro della lista, espandi/comprimi,
+// «Mostra tutte»/«Nascondi», ordinamento della vista, schede) e' un'azione di
+// lettura, dichiarata con READ_ONLY_SAFE. Verifica con dati REALISTICI (8
+// colonne, layer con campi, progetto sorgente con colonne) per ogni tipo di
+// nodo, e controllo statico sui sorgenti.
+describe('Sola lettura: le azioni di vista restano attive (dati realistici)', () => {
+  const CONTROLS = 'input, select, textarea, button';
+  const TYPES = ['int', 'str', 'real', 'date', 'bool', 'geometry(Point,4326)', 'str', 'int'];
+  const COLS8 = TYPES.map((type, i) => ({ id: `col${i}`, column_id: `col${i}`, name: `campo_${i}`, source_name: `campo_${i}`, type, visible: true }));
+  // Dati realistici per tipo (oltre ai minimi del banco).
+  const REALISTIC = {
+    tableNode: { table_name: 'comuni', alias: 'c', columns: COLS8, filters: [{ column: 'campo_0', operator: '>', value: '3' }] },
+    featureLayerNode: { layer_url: 'https://srv/arcgis/rest/services/x/FeatureServer/0', layer_name: 'Comuni', columns: COLS8 },
+    project_source: { columns: COLS8 },
+    file_source: { columns: COLS8 },
+    resultNode: { columns: COLS8 },
+    result: { columns: COLS8.map(c => ({ ...c, label: '' })) },
+    datasourceNode: { columns: COLS8 },
+    transform: { columns: COLS8 },
+    multi_join: { columns: COLS8 },
+  };
+  // Azioni di vista che il pannello DEVE offrire con quei dati.
+  const EXPECTED_VIEW = {
+    tableNode: ['Cerca colonne', 'Mostra tutte'],
+    featureLayerNode: ['Cerca campi', 'Mostra tutti'],
+    project_source: ['Mostra tutte'],
+    result: ['Cerca colonna'],
+  };
+  const VIEW = /Cerca|Cancella ricerca|Mostra tutt|Mostra altr|Nascondi|Espandi|Comprimi/;
+  const labelOf = (el) => [el.getAttribute('aria-label'), el.textContent, el.getAttribute('title'), el.getAttribute('placeholder')]
+    .map(x => (x || '').trim().replace(/\s+/g, ' ')).filter(Boolean).join(' | ');
+  const viewControls = (form) => [...form.querySelectorAll(CONTROLS)]
+    .filter(el => el.type === 'search' || VIEW.test(labelOf(el)));
+  let seenView = 0;
+
+  it.each(CASES.map(c => [`${c.mode} · ${c.type}`, c]))('%s: ogni azione di vista e\' attiva e dichiarata', async (_, c) => {
+    const { container } = mount(c, { readOnly: true, data: REALISTIC[c.type] || { columns: COLS8 } });
+    await act(async () => { await Promise.resolve(); });
+    const form = container.querySelector('.node-inspector__form');
+    const views = viewControls(form);
+    seenView += views.length;
+    expect(views.filter(el => el.disabled || !isReadOnlySafe(el)).map(el => el.outerHTML.slice(0, 120))).toEqual([]);
+    const labels = views.map(labelOf).join(' || ');
+    for (const name of EXPECTED_VIEW[c.type] || []) expect(labels, name).toContain(name);
+
+    // Le azioni di vista funzionano davvero in sola lettura (e non scrivono).
+    const before = useCanvasStore.getState();
+    const search = views.find(el => el.tagName === 'INPUT');
+    if (search) {
+      await act(async () => { fireEvent.change(search, { target: { value: 'campo_7' } }); });
+      expect(search.value).toBe('campo_7');
+      const clear = [...form.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === 'Cancella ricerca');
+      if (clear) {
+        expect(clear.disabled).toBe(false);
+        await act(async () => { fireEvent.click(clear); });
+        expect(search.value).toBe('');
+      }
+    }
+    const showAll = [...form.querySelectorAll('button')].find(b => /Mostra tutt/.test(b.textContent));
+    if (showAll) {
+      await act(async () => { fireEvent.click(showAll); });
+      const hide = [...form.querySelectorAll('button')].find(b => /Nascondi/.test(b.textContent));
+      expect(hide, 'Nascondi dopo Mostra tutte').toBeTruthy();
+      expect(hide.disabled).toBe(false);
+    }
+    const after = useCanvasStore.getState();
+    expect(after.isDirty).toBe(before.isDirty);
+    expect(after.past.length).toBe(before.past.length);
+  });
+
+  it('la verifica ha visto delle azioni di vista', () => {
+    expect(seenView).toBeGreaterThanOrEqual(6);
+  });
+
+  // Controllo statico: ogni input di ricerca (type=search, placeholder o
+  // etichetta «Cerca») e ogni pulsante che cambia la vista («Mostra tutt»,
+  // «Mostra altri», «Nascondi», «Espandi», «Comprimi», espandi/comprimi,
+  // schede, ordinamento) nei pannelli dei nodi e nei modali che il pannello
+  // apre e' dichiarato con {...READ_ONLY_SAFE}.
+  it('statico: ogni controllo di vista dei pannelli e dei modali e\' un\'azione di lettura dichiarata', () => {
+    const src = path.resolve(import.meta.dirname, '../../src/components');
+    const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (
+      e.isDirectory() ? walk(path.join(dir, e.name)) : (/\.jsx$/.test(e.name) ? [path.join(dir, e.name)] : [])));
+    // Fuori dal pannello del passo (non montati in NodeInspector ne' da un
+    // suo modale): barre laterali dell'editor, wizard delle connessioni.
+    const OUTSIDE_PANEL = {
+      'FilesSidebar.jsx': 'barra laterale dell\'editor',
+      'ProjectsSidebar.jsx': 'barra laterale dell\'editor',
+      'FeatureServicePanel.jsx': 'barra laterale di Estrai',
+      'QueryPreview.jsx': 'barra di Estrai',
+      'ResponseConfigBuilder.jsx': 'wizard delle connessioni API',
+      'JsonTreeNode.jsx': 'wizard delle connessioni API',
+      'CommandPalette.jsx': 'tavolozza dei comandi dell\'app',
+    };
+    const tags = (text, name) => {
+      const out = [];
+      const re = new RegExp(`<${name}(?=[\\s>/])`, 'g');
+      let m;
+      while ((m = re.exec(text))) {
+        let j = m.index + name.length + 1;
+        let depth = 0;
+        let q = null;
+        for (; j < text.length; j += 1) {
+          const ch = text[j];
+          if (q) { if (ch === q) q = null; continue; }
+          if (ch === '"' || (depth > 0 && (ch === "'" || ch === '`'))) { q = ch; continue; }
+          if (ch === '{') depth += 1;
+          else if (ch === '}') depth -= 1;
+          else if (ch === '>' && depth === 0) break;
+        }
+        const attrs = text.slice(m.index, j + 1);
+        const close = attrs.endsWith('/>') ? -1 : text.indexOf(`</${name}>`, j);
+        out.push({ attrs, body: close > 0 ? text.slice(j + 1, close) : '' });
+      }
+      return out;
+    };
+    const VIEW_INPUT = /type="search"|placeholder=["{][^\n]*Cerca|aria-label="Cerca/;
+    const VIEW_BUTTON = /Mostra tutt|Mostra altr|Nascondi|Espandi|Comprimi|setIsExpanded|setExpanded|setShowAll|setCollapsed|setIsCollapsed|setSearch\w*\(''\)|setQuery\(''\)|setActiveTab|setSort|onToggleExpand/;
+    const files = ['nodes', 'panels', 'transforms', 'common', 'modals'].flatMap(d => walk(path.join(src, d)))
+      .filter(f => !OUTSIDE_PANEL[path.basename(f)]);
+    const offenders = [];
+    let seen = 0;
+    for (const file of files) {
+      const text = fs.readFileSync(file, 'utf-8');
+      const hits = [
+        ...tags(text, 'input').filter(t => VIEW_INPUT.test(t.attrs)),
+        ...tags(text, 'button').filter(t => VIEW_BUTTON.test(t.attrs + t.body)),
+      ];
+      seen += hits.length;
+      for (const t of hits) if (!t.attrs.includes('{...READ_ONLY_SAFE}')) offenders.push(`${path.basename(file)}: ${t.attrs.slice(0, 90)}`);
+    }
+    expect(seen).toBeGreaterThanOrEqual(13);
+    expect(offenders).toEqual([]);
+  });
+
+  it('i modali aperti dal pannello stanno fuori dal blocco (ModalWrapper con createPortal)', () => {
+    const src = path.resolve(import.meta.dirname, '../../src/components');
+    const wrapper = fs.readFileSync(path.join(src, 'common/ModalWrapper.jsx'), 'utf-8');
+    expect(wrapper).toMatch(/return createPortal\(/);
+    for (const modal of ['modals/FilterModal.jsx', 'modals/ColumnBuilderModal.jsx', 'modals/RunHistoryModal.jsx', 'modals/PreviewModal.jsx', 'nodes/carica/ConflictModal.jsx']) {
+      expect(fs.readFileSync(path.join(src, modal), 'utf-8'), modal).toMatch(/ModalWrapper|createPortal/);
+    }
+  });
+});
+
+// Fase 5, T5+T6, seconda correzione (punto 5). useReadOnlyLock non trattiene
+// elementi: chi ha spento lo segna sull'elemento (data-readonly-locked); un
+// controllo smontato esce dal DOM e da ogni struttura del blocco.
+describe('useReadOnlyLock: nessun elemento staccato trattenuto', () => {
+  it('spegne con un marcatore, riaccende solo i suoi, non tiene riferimenti', async () => {
+    let setShown;
+    function Panel({ readOnly }) {
+      const ref = React.useRef(null);
+      const [shown, setShownState] = React.useState(true);
+      setShown = setShownState;
+      useReadOnlyLock(ref, readOnly);
+      return (
+        <div ref={ref}>
+          <input aria-label="a" />
+          <button type="button" disabled>spento dal form</button>
+          {shown && <input aria-label="temporaneo" />}
+          <button type="button" {...READ_ONLY_SAFE}>Valida</button>
+        </div>
+      );
+    }
+    const { rerender } = render(<Panel readOnly />);
+    const a = screen.getByLabelText('a');
+    const temp = screen.getByLabelText('temporaneo');
+    expect(a.disabled).toBe(true);
+    expect(a.hasAttribute('data-readonly-locked')).toBe(true);
+    expect(temp.disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Valida' }).disabled).toBe(false);
+    await act(async () => { setShown(false); });
+    expect(temp.isConnected).toBe(false);
+    rerender(<Panel readOnly={false} />);
+    expect(a.disabled).toBe(false);
+    expect(a.hasAttribute('data-readonly-locked')).toBe(false);
+    expect(screen.getByRole('button', { name: 'spento dal form' }).disabled).toBe(true);
+    // Lo staccato non e' toccato dallo sblocco: nessuno lo trattiene.
+    expect(temp.disabled).toBe(true);
+  });
+
+  it('statico: il blocco non tiene collezioni di elementi (Set/Map/array)', () => {
+    const text = fs.readFileSync(path.resolve(import.meta.dirname, '../../src/components/common/readOnlySafe.js'), 'utf-8');
+    const body = text.slice(text.indexOf('export function useReadOnlyLock'));
+    expect(body).not.toMatch(/new (Weak)?(Set|Map)\(|\.push\(|\.add\(/);
   });
 });

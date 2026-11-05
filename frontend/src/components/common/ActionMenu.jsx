@@ -11,7 +11,8 @@
  *   ]} />
  *
  * Voci nulle o false si saltano (permessi). Tastiera: Invio/Spazio apre,
- * Esc chiude e torna al pulsante, frecce tra le voci.
+ * Esc chiude e torna al pulsante, frecce tra le voci; scelta una voce il
+ * focus torna al pulsante.
  */
 import React, { useEffect, useId, useRef, useState } from 'react';
 import './ActionMenu.css';
@@ -49,7 +50,10 @@ export default function ActionMenu({ items, label = 'Altre azioni', disabled = f
   };
   const choose = (item) => (e) => {
     e.stopPropagation();
-    setOpen(false);
+    // Il focus torna al pulsante PRIMA dell'azione: se l'azione apre una
+    // finestra (conferma), questa prende il focus e alla chiusura lo rende
+    // al pulsante, non al corpo della pagina (la voce non c'è più).
+    close();
     item.onSelect?.();
   };
   const renderItem = (item) => (

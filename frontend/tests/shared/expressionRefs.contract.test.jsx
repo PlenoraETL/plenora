@@ -11,7 +11,7 @@ import path from 'node:path';
 import { render } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import {
-  collectExpressionRefs, expressionColumnRefs, resolveColumnToken, rewriteExpressionRefs, rewriteExpressionToken,
+  collectExpressionRefs, expressionColumnRefs, resolveColumnToken, rewriteExpressionNames, rewriteExpressionRefs,
 } from '../../src/utils/expressionRefs';
 
 // Fase 5, T6, R3.12: lo stesso corpus del backend (generato da
@@ -23,8 +23,27 @@ describe('parita\' col tokenizzatore del backend: solo i riferimenti, mai i lett
   it.each(TOKEN_CASES.map(c => [c.expression || '<vuota>', c]))('%s', (_, c) => {
     expect(expressionColumnRefs(c.expression)).toEqual(c.refs);
     for (const rw of c.rewrites) {
-      expect(rewriteExpressionToken(c.expression, rw.old, rw.new)).toBe(rw.expected);
+      expect(rewriteExpressionNames(c.expression, { [rw.old]: rw.new })).toBe(rw.expected);
     }
+  });
+
+  // Fase 5, T5+T6, seconda correzione. REGOLA: rinomina SIMULTANEA ovunque
+  // (backend rewrite_expression_refs, qui rewriteExpressionNames): stessi
+  // risultati del corpus, scambi e catene compresi, anche dal percorso del
+  // pannello (rewriteExpressionRefs con riferimenti salvati per id).
+  it.each(TOKEN_CASES.map(c => [c.expression || '<vuota>', c]))('simultanea: %s', (_, c) => {
+    const { renames, expected } = c.simultaneous;
+    expect(rewriteExpressionNames(c.expression, renames)).toBe(expected);
+    const olds = Object.keys(renames);
+    const refs = olds.map((old, i) => ({ id: `c${i}`, name: old }));
+    const columns = olds.map((old, i) => ({ id: `c${i}`, name: renames[old] }));
+    expect(rewriteExpressionRefs(c.expression, refs, columns)).toBe(expected);
+  });
+
+  it('il corpus ha scambi e catene', () => {
+    const swap = TOKEN_CASES.find(c => c.expression === "a + b == 'a'");
+    expect(swap.simultaneous.expected).toBe("b + a == 'a'");
+    expect(TOKEN_CASES.find(c => c.expression === 'a + b').simultaneous.expected).toBe('b + c');
   });
 
   it('scenario dell\'audit: stato == \'stato\' con stato -> status', () => {

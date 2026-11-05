@@ -11,6 +11,7 @@ import importlib
 from pathlib import Path
 from typing import Any, Callable, List, Optional
 
+from app.shared.execution.parameter_dependencies import dependency_satisfied
 from app.shared.execution.registry_types import LIST_PARAM_TYPES, require_known_param_type, parameter_value
 from app.shared.execution.lookup_mapping import normalize_lookup_mapping
 from app.core.manipola.preparation import prepare_operation
@@ -308,27 +309,10 @@ class PluginExecutor:
         for param in parameters:
             param_id = param['id']
 
-            # Es: il parametro "custom_value" dipende da "mode" == "custom"
-            if 'depends_on' in param:
-                dep = param['depends_on']
-                dep_param_id = dep['param']
-                dep_expected = dep['value']
-                
-                # Cerca il valore corrente, oppure il default del parametro dipendente
-                if dep_param_id in node_config:
-                    dep_value = node_config[dep_param_id]
-                else:
-                    # Cerca il default nel registry
-                    dep_param_def = next((p for p in parameters if p['id'] == dep_param_id), None)
-                    dep_value = dep_param_def.get('default') if dep_param_def else None
-                
-                # Supporta array di valori possibili
-                if isinstance(dep_expected, list):
-                    if dep_value not in dep_expected:
-                        continue  # Dipendenza non soddisfatta
-                else:
-                    if dep_value != dep_expected:
-                        continue  # Dipendenza non soddisfatta
+            # Es: il parametro "custom_value" dipende da "mode" == "custom".
+            # Regola unica con i bersagli collegabili (parameter_dependencies).
+            if not dependency_satisfied(param, parameters, node_config):
+                continue  # Dipendenza non soddisfatta
 
             if param_id in node_config:
                 value = node_config[param_id]

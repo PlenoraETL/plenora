@@ -16,7 +16,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.shared.execution.expression_refs import expression_column_refs, rewrite_expression_ref
+from app.shared.execution.expression_refs import (
+    expression_column_refs,
+    rewrite_expression_ref,
+    rewrite_expression_refs,
+)
 
 CASES_PATH = Path(__file__).with_name("expression_refs_cases.json")
 
@@ -63,6 +67,15 @@ CORPUS: list[tuple[str, list[tuple[str, str]]]] = [
     ("nome + ' ' + cognome", [("nome", "n"), ("cognome", "c")]),
     ("concat_ws('-', a, b)", [("concat_ws", "c"), ("a", "x")]),
     ("x\n+ y", [("y", "z")]),
+    # Fase 5, T5+T6, seconda correzione: rinomina SIMULTANEA. Scambi e
+    # catene: ogni riferimento si legge una volta sull'espressione di
+    # partenza (in sequenza a<->b darebbe "a + a", a->b,b->c "c + c").
+    ("a + b == 'a'", [("a", "b"), ("b", "a")]),
+    ("a * b - `a`", [("a", "b"), ("b", "a")]),
+    ("a + b", [("a", "b"), ("b", "c")]),
+    ("b + a", [("b", "c"), ("a", "b")]),
+    ("x + y + z", [("x", "y"), ("y", "z"), ("z", "x")]),
+    ("round(a, ndigits=b) + 'b'", [("a", "b"), ("b", "a")]),
 ]
 
 
@@ -76,6 +89,11 @@ def build_cases() -> list[dict]:
                 {"old": old, "new": new, "expected": rewrite_expression_ref(expression, old, new)}
                 for old, new in renames
             ],
+            # Tutte le rinomine del caso insieme (un solo passaggio).
+            "simultaneous": {
+                "renames": dict(renames),
+                "expected": rewrite_expression_refs(expression, dict(renames)),
+            },
         })
     return cases
 

@@ -17,6 +17,7 @@ import useCanvasStore from '../../store/useCanvasStore';
 import './ProjectSourceNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { pressable } from '../../utils/pressable';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 /**
  * ProjectSourceNode - Nodo sorgente per progetti SQL (tipo "estrai") o Manipola
@@ -252,6 +253,7 @@ const ProjectSourceNode = ({ id, data }) => {
             {hasMoreColumns && (
               <button
                 type="button"
+                {...READ_ONLY_SAFE}
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="project-source-node__expand-btn"
               >

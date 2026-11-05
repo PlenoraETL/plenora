@@ -12,6 +12,7 @@ import React, { useMemo } from 'react';
 import { getColumnTypeIcon } from '../../utils/columnUtils';
 import { pressable } from '../../utils/pressable';
 import './PreviewModal.css';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 /* Inferisce gruppi sorgente dal prefisso colonna. */
 
@@ -148,7 +149,7 @@ const PreviewTable = ({
       {/* toolbar */}
       <div className="preview-modal__toolbar">
         <div className="preview-modal__search">
-          <input
+          <input {...READ_ONLY_SAFE}
             type="text"
             placeholder="⌕  Cerca nei dati…"
             value={searchTerm}

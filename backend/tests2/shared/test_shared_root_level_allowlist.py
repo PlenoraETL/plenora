@@ -26,6 +26,7 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "error_codes",        # shared error code registry
         "error_envelope",     # standard error response envelope
         "error_sanitizer",    # strip sensitive data from error messages
+        "utc_time",           # instants sent to clients always in explicit UTC (Fase 5 T7)
     }
 )
 
@@ -34,6 +35,7 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "error_codes": "KEEP_ROOT_CROSS_CUTTING",
     "error_envelope": "KEEP_ROOT_CROSS_CUTTING",
     "error_sanitizer": "KEEP_ROOT_CROSS_CUTTING",
+    "utc_time": "KEEP_ROOT_CROSS_CUTTING",
 }
 
 _CLASSIFICATION_BUCKETS: frozenset[str] = frozenset(

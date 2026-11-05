@@ -8,6 +8,14 @@
  * un'anteprima, esegue (con i permessi suoi), riprova a caricare un elenco,
  * cerca in una lista, sceglie un'opzione dell'esecuzione (non del canvas).
  *
+ * Seconda correzione (Fase 5, T5+T6): un controllo che cambia SOLO lo stato
+ * di VISTA locale del pannello (ricerca, filtro della lista, espandi/
+ * comprimi, «Mostra tutte»/«Nascondi», ordinamento della vista, schede) e'
+ * un'azione di lettura: si dichiara anche lui con READ_ONLY_SAFE. I modali
+ * aperti dal pannello (ModalWrapper, createPortal) stanno fuori dal form e
+ * fuori da questo blocco; si aprono solo da azioni di lettura o da controlli
+ * di modifica (spenti).
+ *
  * Si dichiara in UN punto, sul controllo: `{...READ_ONLY_SAFE}`. Il pannello
  * (NodeInspector, ReadOnlyForm) spegne ogni altro input/select/textarea/
  * button del form con `useReadOnlyLock`, anche quelli che i form montano
@@ -31,17 +39,23 @@ export const isReadOnlySafe = (el) => Boolean(el?.closest?.(SAFE_SELECTOR));
 /**
  * Spegne in `ref.current` ogni controllo che non sia un'azione di lettura,
  * finche' `readOnly` e' vero. Riaccende solo quelli che ha spento lui.
+ *
+ * Nessun riferimento trattenuto (Fase 5, T5+T6, seconda correzione): chi e'
+ * stato spento lo dice un marcatore sull'elemento (`data-readonly-locked`),
+ * non un Set di elementi. Un controllo smontato mentre il pannello e' in
+ * sola lettura esce dal DOM e da qui: nessun elemento staccato resta vivo.
  */
+const LOCKED_ATTR = 'data-readonly-locked';
+
 export function useReadOnlyLock(ref, readOnly) {
   useLayoutEffect(() => {
     const root = ref.current;
     if (!root || !readOnly) return undefined;
-    const locked = new Set();
     const lock = () => {
       for (const el of root.querySelectorAll(FORM_CONTROLS)) {
         if (isReadOnlySafe(el) || el.disabled) continue;
         el.disabled = true;
-        locked.add(el);
+        el.setAttribute(LOCKED_ATTR, '');
       }
     };
     lock();
@@ -49,7 +63,10 @@ export function useReadOnlyLock(ref, readOnly) {
     observer?.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled'] });
     return () => {
       observer?.disconnect();
-      for (const el of locked) el.disabled = false;
+      for (const el of root.querySelectorAll(`[${LOCKED_ATTR}]`)) {
+        el.disabled = false;
+        el.removeAttribute(LOCKED_ATTR);
+      }
     };
   }, [ref, readOnly]);
 }

@@ -1,6 +1,9 @@
 import { projectInputRole } from './runtimeInputKinds';
+import { canonicalNodeType } from './nodeTypeRegistry';
 
 const PARAMETER_EDGE_KIND = 'parameter_binding';
+// Operatori senza valore: il filtro non legge `value` (stessa regola del backend).
+const VALUELESS_OPERATORS = new Set(['IS NULL', 'IS NOT NULL']);
 
 const SCALAR_PARAMETER_TYPES = new Set(['string', 'number', 'boolean', 'select']);
 const SCHEMA_AFFECTING_PARAMETER_IDS = new Set([
@@ -37,6 +40,16 @@ export function isBindableTransformParameter(param, transformDefinition = {}) {
   return SCALAR_PARAMETER_TYPES.has(param.type)
     && param.id !== addsColumn
     && !SCHEMA_AFFECTING_PARAMETER_IDS.has(param.id);
+}
+
+/** `depends_on` di un parametro: stessa regola di DynamicConfig e del backend. */
+function dependencySatisfied(param, parameters, config) {
+  if (!param?.depends_on) return true;
+  const { param: depParam, value: depValue } = param.depends_on;
+  const current = config[depParam] !== undefined
+    ? config[depParam]
+    : parameters.find(p => p.id === depParam)?.default;
+  return Array.isArray(depValue) ? depValue.includes(current) : current === depValue;
 }
 
 function parameterEdgeStyle() {
@@ -108,16 +121,28 @@ export function serializedBindingsForInput(node, edges) {
   return (node.data?.input_kind || 'file') === 'file' ? (node.data?.bindings || []) : [];
 }
 
+/**
+ * Bersagli collegabili di un nodo: stessa tabella del backend
+ * (eseguibili/binding_capabilities.NODE_TARGET_FAMILIES). Ogni bersaglio
+ * offerto e' letto dall'esecuzione del suo tipo di nodo: filtri della tabella
+ * di Estrai, HAVING (con GROUP BY) attivo del risultato di Estrai, parametri dei passi,
+ * parametri statici del nodo API.
+ */
 export function getNodeBindableTargets(node, registry = null) {
   if (!node) return [];
   const data = node.data || {};
+  const type = canonicalNodeType(node.type);
   const options = [];
 
-  if (node.type === 'transform') {
+  if (type === 'transform') {
     const definition = registry?.transforms?.[data.transform_op]
       || registry?.[data.transform_op]
       || {};
-    (definition.parameters || []).forEach(param => {
+    const parameters = definition.parameters || [];
+    parameters.forEach(param => {
+      // L'esecuzione non legge un parametro con la dipendenza non soddisfatta
+      // (backend: shared/execution/parameter_dependencies).
+      if (!dependencySatisfied(param, parameters, data.config || {})) return;
       if (isBindableTransformParameter(param, definition)) {
         options.push({
           value: `config.${param.id}`,
@@ -144,41 +169,39 @@ export function getNodeBindableTargets(node, registry = null) {
     });
   }
 
-  (data.filters || []).forEach((item, index) => options.push({
-    value: `filters.${index}.value`,
-    parameter: `filters-${index}`,
-    type: 'string',
-    label: `Filtro ${index + 1}: ${item.column || item.field || 'valore'}`,
-  }));
-  (data.conditions || []).forEach((item, index) => {
-    ['value', 'result'].forEach(field => {
-      if (Object.prototype.hasOwnProperty.call(item || {}, field)) {
-        options.push({
-          value: `conditions.${index}.${field}`,
-          parameter: `conditions-${index}`,
-          type: 'string',
-          label: `Condizione ${index + 1}: ${field}`,
-        });
-      }
+  if (type === 'source') {
+    (data.filters || []).forEach((item, index) => {
+      if (!Object.prototype.hasOwnProperty.call(item || {}, 'value')) return;
+      if (VALUELESS_OPERATORS.has(String(item.operator || '').toUpperCase())) return;
+      options.push({
+        value: `filters.${index}.value`,
+        parameter: `filters-${index}`,
+        type: 'string',
+        label: `Filtro ${index + 1}: ${item.column || item.field || 'valore'}`,
+      });
     });
-  });
-  (data.having_conditions || []).forEach((item, index) => options.push({
-    value: `having_conditions.${index}.value`,
-    parameter: `having-${index}`,
-    type: 'string',
-    label: `HAVING ${index + 1}: ${item.column || item.field || 'valore'}`,
-  }));
-  Object.keys(data.static_parameters || {}).forEach(name => options.push({
-    value: `static_parameters.${name}`,
-    parameter: `static-${name}`,
-    type: 'string',
-    label: `Parametro statico: ${name}`,
-  }));
-  ['value', 'default_value'].forEach(field => {
-    if (Object.prototype.hasOwnProperty.call(data, field)) {
-      options.push({ value: field, parameter: field, type: 'string', label: field });
-    }
-  });
+  }
+  if (type === 'result' && data.having_enabled && data.group_by_enabled) {
+    (data.having_conditions || []).forEach((item, index) => {
+      if (!Object.prototype.hasOwnProperty.call(item || {}, 'value')) return;
+      options.push({
+        value: `having_conditions.${index}.value`,
+        parameter: `having-${index}`,
+        type: 'string',
+        label: `HAVING ${index + 1}: ${item.column || item.field || 'valore'}`,
+      });
+    });
+  }
+  if (type === 'api_enrich') {
+    Object.keys(data.static_parameters || {})
+      .filter(name => name && !name.includes('.'))
+      .forEach(name => options.push({
+        value: `static_parameters.${name}`,
+        parameter: `static-${name}`,
+        type: 'string',
+        label: `Parametro statico: ${name}`,
+      }));
+  }
   return options;
 }
 

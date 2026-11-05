@@ -5,7 +5,7 @@ import errno
 import socket
 import stat
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterator, Optional
 
 from app.core.datasources.interface import (
@@ -247,7 +247,7 @@ class SFTPDataSource(DataSourceInterface):
                     name=entry.filename,
                     path=self._join_path(path, entry.filename),
                     size=0,
-                    modified_date=datetime.fromtimestamp(entry.st_mtime or 0),
+                    modified_date=datetime.fromtimestamp(entry.st_mtime or 0, tz=timezone.utc),
                     type="folder",
                     hash=None,
                 ))
@@ -272,7 +272,7 @@ class SFTPDataSource(DataSourceInterface):
                 name=entry.filename,
                 path=file_path,
                 size=entry.st_size or 0,
-                modified_date=datetime.fromtimestamp(entry.st_mtime or 0),
+                modified_date=datetime.fromtimestamp(entry.st_mtime or 0, tz=timezone.utc),
                 type=self._extension(entry.filename),
                 hash=hash_val,
             ))
@@ -293,7 +293,7 @@ class SFTPDataSource(DataSourceInterface):
             name=name,
             path=path,
             size=attrs.st_size or 0,
-            modified_date=datetime.fromtimestamp(attrs.st_mtime or 0),
+            modified_date=datetime.fromtimestamp(attrs.st_mtime or 0, tz=timezone.utc),
             type=self._extension(name),
         )
 

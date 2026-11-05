@@ -6,8 +6,6 @@ exponential backoff per `EnrichmentExecutor`: path sequenziale
 
 from __future__ import annotations
 
-from urllib.parse import quote as _quote
-import re
 
 import time
 from typing import Optional, Tuple
@@ -34,6 +32,7 @@ from app.core.arricchisci.success_evaluator import (
 )
 from app.shared.security.outbound_url import validate_external_url
 from app.core.arricchisci.types import JsonObject
+from app.core.arricchisci.url_path_params import substitute_path_params
 from app.observability.log_sanitization import (
     sanitize_for_log,
     sanitize_url_for_log,
@@ -70,14 +69,10 @@ class EnrichmentRetryHttpMixin:
         """
         last_error = None
 
-        call_url = self.url
-        call_params_base = dict(params)
-        for pname in re.findall(r'\{(\w+)\}', call_url):
-            if pname in call_params_base:
-                encoded = _quote(str(call_params_base.pop(pname)), safe='-._~:@!$&\'()*+,=;/')
-                call_url = call_url.replace(f'{{{pname}}}', encoded)
-
         try:
+            # Parametri di percorso: regola unica (url_path_params), un valore
+            # non cambia il percorso dell'endpoint.
+            call_url, call_params_base = substitute_path_params(self.url, params)
             validate_external_url(call_url)
         except ValueError as e:
             return None, RowError(

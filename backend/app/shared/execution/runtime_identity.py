@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from app.shared import error_codes
-from app.shared.contracts.auth import CurrentUser
+from app.shared.contracts.auth import CurrentUser, username_form_error
 from app.shared.execution.runtime_input_kinds import (
     SOURCE_COLUMN_FIELD,
     is_server_injected,
@@ -55,7 +55,7 @@ from app.shared.execution.runtime_input_kinds import (
 )
 
 IdentityOrigin = Literal["authenticated", "preview", "absent"]
-AbsentReason = Literal["project_run", "unattended", "preview_missing"]
+AbsentReason = Literal["project_run", "unattended", "preview_missing", "preview_conflict", "username_invalid"]
 
 PREVIEW_USERNAME_FIELD = "preview_username"
 KIND_LABEL = "Utente che esegue"
@@ -78,6 +78,15 @@ _MISSING_MESSAGES: dict[str, str] = {
         "L'input «{label}» ({kind}): per anteprima e Valida indica un nome "
         "utente di prova nell'input."
     ),
+    "username_invalid": (
+        "L'input «{label}» ({kind}): lo username dell'utente che avvia ha spazi "
+        "iniziali o finali o caratteri di controllo e non si usa come filtro. "
+        "Chiedi all'amministratore di correggerlo."
+    ),
+    "preview_conflict": (
+        "Gli input «{kind}» hanno nomi utente di prova diversi: usane uno solo "
+        "(input «{label}»)."
+    ),
 }
 
 
@@ -98,11 +107,24 @@ class RuntimeIdentity:
     username: str | None = None
     reason: AbsentReason = "unattended"
 
+    # REGOLA (correzione dopo la conferma, punto 3): le factory non
+    # sollevano MAI. Ogni blocco (utente assente, nomi di prova diversi) nasce
+    # in :func:`resolve_identity_inputs`, cioe' dentro la preparazione di ogni
+    # percorso e il suo mappatore unico degli errori (400 tipizzato).
+
     @classmethod
     def authenticated(cls, user: CurrentUser) -> "RuntimeIdentity":
-        username = str(getattr(user, "username", "") or "").strip()
-        if not username:
+        """Lo username ESATTO del DB (punto 2): nessuno strip, nessuna
+        trasformazione. Gli username nuovi sono gia' senza spazi iniziali e
+        finali e unici in forma normalizzata (``auth.usernames``); uno
+        username vuoto o di soli spazi non e' un utente."""
+        username = getattr(user, "username", None)
+        if not isinstance(username, str) or not username.strip():
             return cls.unattended()
+        if username_form_error(username) is not None:
+            # Utente creato prima della regola: mai uno username che un
+            # database potrebbe confrontare uguale a quello di un altro.
+            return cls("absent", None, "username_invalid")
         return cls("authenticated", username)
 
     @classmethod
@@ -122,10 +144,7 @@ class RuntimeIdentity:
         }
         names.discard("")
         if len(names) > 1:
-            raise RuntimeIdentityError(
-                error_codes.RUNTIME_IDENTITY_REQUIRED,
-                f"Gli input «{KIND_LABEL}» hanno nomi utente di prova diversi: usane uno solo.",
-            )
+            return cls("absent", None, "preview_conflict")
         if not names:
             return cls("absent", None, "preview_missing")
         return cls("preview", names.pop())

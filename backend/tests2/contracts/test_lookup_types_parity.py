@@ -157,3 +157,57 @@ def test_prediction_logs_nothing_at_info():
         assert [r.levelno for r in records] == [logging.INFO]
     finally:
         probe_logger.removeHandler(handler)
+
+
+# ── Fase 5, T5+T6, seconda correzione ──────────────────────────────────────
+# REGOLA: un ingresso di prova che non si costruisce rende il tipo INCERTO,
+# mai un'eccezione (prima: OverflowError da typed_probe_frame con una
+# chiave-testo oltre int64 su una colonna intera). E una chiave che la colonna
+# non puo' contenere (intero oltre int64 su int/Int64) non e' un candidato:
+# non corrisponde mai, come nell'esecuzione.
+
+@pytest.mark.parametrize("col_type", ["int", "Int64", "integer", "bigint"])
+@pytest.mark.parametrize("mapping", [
+    {"12345678901234567890": "a"},
+    {"12345678901234567890": "1", "2": "3"},
+    {"1": "x", "12345678901234567890": None},
+    [{"from": 12345678901234567890, "to": 2.0}, {"from": "0", "to": 2}],
+])
+@pytest.mark.parametrize("unmatched", ["keep", "null", ""])
+def test_key_beyond_int64_never_raises_and_matches_execution(col_type, mapping, unmatched):
+    _plan.cache_clear()
+    config = {"mapping": mapping, "unmatched": unmatched}
+    plan = lookup_type_plan(col_type, config)
+    assert isinstance(plan.type, str) and plan.type
+    if plan.certain:
+        # Tipo certo: e' quello dell'esecuzione su dati veri della colonna.
+        for values in ([2, None], [0, 7], []):
+            frame = pd.DataFrame({"c": pd.Series(values, dtype="float64" if None in values else "int64")})
+            out = op_lookup(frame, column="c", **config)
+            got = next(c["type"] for c in build_columns_with_types(out, {}) if c["name"] == "c")
+            assert got == plan.type, (values, got, plan)
+
+
+def test_probe_that_cannot_be_built_is_uncertain_not_an_error(monkeypatch):
+    from app.core.manipola import lookup_type_plan as module
+
+    real = module.typed_probe_frame
+
+    def failing(column, column_type, values):
+        if any(v is None for v in values):
+            raise OverflowError("prova non costruibile")
+        return real(column, column_type, values)
+
+    monkeypatch.setattr(module, "typed_probe_frame", failing)
+    _plan.cache_clear()
+    try:
+        plan = lookup_type_plan("int", {"mapping": {"1": "a"}, "unmatched": "keep"})
+    finally:
+        _plan.cache_clear()
+    assert plan.certain is False
+
+
+def test_mapping_order_is_execution_order():
+    """L'ordine di inserimento della mappa e' quello dell'esecuzione (dichiarato)."""
+    plan = representative_plan("str", {"mapping": {"b": "1", "a": "x"}, "unmatched": "keep"})
+    assert [pair["from"] for pair in plan["mapping"]] == ["b", "a"]

@@ -18,7 +18,10 @@
  *  - Con i riferimenti salvati (`<param>_column_refs` = [{id, name}]): per
  *    id. Il nome vecchio si sostituisce col nome attuale della stessa
  *    colonna, ma non se il nome vecchio e' oggi il nome di UN'ALTRA colonna
- *    (sarebbe ambiguo: si lascia com'e').
+ *    (sarebbe ambiguo: si lascia com'e'), a meno che quell'altra colonna non
+ *    sia rinominata anche lei secondo i riferimenti (scambio a<->b).
+ *  - Tutte le rinomine di un'espressione si applicano INSIEME
+ *    (`rewriteExpressionNames`, come `rewrite_expression_refs` del backend).
  *  - Senza riferimenti (progetti vecchi): un nome che e' il nome ATTUALE di
  *    una colonna non si tocca mai; un nome che non esiste piu' si riscrive
  *    solo se esattamente una colonna lo dichiara come nome di origine
@@ -137,13 +140,24 @@ export function expressionColumnRefs(expression) {
 }
 
 
-export function rewriteExpressionToken(expression, oldName, newName) {
-  if (!expression || !oldName || !newName || oldName === newName) return expression;
+/**
+ * Rinomina SIMULTANEA (Fase 5, T5+T6, seconda correzione; come
+ * `rewrite_expression_refs` del backend): `renames` {vecchio: nuovo} (oggetto
+ * o Map). Ogni riferimento si legge UNA volta sull'espressione di partenza:
+ * gli scambi (a->b, b->a) e le catene (a->b, b->c) non si ripassano.
+ */
+export function rewriteExpressionNames(expression, renames) {
+  if (!expression || typeof expression !== 'string' || !renames) return expression;
+  const map = new Map([...(renames instanceof Map ? renames : Object.entries(renames))]
+    .filter(([oldName, newName]) => oldName && newName && oldName !== newName));
+  if (map.size === 0) return expression;
   let out = '';
   let cursor = 0;
   let changed = false;
   for (const t of expressionTokens(expression)) {
-    if (tokenRef(t) !== oldName) continue;
+    const ref = tokenRef(t);
+    if (ref === null || !map.has(ref)) continue;
+    const newName = map.get(ref);
     out += expression.slice(cursor, t.start) + (t.kind === 'backtick' ? `\`${newName}\`` : newName);
     cursor = t.end;
     changed = true;
@@ -193,23 +207,28 @@ export function rewriteExpressionRefs(expression, refs, columns) {
   if (!expression || typeof expression !== 'string') return expression;
   const list = columns || [];
   const byId = new Map(list.map(c => [columnKey(c), c]).filter(([k]) => Boolean(k)));
-  let next = expression;
+  // Rinomina simultanea: si raccolgono i nomi, si riscrive una volta sola.
+  const renames = new Map();
   const saved = (Array.isArray(refs) ? refs : []).filter(r => r?.id && byId.get(r.id)?.name);
   if (saved.length > 0) {
+    // Colonne che i riferimenti dicono rinominate (nome salvato diverso dal
+    // nome attuale): il loro nome attuale non era il loro nome nell'espressione.
+    const renamedAway = new Set(saved.filter(r => r.name && r.name !== byId.get(r.id).name).map(r => r.id));
     for (const ref of saved) {
       const current = byId.get(ref.id);
-      if (!ref.name || ref.name === current.name) continue;
-      // Il nome vecchio e' oggi di un'altra colonna: non univoco, non si tocca.
-      if (list.some(c => c?.name === ref.name && columnKey(c) !== ref.id)) continue;
-      next = rewriteExpressionToken(next, ref.name, current.name);
+      if (!ref.name || ref.name === current.name || renames.has(ref.name)) continue;
+      // Il nome vecchio e' oggi di un'altra colonna (che non e' stata a sua
+      // volta rinominata, come negli scambi): non univoco, non si tocca.
+      if (list.some(c => c?.name === ref.name && columnKey(c) !== ref.id && !renamedAway.has(columnKey(c)))) continue;
+      renames.set(ref.name, String(current.name));
     }
-    return next;
+    return rewriteExpressionNames(expression, renames);
   }
   const present = new Set(expressionColumnRefs(expression));
   for (const token of candidateTokens(list)) {
     if (!present.has(token)) continue;
     const col = resolveColumnToken(token, list);
-    if (col && col.name !== token) next = rewriteExpressionToken(next, token, String(col.name));
+    if (col && col.name !== token) renames.set(token, String(col.name));
   }
-  return next;
+  return rewriteExpressionNames(expression, renames);
 }

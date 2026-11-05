@@ -5,6 +5,7 @@ Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 from app.shared.execution.api_mapping import mapping_destination
+from app.shared.execution.runtime_bound_fields import with_runtime_static_parameters
 from app.core.dataframes.schema import record_column_names
 
 import csv
@@ -389,7 +390,9 @@ def build_enrichment_executor(
     deduped = resolve_enrichment_output_mapping(node_data, api_config)
 
     api_cfg = {
-        **api_config,
+        # Parametri statici scritti dagli input runtime nel nodo: contano piu'
+        # di quelli della connessione per quelle chiavi (runtime_bound_fields).
+        **with_runtime_static_parameters(api_config, node_data),
         "output_mapping": deduped,
         "batch": node_data.get("batch") or api_config.get("batch", {}),
     }

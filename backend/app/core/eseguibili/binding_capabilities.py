@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from app.shared.contracts.payloads import JsonObject
+from app.shared.execution.parameter_dependencies import dependency_satisfied
 
 _SCALAR_PARAMETER_TYPES = frozenset({"string", "number", "boolean", "select"})
 _SCHEMA_AFFECTING_PARAMETER_IDS = frozenset(
@@ -45,6 +46,9 @@ _SENSITIVE_PARTS = frozenset(
         "key_value",
     }
 )
+
+
+_VALUELESS_OPERATORS = frozenset({"IS NULL", "IS NOT NULL"})
 
 
 @dataclass(frozen=True)
@@ -82,12 +86,16 @@ def _transform_targets(data: Mapping[str, Any]) -> list[BindableTarget]:
     adds_column = str(output.get("adds_column") or "")
     targets: list[BindableTarget] = []
 
-    for parameter in definition.get("parameters") or []:
-        if not isinstance(parameter, Mapping):
-            continue
+    parameters = [p for p in definition.get("parameters") or [] if isinstance(p, Mapping)]
+    config = data.get("config") if isinstance(data.get("config"), Mapping) else {}
+    for parameter in parameters:
         parameter_id = str(parameter.get("id") or "")
         parameter_type = str(parameter.get("type") or "")
         if not parameter_id:
+            continue
+        # L'esecuzione non legge un parametro con la dipendenza non
+        # soddisfatta: non si offre (regola unica: parameter_dependencies).
+        if not dependency_satisfied(parameter, parameters, config):
             continue
         explicit = parameter.get("runtime_bindable")
         schema_affecting = (
@@ -132,64 +140,68 @@ def _transform_targets(data: Mapping[str, Any]) -> list[BindableTarget]:
     return targets
 
 
+def _filter_targets(data: Mapping[str, Any]) -> list[BindableTarget]:
+    """Tabella di Estrai: valore dei filtri WHERE (``query_filters``). Gli
+    operatori senza valore (``IS NULL``/``IS NOT NULL``) non lo leggono."""
+    return [
+        BindableTarget(path=f"filters.{index}.value", value_type="string",
+                       label=f"Filtro {index + 1}: valore")
+        for index, item in enumerate(data.get("filters") or [])
+        if isinstance(item, Mapping) and "value" in item
+        and str(item.get("operator") or "").upper() not in _VALUELESS_OPERATORS
+    ]
+
+
+def _having_targets(data: Mapping[str, Any]) -> list[BindableTarget]:
+    """Risultato di Estrai: valori HAVING, letti solo con HAVING e GROUP BY
+    attivi (``query_projection.generate_having``)."""
+    if not (data.get("having_enabled") and data.get("group_by_enabled")):
+        return []
+    return [
+        BindableTarget(path=f"having_conditions.{index}.value", value_type="string",
+                       label=f"HAVING {index + 1}: valore")
+        for index, item in enumerate(data.get("having_conditions") or [])
+        if isinstance(item, Mapping) and "value" in item
+    ]
+
+
+def _static_parameter_targets(data: Mapping[str, Any]) -> list[BindableTarget]:
+    """Nodo API: parametri statici. La risoluzione li scrive nel campo che
+    l'esecuzione legge (``shared.execution.runtime_bound_fields``)."""
+    static_parameters = data.get("static_parameters") or {}
+    if not isinstance(static_parameters, Mapping):
+        return []
+    return [
+        BindableTarget(path=f"static_parameters.{name}", value_type="string",
+                       label=f"Parametro statico: {name}")
+        for name in static_parameters
+        if isinstance(name, str) and name and "." not in name
+    ]
+
+
+# REGOLA (Fase 5, input «Utente che esegue», correzione dopo la conferma):
+# ogni bersaglio offerto e' LETTO dall'esecuzione del suo tipo di nodo. Un
+# tipo di nodo offre solo le famiglie della sua riga; una famiglia senza un
+# esecutore che la legge non si offre (prima: ``conditions`` al primo livello,
+# ``value``/``default_value`` e ``filters`` su qualunque nodo, che nessun
+# esecutore leggeva). Test di enumerazione:
+# tests2/eseguibili/unit/test_runtime_binding_targets_reach_execution.py.
+NODE_TARGET_FAMILIES: Mapping[str, tuple[Any, ...]] = {
+    "transform": (_transform_targets,),
+    "source": (_filter_targets,),
+    "result": (_having_targets,),
+    "api_enrich": (_static_parameter_targets,),
+}
+
+
 def bindable_targets(node: Mapping[str, Any]) -> list[BindableTarget]:
     """Return writable runtime parameters for one concrete canvas node."""
 
     data = _node_data(node)
     node_type = str(data.get("type") or node.get("type") or "")
     targets: list[BindableTarget] = []
-
-    if node_type == "transform":
-        targets.extend(_transform_targets(data))
-
-    for index, item in enumerate(data.get("filters") or []):
-        if isinstance(item, Mapping) and "value" in item:
-            targets.append(
-                BindableTarget(
-                    path=f"filters.{index}.value",
-                    value_type="string",
-                    label=f"Filtro {index + 1}: valore",
-                )
-            )
-    for index, item in enumerate(data.get("conditions") or []):
-        if not isinstance(item, Mapping):
-            continue
-        for field in ("value", "result"):
-            if field in item:
-                targets.append(
-                    BindableTarget(
-                        path=f"conditions.{index}.{field}",
-                        value_type="string",
-                        label=f"Condizione {index + 1}: {field}",
-                    )
-                )
-    for index, item in enumerate(data.get("having_conditions") or []):
-        if isinstance(item, Mapping) and "value" in item:
-            targets.append(
-                BindableTarget(
-                    path=f"having_conditions.{index}.value",
-                    value_type="string",
-                    label=f"HAVING {index + 1}: valore",
-                )
-            )
-
-    static_parameters = data.get("static_parameters") or {}
-    if isinstance(static_parameters, Mapping):
-        for name in static_parameters:
-            targets.append(
-                BindableTarget(
-                    path=f"static_parameters.{name}",
-                    value_type="string",
-                    label=f"Parametro statico: {name}",
-                )
-            )
-
-    for field in ("value", "default_value"):
-        if field in data:
-            targets.append(
-                BindableTarget(path=field, value_type="string", label=field)
-            )
-
+    for family in NODE_TARGET_FAMILIES.get(node_type, ()):
+        targets.extend(family(data))
     # Preserve order while removing aliases/duplicates.
     return list({target.path: target for target in targets}.values())
 
@@ -217,4 +229,4 @@ def canonical_binding_path(node: Mapping[str, Any], requested_path: str) -> str:
     raise ValueError(f"Campo non configurabile da input runtime: {path!r}")
 
 
-__all__ = ["BindableTarget", "bindable_targets", "canonical_binding_path"]
+__all__ = ["NODE_TARGET_FAMILIES", "BindableTarget", "bindable_targets", "canonical_binding_path"]

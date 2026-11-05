@@ -21,7 +21,9 @@ from pydantic import (
     StrictStr,
     TypeAdapter,
 )
+from app.core.auth.exceptions import UsernameInvalidError, UsernameTakenError
 from app.db.pg_connection import unit_of_work
+from app.shared.contracts.auth import normalized_username, username_form_error
 from app.db.sql_safety import safe_set_clause
 
 
@@ -183,6 +185,28 @@ def list_all_users(*, limit: int = 200, offset: int = 0) -> list[UserRow]:
     return [row for row in (hydrate_user_row(row) for row in rows) if row is not None]
 
 
+def find_users_by_normalized_username(username: str) -> list[UserRow]:
+    """Utenti il cui username coincide con ``username`` in forma normalizzata
+    (trim + casefold). Il confronto e' in Python su tutti gli username:
+    ``casefold`` non ha un equivalente esatto in SQL (``lower`` lascia «ß») e
+    la tabella degli utenti e' piccola."""
+    target = normalized_username(username)
+    rows = _fetchall("SELECT id, username FROM users")
+    matches = [str(row["id"]) for row in rows if normalized_username(row["username"]) == target]
+    return [user for user in (get_user(user_id) for user_id in matches) if user is not None]
+
+
+def assert_username_writable(username: str) -> None:
+    """Regola unica di OGNI scrittura di un utente
+    (``shared.contracts.auth``): forma valida e nessun altro utente con lo
+    stesso username normalizzato."""
+    problem = username_form_error(username)
+    if problem is not None:
+        raise UsernameInvalidError(problem)
+    if find_users_by_normalized_username(username):
+        raise UsernameTakenError("Username già esistente")
+
+
 def create_user(
     user_id: str,
     username: str,
@@ -191,6 +215,9 @@ def create_user(
     role: str = "user",
     email: str = "",
 ) -> UserRow:
+    # Unico punto di scrittura degli utenti (API, bootstrap degli installer,
+    # seed): la regola dello username vale per tutti.
+    assert_username_writable(username)
     now = _now_iso()
     _execute(
         "INSERT INTO users (id, username, password_hash, email, group_id, "
@@ -286,6 +313,8 @@ def delete_group(group_id: str) -> bool:
 
 
 __all__ = [
+    "assert_username_writable",
+    "find_users_by_normalized_username",
     "GroupRow",
     "GroupSummaryRow",
     "UserRow",

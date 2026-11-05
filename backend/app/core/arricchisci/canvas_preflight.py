@@ -19,6 +19,7 @@ from app.core.projects.canvas_models import CanvasState
 from app.core.projects.schema_execution_sources import prepare_canvas_data
 from app.shared.execution.node_fields import node_field
 from app.shared.execution.runtime_identity import RuntimeIdentity
+from app.shared.execution.runtime_bound_fields import with_runtime_static_parameters
 
 
 def prepare_contract(contract: PipelineExecutionContract, inputs: JsonObject, *,
@@ -58,6 +59,8 @@ def estimate_canvas(contract: PipelineExecutionContract, connections: JsonObject
 def estimate_api_input(data: JsonObject, api: JsonObject, frame: Any, *, sampled: bool = False,
                        reason: str | None = None, generator: bool = False) -> JsonObject:
     """Common preparation for canvas and standalone file estimates."""
+    # Stessi parametri dell'esecuzione: input runtime del nodo sopra la connessione.
+    api = with_runtime_static_parameters(api, data)
     estimate = {"input_rows": len(frame) if frame is not None else None,
                 "sampled": sampled, "sampled_rows": len(frame) if frame is not None else 0,
                 "status": "unknown", "api_calls": None, "reason": reason, "valid": True,

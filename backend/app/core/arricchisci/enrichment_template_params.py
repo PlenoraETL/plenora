@@ -13,6 +13,7 @@ from typing import Any, List, Optional
 
 from app.core.dataframes.values import is_null_scalar, to_python_scalar
 from app.core.arricchisci.types import JsonObject
+from app.shared.execution.runtime_bound_fields import effective_static_parameters
 from app.utils.logger import get_logger
 
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
@@ -90,7 +91,9 @@ class EnrichmentTemplateParamsMixin:
         Costruisce parametri API dalla riga DataFrame.
 
         Ordine di priorità (i successivi sovrascrivono i precedenti):
-        1. static_parameters dalla config API (fissi per tutte le righe)
+        1. static_parameters dalla config API (fissi per tutte le righe),
+           poi i valori scritti dagli input runtime nel nodo per quelle
+           chiavi (``shared.execution.runtime_bound_fields``)
         2. Parametri dinamici dal param_mapping (colonna -> parametro API,
            oppure template stringa con placeholder {col})
         3. API key in query string (se configurata come query param)
@@ -102,10 +105,8 @@ class EnrichmentTemplateParamsMixin:
         """
         params = {}
 
-        # 1. Prima aggiungi static_parameters dalla config API
-        static_params = self.api_config.get("static_parameters", {})
-        if static_params:
-            params.update(static_params)
+        # 1. Prima i parametri statici: connessione + input runtime del nodo
+        params.update(effective_static_parameters(self.api_config))
 
         # 2. Poi aggiungi parametri dinamici dal mapping
         for api_param, mapping_value in self.param_mapping.items():

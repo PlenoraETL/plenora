@@ -20,6 +20,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import ValidationError
 
 from app.core.auth import disclosure as _disclosure
+from app.core.auth.exceptions import UsernameInvalidError, UsernameTakenError
+from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from app.core.auth.models import (
     ResetPasswordRequest,
     UserCreate,
@@ -138,16 +141,22 @@ def create_user(data: UserCreate, current_user: CurrentUser = Depends(require_ad
     if len(data.password) < 12:
         raise HTTPException(status_code=400, detail="La password deve essere lunga almeno 12 caratteri")
 
-    existing = _users_dal.get_user_by_username(data.username)
-    if existing:
+    # Regola dello username (shared.contracts.auth): forma valida e unicita'
+    # sulla forma normalizzata. La applica create_user, unico punto di
+    # scrittura; qui la si verifica prima per non calcolare l'hash invano.
+    try:
+        _users_dal.assert_username_writable(data.username)
+        user_id = f"usr_{uuid.uuid4().hex[:12]}"
+        user = _users_dal.create_user(
+            user_id=user_id, username=data.username,
+            password_hash=hash_password(data.password),
+            group_id=data.group_id, email=data.email, role=data.role,
+        )
+    except UsernameTakenError:
         _disclosure.raise_disclosure(_disclosure.username_already_exists())
-
-    user_id = f"usr_{uuid.uuid4().hex[:12]}"
-    user = _users_dal.create_user(
-        user_id=user_id, username=data.username,
-        password_hash=hash_password(data.password),
-        group_id=data.group_id, email=data.email, role=data.role,
-    )
+    except UsernameInvalidError as exc:
+        raise_typed_http(error_codes.VALIDATION_ERROR, status_code=400, message=str(exc),
+                         details={"reason": "username_invalid"})
     return UserResponse(**_user_response_payload(user))
 
 

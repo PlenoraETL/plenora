@@ -22,6 +22,22 @@ TIPI dei valori della mappa, non dal loro numero. Il piano gira su una MAPPA
 RIDOTTA rappresentativa (``representative_plan``, regola sotto) e i log di
 ``op_lookup`` durante le prove scendono a DEBUG (``_quiet_probes``): una
 mappa di 50.000 chiavi costa una lettura lineare, non 17 esecuzioni.
+
+Ordine delle chiavi (Fase 5, T5+T6, seconda correzione; correzione
+DICHIARATA): la mappa del piano e' una lista di coppie nell'ORDINE DI
+INSERIMENTO, che e' l'ordine dell'esecuzione (``op_lookup``: la prima chiave
+che corrisponde vince; i dtype della serie dei valori seguono quell'ordine).
+Prima della correzione dopo la conferma la chiave di cache serializzava la
+mappa con ``sort_keys`` e il piano girava sulle chiavi in ordine alfabetico:
+su 19 configurazioni della matrice di confronto (sonda ``lkcmp``) tipo o
+certezza differivano dall'esecuzione; ora coincidono con essa
+(tests2/contracts/test_lookup_types_parity.py).
+
+Prove che non si costruiscono: un ingresso di prova che ``typed_probe_frame``
+non sa costruire rende il tipo INCERTO (``certain=False``), mai un'eccezione.
+Una chiave che la colonna non puo' contenere (chiave-testo
+"12345678901234567890" su una colonna int/Int64, oltre int64) non e' un
+candidato: non corrisponde mai, come nell'esecuzione (prima: OverflowError).
 """
 
 from __future__ import annotations
@@ -119,6 +135,11 @@ def _key_candidates(family: str, keys: list[Any]) -> list[Any]:
                 continue
         except (ValueError, TypeError):
             continue
+        # Un valore che la colonna non puo' contenere (intero oltre int64, la
+        # forma di int/Int64 nei dati caricati) non e' un valore della colonna:
+        # quella chiave non corrisponde mai, non e' un candidato.
+        if family == "int" and not _INT64[0] <= value < _INT64[1]:
+            continue
         if lookup_value_text(value) == text:
             out.append(value)
             break
@@ -132,8 +153,19 @@ def _unmatched_values(family: str, present: set[Any]) -> list[Any]:
     return [v for v in _UNMATCHED.get(family, []) if lookup_value_text(v) not in present and v not in present]
 
 
+class _ProbeNotBuilt(Exception):
+    """L'ingresso di prova non si costruisce (es. chiave-testo oltre int64)."""
+
+
 def _probe_type(column: str, column_type: str, values: list[Any], params: JsonObject) -> str | None:
-    frame = typed_probe_frame(column, column_type, values)
+    # REGOLA (Fase 5, T5+T6, seconda correzione): un ingresso di prova che non
+    # si costruisce (qualunque errore di ``typed_probe_frame``, es. la chiave
+    # "12345678901234567890" su una colonna int: OverflowError) rende il tipo
+    # INCERTO, mai un'eccezione verso chi chiede la previsione.
+    try:
+        frame = typed_probe_frame(column, column_type, values)
+    except Exception as exc:  # noqa: BLE001 - qualunque errore di costruzione
+        raise _ProbeNotBuilt(str(exc)) from exc
     try:
         result = op_lookup(frame, column=column, **params)
     except (ValueError, TypeError, KeyError):
@@ -163,15 +195,25 @@ def _plan(column_type: str, plan_json: str) -> LookupTypePlan:
     groups = [_key_candidates(family, keys), plan["unmatched_probe"], [None]]
     pool = [value for group in groups for value in group]
     observed: list[str] = []
+    not_built = False
+
+    def probe(values: list[Any]) -> str | None:
+        nonlocal not_built
+        try:
+            return _probe_type(column, column_type, values, params)
+        except _ProbeNotBuilt:
+            not_built = True
+            return None
+
     with _quiet_probes():
         for size in range(len(pool) + 1):
             for combo in itertools.combinations(pool, size):
-                kind = _probe_type(column, column_type, list(combo), params)
+                kind = probe(list(combo))
                 if kind is not None and kind not in observed:
                     observed.append(kind)
-        full = _probe_type(column, column_type, pool, params)
+        full = probe(pool)
     predicted = full or (observed[0] if observed else column_type)
-    return LookupTypePlan(predicted, len(observed) <= 1, tuple(observed))
+    return LookupTypePlan(predicted, len(observed) <= 1 and not not_built, tuple(observed))
 
 
 # ── Mappa ridotta rappresentativa ───────────────────────────────────────────

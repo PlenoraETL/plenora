@@ -21,6 +21,7 @@ import { requestErrorMessage, backendMessage } from '../../utils/errorMessages';
 import { errorReason } from '../../api/errors';
 import { formatDateTime as formatTimestamp, formatNumber as formatRows } from '../../utils/format';
 import { pressable } from '../../utils/pressable';
+import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
 /**
  * Mappa un errore di /compare/l2 al messaggio user-facing in base al
@@ -241,13 +242,13 @@ const colKeys = nodeData?.rows?.length > 0
 
           {/* Tab bar */}
           <div className="rh-tabs">
-            <button
+            <button {...READ_ONLY_SAFE}
               className={`rh-tab ${activeTab === 'data' ? 'rh-tab--active' : ''}`}
               onClick={() => setActiveTab('data')}
             >
               📊 Dati nodo
             </button>
-            <button
+            <button {...READ_ONLY_SAFE}
               className={`rh-tab ${activeTab === 'compare' ? 'rh-tab--active' : ''}`}
               onClick={() => setActiveTab('compare')}
               disabled={!compareMode}

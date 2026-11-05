@@ -3,7 +3,7 @@
 from pathlib import Path as _Path
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Iterator, Optional
 
 from app.core.datasources.interface import (
@@ -166,7 +166,7 @@ class LocalDataSource(DataSourceInterface):
                             name=filename,
                             path=rel,
                             size=st.st_size,
-                            modified_date=datetime.fromtimestamp(st.st_mtime),
+                            modified_date=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc),
                             type=self._extension(filename),
                             hash=hash_val,
                         ))
@@ -189,7 +189,7 @@ class LocalDataSource(DataSourceInterface):
                                 name=entry.name,
                                 path=rel,
                                 size=0,
-                                modified_date=datetime.fromtimestamp(st.st_mtime),
+                                modified_date=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc),
                                 type='folder',
                                 hash=None,
                             ))
@@ -218,7 +218,7 @@ class LocalDataSource(DataSourceInterface):
                                 name=entry.name,
                                 path=rel,
                                 size=st.st_size,
-                                modified_date=datetime.fromtimestamp(st.st_mtime),
+                                modified_date=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc),
                                 type=self._extension(entry.name),
                                 hash=hash_val,
                             ))
@@ -226,7 +226,7 @@ class LocalDataSource(DataSourceInterface):
             raise DataSourcePermissionError(f"Accesso negato: {full_path}") from e
 
         results.sort(key=lambda f: (0 if f.type == 'folder' else 1, f.modified_date), reverse=False)
-        results.sort(key=lambda f: f.modified_date if f.type != 'folder' else datetime.max, reverse=True)
+        results.sort(key=lambda f: f.modified_date if f.type != 'folder' else datetime.max.replace(tzinfo=timezone.utc), reverse=True)
         folders = [r for r in results if r.type == 'folder']
         files   = [r for r in results if r.type != 'folder']
         files.sort(key=lambda f: f.modified_date, reverse=True)
@@ -246,7 +246,7 @@ class LocalDataSource(DataSourceInterface):
             name=name,
             path=path,
             size=st.st_size,
-            modified_date=datetime.fromtimestamp(st.st_mtime),
+            modified_date=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc),
             type=self._extension(name),
         )
 

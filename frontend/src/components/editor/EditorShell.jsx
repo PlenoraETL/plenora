@@ -7,11 +7,17 @@
  *   - 3 branch di early return: loading (LoadingOverlay), loadError (banner
  *     "Errore caricamento" con bottoni Riprova / Torna alla lista),
  *     !project (banner "Progetto non trovato" con bottone Torna).
- *   - Wrapper canvas: CanvasErrorBoundary + div `${prefix}-canvas` (con
- *     classe canvas-readonly opt-in) + ReactFlow + Background + Controls
- *     + MiniMap.
- *   - Layout root: `${prefix}-editor` > topbar > beforeCanvas > main >
+ *   - Wrapper canvas: CanvasErrorBoundary + div `editor-shell__canvas
+ *     ${prefix}-canvas` (con classe canvas-readonly opt-in) + ReactFlow +
+ *     Background + Controls + MiniMap.
+ *   - Layout root: `editor-shell` > topbar > beforeCanvas > main >
  *     (sidebar | canvas) > afterCanvas (dentro canvas) > modals.
+ *   - Impaginazione: classi STATICHE del guscio (`editor-shell`,
+ *     `__main`, `__canvas`, `__hex`, `__error`, `__error-message`,
+ *     `__error-btn`) con le regole in EditorShell.css, uguali per i tre
+ *     editor: il layout non dipende da nomi composti col prefisso. L'unica
+ *     classe col prefisso è `${prefix}-canvas`, per i ritocchi del singolo
+ *     editor (colori degli archi, controlli) nel suo CSS.
  *
  * Cosa NON gestisce (responsabilita' del consumer):
  *   - Hook applicativi (useEditorData / useCanvasCore / usePreview / ...).
@@ -84,6 +90,7 @@ import { withFlowEdgeLabels } from '../../utils/glossary';
 import { isShortcutBlocked, isTypingTarget } from '../../utils/dialogStack';
 import { requestCanvasDeletion } from '../../utils/canvasDeletion';
 import { formatDateTime } from '../../utils/format';
+import './EditorShell.css';
 
 const EMPTY_OBJ = {};
 
@@ -93,7 +100,7 @@ const EMPTY_OBJ = {};
  * e focus iniziale sul primo bottone azione per dare un punto di
  * tastiera immediato.
  */
-function ErrorBanner({ prefix, message, children }) {
+function ErrorBanner({ message, children }) {
   const firstBtnRef = useRef(null);
   useEffect(() => {
     firstBtnRef.current?.focus();
@@ -109,8 +116,8 @@ function ErrorBanner({ prefix, message, children }) {
     return child;
   });
   return (
-    <div className={`${prefix}-error`} role="alert" aria-live="assertive">
-      <p className={`${prefix}-error__message`}>{message}</p>
+    <div className="editor-shell__error" role="alert" aria-live="assertive">
+      <p className="editor-shell__error-message">{message}</p>
       {enhanced}
     </div>
   );
@@ -338,14 +345,14 @@ canvasConfig = EMPTY_OBJ,
 
   if (loadError) {
     return (
-      <ErrorBanner prefix={prefix} message={`Errore caricamento: ${loadError}`}>
+      <ErrorBanner message={`Errore caricamento: ${loadError}`}>
         {reload && (
-          <button type="button" className={`${prefix}-error__btn`} onClick={reload}>
+          <button type="button" className="editor-shell__error-btn" onClick={reload}>
             Riprova
           </button>
         )}
         {onBack && (
-          <button type="button" className={`${prefix}-error__btn`} onClick={onBack}>
+          <button type="button" className="editor-shell__error-btn" onClick={onBack}>
             Torna alla lista
           </button>
         )}
@@ -355,9 +362,9 @@ canvasConfig = EMPTY_OBJ,
 
   if (!project) {
     return (
-      <ErrorBanner prefix={prefix} message="Progetto non trovato">
+      <ErrorBanner message="Progetto non trovato">
         {onBack && (
-          <button type="button" className={`${prefix}-error__btn`} onClick={onBack}>
+          <button type="button" className="editor-shell__error-btn" onClick={onBack}>
             Torna alla lista
           </button>
         )}
@@ -365,10 +372,10 @@ canvasConfig = EMPTY_OBJ,
     );
   }
 
-  const canvasClassName = `${prefix}-canvas${isReadOnly ? ' canvas-readonly' : ''}`;
+  const canvasClassName = `editor-shell__canvas ${prefix}-canvas${isReadOnly ? ' canvas-readonly' : ''}`;
 
   return (
-    <div className={`${prefix}-editor`}>
+    <div className="editor-shell">
       {toolbar
         ? <EditorToolbar {...toolbar} onAddStep={palette && !isReadOnly ? openPaletteFromSelection : null} />
         : topbar}
@@ -405,7 +412,7 @@ canvasConfig = EMPTY_OBJ,
       ))}
       {beforeCanvas}
       <CanvasGraphContext.Provider value={graph}>
-      <div className={`${prefix}-main`}>
+      <div className="editor-shell__main">
         {sidebar}
         <CanvasErrorBoundary>
           {/* Drop handler sul canvas div (gli eventi bubble da ReactFlow). */}
@@ -417,7 +424,7 @@ canvasConfig = EMPTY_OBJ,
             {hexCanvasRef && (
               <canvas
                 ref={hexCanvasRef}
-                className={`${prefix}-canvas__hex`}
+                className="editor-shell__hex"
               />
             )}
             <ReactFlow

@@ -257,20 +257,83 @@
    CANVAS
    ═══════════════════════════════════════════════════════════════ */
 
-/* ReactFlow sits above hex canvas */
+/* Impaginazione (radice, main, canvas, strato esagonale, errore):
+   components/editor/EditorShell.css. Qui solo i ritocchi di questo editor. */
 
-/* ReactFlow overrides */
+/* ReactFlow overrides: il pattern a punti è nascosto (sotto ci sono gli esagoni) */
+.estrai-canvas .react-flow__background { opacity: 0 !important; }
 
 /* Override default ReactFlow node selection border */
+.estrai-canvas .react-flow__node {
+  outline: none !important;
+}
+.estrai-canvas .react-flow__node.selected > * {
+  box-shadow: 0 0 0 2px rgba(75,139,255,0.5) !important;
+}
+.estrai-canvas .react-flow__node.selected {
+  outline: none !important;
+}
 /* Remove any red border ReactFlow applies on nodes */
+.estrai-canvas .react-flow__node-tableNode,
+.estrai-canvas .react-flow__node-datasourceNode,
+.estrai-canvas .react-flow__node-resultNode,
+.estrai-canvas .react-flow__node-featureLayerNode,
+.estrai-canvas .react-flow__node-carica,
+.estrai-canvas .react-flow__node-staticValues,
+.estrai-canvas .react-flow__node-comment {
+  outline: none !important;
+  border: none !important;
+}
+
+.estrai-canvas .react-flow__controls {
+  background: var(--plen-surface);
+  border: 1px solid var(--plen-border-hi);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+.estrai-canvas .react-flow__controls-button {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--plen-border);
+  color: var(--plen-text-sub);
+  width: 32px;
+  height: 32px;
+}
+.estrai-canvas .react-flow__controls-button:hover {
+  background: var(--plen-surface-2);
+  color: var(--plen-text);
+}
+.estrai-canvas .react-flow__controls-button svg { fill: currentColor; }
+.estrai-canvas .react-flow__controls-button:last-child { border-bottom: none; }
+
+.estrai-canvas .react-flow__minimap {
+  background: var(--plen-surface) !important;
+  border: 1px solid var(--plen-border-hi) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+.estrai-canvas .react-flow__minimap-mask { fill: var(--plen-surface-2) !important; opacity: 0.7; }
+.estrai-canvas .react-flow__minimap-node { fill: var(--plen-surface-3) !important; }
 
 /* Edge styles */
+.estrai-canvas .react-flow__edge-path {
+  stroke: rgba(52,193,122,0.5);
+  stroke-width: 2;
+}
+.estrai-canvas .react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--plen-estrai);
+  stroke-width: 2.5;
+}
+.estrai-canvas .react-flow__edge-text { fill: var(--plen-text-sub); font-size: 11px; font-family: var(--plen-font-mono); }
+.estrai-canvas .react-flow__edge-textbg { fill: var(--plen-surface); }
 
 /* Connection line */
-
-/* ═══════════════════════════════════════════════════════════════
-   ERROR / LOADING
-   ═══════════════════════════════════════════════════════════════ */
+.estrai-canvas .react-flow__connection-path {
+  stroke: var(--plen-estrai);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+}
 
 /* ═══════════════════════════════════════════════════════════════
    RESPONSIVE

@@ -32,8 +32,11 @@
 /* ── Main layout ──────────────────────────────────────────────── */
 
 /* ── Canvas area ──────────────────────────────────────────────── */
+/* Impaginazione (radice, main, canvas, strato esagonale, errore):
+   components/editor/EditorShell.css. Qui solo i ritocchi di questo editor. */
 
 /* ReactFlow overrides */
+.manipola-canvas .react-flow__background { opacity: 0.4; }
 
 .react-flow__controls {
   background: var(--plen-surface-2, #111525) !important;
@@ -69,6 +72,16 @@
 }
 
 /* Edges — viola Manipola */
+.manipola-canvas .react-flow__edge-path {
+  stroke: var(--plen-manipola, #9B6DFF);
+  stroke-opacity: 0.6;
+}
+.manipola-canvas .react-flow__edge.selected .react-flow__edge-path {
+  stroke-opacity: 1;
+}
+.manipola-canvas .react-flow__arrowhead path {
+  fill: var(--plen-manipola, #9B6DFF);
+}
 
 /* ── Error state ──────────────────────────────────────────────── */
 

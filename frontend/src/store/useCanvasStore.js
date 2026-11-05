@@ -135,7 +135,11 @@ export const createCanvasStore = () => create(
           if (!isCanvasVersionConflict(err)) throw err;
           const conflict = new CanvasVersionConflictError(err);
           if (get().projectId === projectId) {
-            set({ saveConflict: { kind, versionId, at: Date.now(), serverVersion: conflict.serverVersion, serverUpdatedAt: conflict.serverUpdatedAt } }, false, 'save:conflict');
+            // Dopo un conflitto l'«ultimo salvato» NON è più quello che ha il
+            // server (l'ha cambiato un'altra scheda): savedGraph si azzera,
+            // così nessun confronto locale dichiara «salvato» un canvas che il
+            // server non ha (store/saveState).
+            set({ saveConflict: { kind, versionId, at: Date.now(), serverVersion: conflict.serverVersion, serverUpdatedAt: conflict.serverUpdatedAt }, savedGraph: null }, false, 'save:conflict');
           }
           throw conflict;
         }
@@ -169,7 +173,10 @@ export const createCanvasStore = () => create(
             // automatiche da persistere (pendingSync).
             // Regola unica (store/saveState): un canvas uguale all'ultimo
             // salvato non si risalva (es. modifiche annullate a mano).
-            if (snapshot.isReadOnly || (!hasUnsavedChanges(snapshot) && !snapshot.pendingSync) || !snapshot.projectId) {
+            // «Sovrascrivi» (forceNext) scrive SEMPRE: il server ha un'altra
+            // versione anche se il canvas è uguale all'ultimo salvato qui.
+            if (snapshot.isReadOnly || !snapshot.projectId
+              || (!forceNext && !hasUnsavedChanges(snapshot) && !snapshot.pendingSync)) {
               // Modifiche annullate fino allo stato salvato: il server ha gia'
               // questo canvas, e' «salvato» (stesso evento di un salvataggio
               // per chi ascolta, es. la copia di sicurezza).
@@ -1052,7 +1059,10 @@ export const createCanvasStore = () => create(
 
       /**
        * Dopo un conflitto di versione, scelta esplicita "Sovrascrivi": la
-       * scrittura rifiutata (salvataggio o ripristino) riparte senza base.
+       * scrittura rifiutata (salvataggio o ripristino) riparte senza base,
+       * SEMPRE (anche se il canvas è tornato uguale all'ultimo salvato: il
+       * server ha la versione dell'altra scheda); a buon fine azzera
+       * saveConflict (writeConditioned).
        * Solo utils/serverActions la chiama.
        */
       overwriteAfterConflict: async () => {

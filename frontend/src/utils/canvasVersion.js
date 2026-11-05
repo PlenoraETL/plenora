@@ -26,7 +26,9 @@
  *    (editor/SaveConflictNotice, utils/serverActions):
  *      1. ricaricare la versione del server, tenendo le proprie modifiche
  *         come copia di sicurezza della scheda (utils/localDrafts);
- *      2. sovrascrivere consapevolmente: la stessa scrittura senza base.
+ *      2. sovrascrivere consapevolmente: la stessa scrittura senza base,
+ *         SEMPRE: dopo un conflitto l'«ultimo salvato» locale non è più il
+ *         server, quindi nessun «canvas invariato, niente PUT».
  *
  * TABELLA DELLE TRANSIZIONI (test in tests/components/CanvasVersion.contract.test.jsx)
  * | evento                         | base mandata         | dopo                                   |
@@ -37,6 +39,7 @@
  * | Valida / Anteprima             | (salvano se serve)   | token invariato                        |
  * | salvataggio superato (409)     | token vecchio        | saveConflict; canvas del server intatto|
  * | "Sovrascrivi"                  | nessuna              | token := risposta; conflitto chiuso    |
+ * | "Sovrascrivi" su canvas tornato uguale | nessuna      | PUT comunque (il server ha l'altra versione) |
  * | "Ricarica la versione del server" | -                 | copia della scheda scritta, ricarica   |
  * | ripristino di una versione     | token                | token := risposta; ricarica l'editor   |
  * | ripristino superato (409)      | token vecchio        | saveConflict (kind restore)            |

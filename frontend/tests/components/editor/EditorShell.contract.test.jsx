@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -198,14 +200,88 @@ describe('EditorShell — contract', () => {
     expect(reactFlowPropsRef.current.edgeTypes).toBe(customEdgeTypes);
   });
 
-  it('uses the prefix prop to namespace root and error CSS classes', () => {
+  it('uses the prefix prop only for the per-editor canvas class', () => {
     const { container, rerender } = render(
       <EditorShell {...baseProps} prefix="manipola" />,
     );
-    expect(container.querySelector('.manipola-editor')).toBeTruthy();
-    expect(container.querySelector('.manipola-canvas')).toBeTruthy();
+    expect(container.querySelector('.editor-shell')).toBeTruthy();
+    expect(container.querySelector('.editor-shell__canvas.manipola-canvas')).toBeTruthy();
 
     rerender(<EditorShell {...baseProps} prefix="arricchisci" loadError="boom" />);
-    expect(container.querySelector('.arricchisci-error')).toBeTruthy();
+    expect(container.querySelector('.editor-shell__error')).toBeTruthy();
+  });
+});
+
+// Fase 5 T7, correzione dopo la conferma: T7 aveva tolto le regole di
+// `${prefix}-editor/-main/-canvas...` (composte a runtime) e i tre editor
+// erano senza impaginazione. jsdom non calcola il layout: il test legge il
+// CSS e verifica che OGNI classe messa sui contenitori del guscio abbia le
+// regole di impaginazione attese (classi statiche, una sola fonte).
+describe('EditorShell — impaginazione dei contenitori (CSS letto dal file)', () => {
+  const css = (rel) => fs.readFileSync(path.resolve(import.meta.dirname, '../../../src', rel), 'utf-8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const SHELL_CSS = css('components/editor/EditorShell.css');
+  const EDITOR_CSS = {
+    estrai: css('styles/EstraiEditor.css'),
+    manipola: css('styles/ManipolaEditor.css'),
+    arricchisci: css('styles/ArricchisciEditor.css'),
+  };
+  // Dichiarazioni della regola il cui selettore è ESATTAMENTE `.cls`.
+  const decls = (text, cls) => {
+    const out = {};
+    for (const [, sel, body] of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!sel.split(',').map(x => x.trim()).includes(`.${cls}`)) continue;
+      for (const d of body.split(';')) {
+        const i = d.indexOf(':');
+        if (i > 0) out[d.slice(0, i).trim()] = d.slice(i + 1).trim();
+      }
+    }
+    return out;
+  };
+  const EXPECTED = {
+    'editor-shell': { height: '100vh', display: 'flex', 'flex-direction': 'column' },
+    'editor-shell__main': { flex: '1', display: 'flex', 'min-height': '0' },
+    'editor-shell__canvas': { flex: '1', height: '100%', position: 'relative' },
+    'editor-shell__hex': { position: 'absolute', 'pointer-events': 'none' },
+    'editor-shell__error': { display: 'flex', 'flex-direction': 'column', 'align-items': 'center' },
+    'editor-shell__error-message': { 'font-size': '15px' },
+    'editor-shell__error-btn': { cursor: 'pointer' },
+  };
+
+  it.each(['estrai', 'manipola', 'arricchisci'])('%s: i contenitori renderizzati hanno le regole del guscio', (prefix) => {
+    const hexCanvasRef = React.createRef();
+    const { container, unmount } = render(<EditorShell {...baseProps} prefix={prefix} hexCanvasRef={hexCanvasRef} />);
+    const root = container.firstElementChild;
+    const main = container.querySelector('.editor-shell__main');
+    const canvas = container.querySelector('.editor-shell__canvas');
+    const hex = container.querySelector('canvas');
+    expect(root.classList.contains('editor-shell')).toBe(true);
+    expect(main.parentElement).toBe(root);
+    expect(main.contains(canvas)).toBe(true);
+    expect(hex.parentElement).toBe(canvas);
+    expect(canvas.classList.contains(`${prefix}-canvas`)).toBe(true);
+    // Ogni classe dei contenitori ha una regola nel CSS (guscio o editor).
+    for (const el of [root, main, canvas, hex]) {
+      for (const cls of el.classList) {
+        const where = /^editor-shell/.test(cls) ? SHELL_CSS : EDITOR_CSS[prefix];
+        expect({ cls, rule: new RegExp(`\.${cls}(?![\w-])`).test(where) }).toEqual({ cls, rule: true });
+      }
+    }
+    for (const [cls, want] of Object.entries(EXPECTED)) {
+      if (!/error/.test(cls)) expect(container.querySelector(`.${cls}`)).toBeTruthy();
+      expect({ cls, ...decls(SHELL_CSS, cls) }).toMatchObject({ cls, ...want });
+    }
+    unmount();
+    // Schermata d'errore: stesse classi statiche, stilizzate.
+    const err = render(<EditorShell {...baseProps} prefix={prefix} loadError="boom" />);
+    for (const cls of ['editor-shell__error', 'editor-shell__error-message', 'editor-shell__error-btn']) {
+      expect(err.container.querySelector(`.${cls}`)).toBeTruthy();
+    }
+    err.unmount();
+  });
+
+  it('il CSS del guscio è importato da EditorShell (vale per i tre editor)', () => {
+    const src = fs.readFileSync(path.resolve(import.meta.dirname, '../../../src/components/editor/EditorShell.jsx'), 'utf-8');
+    expect(src).toMatch(/import '\.\/EditorShell\.css';/);
   });
 });

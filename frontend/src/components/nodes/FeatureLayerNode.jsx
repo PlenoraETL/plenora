@@ -184,8 +184,12 @@ const FeatureLayerNode = memo(({ data, id }) => {
             {columns.length > 3 && (
               <div className="fl-node__toolbar">
                 <div className="fl-node__search">
+                  {/* Ricerca e Mostra tutti: stato di VISTA locale, azioni
+                      di lettura (common/readOnlySafe). */}
                   <input
                     type="text"
+                    {...READ_ONLY_SAFE}
+                    aria-label="Cerca campi"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="🔍 Cerca campi..."
@@ -194,6 +198,8 @@ const FeatureLayerNode = memo(({ data, id }) => {
                   {searchTerm && (
                     <button
                       type="button"
+                      {...READ_ONLY_SAFE}
+                      aria-label="Cancella ricerca"
                       className="fl-node__search-clear"
                       onClick={() => setSearchTerm('')}
                     >
@@ -262,6 +268,7 @@ const FeatureLayerNode = memo(({ data, id }) => {
             {hasMoreColumns && (
               <button
                 type="button"
+                {...READ_ONLY_SAFE}
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="fl-node__expand-btn"
               >

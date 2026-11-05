@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Optional
 
 from app.core.projects import db as project_db
 from app.core.projects.canvas_models import CanvasState
+from app.shared.execution.runtime_bound_fields import strip_runtime_bound_fields
 from app.core.projects.exceptions import CanvasCorruptedError
 from app.core.projects.models import CanvasVersionRef
 from app.core.output_contract import sync_canvas_with_output_contracts
@@ -170,6 +171,8 @@ class ProjectCanvasService:
             return False
 
         self._owner._assert_no_lineage_cycle(project_id, canvas)
+        # Mai salvati: li scrive solo la risoluzione degli input runtime.
+        strip_runtime_bound_fields(canvas)
 
         updated_row = project_db.update_project_row(
             project_id, canvas=canvas.model_dump(), canvas_validated=False,
