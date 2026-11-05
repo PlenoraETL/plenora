@@ -11,6 +11,9 @@ import { createSchedule, updateSchedule, getSchedule } from '../../api/schedules
 import ModalWrapper from '../common/ModalWrapper';
 import Wizard from '../common/Wizard';
 import { toastApiError } from '../../utils/toastApiError';
+import * as codecs from '../../utils/fieldCodecs';
+import { formErrors, formPayload } from '../../utils/formSchema';
+import { DEFAULT_TIMEZONE, timezoneOptions } from '../../utils/timezones';
 import './ScheduleWizard.css';
 
 const STEPS = [
@@ -44,6 +47,63 @@ const WRITE_MODES = [
   { value: 'upsert',  label: 'Upsert',  desc: 'aggiorna o inserisci' },
 ];
 
+const RETRY_OPTIONS = [
+  { value: '0', label: '0 — nessun retry' },
+  { value: '1', label: '1 retry' },
+  { value: '2', label: '2 retry' },
+  { value: '3', label: '3 retry (consigliato)' },
+  { value: '5', label: '5 retry' },
+];
+
+const withDestination = (v) => Boolean(v.enable_destination);
+
+/**
+ * Schema del modulo (Fase 5 T5, R8.13, R8.4, N13): per ogni campo lo step,
+ * il convertitore e quando esiste. Validazione di ogni step e payload
+ * vengono da qui: il cron con la regola dello scheduler (utils/cron), il fuso
+ * dall'elenco unico (o quello gia' salvato, mostrato com'e'), numeri ed
+ * elenchi senza default silenziosi (prima "parseInt(v) || 1000" e i backoff
+ * non numerici o 0 scartati).
+ */
+export const scheduleFields = ({ keepTimezone } = {}) => [
+  { name: 'project_id', step: 1, required: true, codec: codecs.text({ optional: false }), requiredMessage: 'Seleziona una pipeline' },
+  { name: 'cron_expression', step: 2, required: true, codec: codecs.cron() },
+  { name: 'description', step: 2, codec: codecs.text() },
+  { name: 'timezone', step: 2, required: true, codec: codecs.timezone({ keep: keepTimezone }) },
+  { name: 'connection_id', step: 4, visible: withDestination, required: true, codec: codecs.text({ optional: false }), requiredMessage: 'Seleziona una connessione' },
+  { name: 'schema_name', step: 4, visible: withDestination, codec: codecs.text() },
+  { name: 'table_name', step: 4, visible: withDestination, required: true, codec: codecs.text({ optional: false }), requiredMessage: 'Nome tabella richiesto' },
+  { name: 'match_columns', step: 4, visible: (v) => withDestination(v) && v.write_mode === 'upsert', required: true, codec: codecs.list({ item: codecs.text() }), requiredMessage: 'Colonne di match richieste per upsert' },
+  { name: 'batch_size', step: 4, visible: withDestination, required: true, codec: codecs.integer({ min: 100, max: 50000 }) },
+  { name: 'max_retries', step: 5, required: true, codec: codecs.integer({ min: 0, max: 10 }) },
+  { name: 'retry_backoff_seconds', step: 5, codec: codecs.list({ item: codecs.integer({ min: 0, max: 86400 }), unique: false }) },
+];
+
+/** Payload dello schedule dai valori convertiti dello schema. */
+export function schedulePayload(form, fields) {
+  const v = formPayload(fields, form);
+  return {
+    project_id: v.project_id,
+    schedule: { cron_expression: v.cron_expression, description: v.description || '', timezone: v.timezone, enabled: form.enabled },
+    execution: { use_cache: form.use_cache, concurrency_max_queue: form.concurrency_max_queue },
+    destination: form.enable_destination ? {
+      connection_id: v.connection_id,
+      schema_name: v.schema_name || 'public',
+      table_name: v.table_name,
+      write_mode: form.write_mode,
+      match_columns: form.write_mode === 'upsert' ? v.match_columns : [],
+      batch_size: v.batch_size,
+      verify_destination_connection: form.verify_destination_connection,
+    } : null,
+    on_error: {
+      max_retries: v.max_retries,
+      retry_backoff_seconds: v.retry_backoff_seconds || [],
+      append_conflicts: form.append_conflicts,
+      log_skipped_rows: form.log_skipped_rows,
+    },
+  };
+}
+
 function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = null }) {
   const toast = useToast();
   const [step, setStep] = useState(1);
@@ -72,7 +132,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     project_id: defaultProjectId || '',
     cron_expression: '0 3 * * *',
     description: '',
-    timezone: 'Europe/Rome',
+    timezone: DEFAULT_TIMEZONE,
     use_cache: false,
     concurrency_max_queue: 3,
     enable_destination: false,
@@ -81,9 +141,9 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     table_name: '',
     write_mode: 'replace',
     match_columns: '',
-    batch_size: 1000,
+    batch_size: '1000',
     verify_destination_connection: true,
-    max_retries: 3,
+    max_retries: '3',
     retry_backoff_seconds: '60, 300, 900',
     append_conflicts: 'skip',
     log_skipped_rows: true,
@@ -100,7 +160,8 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
       project_id: existing.pipeline?.project_id || '',
       cron_expression: existing.schedule?.cron_expression || '0 3 * * *',
       description: existing.schedule?.description || '',
-      timezone: existing.schedule?.timezone || 'Europe/Rome',
+      // Il fuso salvato si mostra COM'E', anche se non e' in elenco (N13).
+      timezone: existing.schedule?.timezone || DEFAULT_TIMEZONE,
       use_cache: existing.execution?.use_cache ?? false,
       concurrency_max_queue: existing.execution?.concurrency_max_queue ?? 3,
       enable_destination: !!existing.destination,
@@ -109,9 +170,9 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
       table_name: existing.destination?.table_name || '',
       write_mode: existing.destination?.write_mode || 'replace',
       match_columns: (existing.destination?.match_columns || []).join(', '),
-      batch_size: existing.destination?.batch_size ?? 1000,
+      batch_size: String(existing.destination?.batch_size ?? 1000),
       verify_destination_connection: existing.destination?.verify_destination_connection ?? true,
-      max_retries: existing.on_error?.max_retries ?? 3,
+      max_retries: String(existing.on_error?.max_retries ?? 3),
       retry_backoff_seconds: (existing.on_error?.retry_backoff_seconds || [60,300,900]).join(', '),
       append_conflicts: existing.on_error?.append_conflicts || 'skip',
       log_skipped_rows: existing.on_error?.log_skipped_rows ?? true,
@@ -146,15 +207,11 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     estrai:'rgba(52,193,122,0.12)', manipola:'rgba(155,109,255,0.12)', arricchisci:'rgba(245,166,35,0.12)'
   }[type] || 'rgba(75,139,255,0.12)');
 
+  const fields = scheduleFields({ keepTimezone: existing?.schedule?.timezone });
+  // Errori di uno step dallo schema (stessa fonte del payload).
+  const stepErrors = (s) => formErrors(fields.filter(f => f.step === s), form);
   const validateStep = (s) => {
-    const errs = {};
-    if (s === 1 && !form.project_id) errs.project_id = 'Seleziona una pipeline';
-    if (s === 2 && !form.cron_expression.trim()) errs.cron_expression = 'Espressione cron richiesta';
-    if (s === 4 && form.enable_destination) {
-      if (!form.connection_id) errs.connection_id = 'Seleziona una connessione';
-      if (!form.table_name.trim()) errs.table_name = 'Nome tabella richiesto';
-      if (form.write_mode === 'upsert' && !form.match_columns.trim()) errs.match_columns = 'Colonne di match richieste per upsert';
-    }
+    const errs = stepErrors(s);
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -167,26 +224,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
   const handleSubmit = async () => {
     try {
       setSaving(true);
-      const payload = {
-        project_id: form.project_id,
-        schedule: { cron_expression: form.cron_expression, description: form.description, timezone: form.timezone, enabled: form.enabled },
-        execution: { use_cache: form.use_cache, concurrency_max_queue: form.concurrency_max_queue },
-        destination: form.enable_destination ? {
-          connection_id: form.connection_id,
-          schema_name: form.schema_name,
-          table_name: form.table_name,
-          write_mode: form.write_mode,
-          match_columns: form.write_mode === 'upsert' ? form.match_columns.split(',').map(c=>c.trim()).filter(Boolean) : [],
-          batch_size: form.batch_size,
-          verify_destination_connection: form.verify_destination_connection,
-        } : null,
-        on_error: {
-          max_retries: form.max_retries,
-          retry_backoff_seconds: form.retry_backoff_seconds.split(',').map(v=>parseInt(v.trim())).filter(Boolean),
-          append_conflicts: form.append_conflicts,
-          log_skipped_rows: form.log_skipped_rows,
-        },
-      };
+      const payload = schedulePayload(form, fields);
       if (editId) await updateSchedule(editId, payload);
       else await createSchedule(payload);
       toast.success(editId ? 'Schedule aggiornato' : 'Schedule creato');
@@ -269,7 +307,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                   Espressione Cron
                   <a href="https://crontab.guru/" target="_blank" rel="noreferrer" className="wiz-help-link">crontab.guru ↗</a>
                 </div>
-                <input type="text"
+                <input type="text" aria-label="Espressione Cron"
                   className={`wiz-input wiz-input--mono${errors.cron_expression ? ' wiz-input--error' : ''}`}
                   value={form.cron_expression}
                   onChange={e => { updateForm('cron_expression', e.target.value); setCronPreset('custom'); }}
@@ -287,11 +325,12 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                 </div>
                 <div className="wiz-field">
                   <div className="wiz-label">Timezone</div>
-                  <select className="wiz-select" value={form.timezone} onChange={e => updateForm('timezone', e.target.value)}>
-                    <option value="Europe/Rome">Europe/Rome (CET/CEST)</option>
-                    <option value="UTC">UTC</option>
-                    <option value="Europe/London">Europe/London</option>
+                  {/* Elenco unico dei fusi (utils/timezones); un fuso salvato
+                      fuori elenco si vede com'e' (N13). */}
+                  <select className="wiz-select" aria-label="Timezone" value={form.timezone} onChange={e => updateForm('timezone', e.target.value)}>
+                    {timezoneOptions(form.timezone).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
+                  {errors.timezone && <span className="wiz-error">{errors.timezone}</span>}
                 </div>
               </div>
             </div>
@@ -402,8 +441,11 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                   <div className="wiz-row">
                     <div className="wiz-field">
                       <div className="wiz-label">Batch size</div>
-                      <input type="number" className="wiz-input" value={form.batch_size}
-                        onChange={e => updateForm('batch_size', parseInt(e.target.value) || 1000)} min={100} max={50000} />
+                      <input type="text" inputMode="numeric" aria-label="Batch size"
+                        className={`wiz-input${errors.batch_size ? ' wiz-input--error' : ''}`} value={form.batch_size}
+                        onChange={e => updateForm('batch_size', e.target.value)} />
+                      <span className="wiz-hint">Da 100 a 50000</span>
+                      {errors.batch_size && <span className="wiz-error">{errors.batch_size}</span>}
                     </div>
                     <div className="wiz-field wiz-field--check-aligned">
                       <label className="wiz-check-label">
@@ -429,19 +471,21 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
               <div className="wiz-row">
                 <div className="wiz-field">
                   <div className="wiz-label">Tentativi retry</div>
-                  <select className="wiz-select" value={form.max_retries} onChange={e => updateForm('max_retries', parseInt(e.target.value))}>
-                    <option value={0}>0 — nessun retry</option>
-                    <option value={1}>1 retry</option>
-                    <option value={2}>2 retry</option>
-                    <option value={3}>3 retry (consigliato)</option>
-                    <option value={5}>5 retry</option>
+                  <select className="wiz-select" aria-label="Tentativi retry" value={form.max_retries} onChange={e => updateForm('max_retries', e.target.value)}>
+                    {/* Un valore salvato fuori elenco si vede com'e'. */}
+                    {!RETRY_OPTIONS.some(o => o.value === form.max_retries) && (
+                      <option value={form.max_retries}>{form.max_retries} retry</option>
+                    )}
+                    {RETRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
+                  {errors.max_retries && <span className="wiz-error">{errors.max_retries}</span>}
                 </div>
                 <div className="wiz-field">
                   <div className="wiz-label">Backoff (secondi)</div>
-                  <input className="wiz-input wiz-input--mono" value={form.retry_backoff_seconds}
+                  <input className={`wiz-input wiz-input--mono${errors.retry_backoff_seconds ? ' wiz-input--error' : ''}`} aria-label="Backoff (secondi)" value={form.retry_backoff_seconds}
                     onChange={e => updateForm('retry_backoff_seconds', e.target.value)} placeholder="60, 300, 900" />
                   <span className="wiz-hint">Attesa tra retry, separati da virgola</span>
+                  {errors.retry_backoff_seconds && <span className="wiz-error">{errors.retry_backoff_seconds}</span>}
                 </div>
               </div>
               <div className="wiz-field">

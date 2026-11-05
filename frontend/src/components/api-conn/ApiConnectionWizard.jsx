@@ -104,10 +104,14 @@ function buildFormFromTemplate(tpl) {
       label: p.label,
       description: p.description,
     })),
+    // R8.9: il default di un parametro diventa una costante SOLO se il
+    // parametro e' fisso (hidden, o qualsiasi in un generator); per uno
+    // mappato resta il valore della
+    // colonna (prima diventava una costante per tutte le righe).
     static_parameters: {
       ...(tpl.config?.static_parameters || {}),
       ...(tpl.parameters || [])
-        .filter(p => p.default != null)
+        .filter(p => p.default != null && (p.hidden || (tpl.config?.api_type || 'enricher') === 'generator'))
         .reduce((a, p) => ({ ...a, [p.name]: p.default }), {}),
     },
     output_mapping: (tpl.output_mapping || []).map(o => ({
@@ -237,6 +241,24 @@ function suggestedMappingFromTestResult(result) {
   const suggested = normalizeOutputMapping(result?.suggested_output_mapping);
   if (suggested.length > 0) return suggested;
   return buildSuggestedMappingFromFields(result?.available_fields);
+}
+
+/**
+ * Valori fissi dopo il cambio del parametro `index` in `next` (null =
+ * rimosso). R8.8: rinominato -> il valore passa alla chiave nuova; rimosso, o
+ * reso mappato in un enricher -> la chiave sparisce (prima restava e veniva
+ * inviata e usata nei test). Le costanti senza parametro (template) restano.
+ */
+export function staticParamsAfter(prev, index, next) {
+  const statics = { ...(prev.static_parameters || {}) };
+  const old = (prev.parameters || [])[index];
+  if (!old) return statics;
+  const sharedName = (name) => (prev.parameters || []).some((p, j) => j !== index && p.name === name);
+  const value = old.name ? statics[old.name] : undefined;
+  if (old.name && !sharedName(old.name)) delete statics[old.name];
+  const fixed = next && (prev.api_type === 'generator' || next.mode === 'fixed');
+  if (fixed && next.name && value !== undefined) statics[next.name] = value;
+  return statics;
 }
 
 export default function ApiConnectionWizard({ isOpen, seed, onClose, onSaved }) {
@@ -431,7 +453,9 @@ const getCustomHeadersObject = () => {
           : [singleParams];
         testPayload = {
           url: batch.endpoint_override || formData.url,
-          method: batch.method_override || 'POST',
+          // R8.9: stesso metodo dell'esecuzione (enrichment_batch_mode:
+          // method_override o metodo principale), come dice la UI.
+          method: batch.method_override || formData.method,
           auth: formData.auth,
           custom_headers: getCustomHeadersObject(),
           options: formData.options,
@@ -468,8 +492,16 @@ const getCustomHeadersObject = () => {
   };
 
   const addParameter    = () => setFormData(prev => ({ ...prev, parameters: [...prev.parameters, { name:'', type:'string', required:true, mode:'mapped' }] }));
-  const updateParameter = (i, f, v) => setFormData(prev => ({ ...prev, parameters: prev.parameters.map((p, j) => j === i ? { ...p, [f]: v } : p) }));
-  const removeParameter = (i) => setFormData(prev => ({ ...prev, parameters: prev.parameters.filter((_, j) => j !== i) }));
+  // R8.8: i valori fissi seguono il loro parametro (staticParamsAfter).
+  const updateParameter = (i, f, v) => setFormData(prev => {
+    const parameters = prev.parameters.map((p, j) => (j === i ? { ...p, [f]: v } : p));
+    return { ...prev, parameters, static_parameters: staticParamsAfter(prev, i, parameters[i]) };
+  });
+  const removeParameter = (i) => setFormData(prev => ({
+    ...prev,
+    parameters: prev.parameters.filter((_, j) => j !== i),
+    static_parameters: staticParamsAfter(prev, i, null),
+  }));
   const addCustomHeader    = () => setCustomHeadersList(prev => [...prev, { key:'', value:'' }]);
   const updateCustomHeader = (i, f, v) => setCustomHeadersList(prev => prev.map((h, j) => j === i ? { ...h, [f]: v } : h));
   const removeCustomHeader = (i) => setCustomHeadersList(prev => prev.filter((_, j) => j !== i));

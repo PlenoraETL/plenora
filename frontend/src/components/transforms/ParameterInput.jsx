@@ -3,7 +3,7 @@
  *
  * Tipi supportati:
  * - string: input testo
- * - number: input numerico con min/max/step
+ * - number: campo numerico (FieldInput) con min/max applicati
  * - boolean: checkbox
  * - select: dropdown
  * - column / geometry_column: selettore colonna (singola)
@@ -34,6 +34,8 @@ import RenameListInput from './parameter-inputs/RenameListInput';
 import MaskingListInput from './parameter-inputs/MaskingListInput';
 import ConditionListInput from './parameter-inputs/ConditionListInput';
 import RuntimeInputBindingControl from './RuntimeInputBindingControl';
+import FieldInput from '../common/FieldInput';
+import { decimal } from '../../utils/fieldCodecs';
 import ValueMappingInput from './parameter-inputs/ValueMappingInput';
 import FilterPanel from './panels/FilterPanel';
 import FormulaPanel from './panels/FormulaPanel';
@@ -74,7 +76,6 @@ const ParameterInput = ({
     options,
     min,
     max,
-    step,
     rows,
     filter,
     source  // "left" o "right" dal registry
@@ -87,6 +88,13 @@ const ParameterInput = ({
     null
   );
 
+  // Fase 5 T5 (R8.14): si mostra il default SOLO se il parametro manca
+  // (undefined): e' il caso in cui il runtime lo applica (manipola/
+  // node_validator._runtime_default). Un valore presente, anche vuoto o
+  // null, si mostra com'e': quello che si vede e' quello che gira.
+  const shown = value === undefined ? defaultValue : value;
+  const numberCodec = decimal({ min, max, optional: true, empty: null });
+
   // Render input in base al tipo
   const renderInput = () => {
     switch (type) {
@@ -95,7 +103,7 @@ const ParameterInput = ({
         return (
           <input
             type="text"
-            value={value ?? defaultValue ?? ''}
+            value={shown ?? ''}
             onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder || `Inserisci ${label.toLowerCase()}`}
             className="parameter-input__field"
@@ -104,17 +112,14 @@ const ParameterInput = ({
 
       case 'number':
         return (
-          <input
-            type="number"
-            value={value ?? defaultValue ?? ''}
-            onChange={(e) => {
-              const val = e.target.value;
-              onChange(val === '' ? null : parseFloat(val));
-            }}
-            min={min}
-            max={max}
-            step={step || 1}
+          // Un convertitore per tipo (utils/fieldCodecs): min/max applicati,
+          // un testo non valido e' l'errore del campo e non si scrive.
+          <FieldInput
+            codec={numberCodec}
+            value={shown ?? null}
+            onCommit={onChange}
             placeholder={placeholder}
+            aria-label={label}
             className="parameter-input__field"
           />
         );
@@ -124,7 +129,7 @@ const ParameterInput = ({
           <label className="parameter-input__checkbox">
             <input
               type="checkbox"
-              checked={value ?? defaultValue ?? false}
+              checked={Boolean(shown ?? false)}
               onChange={(e) => onChange(e.target.checked)}
             />
             <span className="parameter-input__checkbox-label">{label}</span>
@@ -134,13 +139,17 @@ const ParameterInput = ({
       case 'select':
         return (
           <select
-            value={value ?? defaultValue ?? ''}
+            value={shown ?? ''}
             // "-- Seleziona --" = parametro assente, mai la stringa vuota
             // (il backend la rifiuterebbe come valore della scelta).
             onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
             className="parameter-input__field"
           >
-            {!required && <option value="">-- Seleziona --</option>}
+            {/* Obbligatorio senza valore: nessuna opzione preselezionata in
+                silenzio (prima si vedeva la prima, non salvata). */}
+            {(!required || shown === undefined || shown === null || shown === '') && (
+              <option value="" disabled={Boolean(required)}>-- Seleziona --</option>
+            )}
             {(options || []).map(opt => {
               const optValue = typeof opt === 'object' ? opt.value : opt;
               const optLabel = typeof opt === 'object' ? opt.label : opt;
@@ -180,7 +189,7 @@ const ParameterInput = ({
         return (
           <div className="parameter-input__expression">
             <textarea
-              value={value ?? defaultValue ?? ''}
+              value={shown ?? ''}
               onChange={(e) => onChange(e.target.value)}
               placeholder={placeholder || "Es: colonna1 * 2 + colonna2"}
               rows={rows || 3}

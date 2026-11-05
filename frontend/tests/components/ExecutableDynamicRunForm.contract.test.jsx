@@ -60,8 +60,8 @@ async function chooseAndAnalyze(name, fileId) {
   const input = document.querySelector('input[type="file"]');
   const file = new File(['citta\nRoma'], name, { type: 'text/csv' });
   analyzeMock.mockResolvedValueOnce(analysis(fileId));
+  // T5 (R8.10): l'analisi parte da sola alla scelta del file.
   fireEvent.change(input, { target: { files: [file] } });
-  fireEvent.click(await screen.findByRole('button', { name: 'Analizza file' }));
   await screen.findByText(/3 righe rilevate/);
 }
 
@@ -86,13 +86,24 @@ describe('ExecutableDynamicRunForm — la finestra unica «Prima di avviare»', 
     render(<ExecutableDynamicRunForm eseguibile={eseguibileOf()} onClose={vi.fn()} />);
     expect(await screen.findByText('Pulizia indirizzi')).toBeInTheDocument();
     const soglia = screen.getByLabelText('Soglia');
-    expect(soglia).toHaveAttribute('min', '1');
-    expect(soglia).toHaveAttribute('max', '10');
     expect(screen.getByRole('option', { name: 'Produzione' })).toHaveValue('sel-a');
     const avvia = screen.getByRole('button', { name: /avvia l'esecuzione/i });
     expect(avvia).toBeDisabled();
     await chooseAndAnalyze('a.csv', 'up-a');
     expect(avvia).not.toBeDisabled();
+    // T5 (R8.10): i vincoli sono la regola del backend, non attributi HTML:
+    // fuori dai limiti l'errore si vede sul campo e Avvia resta spento.
+    fireEvent.change(soglia, { target: { value: '50' } });
+    expect(screen.getByText('Inserisci un valore tra 1 e 10')).toBeInTheDocument();
+    expect(avvia).toBeDisabled();
+    fireEvent.change(soglia, { target: { value: '7' } });
+    expect(screen.queryByText('Inserisci un valore tra 1 e 10')).toBeNull();
+    expect(avvia).not.toBeDisabled();
+    fireEvent.click(avvia);
+    // Il valore inviato e' quello convertito (7), non il testo ("7").
+    await waitFor(() => expect(runMock).toHaveBeenCalledWith('exe-1', expect.objectContaining({
+      inputs: expect.objectContaining({ soglia: 7 }),
+    })));
   });
 
   it('l\'analisi del file A arrivata dopo la scelta di B non finisce su B', async () => {
@@ -101,7 +112,7 @@ describe('ExecutableDynamicRunForm — la finestra unica «Prima di avviare»', 
     let resolveA;
     analyzeMock.mockImplementationOnce(() => new Promise((r) => { resolveA = r; }));
     fireEvent.change(input, { target: { files: [new File(['x'], 'a.csv')] } });
-    fireEvent.click(await screen.findByRole('button', { name: 'Analizza file' }));
+    await waitFor(() => expect(analyzeMock).toHaveBeenCalledTimes(1));
     // Scelto B prima della risposta per A.
     fireEvent.change(input, { target: { files: [new File(['y'], 'b.csv')] } });
     await act(async () => { resolveA(analysis('up-a')); });

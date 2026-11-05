@@ -3,6 +3,11 @@ import {
   TRANSACTION_MODES as TRANSACTION_MODE_VALUES,
   CONFLICT_POLICIES as CONFLICT_POLICY_VALUES,
 } from '../../../constants/canvasTypes';
+import FieldInput from '../../common/FieldInput';
+import { integer } from '../../../utils/fieldCodecs';
+
+// Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
+const DB_BATCH = integer({ min: 100, max: 10000 });
 
 // Etichette UI, drift FE↔BE noto per CONFLICT_POLICIES (FE+executor
 // usano "force", canvas Pydantic accetta "update"). Il valore qui
@@ -45,11 +50,12 @@ function DbAdvancedOptions({
         <div className="carica-node__advanced">
           <div className="carica-node__advanced-row">
             <label>Righe per lotto:</label>
-            <input
-              type="number"
+            {/* R8.4: campo unico, niente "|| 1000" silenzioso. */}
+            <FieldInput
+              codec={DB_BATCH}
               value={batchSize}
-              onChange={(e) => onUpdate('batch_size', parseInt(e.target.value) || 1000)}
-              min={100} max={10000} step={100}
+              onCommit={(v) => onUpdate('batch_size', v)}
+              aria-label="Righe per lotto"
               className="carica-node__input carica-node__input--small"
             />
           </div>

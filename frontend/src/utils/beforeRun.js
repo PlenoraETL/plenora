@@ -26,6 +26,7 @@
  */
 import { errorReason } from '../api/errors';
 import { role } from './permissions';
+import { runtimeInputCodec } from './runtimeInputKinds';
 
 export const BEFORE_RUN_REASONS = Object.freeze(['inputs', 'staff', 'estimate', 'blocking', 'changed', 'migrate']);
 
@@ -72,20 +73,46 @@ export const initialInputValues = (inputDefinitions = []) => Object.fromEntries(
   (inputDefinitions || []).map(d => [d.input_key, d.default_value ?? '']),
 );
 
-/** Tutti gli input obbligatori compilati. */
-export const inputsComplete = (inputDefinitions = [], values = {}) => (inputDefinitions || []).every(d => (
-  d.required === false || (values[d.input_key] !== '' && values[d.input_key] != null)
-));
+const blank = (v) => v === '' || v == null;
 
 /**
- * Input da mandare: solo quelli dichiarati (stesso payload di stima e avvio).
+ * Errore di ogni input (Fase 5 T5, R8.10): obbligatorio vuoto, oppure il
+ * valore non passa il convertitore del suo tipo (utils/runtimeInputKinds,
+ * stessa regola del backend). `{ [input_key]: messaggio }`.
+ */
+export function runInputErrors(inputDefinitions = [], values = {}) {
+  const errors = {};
+  (inputDefinitions || []).forEach((d) => {
+    const raw = values[d.input_key];
+    if (blank(raw)) {
+      if (d.required !== false) errors[d.input_key] = 'Campo obbligatorio';
+      return;
+    }
+    const { error } = runtimeInputCodec(d).parse(raw);
+    if (error) errors[d.input_key] = error;
+  });
+  return errors;
+}
+
+/** Tutti gli input compilati e validi. */
+export const inputsComplete = (inputDefinitions = [], values = {}) =>
+  Object.keys(runInputErrors(inputDefinitions, values)).length === 0;
+
+/**
+ * Input da mandare: solo quelli dichiarati (stesso payload di stima e avvio),
+ * col valore CONVERTITO (42, true; non "42", "true").
  * `omitEmptyOptional` (Eseguibili): un input facoltativo vuoto non si manda,
  * cosi' vale il suo default dichiarato.
  */
 export const runInputs = (inputDefinitions = [], values = {}, { omitEmptyOptional = false } = {}) => Object.fromEntries(
   (inputDefinitions || [])
-    .filter(d => !omitEmptyOptional || d.required !== false || (values[d.input_key] !== '' && values[d.input_key] != null))
-    .map(d => [d.input_key, values[d.input_key] ?? '']),
+    .filter(d => !omitEmptyOptional || d.required !== false || !blank(values[d.input_key]))
+    .map((d) => {
+      const raw = values[d.input_key];
+      if (blank(raw)) return [d.input_key, raw ?? ''];
+      const { value, error } = runtimeInputCodec(d).parse(raw);
+      return [d.input_key, error ? raw : value];
+    }),
 );
 
 /** Chiave degli input di una stima: la stima vale solo per quegli input. */

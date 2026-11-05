@@ -22,14 +22,47 @@ import { can, role } from '../utils/permissions';
 import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 import { PASSWORD_MIN_LENGTH, passwordProblem } from '../utils/passwordRule';
 import '../styles/UserManager.css';
-function RoleBadge({ role }) {
-  const labels = {
-    superadmin: '👑 superadmin',
-    admin:      '🔑 admin',
-    user:       '👤 user',
-    viewer:     '👁 viewer',
+/**
+ * Ruoli: UNA tabella per select, badge e regole del form (Fase 5 T5, R8.20).
+ * `superOnly`: solo un superadmin li assegna (backend users_router:
+ * ROLES_ADMIN_OR_ABOVE in creazione).
+ */
+export const USER_ROLES = Object.freeze([
+  { value: 'esecutore', option: '▶ Esecutore (solo eseguibili — kiosk)', badge: '▶ esecutore', superOnly: false },
+  { value: 'viewer', option: '👁 Viewer (sola lettura)', badge: '👁 viewer', superOnly: false },
+  { value: 'user', option: '👤 User', badge: '👤 user', superOnly: false },
+  { value: 'admin', option: '🔑 Admin', badge: '🔑 admin', superOnly: true },
+  { value: 'superadmin', option: '👑 Superadmin', badge: '👑 superadmin', superOnly: true },
+]);
+
+/**
+ * Campi che chi scrive puo' davvero cambiare: la whitelist del backend
+ * (users_router.update_user: admin solo email e is_active, superadmin anche
+ * role e group_id; il body e' extra="forbid": username e password in
+ * modifica darebbero 422). Un campo non
+ * modificabile e' spento e non va nel payload: niente modifica persa in
+ * silenzio.
+ */
+export function userFormRules({ isEdit, isSuperadmin }) {
+  return {
+    username: !isEdit,
+    password: !isEdit,
+    role: !isEdit || isSuperadmin,
+    // In creazione e' obbligatorio (UserCreate): l'admin manda il proprio,
+    // che il backend comunque impone; in modifica solo il superadmin.
+    group_id: !isEdit || isSuperadmin,
+    is_active: isEdit,
   };
-  return <span className={`um__badge um__badge--${role}`}>{labels[role] || role}</span>;
+}
+
+/** Payload dai soli campi modificabili. */
+export function userPayload(form, rules) {
+  return Object.fromEntries(Object.entries(rules).filter(([, editable]) => editable).map(([k]) => [k, form[k]]));
+}
+
+function RoleBadge({ role }) {
+  const entry = USER_ROLES.find(r => r.value === role);
+  return <span className={`um__badge um__badge--${role}`}>{entry?.badge || role}</span>;
 }
 function StatusBadge({ active }) {
   return (
@@ -58,6 +91,10 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
   const isSuperadmin = role.isSuperadmin(currentUser);
+  const rules = userFormRules({ isEdit, isSuperadmin });
+  // Ruoli proponibili; il ruolo attuale c'e' sempre (anche se chi scrive non
+  // puo' assegnarlo), cosi' si vede quello vero e non il primo dell'elenco.
+  const roleOptions = USER_ROLES.filter(r => isSuperadmin || !r.superOnly || r.value === form.role);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async () => {
@@ -67,18 +104,9 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
     if (pwdProblem) return setError(pwdProblem);
     setLoading(true); setError('');
     try {
-      const payload = { ...form };
-      if (isEdit) {
-        // In edit mode `password` e `group_id` NON sono gestiti da PUT /users/{id}:
-        //  - password: usa il modal "Reimposta password" dedicato (endpoint
-        //    separato /users/{id}/reset-password). Includendola qui il
-        //    backend risponde 400.
-        //  - group_id: spostare un utente di gruppo non e' implementato
-        //    da questo endpoint (whitelist backend lo esclude).
-        delete payload.password;
-        delete payload.group_id;
-      }
-      await onSave(payload);
+      // Solo i campi modificabili (userFormRules = whitelist del backend).
+      // La password in modifica ha la sua finestra (Reimposta password).
+      await onSave(userPayload(form, rules));
       onClose();
     } catch (e) {
       setError(humanizeError(e).message);
@@ -125,13 +153,14 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
           )}
           <div className="um__field">
             <label>Ruolo</label>
-            <select value={form.role} onChange={e => set('role', e.target.value)}>
-              <option value="esecutore">▶ Esecutore (solo eseguibili — kiosk)</option>
-              <option value="viewer">👁 Viewer (sola lettura)</option>
-              <option value="user">👤 User</option>
-              {isSuperadmin && <option value="admin">🔑 Admin</option>}
-              {isSuperadmin && <option value="superadmin">👑 Superadmin</option>}
+            <select value={form.role} onChange={e => set('role', e.target.value)} disabled={!rules.role}>
+              {roleOptions.map(r => (
+                <option key={r.value} value={r.value} disabled={r.superOnly && !isSuperadmin}>{r.option}</option>
+              ))}
             </select>
+            {isEdit && !rules.role && (
+              <span className="um__field-hint">Solo un superadmin può cambiare il ruolo.</span>
+            )}
             {role.isEsecutore(form) && (
               <span className="um__field-hint">
                 L'esecutore vede SOLO la lista degli eseguibili del proprio gruppo (e quelli condivisi)
@@ -153,7 +182,7 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
           {isSuperadmin && (
             <div className="um__field">
               <label>Gruppo</label>
-              <select value={form.group_id} onChange={e => set('group_id', e.target.value)}>
+              <select value={form.group_id} onChange={e => set('group_id', e.target.value)} disabled={!rules.group_id}>
                 {groups.map(g => <option key={g.group_id} value={g.group_id}>{g.name} ({g.group_id})</option>)}
               </select>
             </div>

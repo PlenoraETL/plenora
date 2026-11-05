@@ -19,18 +19,16 @@
  * l'ordine visivo originale dove il parent inserisce la preview
  * "Colonne Output" (non output-setting, gestita dal parent).
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import FieldInput from '../../../common/FieldInput';
+import { fileStem, integer } from '../../../../utils/fieldCodecs';
+import { OUTPUT_FORMATS } from '../../../../constants/outputFormats';
 
-const FORMATS = [
-  { value: 'csv', label: 'CSV', icon: '📊', category: 'standard' },
-  { value: 'json', label: 'JSON', icon: '📄', category: 'standard' },
-  { value: 'xlsx', label: 'XLSX', icon: '📗', category: 'standard' },
-  { value: 'geojson', label: 'GeoJSON', icon: '🌐', category: 'geo' },
-  { value: 'gpkg', label: 'GeoPackage', icon: '📦', category: 'geo' },
-  { value: 'shp', label: 'Shapefile', icon: '🗺️', category: 'geo' },
-];
-const STANDARD_FORMATS = FORMATS.filter(f => f.category === 'standard');
-const GEO_FORMATS = FORMATS.filter(f => f.category === 'geo');
+// Catalogo unico dei formati (constants/outputFormats, R8.11).
+const STANDARD_FORMATS = OUTPUT_FORMATS.filter(f => !f.geo);
+const FILE_STEM = fileStem({ extensions: OUTPUT_FORMATS.map(f => f.value), optional: true, empty: 'output' });
+const LIMIT = integer({ min: 1, optional: true });
+const GEO_FORMATS = OUTPUT_FORMATS.filter(f => f.geo);
 
 export default function OutputSettingsPanel({
   data,
@@ -49,54 +47,43 @@ export default function OutputSettingsPanel({
   const limit = data.limit || null;
   const selectedGeomColumn = data.geomColumn || null;
 
+  // Nome file e limite dal campo unico (FieldInput + utils/fieldCodecs,
+  // R8.23): niente separatori di percorso, l'estensione scritta si toglie,
+  // il limite e' un intero >= 1 o vuoto (nessun limite), mai negativo.
   const [isEditingFileName, setIsEditingFileName] = useState(false);
-  const [tempFileName, setTempFileName] = useState(fileName);
-
-  // Sync `tempFileName` se il `fileName` esterno cambia mentre non
-  // si sta editando (es. update del nodo da un'altra fonte).
-  useEffect(() => {
-    if (!isEditingFileName) setTempFileName(fileName);
-  }, [fileName, isEditingFileName]);
-
-  const handleSaveFileName = () => {
-    updateNodeData(id, { fileName: tempFileName.trim() || 'output' });
-    setIsEditingFileName(false);
-  };
+  const handleSaveFileName = (stem) => updateNodeData(id, { fileName: stem });
+  // Si chiude solo con un nome valido; con un nome non valido resta aperto
+  // con l'errore (FieldInput). Esc chiude senza salvare.
+  const closeIfValid = (text) => { if (!FILE_STEM.parse(text).error) setIsEditingFileName(false); };
   const handleChangeFormat = (newFormat) => updateNodeData(id, { format: newFormat });
   const handleChangeGeomColumn = (columnName) => updateNodeData(id, { geomColumn: columnName });
   const handleToggleDistinct = () => updateNodeData(id, { distinct: !distinct });
-  const handleUpdateLimit = (newLimit) => {
-    const limitValue = newLimit === '' ? null : parseInt(newLimit) || null;
-    updateNodeData(id, { limit: limitValue });
-  };
+  const handleUpdateLimit = (limitValue) => updateNodeData(id, { limit: limitValue });
+
 
   return (
     <>
       <div className="result-node__section">
         <div className="result-node__label">Nome file:</div>
         {isEditingFileName ? (
-          <input
-            type="text"
-            value={tempFileName}
-            onChange={(e) => setTempFileName(e.target.value)}
-            onBlur={handleSaveFileName}
+          <FieldInput
+            codec={FILE_STEM}
+            value={fileName}
+            onCommit={handleSaveFileName}
+            commitOn="blur"
+            onBlur={(e) => closeIfValid(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSaveFileName();
-              if (e.key === 'Escape') {
-                setIsEditingFileName(false);
-                setTempFileName(fileName);
-              }
+              if (e.key === 'Enter') closeIfValid(e.target.value);
+              if (e.key === 'Escape') setIsEditingFileName(false);
             }}
             autoFocus
             placeholder="nome file..."
+            aria-label="Nome file"
             className="result-node__filename-input"
           />
         ) : (
           <div
-            onClick={() => {
-              setIsEditingFileName(true);
-              setTempFileName(fileName);
-            }}
+            onClick={() => setIsEditingFileName(true)}
             className="result-node__filename-display"
             title="Clic per modificare"
           >
@@ -186,12 +173,12 @@ export default function OutputSettingsPanel({
             <label className="result-node__limit-label">
               Limita risultati:
             </label>
-            <input
-              type="number"
-              value={limit || ''}
-              onChange={(e) => handleUpdateLimit(e.target.value)}
+            <FieldInput
+              codec={LIMIT}
+              value={limit}
+              onCommit={handleUpdateLimit}
               placeholder="Nessun limite"
-              min="1"
+              aria-label="Limita risultati"
               className="result-node__limit-input"
             />
           </div>

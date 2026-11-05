@@ -29,6 +29,7 @@
  * I CSS `result-node__*` restano in `ResultNode.css` (shared col
  * parent).
  */
+import { uniqueName } from '../../../../utils/uniqueName';
 import React, { useState } from 'react';
 import { getColumnTypeIcon } from '../../../../utils/columnUtils';
 
@@ -109,7 +110,8 @@ export default function GroupOrderHavingPanel({
     const newAgg = {
       column: '*',
       function: 'COUNT',
-      alias: `count_${aggregations.length + 1}`,
+      // Primo alias libero, non il conteggio (utils/uniqueName, R8.19).
+      alias: uniqueName('count', aggregations.map(a => a.alias)),
     };
     updateNodeData(id, {
       group_by_enabled: true,
@@ -123,7 +125,8 @@ export default function GroupOrderHavingPanel({
     if (field === 'column' || field === 'function') {
       const agg = newAggregations[index];
       const colName = agg.column === '*' ? 'all' : agg.column;
-      newAggregations[index].alias = `${agg.function.toLowerCase()}_${colName}`;
+      const others = newAggregations.filter((_a, i) => i !== index).map(a => a.alias);
+      newAggregations[index].alias = uniqueName(`${agg.function.toLowerCase()}_${colName}`, others, { bareFirst: true });
     }
     updateNodeData(id, {
       group_by_enabled: groupByEnabled,

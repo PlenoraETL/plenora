@@ -4,6 +4,11 @@
  * Autenticazione e headers personalizzati.
  */
 import React from 'react';
+import FieldInput from '../../common/FieldInput';
+import { integer } from '../../../utils/fieldCodecs';
+
+// Scadenza del token dal campo unico (R8.4): niente default silenzioso.
+const EXPIRATION = integer({ min: 1, max: 1440 });
 
 const AUTH_OPTIONS = [
   { value: 'none', label: 'Nessuna', desc: 'API pubblica, nessuna credenziale' },
@@ -108,7 +113,7 @@ export default function Step3Auth({
                 <option value="ip">ip</option>
               </select>
             </div>
-            <div className="acm__field-group"><div className="acm__label">Scadenza (minuti)</div><input type="number" min={1} max={1440} className="acm__input" value={formData.auth.expiration||60} onChange={e=>setAuth({expiration:parseInt(e.target.value)||60})}/></div>
+            <div className="acm__field-group"><div className="acm__label">Scadenza (minuti)</div><FieldInput className="acm__input" aria-label="Scadenza (minuti)" codec={EXPIRATION} value={formData.auth.expiration ?? 60} onCommit={v=>setAuth({expiration:v})}/></div>
           </div>
           {formData.auth.client==='referer' && (
             <div className="acm__field-group"><div className="acm__label">Referer URL *</div><input className="acm__input acm__input--mono" value={formData.auth.referer||''} onChange={e=>setAuth({referer:e.target.value})} placeholder="https://myapp.example.com"/></div>

@@ -59,7 +59,7 @@ describe('PivotMappingBuilder — contract', () => {
   });
 
 
-  it('adds a new empty row on "+ Aggiungi mappatura" click and emits empty dict', async () => {
+  it('adds a new empty row on "+ Aggiungi mappatura" click without writing the config (T5)', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<PivotMappingBuilder value={{}} onChange={onChange} />);
@@ -70,28 +70,24 @@ describe('PivotMappingBuilder — contract', () => {
 
     // Header ora visibile (la riga e' stata aggiunta).
     expect(screen.getByText(/Valore sorgente/)).toBeInTheDocument();
-    // rowsToDict() filtra le righe con key vuoto -> dict vuoto.
-    expect(onChange).toHaveBeenLastCalledWith({});
+    // Fase 5 T5: una riga senza valore sorgente e' solo locale.
+    expect(onChange).not.toHaveBeenCalled();
   });
 
 
-  it('auto-prefills val when the user types key on a row with empty val', async () => {
+  it('typing the whole key char by char then leaving the field maps it to itself (R8.3)', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<PivotMappingBuilder value={{}} onChange={onChange} />);
 
-    // Crea una riga vuota.
     await user.click(
       screen.getByRole('button', { name: /Aggiungi mappatura/i }),
     );
 
-    // fireEvent.change con value='canone' completo: emette UN solo
-    // updateRow con field='key' e val=''. Il branch !updated[idx].val
-    // si attiva e setta val='canone'. (user.type carattere-per-carattere
-    // attiverebbe l'auto-prefill solo al primo, perche' dal secondo in
-    // poi val e' gia' valorizzato col primo char.)
+    // Prima: carattere per carattere la colonna in uscita restava "c".
     const keyInput = screen.getByPlaceholderText('es: canone');
-    fireEvent.change(keyInput, { target: { value: 'canone' } });
+    await user.type(keyInput, 'canone');
+    fireEvent.blur(keyInput);
 
     expect(onChange).toHaveBeenLastCalledWith({ canone: 'canone' });
   });

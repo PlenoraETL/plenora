@@ -82,6 +82,10 @@ export function useEdgeHandlers(options = {}) {
           : null;
     if (flowType) {
       const prefix = flowType === 'output' ? 'edge' : 'edge_carica';
+      // R8.17: un arco che c'e' gia' non si scarta in silenzio: si seleziona
+      // quello esistente, come per i join (connectJoin).
+      const existing = useCanvasStore.getState().edges.find(e => samePair(e, params.source, params.target));
+      if (existing) { useCanvasStore.getState().selectEdge?.(existing.id); return; }
       editEdges(eds => (eds.some(e => samePair(e, params.source, params.target)) ? eds : eds.concat({
         id: `${prefix}_${Date.now()}`, source: params.source, target: params.target,
         ...FLOW_LOOK[flowType], data: { join_type: flowType },

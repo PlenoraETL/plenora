@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useResource } from '../../hooks/useResource';
 import { ResourceError } from '../common/ListState';
 import {
@@ -10,6 +10,9 @@ import {
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { invalidateConnectionSets } from '../../utils/connectionSets';
 import { toastApiError } from '../../utils/toastApiError';
+import FieldInput, { FieldScope } from '../common/FieldInput';
+import { useFieldScope } from '../../hooks/useFieldBuffer';
+import * as codecs from '../../utils/fieldCodecs';
 import './ConnectionSetsPanel.css';
 
 const emptyForm = () => ({
@@ -19,12 +22,14 @@ const emptyForm = () => ({
   members: [],
 });
 
-const normalizeKey = value => String(value || '')
-  .trim()
-  .toLowerCase()
-  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  .replace(/[^a-z0-9_.-]+/g, '_')
-  .replace(/^[_\-.]+|[_\-.]+$/g, '');
+// Fase 5 T5 (R8.2): la chiave e' un campo con buffer locale (FieldInput):
+// si normalizza al commit, non a ogni tasto, quindi "_", "-" e "." finali
+// restano mentre si scrive. Stessa regola del backend
+// (connections/models.ConnectionSetMemberInput: ^[A-Za-z0-9][A-Za-z0-9_.-]*$,
+// max 120). Ogni riga ha un id stabile: il focus non si perde.
+const KEY_RULE = { allowed: '_.-', startsWithLetter: false };
+const SELECTOR_KEY = codecs.key({ ...KEY_RULE, maxLength: 120, optional: true });
+const keyFromLabel = label => codecs.slugify(label, KEY_RULE).slice(0, 120);
 
 // canEdit = can.createConnection, canEditItem = can.editConnection sulla
 // riga (ConnectionManager): le azioni non permesse non si mostrano.
@@ -39,6 +44,9 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
   const [showEditor, setShowEditor] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const fields = useFieldScope();
+  const rowSeq = useRef(0);
+  const nextRowId = () => { rowSeq.current += 1; return `m${rowSeq.current}`; };
 
 
   const open = item => {
@@ -48,7 +56,8 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
       name: item.name,
       description: item.description || '',
       selector_label: item.selector_label || 'Cliente',
-      members: (item.members || []).map(member => ({ ...member })),
+      // Chiave esistente: resta quella (keyAuto false).
+      members: (item.members || []).map(member => ({ ...member, _rid: nextRowId(), keyAuto: false })),
     } : emptyForm());
   };
 
@@ -62,6 +71,9 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
   const addMember = () => setForm(current => ({
     ...current,
     members: [...current.members, {
+      _rid: nextRowId(),
+      // La chiave segue l'etichetta finche' non la si scrive a mano.
+      keyAuto: true,
       selector_key: '',
       label: '',
       connection_id: connections[0]?.id || '',
@@ -87,11 +99,21 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
       toast.warning('Il nome del Connection Set è obbligatorio');
       return;
     }
+    if (!fields.check()) {
+      toast.warning('Correggi le chiavi segnate');
+      return;
+    }
     const invalid = form.members.find(member => (
-      !member.selector_key || !member.label || !member.connection_id
+      !member.selector_key || !member.label.trim() || !member.connection_id
     ));
     if (invalid) {
       toast.warning('Completa chiave, etichetta e connessione di ogni cliente');
+      return;
+    }
+    const keys = form.members.map(member => member.selector_key);
+    const duplicate = keys.find((k, i) => keys.indexOf(k) !== i);
+    if (duplicate) {
+      toast.warning(`La chiave «${duplicate}» è usata da più clienti`);
       return;
     }
     setSaving(true);
@@ -101,7 +123,7 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
         name: form.name.trim(),
         selector_label: form.selector_label.trim() || 'Cliente',
         members: form.members.map((member, index) => ({
-          selector_key: normalizeKey(member.selector_key),
+          selector_key: member.selector_key,
           label: member.label.trim(),
           connection_id: member.connection_id,
           active: member.active !== false,
@@ -222,27 +244,30 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
             </div>
             <button type="button" className="cm__btn" onClick={addMember}>＋ Aggiungi cliente</button>
           </div>
+          <FieldScope scope={fields}>
           <div className="cset__members">
             {form.members.map((member, index) => (
-              <div className="cset__member" key={`${index}:${member.selector_key}`}>
+              <div className="cset__member" key={member._rid}>
                 <input
                   value={member.label}
                   placeholder="Etichetta cliente"
+                  aria-label="Etichetta cliente"
                   onChange={event => {
                     const label = event.target.value;
-                    updateMember(index, {
-                      label,
-                      selector_key: member.selector_key || normalizeKey(label),
-                    });
+                    updateMember(index, member.keyAuto
+                      ? { label, selector_key: keyFromLabel(label) }
+                      : { label });
                   }}
                 />
-                <input
-                  value={member.selector_key}
-                  placeholder="chiave_cliente"
-                  onChange={event => updateMember(index, {
-                    selector_key: normalizeKey(event.target.value),
-                  })}
-                />
+                <span className="cset__key-field">
+                  <FieldInput
+                    codec={SELECTOR_KEY}
+                    value={member.selector_key}
+                    placeholder="chiave_cliente"
+                    aria-label="Chiave cliente"
+                    onCommit={selectorKey => updateMember(index, { selector_key: selectorKey, keyAuto: false })}
+                  />
+                </span>
                 <select
                   value={member.connection_id}
                   onChange={event => updateMember(index, { connection_id: event.target.value })}
@@ -269,6 +294,7 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
               <div className="cset__empty">Aggiungi almeno un cliente al set.</div>
             )}
           </div>
+          </FieldScope>
         </ModalWrapper>
       )}
     </section>

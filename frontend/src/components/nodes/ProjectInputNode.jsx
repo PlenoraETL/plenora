@@ -14,15 +14,36 @@ import './ProjectInputNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import { INPUT_KIND_LABELS, termName } from '../../utils/glossary';
+import FieldInput from '../common/FieldInput';
+import * as codecs from '../../utils/fieldCodecs';
+import { runtimeInputCodec } from '../../utils/runtimeInputKinds';
 
 const INPUT_TYPES = Object.entries(INPUT_KIND_LABELS);
 
-const normalizeKey = value => String(value || '')
-  .toLowerCase()
-  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  .replace(/[^a-z0-9_]+/g, '_')
-  .replace(/^_+|_+$/g, '')
-  .replace(/^[^a-z]+/, '');
+// Campi con buffer locale e un convertitore per tipo (Fase 5 T5, R8.1, N4):
+// la chiave si normalizza al commit, non a ogni tasto ("file_" resta mentre
+// si scrive "file_clienti"); gli elenchi tengono la virgola appena digitata.
+// Stessa regola del backend per la chiave (eseguibili/models: ^[a-z][a-z0-9_]*$).
+const KEY = codecs.key({ allowed: '_', startsWithLetter: true, maxLength: 80 });
+const LABEL = codecs.text({ trim: false });
+const NAMES = codecs.list({ item: codecs.text() });
+const EXTENSIONS = codecs.list({ item: codecs.key({ allowed: '', startsWithLetter: false, maxLength: 16, optional: false }) });
+const OPTIONS = codecs.list({ item: codecs.text() });
+const SIZE_MB = codecs.integer({ min: 1, optional: true });
+const MIN_LENGTH = codecs.integer({ min: 0, optional: true });
+const MAX_LENGTH = codecs.integer({ min: 1, optional: true });
+const BOUND = codecs.decimal({ optional: true });
+const PATTERN = codecs.regex();
+
+/**
+ * N4: le colonne attese si ricostruiscono dai NOMI conservando tipo e
+ * "facoltativo" di quelle che c'erano; solo una colonna nuova nasce
+ * testo obbligatoria.
+ */
+export function mergeExpectedColumns(previous, names) {
+  const byName = new Map((previous || []).map(column => [column.name, column]));
+  return names.map(name => byName.get(name) || { name, type: 'str', required: true });
+}
 
 // Nessuna cache di modulo (audit R5.4, R1-N4, R5-N3): il registry e' quello
 // condiviso (utils/transformRegistry, svuotato da resetSession) e i set di
@@ -48,8 +69,8 @@ function ProjectInputNode({ id, data }) {
     () => edges.filter(edge => isParameterBindingEdge(edge) && edge.source === id),
     [edges, id],
   );
-  const columnText = useMemo(
-    () => (data.expected_columns || []).map(column => column.name).join(', '),
+  const columnNames = useMemo(
+    () => (data.expected_columns || []).map(column => column.name),
     [data.expected_columns],
   );
 
@@ -80,23 +101,29 @@ function ProjectInputNode({ id, data }) {
   const updateValidation = changes => update({
     validation: { ...(data.validation || {}), ...changes },
   });
-  const optionalNumber = value => (value === '' ? null : Number(value));
+  const sizeMb = data.validation?.max_size_bytes ? Math.round(data.validation.max_size_bytes / 1048576) : null;
+  // Il valore predefinito passa dal convertitore del tipo dell'input (la
+  // stessa regola dell'esecuzione: limiti, opzioni, espressione regolare).
+  const defaultCodec = runtimeInputCodec({ input_kind: kind, validation: data.validation || {} });
 
   return (
     <div className="pin">
       {/* Titolo, chiusura ed eliminazione sono del pannello (NodeInspector,
-          regola 6 del Blocco A). */}
+          regola 6 del Blocco A). N11: in sola lettura TUTTI i controlli sono
+          spenti davvero (fieldset disabled), non solo i select. */}
+      <fieldset className="pin__fieldset" disabled={isReadOnly}>
 
       <label className="pin__field">
         <span>Etichetta</span>
-        <input className="nodrag" value={data.label || ''} onChange={event => update({ label: event.target.value })} />
+        <FieldInput className="nodrag" codec={LABEL} value={data.label || ''} onCommit={label => update({ label })} />
       </label>
       <label className="pin__field">
         <span>Chiave</span>
-        <input
+        <FieldInput
           className="nodrag"
+          codec={KEY}
           value={data.input_key || ''}
-          onChange={event => update({ input_key: normalizeKey(event.target.value) })}
+          onCommit={inputKey => update({ input_key: inputKey })}
           placeholder="es. file_clienti"
         />
       </label>
@@ -179,39 +206,32 @@ function ProjectInputNode({ id, data }) {
           </label>
           <label className="pin__field">
             <span>Colonne attese</span>
-            <input
+            <FieldInput
               className="nodrag"
-              value={columnText}
+              codec={NAMES}
+              value={columnNames}
               placeholder="codice, nome, data"
-              onChange={event => update({
-                expected_columns: event.target.value.split(',')
-                  .map(value => value.trim()).filter(Boolean)
-                  .map(name => ({ name, type: 'str', required: true })),
-              })}
+              onCommit={names => update({ expected_columns: mergeExpectedColumns(data.expected_columns, names) })}
             />
           </label>
           <label className="pin__field">
             <span>Estensioni</span>
-            <input
+            <FieldInput
               className="nodrag"
-              value={(data.validation?.accepted_extensions || []).join(', ')}
+              codec={EXTENSIONS}
+              value={data.validation?.accepted_extensions || []}
               placeholder="csv, xlsx, gpkg"
-              onChange={event => updateValidation({
-                accepted_extensions: event.target.value.split(',').map(value => value.trim()).filter(Boolean),
-              })}
+              onCommit={extensions => updateValidation({ accepted_extensions: extensions })}
             />
           </label>
           <label className="pin__field">
             <span>Dimensione massima (MB)</span>
-            <input
+            <FieldInput
               className="nodrag"
-              type="number"
-              min="1"
-              value={data.validation?.max_size_bytes ? Math.round(data.validation.max_size_bytes / 1048576) : ''}
+              codec={SIZE_MB}
+              value={sizeMb}
               placeholder="limite globale"
-              onChange={event => updateValidation({
-                max_size_bytes: event.target.value === '' ? null : Number(event.target.value) * 1048576,
-              })}
+              onCommit={mb => updateValidation({ max_size_bytes: mb === null ? null : mb * 1048576 })}
             />
           </label>
         </>
@@ -219,37 +239,45 @@ function ProjectInputNode({ id, data }) {
         <>
           <label className="pin__field">
             <span>Valore predefinito</span>
-            <input
-              className="nodrag"
-              type={kind === 'number' || kind === 'integer' ? 'number' : kind === 'date' ? 'date' : kind === 'datetime' ? 'datetime-local' : 'text'}
-              step={kind === 'number' ? 'any' : kind === 'integer' ? '1' : undefined}
-              value={data.default_value ?? ''}
-              onChange={event => update({ default_value: event.target.value === '' ? null : event.target.value })}
-            />
+            {kind === 'boolean' ? (
+              <select className="nodrag" value={data.default_value === true ? 'true' : data.default_value === false ? 'false' : ''} onChange={event => update({ default_value: event.target.value === '' ? null : event.target.value === 'true' })}>
+                <option value="">Nessuno</option>
+                <option value="true">Sì</option>
+                <option value="false">No</option>
+              </select>
+            ) : (
+              <FieldInput
+                key={kind}
+                className="nodrag"
+                type={kind === 'date' ? 'date' : kind === 'datetime' ? 'datetime-local' : 'text'}
+                codec={defaultCodec}
+                value={data.default_value ?? null}
+                onCommit={value => update({ default_value: value ?? null })}
+              />
+            )}
           </label>
           {kind === 'select' && (
             <label className="pin__field">
               <span>Opzioni (separate da virgola)</span>
-              <input
+              <FieldInput
                 className="nodrag"
-                value={(data.validation?.options || []).join(', ')}
-                onChange={event => updateValidation({
-                  options: event.target.value.split(',').map(value => value.trim()).filter(Boolean),
-                })}
+                codec={OPTIONS}
+                value={data.validation?.options || []}
+                onCommit={options => updateValidation({ options })}
               />
             </label>
           )}
           {kind === 'text' && (
             <div className="pin__validation-grid">
-              <label className="pin__field"><span>Lunghezza minima</span><input className="nodrag" type="number" min="0" value={data.validation?.min_length ?? ''} onChange={event => updateValidation({ min_length: optionalNumber(event.target.value) })} /></label>
-              <label className="pin__field"><span>Lunghezza massima</span><input className="nodrag" type="number" min="1" value={data.validation?.max_length ?? ''} onChange={event => updateValidation({ max_length: optionalNumber(event.target.value) })} /></label>
-              <label className="pin__field pin__field--wide"><span>Espressione regolare</span><input className="nodrag" value={data.validation?.pattern || ''} onChange={event => updateValidation({ pattern: event.target.value || null })} placeholder="es. [A-Z]{3}" /></label>
+              <label className="pin__field"><span>Lunghezza minima</span><FieldInput className="nodrag" codec={MIN_LENGTH} value={data.validation?.min_length ?? null} onCommit={v => updateValidation({ min_length: v })} /></label>
+              <label className="pin__field"><span>Lunghezza massima</span><FieldInput className="nodrag" codec={MAX_LENGTH} value={data.validation?.max_length ?? null} onCommit={v => updateValidation({ max_length: v })} /></label>
+              <label className="pin__field pin__field--wide"><span>Espressione regolare</span><FieldInput className="nodrag" codec={PATTERN} value={data.validation?.pattern || null} onCommit={v => updateValidation({ pattern: v || null })} placeholder="es. [A-Z]{3}" /></label>
             </div>
           )}
           {(kind === 'number' || kind === 'integer') && (
             <div className="pin__validation-grid">
-              <label className="pin__field"><span>Valore minimo</span><input className="nodrag" type="number" value={data.validation?.minimum ?? ''} onChange={event => updateValidation({ minimum: optionalNumber(event.target.value) })} /></label>
-              <label className="pin__field"><span>Valore massimo</span><input className="nodrag" type="number" value={data.validation?.maximum ?? ''} onChange={event => updateValidation({ maximum: optionalNumber(event.target.value) })} /></label>
+              <label className="pin__field"><span>Valore minimo</span><FieldInput className="nodrag" codec={BOUND} value={data.validation?.minimum ?? null} onCommit={v => updateValidation({ minimum: v })} /></label>
+              <label className="pin__field"><span>Valore massimo</span><FieldInput className="nodrag" codec={BOUND} value={data.validation?.maximum ?? null} onCommit={v => updateValidation({ maximum: v })} /></label>
             </div>
           )}
           <div className="pin__binding">
@@ -319,6 +347,8 @@ function ProjectInputNode({ id, data }) {
           </div>
         </>
       )}
+
+      </fieldset>
 
       {kind !== 'connection' && (
         <NodeHandle

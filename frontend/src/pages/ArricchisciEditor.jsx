@@ -14,6 +14,7 @@
  * Route: /arricchisci/:projectId
  */
 import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { newProjectInputData } from '../utils/uniqueName';
 import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -259,10 +260,11 @@ const ArricchisciEditorContent = () => {
   }, [addNodes]);
 
   const handleAddProjectInputNode = useCallback(() => {
-    const ordinal = nodesRef.current.filter(node => node.type === 'project_input').length + 1;
+    // Chiave e ordine unici e stabili (utils/uniqueName, R8.19).
+    const data = newProjectInputData(nodesRef.current, { kind: 'file' });
     addNodes({ id: `project_input_${Date.now()}`, type: 'project_input',
-      position: { x: 100, y: 100 + ordinal * 80 },
-      data: { input_key: `input_${ordinal}`, label: `Input ${ordinal}`, input_kind: 'file', required: true, expected_columns: [], validation: {}, bindings: [], order: ordinal - 1 } });
+      position: { x: 100, y: 180 + data.order * 80 },
+      data });
   }, [addNodes, nodesRef]);
 
   const handleAddResultNode = useCallback(() => {

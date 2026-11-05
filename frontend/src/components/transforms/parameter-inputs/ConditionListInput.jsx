@@ -6,8 +6,16 @@
  * valore non viene mostrato.
  *
  * Pure presentational: nessun useState locale.
+ *
+ * Fase 5 T5 (R8.23): `between` passa dal convertitore unico (due numeri,
+ * min <= max, utils/fieldCodecs.numberPair): un intervallo non valido e'
+ * l'errore del campo, non arriva al backend.
  */
 import React from 'react';
+import FieldInput from '../../common/FieldInput';
+import { numberPair } from '../../../utils/fieldCodecs';
+
+const RANGE = numberPair();
 
 const ConditionListInput = ({ value, onChange }) => {
   const conditions = Array.isArray(value) ? value : [];
@@ -56,7 +64,18 @@ const ConditionListInput = ({ value, onChange }) => {
                 <option key={op.value} value={op.value}>{op.label}</option>
               ))}
             </select>
-            {needsValue(cond.operator) && (
+            {cond.operator === 'between' ? (
+              <span className="condition-list-input__value-cell">
+                <FieldInput
+                  codec={RANGE}
+                  value={cond.value || ''}
+                  onCommit={(v) => updateCondition(idx, 'value', v)}
+                  placeholder="min,max"
+                  aria-label="Intervallo min,max"
+                  className="condition-list-input__value"
+                />
+              </span>
+            ) : needsValue(cond.operator) && (
               <input
                 type="text"
                 value={cond.value || ''}

@@ -5,8 +5,28 @@
  * Le rinominazioni vivono nel parent (controlled).
  *
  * Supporta separatori , ; e tab nel paste.
+ *
+ * Fase 5 T5 (R8.15): una regola sola per i nomi finali — dopo le rinomine
+ * ogni colonna ha un nome unico (`finalNames`). La pulizia dei suffissi non
+ * propone un nome gia' usato da una colonna che resta (con `id` e `id_L` non
+ * propone `id_L→id`); il nuovo nome e' un campo con buffer (FieldInput):
+ * vuoto o doppione e' l'errore del campo. "Carica tutte" propone il nome
+ * attuale (nessun cambio) invece di un nome vuoto.
  */
 import React, { useState } from 'react';
+import FieldInput from '../../common/FieldInput';
+import { text } from '../../../utils/fieldCodecs';
+
+const NEW_NAME = text({ optional: false });
+
+/**
+ * Nome finale di ogni colonna con queste rinomine (le colonne non rinominate
+ * tengono il loro). Usata da proposte e validazione.
+ */
+export function finalNames(columns, renames) {
+  const target = new Map((renames || []).filter(r => r.old_name && r.new_name).map(r => [r.old_name, r.new_name]));
+  return (columns || []).map(col => target.get(col.name) ?? col.name);
+}
 
 // Suffissi accumulati dai join a catena (es. "_L_L_L", "_R_L_L") — uno o
 // più gruppi consecutivi di _L/_R in coda al nome colonna.
@@ -30,7 +50,7 @@ const RenameListInput = ({ value, onChange, columns }) => {
     // Aggiungi solo quelle mancanti
     const newEntries = columns
       .filter(col => !existing.has(col.name))
-      .map(col => ({ old_name: col.name, old_name_id: columnKey(col), new_name: '' }));
+      .map(col => ({ old_name: col.name, old_name_id: columnKey(col), new_name: col.name }));
     if (newEntries.length === 0) return;
     onChange([...renames.filter(r => r.old_name), ...newEntries]);
   };
@@ -51,15 +71,19 @@ const RenameListInput = ({ value, onChange, columns }) => {
       acc[cleanName] = (acc[cleanName] || 0) + 1;
       return acc;
     }, {});
+    // Nomi delle colonne che restano come sono (o con la rinomina gia' in
+    // elenco): una proposta non puo' prenderne uno.
+    const strippedNames = new Set(stripped.map(({ col }) => col.name));
+    const kept = new Set(finalNames(columns.filter(col => !strippedNames.has(col.name)), renames));
 
     const newEntries = stripped
-      .filter(({ cleanName }) => cleanNameCounts[cleanName] === 1)
+      .filter(({ cleanName }) => cleanNameCounts[cleanName] === 1 && !kept.has(cleanName))
       .map(({ col, cleanName }) => ({ old_name: col.name, old_name_id: columnKey(col), new_name: cleanName }));
 
     const skippedCollisions = stripped.length - newEntries.length;
     if (skippedCollisions > 0) {
       setCsvError(
-        `${skippedCollisions} colonne saltate: più colonne diverse darebbero lo stesso nome dopo la pulizia ` +
+        `${skippedCollisions} colonne saltate: il nome pulito è già di un'altra colonna ` +
         `(probabili chiavi del Join duplicate — usa "Elimina colonne" per quelle).`
       );
     } else {
@@ -144,6 +168,15 @@ const RenameListInput = ({ value, onChange, columns }) => {
     onChange(renames.filter((_, i) => i !== idx));
   };
 
+  // Il nuovo nome di una riga non puo' essere il nome finale di un'altra colonna.
+  const duplicateName = (idx) => (name) => {
+    const others = renames.filter((_r, i) => i !== idx);
+    const own = renames[idx]?.old_name;
+    const taken = finalNames(columns.filter(col => col.name !== own), others);
+    const otherTargets = others.map(r => r.new_name).filter(Boolean);
+    return name && (taken.includes(name) || otherTargets.includes(name)) ? 'Nome già usato da un\'altra colonna' : null;
+  };
+
   return (
     <div className="rename-list-input">
       {renames.map((rename, idx) => (
@@ -159,13 +192,17 @@ const RenameListInput = ({ value, onChange, columns }) => {
             ))}
           </select>
           <span className="rename-list-input__arrow">→</span>
-          <input
-            type="text"
-            value={rename.new_name || ''}
-            onChange={(e) => updateRename(idx, 'new_name', e.target.value)}
-            placeholder="Nuovo nome"
-            className="rename-list-input__input"
-          />
+          <span className="rename-list-input__cell">
+            <FieldInput
+              codec={NEW_NAME}
+              value={rename.new_name || ''}
+              validate={duplicateName(idx)}
+              onCommit={(name) => updateRename(idx, 'new_name', name)}
+              placeholder="Nuovo nome"
+              aria-label="Nuovo nome"
+              className="rename-list-input__input"
+            />
+          </span>
           <button
             type="button"
             onClick={() => removeRename(idx)}

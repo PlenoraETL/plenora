@@ -26,3 +26,7 @@
   .cset__form-grid { grid-template-columns: 1fr; }
   .cset__member { grid-template-columns: 1fr; }
 }
+
+/* Fase 5 T5: chiave con il suo errore sotto. */
+.cset__key-field { display: flex; flex-direction: column; min-width: 0; }
+.cset__key-field input { width: 100%; }

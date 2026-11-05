@@ -24,6 +24,9 @@ import { useResource } from '../hooks/useResource';
 import { useBusy } from '../hooks/useBusy';
 import '../styles/DataSourceManager.css';
 import { goBack } from '../utils/navigation';
+import SchemaFields from '../components/common/SchemaFields';
+import { formErrors, formPayload, initialValues } from '../utils/formSchema';
+import { DS_FIELDS, DS_STATE_FIELDS, DEFAULT_PORTS } from '../utils/dataSourceForm';
 const DS_TYPES = [
   { value:'local',      label:'Cartella locale',   icon:'📂', color:'#94A3B8', rgb:'148,163,184', desc:'Disco locale o percorso UNC' },
   { value:'ftp',        label:'FTP',               icon:'📁', color:'#60A5FA', rgb:'96,165,250',  desc:'File Transfer Protocol (FTPS)' },
@@ -31,18 +34,12 @@ const DS_TYPES = [
   { value:'sharepoint', label:'SharePoint Online', icon:'☁️', color:'#4B8BFF', rgb:'75,139,255',  desc:'Microsoft Graph API (OAuth2)' },
 ];
 const TYPE_INFO = Object.fromEntries(DS_TYPES.map(t => [t.value, t]));
-const DEFAULT_PORTS = { ftp:21, sftp:22 };
-const EMPTY_FORM = {
-  name:'', description:'', type:'local', root_path:'',
-  host:'', port:'', username:'', password:'',
-  tls:false, passive:true,
-  private_key:'', private_key_passphrase:'', host_key_policy:'reject',
-  tenant_id:'', client_id:'', client_secret:'', site_url:'', site_id:'', drive_id:'',
-};
+// Stato del modulo: il testo dei campi dello schema unico (utils/dataSourceForm).
+const emptyForm = (type = 'local') => ({ type, ...initialValues(DS_STATE_FIELDS) });
 const formatSize = (bytes) => {
   if (!bytes) return '0 B';
   const k = 1024, s = ['B','KB','MB','GB'], i = Math.floor(Math.log(bytes)/Math.log(k));
-  return `${parseFloat((bytes/Math.pow(k,i)).toFixed(1))} ${s[i]}`;
+  return `${Number((bytes/Math.pow(k,i)).toFixed(1))} ${s[i]}`;
 };
 const formatDate = (iso) => {
   if (!iso) return '—';
@@ -66,7 +63,8 @@ export default function DataSourceManager() {
   const busy = useBusy();
   const [showModal,     setShowModal]     = useState(false);
   const [editing,       setEditing]       = useState(null);
-  const [formData,      setFormData]      = useState(EMPTY_FORM);
+  const [formData,      setFormData]      = useState(emptyForm);
+  const [fieldErrors,   setFieldErrors]   = useState({});
   const [saving,        setSaving]        = useState(false);
   const [formError,     setFormError]     = useState(null);
   const [testResults,   setTestResults]   = useState({});
@@ -105,22 +103,27 @@ export default function DataSourceManager() {
   const browserLoading = browser.loading;
   const browserError = browser.error;
 
-  const openNew = () => { setEditing(null); setFormData(EMPTY_FORM); setFormError(null); setShowModal(true); };
+  const openNew = () => { setEditing(null); setFormData(emptyForm()); setFieldErrors({}); setFormError(null); setShowModal(true); };
   const openEdit = ds => {
     setEditing(ds);
-    setFormData({ ...EMPTY_FORM, name:ds.name||'', description:ds.description||'', type:ds.type||'local', root_path:ds.root_path||'', host:ds.host||'', port:ds.port||'', username:ds.username||'', password:'', tls:ds.tls||false, passive:ds.passive!==false, private_key:'', private_key_passphrase:'', host_key_policy:ds.host_key_policy||'reject', tenant_id:ds.tenant_id||'', client_id:ds.client_id||'', client_secret:'', site_url:ds.site_url||'', site_id:ds.site_id||'', drive_id:ds.drive_id||'' });
-    setFormError(null); setShowModal(true);
+    // I segreti partono vuoti ("invariati"); gli altri dal Data Source.
+    setFormData({ type: ds.type || 'local', ...initialValues(DS_STATE_FIELDS, ds) });
+    setFieldErrors({}); setFormError(null); setShowModal(true);
   };
   const closeModal = () => { setShowModal(false); setEditing(null); setFormError(null); };
-  const handleTypeChange = type => setFormData(prev => ({ ...prev, type, port: DEFAULT_PORTS[type] || '' }));
-  const handleField = (f, v) => setFormData(prev => ({ ...prev, [f]: v }));
+  // In modifica il tipo non cambia (il backend non lo aggiorna).
+  const handleTypeChange = type => { if (editing) return; setFormData(prev => ({ ...prev, type, port: DEFAULT_PORTS[type] ? String(DEFAULT_PORTS[type]) : '' })); setFieldErrors({}); };
+  const handleField = (f, v) => { setFormData(prev => ({ ...prev, [f]: v })); setFieldErrors(prev => (prev[f] ? { ...prev, [f]: null } : prev)); };
+  const formCtx = { mode: editing ? 'edit' : 'create' };
 
   const handleSave = async () => {
-    if (!formData.name.trim()) { setFormError('Il nome è obbligatorio'); return; }
-    if (formData.type === 'sharepoint' && !formData.site_url && !formData.site_id) { setFormError("Inserire 'URL Sito' o 'Site ID'"); return; }
+    // Validazione e payload dallo schema: solo i campi del tipo scelto.
+    const errs = formErrors(DS_FIELDS, formData, formCtx);
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) { setFormError('Correggi i campi segnati.'); return; }
     setSaving(true); setFormError(null);
-    const payload = {};
-    Object.entries(formData).forEach(([k,v]) => { if (v !== '' && v !== null && v !== undefined) payload[k] = v; });
+    const payload = formPayload(DS_FIELDS, formData, formCtx);
+    if (!editing) payload.type = formData.type;
     try {
       if (editing) await updateDataSource(editing.id, payload); else await createDataSource(payload);
       closeModal(); await load();
@@ -292,7 +295,9 @@ export default function DataSourceManager() {
                     <button type="button" key={t.value}
                       className={`dsm__type-btn${formData.type===t.value?' dsm__type-btn--active':''}`}
                       style={formData.type===t.value?{borderColor:t.color,background:`rgba(${t.rgb},.08)`}:{}}
-                      onClick={() => handleTypeChange(t.value)}>
+                      onClick={() => handleTypeChange(t.value)}
+                      disabled={Boolean(editing) && formData.type !== t.value}
+                      title={editing && formData.type !== t.value ? 'Il tipo non si cambia in modifica' : undefined}>
                       <span className="dsm__type-icon">{t.icon}</span>
                       <span className="dsm__type-label">{t.label}</span>
                       <span className="dsm__type-desc">{t.desc}</span>
@@ -301,99 +306,22 @@ export default function DataSourceManager() {
                 </div>
               </div>
 
-              {/* Nome + Descrizione */}
-              <div className="dsm__row">
-                <div className="dsm__field">
-                  <div className="dsm__label">Nome *</div>
-                  <input className="dsm__input" value={formData.name} onChange={e=>handleField('name',e.target.value)} placeholder="es. SharePoint ICSC" />
-                </div>
-                <div className="dsm__field">
-                  <div className="dsm__label">Descrizione</div>
-                  <input className="dsm__input" value={formData.description} onChange={e=>handleField('description',e.target.value)} placeholder="Opzionale" />
-                </div>
-              </div>
-
-              {/* LOCALE */}
-              {formData.type === 'local' && (
-                <div className="dsm__field">
-                  <div className="dsm__label">Percorso cartella *</div>
-                  <input className="dsm__input" value={formData.root_path} onChange={e=>handleField('root_path',e.target.value)} placeholder="C:\dati\estrazioni  oppure  \\server\share\dati" />
-                  <span className="dsm__hint">Percorso assoluto locale o UNC</span>
-                </div>
-              )}
-
-              {/* FTP */}
-              {formData.type === 'ftp' && (<>
-                <div className="dsm__row">
-                  <div className="dsm__field dsm__field--grow">
-                    <div className="dsm__label">Host *</div>
-                    <input className="dsm__input" value={formData.host} onChange={e=>handleField('host',e.target.value)} placeholder="ftp.server.it" />
-                  </div>
-                  <div className="dsm__field dsm__field--sm">
-                    <div className="dsm__label">Porta</div>
-                    <input className="dsm__input" type="number" value={formData.port} onChange={e=>handleField('port',e.target.value)} placeholder="21" />
-                  </div>
-                </div>
-                <div className="dsm__row">
-                  <div className="dsm__field"><div className="dsm__label">Utente</div><input className="dsm__input" value={formData.username} onChange={e=>handleField('username',e.target.value)} placeholder="anonymous" /></div>
-                  <div className="dsm__field"><div className="dsm__label">Password</div><input className="dsm__input" type="password" value={formData.password} onChange={e=>handleField('password',e.target.value)} placeholder={editing?'(invariata)':''} /></div>
-                </div>
-                <div className="dsm__field">
-                  <div className="dsm__label">Cartella root</div>
-                  <input className="dsm__input" value={formData.root_path} onChange={e=>handleField('root_path',e.target.value)} placeholder="/upload/estrazioni" />
-                </div>
-                <div className="dsm__checkboxes">
-                  <label className="dsm__check-label"><input type="checkbox" checked={formData.tls} onChange={e=>handleField('tls',e.target.checked)}/><span>TLS (FTPS)</span></label>
-                  <label className="dsm__check-label"><input type="checkbox" checked={formData.passive} onChange={e=>handleField('passive',e.target.checked)}/><span>Modalità passiva</span></label>
-                </div>
-              </>)}
-
-              {/* SFTP */}
-              {formData.type === 'sftp' && (<>
-                <div className="dsm__row">
-                  <div className="dsm__field dsm__field--grow"><div className="dsm__label">Host *</div><input className="dsm__input" value={formData.host} onChange={e=>handleField('host',e.target.value)} placeholder="sftp.server.it" /></div>
-                  <div className="dsm__field dsm__field--sm"><div className="dsm__label">Porta</div><input className="dsm__input" type="number" value={formData.port} onChange={e=>handleField('port',e.target.value)} placeholder="22" /></div>
-                </div>
-                <div className="dsm__row">
-                  <div className="dsm__field"><div className="dsm__label">Utente *</div><input className="dsm__input" value={formData.username} onChange={e=>handleField('username',e.target.value)} /></div>
-                  <div className="dsm__field"><div className="dsm__label">Password</div><input className="dsm__input" type="password" value={formData.password} onChange={e=>handleField('password',e.target.value)} placeholder={editing?'(invariata)':'Lascia vuoto se usi chiave SSH'} /></div>
-                </div>
-                <div className="dsm__field">
-                  <div className="dsm__label">Chiave SSH privata (PEM)</div>
-                  <textarea className="dsm__textarea" value={formData.private_key} onChange={e=>handleField('private_key',e.target.value)} placeholder={editing?'(invariata — lascia vuoto per non modificare)':'-----BEGIN RSA PRIVATE KEY-----\n...'} rows={4} />
-                </div>
-                <div className="dsm__row">
-                  <div className="dsm__field"><div className="dsm__label">Passphrase chiave</div><input className="dsm__input" type="password" value={formData.private_key_passphrase} onChange={e=>handleField('private_key_passphrase',e.target.value)} placeholder="Lascia vuoto se non cifrata" /></div>
-                  <div className="dsm__field">
-                    <div className="dsm__label">Policy host sconosciuti</div>
-                    <select className="dsm__select" value={formData.host_key_policy} onChange={e=>handleField('host_key_policy',e.target.value)}>
-                      <option value="auto_add">Accetta automaticamente</option>
-                      <option value="reject">Rifiuta (più sicuro)</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="dsm__field"><div className="dsm__label">Cartella root</div><input className="dsm__input" value={formData.root_path} onChange={e=>handleField('root_path',e.target.value)} placeholder="/upload/estrazioni" /></div>
-              </>)}
-
-              {/* SHAREPOINT */}
-              {formData.type === 'sharepoint' && (<>
+              {formData.type === 'sharepoint' && (
                 <div className="dsm__sp-info">💡 Richiede un'app Azure AD con permessi <strong>Sites.ReadWrite.All</strong> e <strong>Files.ReadWrite.All</strong>.</div>
-                <div className="dsm__field"><div className="dsm__label">Tenant ID *</div><input className="dsm__input" value={formData.tenant_id} onChange={e=>handleField('tenant_id',e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></div>
-                <div className="dsm__row">
-                  <div className="dsm__field"><div className="dsm__label">Client ID *</div><input className="dsm__input" value={formData.client_id} onChange={e=>handleField('client_id',e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></div>
-                  <div className="dsm__field"><div className="dsm__label">Client Secret *</div><input className="dsm__input" type="password" value={formData.client_secret} onChange={e=>handleField('client_secret',e.target.value)} placeholder={editing?'(invariato)':''} /></div>
-                </div>
-                <div className="dsm__field">
-                  <div className="dsm__label">URL Sito *</div>
-                  <input className="dsm__input" value={formData.site_url} onChange={e=>handleField('site_url',e.target.value)} placeholder="https://tenant.sharepoint.com/sites/ICSC" />
-                  <span className="dsm__hint">Usato per individuare il sito automaticamente</span>
-                </div>
-                <div className="dsm__row">
-                  <div className="dsm__field"><div className="dsm__label">Site ID <span className="dsm__optional">(opzionale)</span></div><input className="dsm__input" value={formData.site_id} onChange={e=>handleField('site_id',e.target.value)} placeholder="Scoperto automaticamente" /></div>
-                  <div className="dsm__field"><div className="dsm__label">Drive ID <span className="dsm__optional">(opzionale)</span></div><input className="dsm__input" value={formData.drive_id} onChange={e=>handleField('drive_id',e.target.value)} placeholder="Default: Document Library" /></div>
-                </div>
-                <div className="dsm__field"><div className="dsm__label">Percorso root</div><input className="dsm__input" value={formData.root_path} onChange={e=>handleField('root_path',e.target.value)} placeholder="/sites/ICSC/Documents/estrazioni" /></div>
-              </>)}
+              )}
+              {/* Campi dallo schema unico (utils/dataSourceForm): quelli del
+                  tipo scelto, gli stessi che si validano e si inviano. */}
+              <SchemaFields
+                fields={DS_FIELDS}
+                values={formData}
+                ctx={formCtx}
+                errors={fieldErrors}
+                onChange={handleField}
+                classes={{
+                  grid: 'dsm__schema-grid', field: 'dsm__field', label: 'dsm__label', input: 'dsm__input',
+                  textarea: 'dsm__textarea', select: 'dsm__select', hint: 'dsm__hint', check: 'dsm__check-label',
+                }}
+              />
 
               {formError && <div className="dsm__form-error">❌ {formError}</div>}
             </div>

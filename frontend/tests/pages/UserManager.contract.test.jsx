@@ -119,7 +119,7 @@ describe('UserManager', () => {
         password: 'StrongPwd1234',
         role: 'admin',
         group_id: 'grp-2',
-        is_active: true,
+        // T5 (R8.20): solo i campi che il backend accetta in creazione (UserCreate).
       });
     });
   });

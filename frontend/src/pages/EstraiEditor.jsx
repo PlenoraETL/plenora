@@ -3,6 +3,7 @@
  * Logica invariata — solo classi CSS aggiornate al design system Plenora
  */
 import { ReactFlowProvider } from '@xyflow/react';
+import { newProjectInputData } from '../utils/uniqueName';
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import '@xyflow/react/dist/style.css';
@@ -244,12 +245,12 @@ function EstraiEditor() {
   // Static values non sono una sorgente SQL ESTRAI.
 
   const handleAddProjectInputNode = useCallback(() => {
-    const ordinal = nodesRef.current.filter(node => node.type === 'project_input').length + 1;
+    // Chiave e ordine unici e stabili (utils/uniqueName, R8.19).
     addNodes({
       id: `project_input_${Date.now()}`,
       type: 'project_input',
       position: getViewportCenter(reactFlowInstance),
-      data: { input_key: `input_${ordinal}`, label: `Input ${ordinal}`, input_kind: 'text', required: true, expected_columns: [], validation: {}, bindings: [], order: ordinal - 1 },
+      data: newProjectInputData(nodesRef.current, { kind: 'text' }),
     });
   }, [addNodes, nodesRef, getViewportCenter, reactFlowInstance]);
 

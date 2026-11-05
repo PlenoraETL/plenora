@@ -9,6 +9,12 @@ import {
   REST_METHODS,
   REST_BATCH_MODES as REST_BATCH_MODE_VALUES,
 } from '../../../constants/canvasTypes';
+import FieldInput from '../../common/FieldInput';
+import { integer } from '../../../utils/fieldCodecs';
+
+// Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
+const REST_BATCH = integer({ min: 1, max: 10000 });
+const REST_TIMEOUT = integer({ min: 1, max: 600 });
 
 // Re-export per non rompere CaricanNode che importa REST_METHODS da
 // questo file per `isRestValid` e Preview.
@@ -241,21 +247,22 @@ function RestDestinationSection({
             </div>
             <div className="carica-node__advanced-row">
               <label>Righe per lotto:</label>
-              <input
-                type="number"
+              {/* R8.4: campo unico, niente default silenzioso. */}
+              <FieldInput
+                codec={REST_BATCH}
                 value={restBatchSize}
-                onChange={(e) => onUpdate('rest_batch_size', parseInt(e.target.value) || 1)}
-                min={1} max={10000} step={1}
+                onCommit={(v) => onUpdate('rest_batch_size', v)}
+                aria-label="Righe per lotto"
                 className="carica-node__input carica-node__input--small"
               />
             </div>
             <div className="carica-node__advanced-row">
               <label>Attesa massima (s):</label>
-              <input
-                type="number"
+              <FieldInput
+                codec={REST_TIMEOUT}
                 value={restTimeoutSeconds}
-                onChange={(e) => onUpdate('rest_timeout_seconds', parseInt(e.target.value) || 30)}
-                min={1} max={600} step={1}
+                onCommit={(v) => onUpdate('rest_timeout_seconds', v)}
+                aria-label="Attesa massima (s)"
                 className="carica-node__input carica-node__input--small"
               />
             </div>

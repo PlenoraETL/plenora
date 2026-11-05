@@ -28,3 +28,7 @@
 .pin__validation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .pin__validation-grid .pin__field--wide { grid-column: 1 / -1; }
 .pin__handle { width: 12px !important; height: 12px !important; background: #38bdf8 !important; }
+
+/* Fase 5 T5 (N11): contenitore dei controlli, spento in sola lettura. */
+.pin__fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.pin__fieldset:disabled input, .pin__fieldset:disabled select, .pin__fieldset:disabled button { cursor: not-allowed; opacity: .7; }

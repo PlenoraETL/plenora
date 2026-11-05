@@ -32,6 +32,19 @@ import { ResourceError } from '../components/common/ListState';
 import '../styles/ConnectionManager.css';
 import { requestErrorMessage } from '../utils/errorMessages';
 import { goBack } from '../utils/navigation';
+import FieldInput, { FieldScope } from '../components/common/FieldInput';
+import { useFieldScope } from '../hooks/useFieldBuffer';
+import { integer } from '../utils/fieldCodecs';
+
+// Porta dal campo unico (R8.4): vuota o fuori 1-65535 e' l'errore del campo.
+const PORT = integer({ min: 1, max: 65535 });
+
+/**
+ * R8.7: in modifica la categoria (database / ArcGIS) e' quella della
+ * connessione: un tipo dell'altra categoria non si puo' scegliere (prima
+ * nasceva una connessione nuova e la vecchia restava).
+ */
+export const typeSelectable = (type, editingCategory) => !editingCategory || type.category === editingCategory;
 
 const ALL_TYPES = [
   { value: 'postgres', label: '🐘 PostgreSQL',   color: '#4B8BFF', colorRgb: '75,139,255',  defaultPort: 5432, defaultSchema: 'public', category: 'database' },
@@ -56,6 +69,7 @@ function ConnectionManager() {
   // riabilita B mentre il suo test gira.
   const testing = useBusy();
   const [saving,            setSaving]            = useState(false);
+  const fields = useFieldScope();
   const [testResults,       setTestResults]       = useState({});
   const [activeTab,         setActiveTab]         = useState('all');
   const [sharingConnection, setSharingConnection] = useState(null);  // conn in sharing modal (solo super)
@@ -113,13 +127,17 @@ function ConnectionManager() {
 
   const handleTypeChange = (type) => {
     const info = ALL_TYPES.find(t => t.value === type);
+    if (info && !typeSelectable(info, editingConnection ? editingCategory : null)) return;
     setFormData(prev => ({ ...prev, type, port: info?.defaultPort || 0, db_schema: info?.defaultSchema || '' }));
   };
 
   const handleSubmit = async () => {
     if (saving) return;
+    if (!fields.check()) { toast.warning('Correggi i campi segnati'); return; }
     const typeInfo = ALL_TYPES.find(t => t.value === formData.type);
     const isArcgis = typeInfo?.category === 'arcgis';
+    // Una modifica aggiorna sempre la connessione aperta, mai una nuova.
+    if (editingConnection && typeInfo?.category !== editingCategory) { toast.warning('Il tipo della connessione non si può cambiare in un\'altra categoria'); return; }
     if (!formData.name.trim()) { toast.warning('Il nome è obbligatorio'); return; }
     if (isArcgis && !formData.server_url.trim()) { toast.warning("URL server obbligatorio"); return; }
     if (!isArcgis && (!formData.host.trim() || !formData.database.trim())) { toast.warning('Host e database obbligatori'); return; }
@@ -309,6 +327,7 @@ function ConnectionManager() {
             </>
           }
         >
+          <FieldScope scope={fields}>
             {/* Tipo */}
             <div className="cm__modal-field">
               <label className="cm__modal-label">Tipo</label>
@@ -319,6 +338,8 @@ function ConnectionManager() {
                     className={`cm__db-type-btn ${formData.type === t.value ? 'cm__db-type-btn--on' : ''}`}
                     style={formData.type === t.value ? { borderColor: t.color, background: `rgba(${t.colorRgb},0.10)`, color: t.color } : {}}
                     onClick={() => handleTypeChange(t.value)}
+                    disabled={!typeSelectable(t, editingConnection ? editingCategory : null)}
+                    title={!typeSelectable(t, editingConnection ? editingCategory : null) ? 'In modifica il tipo resta nella stessa categoria' : undefined}
                   >
                     {t.label}
                   </button>
@@ -350,7 +371,7 @@ function ConnectionManager() {
                   </div>
                   <div className="cm__modal-field cm__modal-field--inline">
                     <label className="cm__modal-label">Porta</label>
-                    <input type="number" className="cm__modal-input" value={formData.port} onChange={e => setFormData({ ...formData, port: parseInt(e.target.value)||0 })} />
+                    <FieldInput className="cm__modal-input" aria-label="Porta" codec={PORT} value={formData.port} onCommit={port => setFormData(f => ({ ...f, port }))} />
                   </div>
                 </div>
                 <div className="cm__form-row cm__form-row--2-1 cm__form-row--mt-md">
@@ -434,7 +455,7 @@ function ConnectionManager() {
                 )}
               </>
             )}
-
+          </FieldScope>
         </ModalWrapper>
       )}
 {sharingConnection && (

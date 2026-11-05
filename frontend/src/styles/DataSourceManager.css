@@ -273,3 +273,9 @@
 .dsm__lock-badge          { display: inline-flex; align-items: center; justify-content: center; color: var(--dsm-text-dim); }
 .dsm__inline-row          { display: flex; gap: 6px; }
 .dsm__type-info           { max-width: 540px; }
+
+/* Fase 5 T5 (R8.5): campi dallo schema unico, due colonne. */
+.dsm__schema-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 12px; margin-top: 12px; }
+.dsm__schema-grid .dsm__field--wide { grid-column: 1 / -1; }
+.dsm__schema-grid .dsm__check-label { align-self: end; }
+@media (max-width: 600px) { .dsm__schema-grid { grid-template-columns: 1fr; } }

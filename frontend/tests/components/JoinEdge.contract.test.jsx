@@ -228,6 +228,11 @@ describe('JoinEdgePanel', () => {
     expect(edgeById('j1').data).toBe(VALID);
     fireEvent.change(screen.getByLabelText('Geometria sorgente'), { target: { value: 'geom' } });
     fireEvent.change(screen.getByLabelText('Geometria di destinazione'), { target: { value: 'area' } });
+    // T5 (R8.17): i filtri ON non si scartano in silenzio passando allo
+    // spaziale: la scrittura resta ferma col motivo finche' non si rimuovono.
+    expect(edgeById('j1').data).toBe(VALID);
+    expect(screen.getByText(/spaziale non usa i filtri ON \(1\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Rimuovi i filtri ON' }));
     expect(serializeEdge(edgeById('j1'))).toMatchObject({
       is_spatial: true, source_column: '', target_column: '', join_conditions: null, on_filters: null,
       source_geom_column: 'geom', target_geom_column: 'area', spatial_distance: null,

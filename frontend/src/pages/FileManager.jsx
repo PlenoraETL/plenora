@@ -4,6 +4,8 @@
  * Route: /files
  */
 import React, { useState, useRef } from 'react';
+import { srid as sridCodec } from '../utils/fieldCodecs';
+import { getColumnSRID } from '../utils/columnUtils';
 import { useResource } from '../hooks/useResource';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/common/ConfirmDialog';
@@ -41,6 +43,9 @@ import UploadModal from './FileManager/UploadModal';
 import LayerModal from './FileManager/LayerModal';
 import PreviewModal from './FileManager/PreviewModal';
 import { goBack } from '../utils/navigation';
+
+// SRID dal convertitore unico (R8.23): "4326", "EPSG:4326" -> 4326.
+const SRID = sridCodec({ optional: true });
 
 const FILTER_TABS = [
   { key: 'all',     label: 'Tutti' },
@@ -197,9 +202,12 @@ const handleMultiLayerUpload = async () => {
       return;
     }
     if (selectedLayers.length === 0) { setUploadError('Seleziona almeno un layer'); return; }
+    if (SRID.parse(userSrid).error) { setUploadError(`SRID: ${SRID.parse(userSrid).error}`); return; }
     setUploading(true); setUploadError(null);
     try {
-      const srid = userSrid ? parseInt(userSrid) : null;
+      const sridResult = SRID.parse(userSrid);
+      if (sridResult.error) { setUploadError(`SRID: ${sridResult.error}`); return; }
+      const srid = sridResult.value;
       await uploadMultiLayer(uploadFile_, uploadName, uploadDescription, selectedLayers, srid);
       await loadFiles();
       resetUploadModal();
@@ -240,8 +248,8 @@ const handleNextStep = async () => {
         setHasGeometryColumn(geomCols.length > 0);
         let foundSrid = null;
         for (const c of geomCols) {
-          const parts = c.type.split(':');
-          if (parts.length >= 3) { const s = parseInt(parts[2]); if (!isNaN(s) && s > 0) { foundSrid = s; break; } }
+          const s = getColumnSRID(c.type);
+          if (s) { foundSrid = s; break; }
         }
         setDetectedSrid(foundSrid);
         setUserSrid(foundSrid ? String(foundSrid) : '4326');
@@ -274,10 +282,14 @@ const handleNextStep = async () => {
 const handleUpload = async () => {
     if (!uploadFile_ || !uploadName.trim()) { setUploadError('Seleziona un file e inserisci un nome'); return; }
     if (selectedColumns.length === 0) { setUploadError('Seleziona almeno una colonna'); return; }
+    // R8.23: SRID dal convertitore unico ("EPSG:4326" -> 4326); un testo non
+    // valido e' un errore, mai NaN inviato al backend.
+    const sridResult = hasGeometryColumn ? SRID.parse(userSrid) : { value: null, error: null };
+    if (sridResult.error) { setUploadError(`SRID: ${sridResult.error}`); return; }
     setUploading(true); setUploadError(null);
     try {
       const columnsToImport = selectedColumns.length === availableColumns.length ? null : selectedColumns;
-      const srid = hasGeometryColumn && userSrid ? parseInt(userSrid) : null;
+      const srid = sridResult.value;
       const result = await uploadFile(uploadFile_, uploadName, uploadDescription, uploadLayer, uploadSheet, columnsToImport, srid);
       if (result.format === 'gdb' || result.format === 'gpkg') {
         const info = await getFileLayers(result.id);

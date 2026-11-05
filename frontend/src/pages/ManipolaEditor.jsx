@@ -15,6 +15,7 @@
  * Route: /editor/manipola/:id
  */
 import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { newProjectInputData } from '../utils/uniqueName';
 import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -225,12 +226,12 @@ const ManipolaEditorContent = () => {
   }, [addNodes]);
 
   const handleAddProjectInputNode = useCallback(() => {
-    const ordinal = nodesRef.current.filter(node => node.type === 'project_input').length + 1;
+    // Chiave e ordine unici e stabili (utils/uniqueName, R8.19).
     addNodes({
       id: `project_input_${Date.now()}`,
       type: 'project_input',
       position: getPos(),
-      data: { input_key: `input_${ordinal}`, label: `Input ${ordinal}`, input_kind: 'file', required: true, expected_columns: [], validation: {}, bindings: [], order: ordinal - 1 },
+      data: newProjectInputData(nodesRef.current, { kind: 'file' }),
     });
   }, [addNodes, nodesRef]);
 

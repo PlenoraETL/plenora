@@ -255,3 +255,6 @@
 .um__cdg-confirm-line     { margin-top: 12px; font-size: 12.5px; color: var(--plen-text-sub); line-height: 1.5; }
 .um__cdg-confirm-strong   { color: var(--plen-text); }
 .um__cdg-input-wrap       { display: flex; flex-direction: column; gap: 6px; }
+
+/* Fase 5 T5 (R8.20): badge dell'esecutore dalla tabella unica dei ruoli. */
+.um__badge--esecutore { background: rgba(245,166,35,0.12); color: #F5A623; border: 1px solid rgba(245,166,35,0.25); }

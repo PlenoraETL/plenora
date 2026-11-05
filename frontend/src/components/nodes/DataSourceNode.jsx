@@ -18,6 +18,11 @@ import ModalWrapper from '../common/ModalWrapper';
 import './DataSourceNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { requestErrorMessage } from '../../utils/errorMessages';
+import FieldInput from '../common/FieldInput';
+import { integer } from '../../utils/fieldCodecs';
+
+// Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
+const FILE_OFFSET = integer({ min: 0 });
 
 /**
  * DataSourceNode — nodo canvas ESTRAI
@@ -330,12 +335,13 @@ return (
                   )}
                   <div className="dsn__field">
                     <label className="dsn__label">File precedenti da saltare</label>
-                    <input
+                    {/* N12: campo unico, svuotato non torna "0" in silenzio. */}
+                    <FieldInput
                       className="dsn__input"
-                      type="number"
-                      min="0"
+                      codec={FILE_OFFSET}
                       value={data.file_offset ?? 0}
-                      onChange={e => upd({ file_offset: parseInt(e.target.value) || 0 })}
+                      onCommit={v => upd({ file_offset: v })}
+                      aria-label="File precedenti da saltare"
                       placeholder="0"
                     />
                     <span className="dsn__hint">0 = più recente &nbsp;·&nbsp; 1 = ieri &nbsp;·&nbsp; 2 = 2 giorni fa</span>

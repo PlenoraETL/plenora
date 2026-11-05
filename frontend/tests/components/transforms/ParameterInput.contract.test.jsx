@@ -78,11 +78,9 @@ describe('ParameterInput — contract', () => {
   });
 
 
-  it('number type: applies min/max/step and emits parseFloat or null on empty', async () => {
+  it('number type: un convertitore per tipo, min/max applicati, null su vuoto (T5 R8.14)', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    // Render con value=5: input visibile come '5', cosi' user.clear
-    // produce davvero un input event (DOM value cambia da '5' a '').
     render(
       <ParameterInput
         param={{
@@ -98,16 +96,40 @@ describe('ParameterInput — contract', () => {
       />,
     );
 
-    const input = screen.getByRole('spinbutton');
-    expect(input).toHaveAttribute('min', '0');
-    expect(input).toHaveAttribute('max', '120');
-    expect(input).toHaveAttribute('step', '1');
-
-    // user.clear svuota il campo: l'ultimo evento intermedio e' value=''
+    const input = screen.getByRole('textbox', { name: 'Eta' });
+    expect(input).toHaveValue('5');
+    // Svuotato: null (parametro presente e vuoto).
     await user.clear(input);
     expect(onChange).toHaveBeenLastCalledWith(null);
+    // Fuori dai limiti: errore del campo, nessuna scrittura.
+    onChange.mockClear();
+    await user.type(input, '500');
+    expect(onChange).not.toHaveBeenCalledWith(500);
+    await user.tab();
+    expect(screen.getByText('Inserisci un valore tra 0 e 120')).toBeInTheDocument();
+    await user.clear(input);
+    await user.type(input, '42');
+    expect(onChange).toHaveBeenLastCalledWith(42);
   });
 
+  it('default mostrato solo se il parametro manca; select obbligatoria senza valore non preseleziona (T5 R8.14)', () => {
+    const { rerender } = render(
+      <ParameterInput param={{ id: 'n', type: 'number', label: 'N', default: 7 }} value={undefined} onChange={vi.fn()} />,
+    );
+    expect(screen.getByRole('textbox', { name: 'N' })).toHaveValue('7');
+    rerender(<ParameterInput param={{ id: 'n', type: 'number', label: 'N', default: 7 }} value={null} onChange={vi.fn()} />);
+    expect(screen.getByRole('textbox', { name: 'N' })).toHaveValue('');
+    rerender(
+      <ParameterInput
+        param={{ id: 'how', type: 'select', label: 'Come', required: true, options: ['inner', 'left'] }}
+        value={undefined}
+        onChange={vi.fn()}
+      />,
+    );
+    const select = screen.getByRole('combobox');
+    expect(select).toHaveValue('');
+    expect(screen.getByRole('option', { name: '-- Seleziona --' })).toBeDisabled();
+  });
 
   it('boolean type: checkbox with inline label + onChange(checked)', async () => {
     const user = userEvent.setup();

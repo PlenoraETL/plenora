@@ -7,7 +7,7 @@
  * data (>, <, BETWEEN con datepicker), geometry (ST_IsValid...).
  */
 import React, { useState, useEffect } from 'react';
-import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
+import { columnTypeFamily, getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import useCanvasStore from '../../store/useCanvasStore';
 import {
@@ -86,16 +86,17 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
     { value: 'BETWEEN', label: 'BETWEEN', description: 'Tra due valori', types: ['int', 'real', 'date'] }
   ];
 
+  // Fase 5 T5 (R8.18): gli operatori dipendono dalla FAMIGLIA del tipo
+  // (utils/columnUtils.columnTypeFamily): integer, float, varchar,
+  // timestamp... hanno gli stessi operatori di int, real, str, date.
   const getOperatorsForType = (columnType) => {
-    const type = (columnType || 'str').toLowerCase();
-    
+    const type = columnTypeFamily(columnType);
     return allOperators.filter(op => {
-      if (op.types.includes('all')) return true;
-      if (op.types.includes(type)) return true;
-      if (type.startsWith('geometry')) {
+      if (type === 'geometry') {
         return ['=', '!=', 'IS NULL', 'IS NOT NULL'].includes(op.value);
       }
-      return false;
+      if (op.types.includes('all')) return true;
+      return op.types.includes(type);
     });
   };
 
@@ -115,7 +116,7 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
       return "%testo%";
     }
     
-    const type = (columnType || 'str').toLowerCase();
+    const type = columnTypeFamily(columnType);
     switch (type) {
       case 'int':
         return "es: 42";
@@ -130,17 +131,11 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
     }
   };
 
-  const getInputType = (columnType) => {
-    const type = (columnType || 'str').toLowerCase();
-    switch (type) {
-      case 'int':
-      case 'real':
-        return 'text';
-      case 'date':
-        return 'date';
-      default:
-        return 'text';
-    }
+  // Il selettore di data solo per un valore singolo: BETWEEN ("v1 AND v2")
+  // e IN ("a, b") si scrivono come testo.
+  const getInputType = (columnType, operator) => {
+    if (['BETWEEN', 'IN', 'NOT IN'].includes(operator)) return 'text';
+    return columnTypeFamily(columnType) === 'date' ? 'date' : 'text';
   };
 
   const addFilter = () => {
@@ -305,7 +300,7 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
                     </select>
                   )}
                   <input
-                    type={getInputType(colType)}
+                    type={getInputType(colType, filter.operator)}
                     value={filter.value}
                     disabled={Boolean(bindingSelections[index])}
                     onChange={(e) => updateFilter(index, 'value', e.target.value)}

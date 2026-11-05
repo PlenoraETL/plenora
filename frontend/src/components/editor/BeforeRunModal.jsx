@@ -30,8 +30,9 @@ import { term } from '../../utils/glossary';
 import { requestErrorMessage } from '../../utils/errorMessages';
 import {
   describeApiCalls, describeInputRows, initialInputValues, inputsComplete, inputsKey, needsPreflight,
-  preflightBlocks, runInputs,
+  preflightBlocks, runInputErrors, runInputs,
 } from '../../utils/beforeRun';
+import '../common/FieldInput.css';
 import { restMigrationMessage } from '../../utils/restSecrets';
 import './BeforeRunModal.css';
 
@@ -46,9 +47,14 @@ export const INTERMEDIATE_MODE_OPTIONS = Object.freeze([
 // Pausa prima di rifare la stima dopo un input cambiato.
 export const PREFLIGHT_DELAY_MS = 300;
 
-function InputField({ definition, value, onChange }) {
+// Fase 5 T5 (R8.10): min/max/pattern/lunghezze non sono solo attributi
+// HTML: il valore passa dal convertitore del suo tipo (stessa regola del
+// backend), l'errore si vede sul campo e Avvia resta spento.
+function InputField({ definition, value, onChange, error, onBlur }) {
   const id = `before-run-input-${definition.input_key}`;
+  const errorId = `${id}-error`;
   const change = (e) => onChange(e.target.value);
+  const a11y = { 'aria-invalid': error ? true : undefined, 'aria-describedby': error ? errorId : undefined, onBlur };
   let control;
   if (definition.input_kind === 'connection' || definition.input_kind === 'select' || definition.input_kind === 'boolean') {
     const options = definition.input_kind === 'connection'
@@ -57,29 +63,24 @@ function InputField({ definition, value, onChange }) {
         ? (definition.validation?.options || []).map(o => ({ value: o, label: o }))
         : [{ value: 'true', label: 'Sì' }, { value: 'false', label: 'No' }];
     control = (
-      <select id={id} className="before-run__field" value={value ?? ''} onChange={change}>
+      <select id={id} className="before-run__field" value={value === true ? 'true' : value === false ? 'false' : (value ?? '')} onChange={change} {...a11y}>
         <option value="">Seleziona…</option>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     );
   } else {
-    const inputType = definition.input_kind === 'integer' || definition.input_kind === 'number' ? 'number'
-      : definition.input_kind === 'datetime' ? 'datetime-local'
-        : definition.input_kind || 'text';
-    const v = definition.validation || {};
+    const inputType = definition.input_kind === 'datetime' ? 'datetime-local'
+      : definition.input_kind === 'date' ? 'date'
+        : 'text';
     control = (
       <input
         id={id}
         className="before-run__field"
         type={inputType}
+        inputMode={inputType === 'text' && (definition.input_kind === 'integer' || definition.input_kind === 'number') ? 'decimal' : undefined}
         value={value ?? ''}
         onChange={change}
-        min={v.minimum}
-        max={v.maximum}
-        minLength={v.min_length}
-        maxLength={v.max_length}
-        pattern={v.pattern || undefined}
-        step={definition.input_kind === 'number' ? 'any' : definition.input_kind === 'integer' ? '1' : undefined}
+        {...a11y}
       />
     );
   }
@@ -89,6 +90,7 @@ function InputField({ definition, value, onChange }) {
         {definition.label || definition.input_key}{definition.required !== false ? ' *' : ''}
       </label>
       {control}
+      {error && <span id={errorId} className="field-input__error" role="alert">{error}</span>}
       {definition.connection_options_error && (
         <span className="before-run__hint before-run__notice--error" role="alert">
           Set di connessioni non caricato: {definition.connection_options_error}.
@@ -175,6 +177,7 @@ export default function BeforeRunModal({
   const withEstimate = Boolean(request) && migration.length === 0 && needsPreflight(request.mode) && typeof onPreflight === 'function';
   const [values, setValues] = useState({});
   const [intermediateMode, setIntermediateMode] = useState('');
+  const [touched, setTouched] = useState({});
   const [estimate, setEstimate] = useState({ key: null, data: null, error: null, loading: false });
   const seq = useRef(0);
 
@@ -184,6 +187,7 @@ export default function BeforeRunModal({
     seq.current += 1;
     setValues(request.values || initialInputValues(request.inputDefinitions || []));
     setIntermediateMode('');
+    setTouched({});
     setEstimate({
       key: request.preflightKey ?? null,
       data: request.preflight || null,
@@ -198,7 +202,16 @@ export default function BeforeRunModal({
     [definitions, values, omitEmptyOptional, extraInputs],
   );
   const key = inputsKey(inputs);
+  const inputErrors = runInputErrors(definitions, values);
   const complete = inputsComplete(definitions, values) && extraComplete;
+  // Errore visibile: valore scritto non valido subito, obbligatorio vuoto
+  // dopo il primo blur.
+  const shownError = (d) => {
+    const err = inputErrors[d.input_key];
+    if (!err) return null;
+    const raw = values[d.input_key];
+    return (raw !== '' && raw != null) || touched[d.input_key] ? err : null;
+  };
 
   // UNA richiesta di stima (input cambiati o «Riprova»): l'ultima vince.
   const runEstimate = useCallback((forInputs, forKey) => {
@@ -287,6 +300,8 @@ export default function BeforeRunModal({
                 key={d.input_key}
                 definition={d}
                 value={values[d.input_key]}
+                error={shownError(d)}
+                onBlur={() => setTouched(cur => ({ ...cur, [d.input_key]: true }))}
                 onChange={(v) => setValues(cur => ({ ...cur, [d.input_key]: v }))}
               />
             ))}

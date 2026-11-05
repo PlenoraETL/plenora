@@ -7,8 +7,18 @@
  *  - Variant standard: lista parametri + paginazione (per generator).
  *
  * Presentational + riceve callback di CRUD parametri dal wizard.
+ *
+ * Fase 5 T5 (R8.4): i numeri dal campo unico (FieldInput): niente
+ * `parseInt(v) || default` (svuotando tornava il default, "0" diventava 1).
  */
 import React from 'react';
+import FieldInput from '../../common/FieldInput';
+import { integer } from '../../../utils/fieldCodecs';
+
+const REQUEST_TIMEOUT = integer({ min: 10, max: 3600 });
+const PAGE_SIZE = integer({ min: 1, max: 10000 });
+const MAX_ROWS = integer({ min: 1 });
+const START_PAGE = integer({ min: 0 });
 
 export default function Step2Params({
   formData,
@@ -113,9 +123,9 @@ export default function Step2Params({
 
           <div className="acm__field-group acm__field-group--mt-lg">
             <div className="acm__label">⏱ Timeout (secondi)</div>
-            <input type="number" className="acm__input acm__input--w-160" min={10} max={3600}
-              value={formData.request?.timeout||600}
-              onChange={e=>setFormData({...formData,request:{...(formData.request||{}),timeout:Math.max(10,Math.min(3600,parseInt(e.target.value)||600))}})}/>
+            <FieldInput className="acm__input acm__input--w-160" aria-label="Timeout (secondi)" codec={REQUEST_TIMEOUT}
+              value={formData.request?.timeout ?? 600}
+              onCommit={v=>setFormData(f=>({...f,request:{...(f.request||{}),timeout:v}}))}/>
             <div className="acm__field-hint">Tempo massimo di attesa della risposta. Default 600s (10 min).</div>
           </div>
         </>
@@ -157,9 +167,9 @@ export default function Step2Params({
             <div className="acm__pagination-fields">
               <div className="acm__param-row">
                 <span className="acm__param-label">Righe/pagina</span>
-                <input className="acm__input acm__input--sm" type="number" min="1" max="10000" value={formData.pagination?.page_size??100} onChange={e=>setFormData({...formData,pagination:{...formData.pagination,page_size:parseInt(e.target.value)||100}})}/>
+                <FieldInput className="acm__input acm__input--sm" aria-label="Righe per pagina" codec={PAGE_SIZE} value={formData.pagination?.page_size??100} onCommit={v=>setFormData(f=>({...f,pagination:{...f.pagination,page_size:v}}))}/>
                 <span className="acm__param-label">Max righe</span>
-                <input className="acm__input acm__input--sm" type="number" min="1" value={formData.pagination?.max_rows??10000} onChange={e=>setFormData({...formData,pagination:{...formData.pagination,max_rows:parseInt(e.target.value)||10000}})}/>
+                <FieldInput className="acm__input acm__input--sm" aria-label="Max righe" codec={MAX_ROWS} value={formData.pagination?.max_rows??10000} onCommit={v=>setFormData(f=>({...f,pagination:{...f.pagination,max_rows:v}}))}/>
               </div>
               {formData.pagination?.type==='offset' && (<>
                 <div className="acm__param-row">
@@ -190,7 +200,7 @@ export default function Step2Params({
                   <span className="acm__param-label">Param size</span>
                   <input className="acm__input" value={formData.pagination?.page_size_param??'page_size'} onChange={e=>setFormData({...formData,pagination:{...formData.pagination,page_size_param:e.target.value}})} placeholder="page_size"/>
                   <span className="acm__param-label">Start</span>
-                  <input className="acm__input acm__input--sm" type="number" min="0" value={formData.pagination?.start_page??1} onChange={e=>setFormData({...formData,pagination:{...formData.pagination,start_page:parseInt(e.target.value)||1}})}/>
+                  <FieldInput className="acm__input acm__input--sm" aria-label="Pagina iniziale" codec={START_PAGE} value={formData.pagination?.start_page??1} onCommit={v=>setFormData(f=>({...f,pagination:{...f.pagination,start_page:v}}))}/>
                 </div>
               )}
             </div>

@@ -116,3 +116,7 @@
   font-style: italic;
   padding: 2px 0;
 }
+
+/* Fase 5 T5: cella con il campo e il suo errore. */
+.pivot-mapping-builder__cell { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.pivot-mapping-builder__cell .pivot-mapping-builder__input { width: 100%; box-sizing: border-box; }

@@ -7,6 +7,11 @@
  * Presentational.
  */
 import React from 'react';
+import FieldInput from '../../common/FieldInput';
+import { integer } from '../../../utils/fieldCodecs';
+
+// Righe per chiamata dal campo unico (R8.4): niente default silenzioso.
+const MAX_SIZE = integer({ min: 1, max: 10000 });
 
 export default function Step4Batch({ formData, setFormData }) {
   return (
@@ -24,9 +29,9 @@ export default function Step4Batch({ formData, setFormData }) {
       {formData.batch?.enabled && (<>
         <div className="acm__field-row">
           <label className="acm__label">Max righe per chiamata</label>
-          <input type="number" className="acm__input" min={1} max={10000}
-            value={formData.batch?.max_size||100}
-            onChange={e=>setFormData(f=>({...f, batch:{...f.batch, max_size:parseInt(e.target.value)||100}}))}/>
+          <FieldInput className="acm__input" aria-label="Max righe per chiamata" codec={MAX_SIZE}
+            value={formData.batch?.max_size ?? 100}
+            onCommit={v=>setFormData(f=>({...f, batch:{...f.batch, max_size:v}}))}/>
         </div>
         <div className="acm__field-row">
           <label className="acm__label">Chiave array nel payload</label>

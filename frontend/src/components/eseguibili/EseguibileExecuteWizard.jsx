@@ -26,15 +26,8 @@ import { ResourceError } from '../common/ListState';
 import { requestErrorMessage } from '../../utils/errorMessages';
 import './EseguibileExecuteWizard.css';
 import ExecutableDynamicRunForm from './ExecutableDynamicRunForm';
+import { initialOutputFormat, outputFormatOptions, DEFAULT_OUTPUT_FORMAT } from '../../constants/outputFormats';
 
-const OUTPUT_FORMATS = [
-  { value: 'xlsx',    label: 'Excel (.xlsx)' },
-  { value: 'csv',     label: 'CSV (.csv)' },
-  { value: 'json',    label: 'JSON (.json)' },
-  { value: 'geojson', label: 'GeoJSON (.geojson)' },
-  { value: 'zip',     label: 'ZIP (.zip)' },
-  { value: 'pdf',     label: 'PDF (.pdf)' },
-];
 
 function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null }) {
   const dialogRef = useRef(null);
@@ -55,7 +48,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
   const [mapping, setMapping] = useState({}); // {chain_column: file_column}
 
   // Step 3
-  const [outputFormat, setOutputFormat] = useState('xlsx');
+  const [outputFormat, setOutputFormat] = useState(DEFAULT_OUTPUT_FORMAT);
   const [outputName, setOutputName] = useState('');
   const run = useEseguibileRun({ eseguibileId, onCleanup: onAfterDownload, onClose });
   const { state } = run;
@@ -74,7 +67,9 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
     if (eseguibile.output_is_file_based && eseguibile.inferred_output_extension) {
       setOutputFormat(eseguibile.inferred_output_extension);
     } else {
-      setOutputFormat(eseguibile.default_output_format || 'xlsx');
+      // Catalogo unico (constants/outputFormats, R8.11): un default non
+      // supportato non si propone.
+      setOutputFormat(initialOutputFormat(eseguibile.default_output_format));
     }
     setOutputName(eseguibile.default_output_name || '');
   }, [eseguibile]);
@@ -373,8 +368,8 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                           </div>
                         ) : (
                           <select className="esw-select" value={outputFormat} onChange={(e) => setOutputFormat(e.target.value)}>
-                            {OUTPUT_FORMATS.map(f => (
-                              <option key={f.value} value={f.value}>{f.label}</option>
+                            {outputFormatOptions(outputFormat).map(f => (
+                              <option key={f.value} value={f.value} disabled={f.disabled}>{f.label}</option>
                             ))}
                           </select>
                         )}

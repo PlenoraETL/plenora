@@ -8,27 +8,8 @@ import {
   isParameterBindingEdge,
   suggestedInputKind,
 } from '../../utils/runtimeBindingEdges';
+import { newProjectInputData } from '../../utils/uniqueName';
 
-const normalizeKey = value => String(value || '')
-  .toLowerCase()
-  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  .replace(/[^a-z0-9_]+/g, '_')
-  .replace(/^_+|_+$/g, '')
-  .replace(/^[^a-z]+/, '');
-
-const uniqueInputKey = (candidate, nodes) => {
-  const base = candidate || 'input';
-  const existing = new Set(
-    (nodes || [])
-      .filter(node => node.type === 'project_input')
-      .map(node => node.data?.input_key)
-      .filter(Boolean),
-  );
-  if (!existing.has(base)) return base;
-  let suffix = 2;
-  while (existing.has(`${base}_${suffix}`)) suffix += 1;
-  return `${base}_${suffix}`;
-};
 
 export default function RuntimeInputBindingControl({
   targetNodeId,
@@ -84,7 +65,6 @@ export default function RuntimeInputBindingControl({
 
   const createAndConnect = () => {
     if (!allowed()) return;
-    const ordinal = nodes.filter(node => node.type === 'project_input').length + 1;
     const target = nodes.find(node => node.id === targetNodeId);
     const id = `project_input_${Date.now()}`;
     const label = `Input ${param.label || param.id}`;
@@ -92,7 +72,6 @@ export default function RuntimeInputBindingControl({
     const options = (param.options || []).map(option => (
       typeof option === 'object' ? option.value : option
     ));
-    const inputKey = uniqueInputKey(normalizeKey(label) || `input_${ordinal}`, nodes);
     const node = {
       id,
       type: 'project_input',
@@ -100,17 +79,14 @@ export default function RuntimeInputBindingControl({
         x: Math.max(0, Number(target?.position?.x || 360) - 340),
         y: Number(target?.position?.y || 0) + 40,
       },
-      data: {
-        input_key: inputKey,
+      // Chiave unica derivata dall'etichetta, ordine dopo il piu' alto
+      // (utils/uniqueName, R8.19).
+      data: newProjectInputData(nodes, {
+        kind,
         label,
-        input_kind: kind,
-        required: true,
         default_value: null,
-        expected_columns: [],
         validation: kind === 'select' ? { options } : {},
-        bindings: [],
-        order: ordinal - 1,
-      },
+      }),
     };
     addNodes(node);
     connect(id);

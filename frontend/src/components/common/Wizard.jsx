@@ -17,7 +17,9 @@
  *   - R6.4/N7 chiudere (Esc, overlay, ×, Annulla) con dati inseriti chiede
  *     conferma; l'overlay chiude solo con un clic iniziato e finito fuori
  *     (stack unico delle finestre, hooks/useDialog);
- *   - tornando indietro lo stato resta (e' del chiamante, non si azzera).
+ *   - tornando indietro lo stato resta (e' del chiamante, non si azzera);
+ *   - T5: un campo con testo non valido (components/common/FieldInput) blocca
+ *     Avanti, il salto in avanti e Completa, con l'errore sul campo.
  *
  * @example
  * <Wizard
@@ -36,9 +38,12 @@ import { createPortal } from 'react-dom';
 import useDialog from '../../hooks/useDialog';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
 import ConfirmDialog from './ConfirmDialog';
+import { FieldScope } from './FieldInput';
+import { useFieldScope } from '../../hooks/useFieldBuffer';
 import './Wizard.css';
 
 export const STEP_INCOMPLETE = 'Completa questo passo prima di proseguire.';
+export const FIELDS_INVALID = 'Correggi i campi segnati prima di proseguire.';
 
 /**
  * Errore di uno step (null = valido): il messaggio di `validate()` o
@@ -106,6 +111,7 @@ export default function Wizard({
   const submittingRef = useRef(false);
   const [touched, setTouched] = useState(false);
   const discard = useConfirmModal();
+  const fields = useFieldScope();
 
   useEffect(() => { if (isOpen) setTouched(false); }, [isOpen]);
   // Errore di step: si azzera a ogni cambio step (gestito centralmente qui,
@@ -141,6 +147,7 @@ export default function Wizard({
   const goTo = (i) => {
     if (isBusy || i === step) return;
     if (i < step) { show(i); return; }
+    if (!fields.check()) { show(step, FIELDS_INVALID); return; }
     const bad = firstInvalidStep(steps, i);
     if (bad !== -1) { show(bad, stepError(steps[bad])); return; }
     show(i);
@@ -150,6 +157,7 @@ export default function Wizard({
   // R6.3: un solo invio alla volta; Completa solo con TUTTI gli step validi.
   const complete = async () => {
     if (submittingRef.current || isBusy || completeDisabled) return;
+    if (!fields.check()) { show(step, FIELDS_INVALID); return; }
     const bad = firstInvalidStep(steps, steps.length);
     if (bad !== -1) { show(bad, stepError(steps[bad])); return; }
     submittingRef.current = true;
@@ -207,7 +215,7 @@ export default function Wizard({
                 <span>⚠️</span><span>{stepErrorText}</span>
               </div>
             )}
-            {current.content}
+            <FieldScope scope={fields}>{current.content}</FieldScope>
           </div>
 
           {footer !== null && (

@@ -29,6 +29,7 @@ describe('ProjectInputNode visual binding contract', () => {
     expect(source).toContain('minimum');
     expect(source).toContain('maximum');
     expect(source).toContain('pattern');
-    expect(source).toContain('options: event.target.value.split');
+    // Fase 5 T5: le opzioni sono un elenco con buffer locale (FieldInput).
+    expect(source).toContain('codec={OPTIONS}');
   });
 });

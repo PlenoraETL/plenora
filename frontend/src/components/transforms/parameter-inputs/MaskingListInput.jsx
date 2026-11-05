@@ -4,8 +4,17 @@
  * cf, email, phone, iban, custom (con chars_start/end + mask_char).
  *
  * Pure presentational: nessun useState locale.
+ *
+ * Fase 5 T5 (N12): i numeri e il carattere passano dal campo unico
+ * (FieldInput + utils/fieldCodecs): svuotando il campo non torna "0" o "*"
+ * in silenzio, un valore fuori 0-20 e' l'errore del campo.
  */
 import React from 'react';
+import FieldInput from '../../common/FieldInput';
+import { integer, text } from '../../../utils/fieldCodecs';
+
+const CHARS = integer({ min: 0, max: 20 });
+const MASK_CHAR = text({ optional: false, trim: false, minLength: 1, maxLength: 1 });
 
 const MaskingListInput = ({ value, onChange, columns }) => {
   const maskings = Array.isArray(value) ? value : [];
@@ -73,33 +82,32 @@ const MaskingListInput = ({ value, onChange, columns }) => {
             <div className="masking-list-input__custom">
               <label>
                 <span>Inizio</span>
-                <input
-                  type="number"
+                <FieldInput
+                  codec={CHARS}
                   value={mask.chars_start ?? 3}
-                  onChange={(e) => updateMasking(idx, 'chars_start', parseInt(e.target.value) || 0)}
-                  min={0}
-                  max={20}
+                  onCommit={(v) => updateMasking(idx, 'chars_start', v)}
+                  aria-label="Caratteri visibili all'inizio"
                   className="masking-list-input__num"
                 />
               </label>
               <label>
                 <span>Fine</span>
-                <input
-                  type="number"
+                <FieldInput
+                  codec={CHARS}
                   value={mask.chars_end ?? 3}
-                  onChange={(e) => updateMasking(idx, 'chars_end', parseInt(e.target.value) || 0)}
-                  min={0}
-                  max={20}
+                  onCommit={(v) => updateMasking(idx, 'chars_end', v)}
+                  aria-label="Caratteri visibili alla fine"
                   className="masking-list-input__num"
                 />
               </label>
               <label>
                 <span>Char</span>
-                <input
-                  type="text"
+                <FieldInput
+                  codec={MASK_CHAR}
                   value={mask.mask_char ?? '*'}
-                  onChange={(e) => updateMasking(idx, 'mask_char', e.target.value.slice(0, 1) || '*')}
+                  onCommit={(v) => updateMasking(idx, 'mask_char', v)}
                   maxLength={1}
+                  aria-label="Carattere di mascheramento"
                   className="masking-list-input__char"
                 />
               </label>

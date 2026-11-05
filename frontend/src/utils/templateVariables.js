@@ -58,7 +58,7 @@ const applyOffset = (date, offsetStr) => {
   
   const [, sign, amount, unit] = match;
   const multiplier = sign === '+' ? 1 : -1;
-  const value = parseInt(amount, 10) * multiplier;
+  const value = Number(amount) * multiplier; // amount: solo cifre (regex)
   
   const result = new Date(date);
   

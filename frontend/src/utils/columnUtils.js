@@ -47,6 +47,22 @@ export function normalizeColumnType(col) {
 }
 
 /**
+ * Famiglia di un tipo di colonna (Fase 5 T5, R8.18): int, real, date, bool,
+ * geometry o str, anche dai tipi SQL e pandas (`integer`, `int8`, `bigint`,
+ * `float`, `numeric`, `varchar`, `timestamp`, `datetime64[ns]`...). Gli
+ * operatori di un filtro dipendono dalla famiglia, non dal nome grezzo.
+ */
+export function columnTypeFamily(rawType) {
+  const t = normalizeColumnType(String(rawType || 'str'));
+  if (t.startsWith('geometry') || t.startsWith('geography')) return 'geometry';
+  if (t === 'bool' || /^bool/.test(t)) return 'bool';
+  if (/date|time/.test(t)) return 'date';
+  if (/^(u?int\d*|integer|bigint|smallint|tinyint|serial\d*|bigserial|smallserial)$/.test(t)) return 'int';
+  if (/^(real|float|double|numeric|decimal|money|number)/.test(t)) return 'real';
+  return 'str';
+}
+
+/**
  * Mappa il tipo dell'API ai tipi standard del sistema
  * Usato principalmente in ApiEnrichNode
  * 
@@ -171,8 +187,8 @@ export function getColumnSRID(type) {
   
   const parts = typeStr.split(':');
   if (parts.length >= 3) {
-    const srid = parseInt(parts[2], 10);
-    return isNaN(srid) ? null : srid;
+    const srid = /^\d+$/.test(parts[2]) ? Number(parts[2]) : NaN;
+    return Number.isInteger(srid) && srid > 0 ? srid : null;
   }
   
   return null;

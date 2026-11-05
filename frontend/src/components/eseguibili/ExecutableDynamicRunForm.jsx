@@ -14,7 +14,9 @@
  *     pulizia a fine esecuzione per l'esecutore (useEseguibileRun).
  *
  * L'analisi di un file scrive solo se quel file e' ancora quello scelto
- * (id di richiesta: mai l'analisi di A sul file B).
+ * (id di richiesta: mai l'analisi di A sul file B). Fase 5 T5 (R8.10):
+ * l'analisi parte da sola alla scelta del file (prima era un passo manuale
+ * per ogni file); «Rianalizza» resta per ripeterla dopo un errore.
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { analyzeEseguibileUpload, preflightEseguibile, runEseguibile } from '../../api';
@@ -24,9 +26,9 @@ import BeforeRunModal from '../editor/BeforeRunModal';
 import ExecutionModal from '../modals/ExecutionModal';
 import { executionResult } from '../../hooks/useExecution';
 import { useEseguibileRun } from './useEseguibileRun';
+import { initialOutputFormat, outputFormatOptions } from '../../constants/outputFormats';
 import './EseguibileExecuteWizard.css';
 
-const OUTPUT_FORMATS = ['xlsx', 'csv', 'json', 'geojson', 'gpkg', 'shp'];
 
 /** Definizioni del manifest nel formato della finestra «Prima di avviare». */
 export const scalarDefinitions = (manifest) => [...(manifest?.inputs || [])]
@@ -73,10 +75,9 @@ function FileInputs({ definitions, files, setFiles, eseguibileId }) {
 
   const selectFiles = (definition, fileList) => {
     const selected = Array.from(fileList || []);
-    setFiles(current => ({
-      ...current,
-      [definition.key]: selected.map(file => ({ id: `f${++selectionSeq.current}`, file, analysis: null, mapping: {} })),
-    }));
+    const items = selected.map(file => ({ id: `f${++selectionSeq.current}`, file, analysis: null, mapping: {} }));
+    setFiles(current => ({ ...current, [definition.key]: items }));
+    items.forEach(item => { analyzeFile(definition, item); });
   };
 
   const updateItem = (key, itemId, patch) => setFiles(current => ({
@@ -90,7 +91,7 @@ function FileInputs({ definitions, files, setFiles, eseguibileId }) {
       const result = await analyzeEseguibileUpload(eseguibileId, item.file, definition.key);
       // Scrive solo sull'elemento analizzato: se nel frattempo e' stato
       // scelto un altro file, quell'elemento non c'e' piu' e non cambia niente.
-      updateItem(definition.key, item.id, { analysis: result, mapping: { ...(result.auto_mapping || {}) } });
+      updateItem(definition.key, item.id, { analysis: result, mapping: { ...(result?.auto_mapping || {}) } });
       setAnalysis(a => ({ ...a, [item.id]: { busy: false, error: null } }));
     } catch (exc) {
       setAnalysis(a => ({ ...a, [item.id]: { busy: false, error: requestErrorMessage(exc) } }));
@@ -191,7 +192,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
 
   const [files, setFiles] = useState({});
   const [outputFormat, setOutputFormat] = useState(
-    fileBased ? eseguibile.inferred_output_extension : eseguibile.default_output_format || 'xlsx',
+    fileBased ? eseguibile.inferred_output_extension : initialOutputFormat(eseguibile.default_output_format),
   );
   const [outputName, setOutputName] = useState(eseguibile.default_output_name || '');
   const [launched, setLaunched] = useState(false);
@@ -259,7 +260,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
             <div className="esw-run__fixed-format">.{outputFormat}</div>
           ) : (
             <select id="esw-output-format" className="before-run__field" value={outputFormat} onChange={event => setOutputFormat(event.target.value)}>
-              {OUTPUT_FORMATS.map(format => <option key={format} value={format}>{format.toUpperCase()}</option>)}
+              {outputFormatOptions(outputFormat).map(f => <option key={f.value} value={f.value} disabled={f.disabled}>{f.label}</option>)}
             </select>
           )}
         </div>

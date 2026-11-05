@@ -208,7 +208,7 @@ export default function JoinEdgePanel({ edge, sourceNode, targetNode, disabled =
               <label className="ppanel__label" htmlFor={`${edge.id}-dist`}>Distanza (unità del sistema di riferimento)</label>
               <input id={`${edge.id}-dist`} type="number" min="0" step="1" className="ppanel__input" disabled={disabled}
                 value={draft.spatial_distance ?? ''}
-                onChange={e => set({ spatial_distance: e.target.value === '' ? '' : Number(e.target.value) })} />
+                onChange={e => set({ spatial_distance: e.target.value })} />
             </div>
           )}
           <div className="ppanel__field">
@@ -222,6 +222,14 @@ export default function JoinEdgePanel({ edge, sourceNode, targetNode, disabled =
             </div>
           </div>
         </>
+      )}
+
+      {draft.mode === 'spatial' && (draft.on_filters || []).some(f => f.column) && (
+        <div className="ppanel__field">
+          <button type="button" className="ppanel__btn" disabled={disabled} onClick={() => set({ on_filters: [] })}>
+            Rimuovi i filtri ON
+          </button>
+        </div>
       )}
 
       {problems.length > 0 && (

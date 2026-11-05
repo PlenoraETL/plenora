@@ -8,6 +8,18 @@
  */
 import React, { useState } from 'react';
 import { requestErrorMessage } from '../../../utils/errorMessages';
+import FieldInput from '../../common/FieldInput';
+import { integer } from '../../../utils/fieldCodecs';
+
+// Numeri dal campo unico (FieldInput + utils/fieldCodecs, R8.4): un testo
+// vuoto o fuori limite e' l'errore del campo e blocca Avanti, mai il minimo
+// rimesso in silenzio.
+const OPTION_CODECS = {
+  rate_limit: integer({ min: 1, max: 100 }),
+  timeout: integer({ min: 5, max: 300 }),
+  retry_max: integer({ min: 0, max: 10 }),
+};
+const WORKERS = integer({ min: 1, max: 16 });
 
 export default function Step1BasicInfo({ formData, setFormData, onImportCurl }) {
   const [curlText, setCurlText] = useState('');
@@ -81,10 +93,11 @@ export default function Step1BasicInfo({ formData, setFormData, onImportCurl }) 
       <details className="acm__details">
         <summary>⚙️ Opzioni avanzate</summary>
         <div className="acm__form-row acm__form-row--gap-md">
-          {[['Rate Limit (req/s)','rate_limit',1,100],['Timeout (sec)','timeout',5,300],['Max Retry','retry_max',0,10]].map(([label,key,min,max])=>(
+          {[['Rate Limit (req/s)','rate_limit'],['Timeout (sec)','timeout'],['Max Retry','retry_max']].map(([label,key])=>(
             <div key={key} className="acm__field-group">
               <div className="acm__label">{label}</div>
-              <input className="acm__input" type="number" min={min} max={max} value={formData.options[key]} onChange={e=>setFormData({...formData,options:{...formData.options,[key]:parseInt(e.target.value)||min}})}/>
+              <FieldInput className="acm__input" aria-label={label} codec={OPTION_CODECS[key]} value={formData.options[key]}
+                onCommit={v=>setFormData(f=>({...f,options:{...f.options,[key]:v}}))}/>
             </div>
           ))}
         </div>
@@ -93,9 +106,9 @@ export default function Step1BasicInfo({ formData, setFormData, onImportCurl }) 
           <label className="acm__label">🔀 Worker paralleli
             <span className="acm__hint-meta acm__hint-meta--strong">— richieste simultanée per riga</span>
           </label>
-          <input type="number" className="acm__input" min={1} max={16}
-            value={formData.options?.parallel_workers||1}
-            onChange={e=>setFormData(f=>({...f,options:{...f.options,parallel_workers:Math.max(1,Math.min(16,parseInt(e.target.value)||1))}}))}/>
+          <FieldInput className="acm__input" aria-label="Worker paralleli" codec={WORKERS}
+            value={formData.options?.parallel_workers ?? 1}
+            onCommit={v=>setFormData(f=>({...f,options:{...f.options,parallel_workers:v}}))}/>
           <div className="acm__field-hint">1 = sequenziale · 2-4 consigliato · max 16. Rispetta sempre il Rate Limit.</div>
         </div>
       )}

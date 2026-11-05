@@ -160,7 +160,8 @@ const PreviewTable = ({
             <label>Righe:</label>
             <select
               value={selectedLimit}
-              onChange={e => onLimitChange(Number(e.target.value))}
+              // Il valore e' una delle opzioni (numeri), non testo libero.
+              onChange={e => onLimitChange(limitOptions.find(opt => String(opt) === e.target.value) ?? selectedLimit)}
               className="preview-modal__limit-select"
             >
               {limitOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}

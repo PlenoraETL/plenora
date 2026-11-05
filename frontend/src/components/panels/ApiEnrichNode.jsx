@@ -29,6 +29,11 @@ import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import NodeHandle from '../canvas/NodeHandle';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import { term } from '../../utils/glossary';
+import FieldInput from '../common/FieldInput';
+import { integer } from '../../utils/fieldCodecs';
+
+// Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
+const MAX_ERRORS = integer({ min: 0 });
 
 /**
  * ApiEnrichNode - Nodo per arricchire dati chiamando API esterne
@@ -589,13 +594,14 @@ const handleExecParamChange = (key, value) => {
                 {data.continue_on_error !== false && (
                   <div className="api-enrich-node__adv-row">
                     <span className="api-enrich-node__adv-key" title="Ferma l'esecuzione se il numero di errori supera questa soglia (0 = mai)">Max errori tollerati</span>
-                    <input
-                      type="number"
+                    {/* N12: campo unico, svuotato non torna "0" in silenzio. */}
+                    <FieldInput
                       className="api-enrich-node__adv-input"
-                      value={data.max_errors || 0}
-                      min={0}
+                      codec={MAX_ERRORS}
+                      value={data.max_errors ?? 0}
                       placeholder="0 = illimitato"
-                      onChange={e => useCanvasStore.getState().updateNodeData(id, { max_errors: parseInt(e.target.value) || 0, _lastUpdate: Date.now() })}
+                      aria-label="Max errori tollerati"
+                      onCommit={v => useCanvasStore.getState().updateNodeData(id, { max_errors: v, _lastUpdate: Date.now() })}
                     />
                   </div>
                 )}

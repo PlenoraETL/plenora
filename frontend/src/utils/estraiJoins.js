@@ -218,6 +218,25 @@ export function joinProblems(draft, sourceNode, targetNode) {
       problems.push({ code: 'missing', field: ref.field.id, index: ref.index, message: `${ref.field.label}${where}: «${ref.value}» non trovata. Scegline un'altra.` });
     }
   }
+  // Fase 5 T5 (R8.17): niente si scarta in silenzio. Un filtro ON a meta'
+  // (valore senza colonna, o colonna senza il valore che l'operatore chiede)
+  // e i filtri ON di un join spaziale (che non li usa) sono problemi che
+  // bloccano la scrittura con il loro messaggio.
+  const filters = draft.on_filters || [];
+  const usedFilters = filters.filter(f => f.column);
+  if (draft.mode === 'spatial' && usedFilters.length > 0) {
+    problems.push({ code: 'invalid', field: 'on_filters', message: `Il ${term('join').name} spaziale non usa i filtri ON (${usedFilters.length}): rimuovili per continuare.` });
+  }
+  if (draft.mode !== 'spatial') {
+    filters.forEach((f, i) => {
+      const hasValue = String(f.value ?? '').trim() !== '';
+      if (!f.column && hasValue) {
+        problems.push({ code: 'invalid', message: `Filtro ON ${i + 1}: scegli la colonna o rimuovilo.` });
+      } else if (f.column && needsValue(f.operator) && !hasValue) {
+        problems.push({ code: 'invalid', message: `Filtro ON ${i + 1}: scrivi il valore o rimuovilo.` });
+      }
+    });
+  }
   if (draft.mode === 'spatial') {
     if (!draft.source_geom_column || !draft.target_geom_column) {
       problems.unshift({ code: 'incomplete', message: 'Scegli le due colonne geometriche.' });

@@ -214,7 +214,13 @@ export default function LoginPage() {
                 type="text"
                 placeholder="nome.utente"
                 value={username}
-                onChange={e => setUsername(e.target.value)}
+                onChange={e => {
+                  // R8.22: il codice MFA e' di QUESTO utente: cambiando
+                  // username si azzera (mai il codice di A inviato per B).
+                  const next = e.target.value;
+                  if (next.trim() !== username.trim()) { setNeedsMfa(false); setMfaCode(''); }
+                  setUsername(next);
+                }}
                 autoComplete="username"
                 autoFocus
                 disabled={loading}

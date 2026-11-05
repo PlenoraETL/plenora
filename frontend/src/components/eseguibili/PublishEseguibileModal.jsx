@@ -6,6 +6,7 @@
  */
 
 import React, { useState } from 'react';
+import { DEFAULT_OUTPUT_FORMAT, outputFormatOptions } from '../../constants/outputFormats';
 import { createEseguibile } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
@@ -19,7 +20,7 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
   const toast = useToast();
   const [name, setName] = useState(project.name || '');
   const [description, setDescription] = useState('');
-  const [outputFormat, setOutputFormat] = useState('xlsx');
+  const [outputFormat, setOutputFormat] = useState(DEFAULT_OUTPUT_FORMAT);
   const [outputName, setOutputName] = useState('');
   const [icon, setIcon] = useState('▶');
   const [submitting, setSubmitting] = useState(false);
@@ -103,12 +104,10 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
             <div className="pem-field">
               <label>Formato output di default</label>
               <select value={outputFormat} onChange={(e) => setOutputFormat(e.target.value)}>
-                <option value="xlsx">Excel (.xlsx)</option>
-                <option value="csv">CSV (.csv)</option>
-                <option value="json">JSON (.json)</option>
-                <option value="geojson">GeoJSON (.geojson)</option>
-                <option value="zip">ZIP (.zip)</option>
-                <option value="pdf">PDF (.pdf)</option>
+                {/* Catalogo unico dei formati (constants/outputFormats, R8.11). */}
+                {outputFormatOptions(outputFormat).map(f => (
+                  <option key={f.value} value={f.value} disabled={f.disabled}>{f.label}</option>
+                ))}
               </select>
             </div>
             <div className="pem-field">
