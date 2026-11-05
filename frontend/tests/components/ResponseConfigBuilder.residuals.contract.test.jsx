@@ -41,7 +41,8 @@ describe('ResponseConfigBuilder — residuals', () => {
       />,
     );
 
-    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    // P11 (Fase 5 T7): il montaggio non riscrive la config.
+    expect(onChange).not.toHaveBeenCalled();
     const initial = onChange.mock.calls.length;
 
     await user.click(
@@ -69,7 +70,8 @@ describe('ResponseConfigBuilder — residuals', () => {
       />,
     );
 
-    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    // P11 (Fase 5 T7): il montaggio non riscrive la config.
+    expect(onChange).not.toHaveBeenCalled();
     const initial = onChange.mock.calls.length;
 
     const rootInput = screen.getByPlaceholderText(/data, results.items/i);
@@ -145,7 +147,8 @@ describe('ResponseConfigBuilder — residuals', () => {
       screen.getByRole('button', { name: /Trasformazioni/i }),
     );
 
-    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    // P11 (Fase 5 T7): il montaggio non riscrive la config.
+    expect(onChange).not.toHaveBeenCalled();
     const initial = onChange.mock.calls.length;
 
     // Trova il select operation: e' il combobox che ha 'round' come option.

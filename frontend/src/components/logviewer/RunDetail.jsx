@@ -8,7 +8,8 @@ import React, { useState } from 'react';
 import { getLogRun } from '../../api/logRuns';
 import { useResource } from '../../hooks/useResource';
 import { ResourceError } from '../common/ListState';
-import { fmtDuration, fmtRows } from '../../utils/logViewerHelpers.jsx';
+import { formatDuration, formatNumber } from '../../utils/format';
+import { formatLogTime } from '../../utils/logViewerHelpers.jsx';
 
 const LEVEL_CONFIG = {
   INFO:    { cls: 'lv__badge--info',  label: 'INFO' },
@@ -75,8 +76,8 @@ export default function RunDetail({ runId, live = false }) {
                 <div className="lv__run-step-module" style={{ color, background: `${color}18`, borderColor: `${color}30` }}>
                   {s.module}
                 </div>
-                <div className="lv__run-step-rows">{fmtRows(s.rows_out)} righe</div>
-                <div className="lv__run-step-dur">{fmtDuration(s.duration_ms)}</div>
+                <div className="lv__run-step-rows">{formatNumber(s.rows_out)} righe</div>
+                <div className="lv__run-step-dur">{formatDuration(s.duration_ms)}</div>
                 {s.error && <div className="lv__run-step-err">{s.error}</div>}
               </div>
             );
@@ -104,7 +105,7 @@ export default function RunDetail({ runId, live = false }) {
                   const modClr = MODULE_COLORS[l.module] || '#6B7280';
                   return (
                     <tr key={i} className={`lv__row lv__row--${(l.level || '').toLowerCase()}`}>
-                      <td className="lv__td lv__td--time lv__td--time-sm">{(l.ts || '').slice(11, 19)}</td>
+                      <td className="lv__td lv__td--time lv__td--time-sm">{formatLogTime(l.ts)}</td>
                       <td className="lv__td">
                         <span className={`lv__badge lv__badge--sm ${lvCfg.cls || ''}`}>{l.level}</span>
                       </td>

@@ -66,8 +66,8 @@ const DELETED_PREFIX = 'plenora:deleted:';
 const TAB_ID_KEY = 'plenora:tab-id';
 
 export const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
-export const HEARTBEAT_MS = 10 * 1000;
-export const TAB_ALIVE_MS = 3 * HEARTBEAT_MS;
+const HEARTBEAT_MS = 10 * 1000;
+const TAB_ALIVE_MS = 3 * HEARTBEAT_MS;
 // Separatore delle copie orfane: <scheda>~<savedAt> non e' mai una scheda viva.
 const ORPHAN_SEP = '~';
 
@@ -107,7 +107,7 @@ const newTabId = () => {
   return `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 };
 
-export const isTabAlive = (tabId, now = Date.now()) => {
+const isTabAlive = (tabId, now = Date.now()) => {
   const ls = storage();
   if (!ls || !tabId || String(tabId).includes(ORPHAN_SEP)) return false;
   const at = Number(ls.getItem(`${TAB_PREFIX}${tabId}`));
@@ -119,7 +119,7 @@ export const touchTab = (tabId) => {
   if (ls && tabId) { try { ls.setItem(`${TAB_PREFIX}${tabId}`, String(Date.now())); } catch { /* pieno */ } }
 };
 
-export const dropTab = (tabId) => { const ls = storage(); if (ls && tabId) remove(ls, `${TAB_PREFIX}${tabId}`); };
+const dropTab = (tabId) => { const ls = storage(); if (ls && tabId) remove(ls, `${TAB_PREFIX}${tabId}`); };
 
 let pageTabId = null;
 /**

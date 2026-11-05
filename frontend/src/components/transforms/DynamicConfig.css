@@ -11,7 +11,7 @@
 
 .dynamic-config--error {
   padding: 12px;
-  background: #fff3cd;
+  background: var(--plen-warn-bg);
   border-radius: 4px;
   display: flex;
   align-items: center;

@@ -1,0 +1,33 @@
+/* EmptyState — stato vuoto unico (Fase 5 T7, G2). Solo token --plen-*. */
+.plen-empty {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 56px 24px;
+  text-align: center;
+  color: var(--plen-text-sub);
+}
+.plen-empty__icon { font-size: 36px; line-height: 1; opacity: 0.8; }
+.plen-empty__body { display: flex; flex-direction: column; gap: 6px; max-width: 460px; }
+.plen-empty__title { font-size: 15px; font-weight: 600; color: var(--plen-text); }
+.plen-empty__text { font-size: 13px; line-height: 1.5; }
+.plen-empty__action { margin-top: 6px; }
+
+.plen-empty--compact {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  text-align: left;
+  border: 1px dashed var(--plen-border-hi);
+  border-radius: 10px;
+}
+.plen-empty--compact .plen-empty__icon { font-size: 18px; }
+.plen-empty--compact .plen-empty__body { flex: 1; max-width: none; gap: 2px; }
+.plen-empty--compact .plen-empty__title { font-size: 13px; }
+.plen-empty--compact .plen-empty__text { font-size: 12px; }
+.plen-empty--compact .plen-empty__action { margin-top: 0; }

@@ -748,6 +748,9 @@
 
 /* Colonna configurata non piu disponibile a monte (Fase 5, T6, R3.17) */
 .result-node__groupby-tag--missing {
-  border-color: var(--plen-warning, #f59e0b);
-  color: var(--plen-warning, #f59e0b);
+  border-color: var(--plen-warn);
+  color: var(--plen-warn);
 }
+
+/* P27 (Fase 5 T7): anteprima calcolata prima di una modifica del canvas. */
+.result-node__preview-inline-stale { font-size: 11px; color: var(--plen-warn); }

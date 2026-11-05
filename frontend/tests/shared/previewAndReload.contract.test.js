@@ -1,15 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
-import { formatNumber, formatPreviewValue, PREVIEW_ROW_LIMIT } from '../../src/utils/previewFormat';
+import { formatCellNumber, formatPreviewValue, PREVIEW_ROW_LIMIT } from '../../src/utils/previewFormat';
 import { installChunkReload } from '../../src/utils/chunkReload';
 
 /** Contract: formato delle anteprime e ripresa dopo un deploy. */
 describe('preview format', () => {
   it('rounds binary decimals, leaves integers and text alone', () => {
-    expect(formatNumber(58.333333333336)).toBe('58,3333');
-    expect(formatNumber(2026)).toBe('2026');
-    expect(formatNumber(1234567)).toBe('1234567');
+    expect(formatCellNumber(58.333333333336)).toBe('58,3333');
+    expect(formatCellNumber(2026)).toBe('2026');
+    expect(formatCellNumber(1234567)).toBe('1234567');
     expect(formatPreviewValue('092_01283')).toBe('092_01283');
     expect(formatPreviewValue(null)).toBe('—');
     expect(formatPreviewValue({ a: 1 })).toBe('{"a":1}');

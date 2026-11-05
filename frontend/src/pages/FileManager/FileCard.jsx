@@ -3,7 +3,8 @@
  */
 
 import React from 'react';
-import { getFormatConfig, formatFileSize, SPATIAL_FORMATS } from './helpers';
+import { getFormatConfig, SPATIAL_FORMATS } from './helpers';
+import { formatBytes as formatFileSize, formatNumber } from '../../utils/format';
 
 // onDelete / onShare arrivano solo se permessi (can.editFile, can.shareResources).
 function FileCard({ file, onPreview, onDelete, onShare }) {
@@ -24,7 +25,7 @@ function FileCard({ file, onPreview, onDelete, onShare }) {
       <div className="fm__card-body">
         {file.description && <div className="fm__card-desc">{file.description}</div>}
         <div className="fm__card-meta">
-          <div><div className="fm__meta-key">{SPATIAL_FORMATS.includes(file.format) ? 'Features' : 'Righe'}</div><div className="fm__meta-val">{file.row_count?.toLocaleString() || '—'}</div></div>
+          <div><div className="fm__meta-key">{SPATIAL_FORMATS.includes(file.format) ? 'Features' : 'Righe'}</div><div className="fm__meta-val">{formatNumber(file.row_count)}</div></div>
           <div><div className="fm__meta-key">Colonne</div><div className="fm__meta-val">{file.columns?.length || 0}</div></div>
           <div><div className="fm__meta-key">Dimensione</div><div className="fm__meta-val">{formatFileSize(file.file_size)}</div></div>
           {file.crs ? (

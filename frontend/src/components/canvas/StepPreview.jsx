@@ -20,18 +20,15 @@ import { saveBeforeServerRead } from '../../utils/serverActions';
 import { useInlinePreview } from '../../hooks/useInlinePreview';
 import { humanizeError } from '../../utils/errorMessages';
 import { PREVIEW_ROW_LIMIT, formatPreviewValue } from '../../utils/previewFormat';
-import { canvasContentKey } from '../../utils/canvasContentKey';
 import { nodeTitle } from './nodeDescriptors';
+import { usePreviewStale, currentCanvasContentKey } from '../../hooks/usePreviewStale';
 import './StepPreview.css';
 import { term } from '../../utils/glossary';
+import { formatNumber } from '../../utils/format';
 
 const HEIGHT_OPEN = 240;
 const HEIGHT_COLLAPSED = 38;
-const STALE_CHECK_MS = 200;
-const currentKey = () => {
-  const { nodes, edges } = useCanvasStore.getState();
-  return canvasContentKey(nodes, edges);
-};
+const currentKey = currentCanvasContentKey;
 
 const selectSelectedId = (s) => {
   let found = null;
@@ -50,7 +47,6 @@ export default function StepPreview({ projectId }) {
   const { status, data, error, run, clear } = useInlinePreview(projectId);
   const [shownFor, setShownFor] = useState(null);
   const [shownKey, setShownKey] = useState(null);
-  const [stale, setStale] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const ref = useRef(null);
@@ -61,19 +57,8 @@ export default function StepPreview({ projectId }) {
     if (shownFor && shownFor !== nodeId) { clear(); setShownFor(null); setShownKey(null); setSaveError(null); }
   }, [nodeId, shownFor, clear]);
 
-  // Dopo un calcolo: confronta l'impronta del canvas a ogni modifica
-  // (con un piccolo ritardo, per non serializzare a ogni frame di drag).
-  useEffect(() => {
-    setStale(false);
-    if (!shownKey) return undefined;
-    let timer = null;
-    const unsubscribe = useCanvasStore.subscribe((s, prev) => {
-      if (s.nodes === prev.nodes && s.edges === prev.edges) return;
-      clearTimeout(timer);
-      timer = setTimeout(() => setStale(currentKey() !== shownKey), STALE_CHECK_MS);
-    });
-    return () => { clearTimeout(timer); unsubscribe(); };
-  }, [shownKey]);
+  // Dopo un calcolo: regola unica dell'anteprima obsoleta (hooks/usePreviewStale).
+  const stale = usePreviewStale(shownKey);
 
   useLayoutEffect(() => {
     const host = ref.current?.parentElement;
@@ -112,7 +97,7 @@ export default function StepPreview({ projectId }) {
         <strong className="step-preview__title">Dati dopo «{title}»</strong>
         {status === 'success' && data && (
           <span className="step-preview__meta">
-            {columns.length} colonne · {Number(data.total_count ?? rows.length).toLocaleString('it-IT')} righe
+            {columns.length} colonne · {formatNumber(data.total_count ?? rows.length)} righe
             {data.truncated || data.approximate ? ' (campione)' : ''}
           </span>
         )}

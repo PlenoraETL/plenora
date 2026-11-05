@@ -101,7 +101,9 @@ describe('AdminObjectStoragePage delete contract', () => {
     render(<AdminObjectStoragePage />);
 
     await screen.findByText('Project 1');
-    await user.click(screen.getByRole('button', { name: 'Elimina tutte le preview' }));
+    // S7/G3: l'azione distruttiva sta nel menu «⋯», non accanto ad «Aggiorna».
+    await user.click(screen.getByRole('button', { name: "Altre azioni dell'object storage" }));
+    await user.click(screen.getByRole('menuitem', { name: 'Elimina tutte le preview' }));
 
     expect(deleteAllStoragePreviewsMock).not.toHaveBeenCalled();
     const confirmationButtons = screen.getAllByRole(

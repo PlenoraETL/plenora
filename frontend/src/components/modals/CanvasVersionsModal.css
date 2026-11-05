@@ -21,7 +21,7 @@
   font: inherit;
   font-size: 13px;
 }
-.cv-versions__label-input:focus { outline: none; border-color: var(--plen-accent, #4b8bff); }
+.cv-versions__label-input:focus { outline: none; border-color: var(--plen-blue); }
 
 .cv-versions__empty {
   color: var(--plen-text-dim, #8a93a6);
@@ -53,7 +53,7 @@
   font-size: 12px;
   cursor: pointer;
 }
-.cv-versions__restore:hover { border-color: var(--plen-accent, #4b8bff); }
+.cv-versions__restore:hover { border-color: var(--plen-blue); }
 .cv-versions__restore--confirm {
   background: #f5a623;
   border-color: #f5a623;

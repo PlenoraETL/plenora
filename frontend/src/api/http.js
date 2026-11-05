@@ -60,7 +60,7 @@ function sentBearerToken(config) {
 let closingToken = null;
 // Il token in chiusura non sopravvive alla sessione (utils/session).
 registerSessionReset('http401', () => { closingToken = null; });
-export function handleUnauthorized(config) {
+function handleUnauthorized(config) {
   if (AUTH_CALL_WITHOUT_SESSION.test(config?.url || '')) return false;
   const sent = sentBearerToken(config);
   if (!sent || sent !== sessionStorage.getItem(TOKEN_KEY) || sent === closingToken) return false;

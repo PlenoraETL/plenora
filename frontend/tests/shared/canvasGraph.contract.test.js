@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
-  analyzeCanvas, branchSteps, danglingNodeIds, nodeRole, reachingOutput, stepLanes, structureKey,
+  analyzeCanvas, branchSteps, nodeRole, structureKey,
 } from '../../src/utils/canvasGraph';
+
+// Fase 5 T7: gli involucri reachingOutput/danglingNodeIds/stepLanes erano
+// usati solo qui; l'app legge analyzeCanvas, e cosi' il test.
+const reachingOutput = (ns, es) => analyzeCanvas(ns, es).reaching;
+const danglingNodeIds = (ns, es) => analyzeCanvas(ns, es).dangling;
+const stepLanes = (ns, es) => analyzeCanvas(ns, es).lanes.map(l => ({ ...l, steps: l.stepIds.map(id => ({ id })) }));
 
 /** Contract Fase 4 M6: ruoli, Output raggiunto, corsie della vista Passi, ramo da duplicare. */
 const n = (id, type = 'transform', data = {}) => ({ id, type, position: { x: 0, y: 0 }, data });

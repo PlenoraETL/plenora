@@ -8,23 +8,9 @@
   text-align: center;
   padding: 32px 20px;
 }
-
-.execution-modal__spinner {
-  font-size: 2.4rem;
-  display: block;
-  margin-bottom: 14px;
-  animation: em-spin 1.2s linear infinite;
-}
 @keyframes em-spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
-}
-
-.execution-modal__loading-text {
-  color: var(--plen-text-sub, #7D8BA8);
-  font-size: 13px;
-  font-family: var(--plen-font-body);
-  margin: 0;
 }
 
 /* ── Progress bar ───────────────────────────────────────────────── */

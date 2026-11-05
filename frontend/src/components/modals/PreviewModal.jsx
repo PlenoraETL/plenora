@@ -13,7 +13,8 @@ import 'leaflet/dist/leaflet.css';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PreviewTable from './PreviewTable';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
-import { formatNumber } from '../../utils/previewFormat';
+import { formatCellNumber } from '../../utils/previewFormat';
+import { formatNumber } from '../../utils/format';
 import './PreviewModal.css';
 
 const parseWKB = (hex) => {
@@ -207,26 +208,53 @@ const MapTab = memo(({ rows, columns, active }) => {
     sat:  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   };
 
-  // Colori per feature
+  // Colori per feature. P6 (Fase 5 T7): la scala della colonna (minimo e
+  // massimo, o indice delle categorie) si calcola UNA volta per colonna, non
+  // per ogni feature (prima O(n²)).
+  const scales = useRef(new Map());
+  if (scales.current.rows !== rows) scales.current = Object.assign(new Map(), { rows });
+  const scaleOf = (col) => {
+    if (!scales.current.has(col)) {
+      const type = columns.find(c => c.name === col)?.type;
+      if (type === 'int' || type === 'real' || type === 'float') {
+        let min = Infinity; let max = -Infinity;
+        for (const r of rows) { const v = r[col]; if (v != null) { if (v < min) min = v; if (v > max) max = v; } }
+        scales.current.set(col, { numeric: true, min, max });
+      } else {
+        const index = new Map();
+        for (const r of rows) if (!index.has(r[col])) index.set(r[col], index.size);
+        scales.current.set(col, { numeric: false, index });
+      }
+    }
+    return scales.current.get(col);
+  };
   const getColor = (feature, col) => {
     if (col === '__none__') return '#4B8BFF';
     const val = feature.properties[col];
-    const type = columns.find(c => c.name === col)?.type;
     if (!val && val !== 0) return '#3F4D68';
-    if (type === 'int' || type === 'real' || type === 'float') {
+    const sc = scaleOf(col);
+    if (sc.numeric) {
       // gradient blue → green
-      const allVals = rows.map(r => r[col]).filter(v => v != null);
-      const min = Math.min(...allVals);
-      const max = Math.max(...allVals);
-      const t = max === min ? 0.5 : (val - min) / (max - min);
+      const t = sc.max === sc.min ? 0.5 : (val - sc.min) / (sc.max - sc.min);
       const h = Math.round(210 - t * 120);
       return `hsl(${h}, 75%, 55%)`;
     }
     // categorical
-    const cats = [...new Set(rows.map(r => r[col]))];
-    const idx = cats.indexOf(val) % PROV_COLORS.length;
-    return PROV_COLORS[idx];
+    return PROV_COLORS[(sc.index.get(val) ?? 0) % PROV_COLORS.length];
   };
+  // Colorazione attuale per il mouseout (resetStyle tornava a quella iniziale).
+  const colorByRef = useRef(colorBy);
+  colorByRef.current = colorBy;
+  // Timer della mappa: si fermano chiudendo la finestra (P6).
+  const timers = useRef([]);
+  const later = (fn, ms) => { timers.current.push(setTimeout(fn, ms)); };
+  useEffect(() => () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    leafletMap.current?.remove();
+    leafletMap.current = null;
+    geoLayer.current = null;
+  }, []);
 
   const styleFeature = (feature) => ({
     fillColor: getColor(feature, colorBy),
@@ -241,7 +269,7 @@ const MapTab = memo(({ rows, columns, active }) => {
 
     if (leafletMap.current) {
       // Mappa già init: forza ridimensionamento (container era hidden)
-      setTimeout(() => {
+      later(() => {
         leafletMap.current.invalidateSize();
         if (geoLayer.current) {
           try {
@@ -254,15 +282,15 @@ const MapTab = memo(({ rows, columns, active }) => {
     }
 
     // Aspetta che il container abbia dimensioni reali prima di init
-    setTimeout(() => {
+    later(() => {
       if (!mapRef.current) return;
       const map = L.map(mapRef.current, { zoomControl: false, attributionControl: false });
       map.setView([44.5, 11.3], 6); // default Italy, verrà sovrascritto da fitBounds
       leafletMap.current = map;
       tileLayer.current = L.tileLayer(TILE_URLS.dark, { maxZoom: 19 }).addTo(map);
-      setTimeout(() => {
+      later(() => {
         map.invalidateSize();
-        buildGeoLayer(map, colorBy);
+        buildGeoLayer(map, colorByRef.current);
       }, 50);
     }, 80);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -335,7 +363,9 @@ const MapTab = memo(({ rows, columns, active }) => {
         layer.on('mouseover', function () {
           this.setStyle?.({ fillOpacity: 0.85, weight: 1.5, color: 'rgba(255,255,255,0.3)' });
         });
-        layer.on('mouseout', function () { geoLayer.current?.resetStyle?.(this); });
+        layer.on('mouseout', function () {
+          this.setStyle?.({ fillColor: getColor(feature, colorByRef.current), fillOpacity: 0.55, color: 'rgba(7,9,15,0.5)', weight: 0.8 });
+        });
       },
     }).addTo(map);
 
@@ -482,14 +512,14 @@ const StatsTab = memo(({ rows, columns }) => {
                 </>
               ) : isNum ? (
                 <>
-                  <div className="pm-stat-row"><span className="pm-stat-k">Min</span><span className="pm-stat-v">{s.min?.toLocaleString() ?? '—'}</span></div>
-                  <div className="pm-stat-row"><span className="pm-stat-k">Max</span><span className="pm-stat-v">{s.max?.toLocaleString() ?? '—'}</span></div>
-                  <div className="pm-stat-row"><span className="pm-stat-k">Media</span><span className="pm-stat-v">{s.avg != null ? Number(s.avg.toFixed(2)).toLocaleString() : '—'}</span></div>
+                  <div className="pm-stat-row"><span className="pm-stat-k">Min</span><span className="pm-stat-v">{formatNumber(s.min, { maxDecimals: 4 })}</span></div>
+                  <div className="pm-stat-row"><span className="pm-stat-k">Max</span><span className="pm-stat-v">{formatNumber(s.max, { maxDecimals: 4 })}</span></div>
+                  <div className="pm-stat-row"><span className="pm-stat-k">Media</span><span className="pm-stat-v">{formatNumber(s.avg)}</span></div>
                   <div className="pm-stat-row"><span className="pm-stat-k">Null</span><span className={`pm-stat-v ${s.nullCount === 0 ? 'ok' : 'bad'}`}>{s.nullCount}</span></div>
                 </>
               ) : (
                 <>
-                  <div className="pm-stat-row"><span className="pm-stat-k">Unici</span><span className="pm-stat-v">{s.uniq?.toLocaleString() ?? '—'}</span></div>
+                  <div className="pm-stat-row"><span className="pm-stat-k">Unici</span><span className="pm-stat-v">{formatNumber(s.uniq)}</span></div>
                   <div className="pm-stat-row"><span className="pm-stat-k">Min</span><span className="pm-stat-v">{s.min ?? '—'}</span></div>
                   <div className="pm-stat-row"><span className="pm-stat-k">Max</span><span className="pm-stat-v">{s.max ?? '—'}</span></div>
                   <div className="pm-stat-row"><span className="pm-stat-k">Null</span><span className={`pm-stat-v ${s.nullCount === 0 ? 'ok' : 'bad'}`}>{s.nullCount}</span></div>
@@ -622,22 +652,22 @@ const PreviewModal = memo(({
     if (type === 'date' || type === 'datetime')
       return <span className="preview-modal__date">{String(value)}</span>;
     if (type === 'int' || type === 'real')
-      return <span className="preview-modal__number">{formatNumber(value)}</span>;
+      return <span className="preview-modal__number">{formatCellNumber(value)}</span>;
     const str = String(value);
     return str.length > 100 ? <span title={str}>{str.substring(0, 97)}…</span> : str;
   };
 
   const subtitle = !loading && !error
     ? truncated
-      ? `${previewCount.toLocaleString()} / ${totalCount.toLocaleString()} righe • ${columns.length} col`
-      : `${rows.length.toLocaleString()} righe • ${columns.length} col`
+      ? `${formatNumber(previewCount)} / ${formatNumber(totalCount)} righe • ${columns.length} col`
+      : `${formatNumber(rows.length)} righe • ${columns.length} col`
     : null;
 
   const footer = (
     <>
       {truncated && (
         <span className="preview-modal__truncated-warning">
-          ⚠️ Anteprima limitata a {previewCount.toLocaleString()} righe
+          ⚠️ Anteprima limitata a {formatNumber(previewCount)} righe
         </span>
       )}
       <ModalButton variant="secondary" onClick={onClose}>Chiudi</ModalButton>
@@ -717,7 +747,7 @@ const PreviewModal = memo(({
             <div className="pm-tabs-spacer" />
 
             <span className="pm-rows-count">
-              {sortedRows.length.toLocaleString()} righe
+              {formatNumber(sortedRows.length)} righe
             </span>
           </div>
 <div className={`pm-tab-content${activeTab === 'table' ? ' active' : ''}`}>

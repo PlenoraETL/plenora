@@ -3,23 +3,13 @@
  * Route: /admin/runtime-config
  */
 import React, { useMemo, useState } from 'react';
-import AppSidebar from '../components/AppSidebar';
+import PageLayout from '../components/common/PageLayout';
 import { getRuntimeConfig } from '../api/adminRuntimeConfig';
 import { useResource } from '../hooks/useResource';
 import ListState from '../components/common/ListState';
 import '../styles/AdminRuntimeConfigPage.css';
+import { formatDateTime } from '../utils/format';
 
-function fmtDate(iso) {
-  if (!iso) return '-';
-  try {
-    return new Date(iso).toLocaleString('it-IT', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
-}
 
 function formatValue(value) {
   if (value == null || value === '') return '-';
@@ -110,20 +100,16 @@ export default function AdminRuntimeConfigPage() {
 
 
   return (
-    <div className="arc">
-      <AppSidebar />
-      <main className="arc__main">
-        <header className="arc__header">
-          <div>
-            <h1 className="arc__title">Configurazione Runtime</h1>
-            <div className="arc__subtitle">
-              Solo lettura · segreti redatti · API {data?.api_version || '-'}
-            </div>
-          </div>
-          <button className="arc__btn" type="button" onClick={load} disabled={loading}>
-            {loading ? 'Aggiornamento...' : 'Aggiorna'}
-          </button>
-        </header>
+    <PageLayout
+      className="arc"
+      title="Configurazione Runtime"
+      subtitle={<>Solo lettura · segreti redatti · API {data?.api_version || '-'}</>}
+      actions={(
+        <button className="arc__btn" type="button" onClick={load} disabled={loading}>
+          {loading ? 'Aggiornamento...' : 'Aggiorna'}
+        </button>
+      )}
+    >
 
         <section className="arc__overview">
           <div className="arc__card">
@@ -132,7 +118,7 @@ export default function AdminRuntimeConfigPage() {
           </div>
           <div className="arc__card">
             <div className="arc__card-label">Snapshot</div>
-            <div className="arc__card-value">{fmtDate(data?.generated_at)}</div>
+            <div className="arc__card-value">{formatDateTime(data?.generated_at, { seconds: true })}</div>
           </div>
           <div className="arc__card">
             <div className="arc__card-label">Backend</div>
@@ -214,7 +200,6 @@ export default function AdminRuntimeConfigPage() {
             />
           ))}
         </ListState>
-      </main>
-    </div>
+    </PageLayout>
   );
 }

@@ -56,10 +56,9 @@ describe('projects api contract', () => {
   it('downloadProjectOutput requests a blob and forwards the fallback filename', async () => {
     httpMock.get.mockResolvedValueOnce({ data: new Blob(['csv']) });
 
-    const { downloadProjectOutput, getDownloadUrl } = await import('../../src/api/projects');
+    const { downloadProjectOutput } = await import('../../src/api/projects');
     const result = await downloadProjectOutput('proj-42', 'export.csv');
 
-    expect(getDownloadUrl('proj-42')).toBe('/api/projects/proj-42/download');
     expect(httpMock.get).toHaveBeenCalledWith('/projects/proj-42/download', {
       responseType: 'blob',
     });

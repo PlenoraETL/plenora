@@ -5,7 +5,6 @@
  */
 import React, { useState } from 'react';
 import { useToast } from '../hooks/useToast';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   listDataSources, createDataSource, updateDataSource,
@@ -13,8 +12,8 @@ import {
 } from '../api/datasources';
 import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
-import AppSidebar from '../components/AppSidebar';
-import ThemeToggle from '../components/common/ThemeToggle';
+import PageLayout from '../components/common/PageLayout';
+import EmptyState from '../components/common/EmptyState';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { toastApiError } from '../utils/toastApiError';
 import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
@@ -23,10 +22,11 @@ import { can } from '../utils/permissions';
 import { useResource } from '../hooks/useResource';
 import { useBusy } from '../hooks/useBusy';
 import '../styles/DataSourceManager.css';
-import { goBack } from '../utils/navigation';
 import SchemaFields from '../components/common/SchemaFields';
 import { formErrors, formPayload, initialValues } from '../utils/formSchema';
 import { DS_FIELDS, DS_STATE_FIELDS, DEFAULT_PORTS } from '../utils/dataSourceForm';
+import { formatBytes as formatSize, formatDateTime as formatDate } from '../utils/format';
+import { pressable } from '../utils/pressable';
 const DS_TYPES = [
   { value:'local',      label:'Cartella locale',   icon:'📂', color:'#94A3B8', rgb:'148,163,184', desc:'Disco locale o percorso UNC' },
   { value:'ftp',        label:'FTP',               icon:'📁', color:'#60A5FA', rgb:'96,165,250',  desc:'File Transfer Protocol (FTPS)' },
@@ -36,18 +36,8 @@ const DS_TYPES = [
 const TYPE_INFO = Object.fromEntries(DS_TYPES.map(t => [t.value, t]));
 // Stato del modulo: il testo dei campi dello schema unico (utils/dataSourceForm).
 const emptyForm = (type = 'local') => ({ type, ...initialValues(DS_STATE_FIELDS) });
-const formatSize = (bytes) => {
-  if (!bytes) return '0 B';
-  const k = 1024, s = ['B','KB','MB','GB'], i = Math.floor(Math.log(bytes)/Math.log(k));
-  return `${Number((bytes/Math.pow(k,i)).toFixed(1))} ${s[i]}`;
-};
-const formatDate = (iso) => {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('it-IT', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-};
 export default function DataSourceManager() {
   const toast    = useToast();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const canvasRef = React.useRef(null);
   useHexCanvas(canvasRef);
@@ -155,7 +145,7 @@ export default function DataSourceManager() {
       if (cascade) {
         const dsName = confirmDelete?.name || id;
         toast.error(
-          `Impossibile eliminare "${dsName}": ${formatCascadeDependencies(cascade.dependencies)}. Rimuovili prima.`,
+          `Impossibile eliminare "${dsName}": ${formatCascadeDependencies(cascade)}. Rimuovili prima.`,
           10000
         );
         return;
@@ -173,22 +163,14 @@ export default function DataSourceManager() {
   const closeBrowser = () => { setBrowserDs(null); setBrowserPath(''); };
 
   return (
-    <div className="dsm">
-      {/* SIDEBAR */}
-      <AppSidebar counts={{ datasources: datasources.length }} />
-
-      {/* MAIN */}
-      <div className="dsm__main">
-        <header className="dsm__topbar">
-          <button type="button" className="dsm__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
-          <div className="dsm__page-title">Data Source</div>
-          <div className="dsm__topbar-right">
-            <ThemeToggle classPrefix="dsm" />
-            {canCreateDs && (
-              <button type="button" className="dsm__btn dsm__btn--primary" onClick={openNew}>＋ Nuovo Data Source</button>
-            )}
-          </div>
-        </header>
+    <PageLayout
+      className="dsm"
+      bare
+      title="Data Source"
+      actions={canCreateDs && (
+        <button type="button" className="dsm__btn dsm__btn--primary" onClick={openNew}>＋ Nuovo Data Source</button>
+      )}
+    >
 
         <div className="dsm__content">
           <canvas ref={canvasRef} className="dsm__hex-bg" />
@@ -200,14 +182,14 @@ export default function DataSourceManager() {
           {loading ? (
             <div className="dsm__loading"><div className="dsm__loading-icon">⬡</div>Caricamento Data Source...</div>
           ) : error && !resource.hasData ? null : datasources.length === 0 ? (
-            <div className="dsm__empty">
-              <div className="dsm__empty-icon">🗄️</div>
-              <div className="dsm__empty-title">Nessun Data Source configurato</div>
-              <div className="dsm__empty-text">Aggiungi un Data Source per collegare Plenora a SharePoint, FTP, SFTP o cartelle di rete.</div>
-              {canCreateDs && (
-                <button type="button" className="dsm__btn dsm__btn--primary dsm__btn--mt-lg" onClick={openNew}>＋ Nuovo Data Source</button>
+            <EmptyState
+              icon="🗄️"
+              title="Nessun Data Source configurato"
+              text="Aggiungi un Data Source per collegare Plenora a SharePoint, FTP, SFTP o cartelle di rete."
+              action={canCreateDs && (
+                <button type="button" className="dsm__btn dsm__btn--primary" onClick={openNew}>＋ Nuovo Data Source</button>
               )}
-            </div>
+            />
           ) : (
             <div className="dsm__grid">
               {datasources.map(ds => {
@@ -271,7 +253,6 @@ export default function DataSourceManager() {
             </div>
           )}
         </div>
-      </div>
 
       {/* MODAL CREA/MODIFICA */}
       {showModal && (
@@ -384,7 +365,7 @@ export default function DataSourceManager() {
                       {browserFiles.map(f => (
                         <tr key={f.path}
                           className={f.type==='folder'?'dsm__file-row--folder':''}
-                          onClick={f.type==='folder'?()=>browseFiles(browserDs.id,f.path):undefined}
+                          {...pressable(f.type==='folder'?()=>browseFiles(browserDs.id,f.path):undefined)}
                           style={f.type==='folder'?{cursor:'pointer'}:{}}>
                           <td className="dsm__file-name">
                             <span className="dsm__file-icon">{f.type==='folder'?'📁':f.type==='csv'?'📊':f.type==='xlsx'?'📗':f.type==='geojson'||f.type==='gpkg'?'🗺️':'📄'}</span>
@@ -456,6 +437,6 @@ export default function DataSourceManager() {
           </div>
         </div>
       )}
-    </div>
+    </PageLayout>
   );
 }

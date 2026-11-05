@@ -13,7 +13,7 @@ import { useResource } from './useResource';
 
 const listeners = new Set();
 
-export const REGISTRY_UNAVAILABLE = 'Il catalogo delle operazioni non è stato caricato.';
+const REGISTRY_UNAVAILABLE = 'Il catalogo delle operazioni non è stato caricato.';
 
 async function loadRegistry() {
   const registry = await fetchTransformRegistry();

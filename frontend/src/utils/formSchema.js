@@ -25,14 +25,14 @@ const resolve = (x, values, ctx) => (typeof x === 'function' ? x(values, ctx) : 
 const isEmpty = (v) => v === null || v === undefined || (typeof v === 'string' && v.trim() === '')
   || (Array.isArray(v) && v.length === 0);
 
-export const codecOf = (field) => field.codec || textCodec();
+const codecOf = (field) => field.codec || textCodec();
 
 /** Campi visibili con questi valori. */
 export const visibleFields = (fields, values, ctx = {}) =>
   fields.filter(f => resolve(f.visible ?? true, values, ctx) !== false);
 
 /** Valore convertito di un campo: `{ value, error }`. */
-export function fieldResult(field, values, ctx = {}) {
+function fieldResult(field, values, ctx = {}) {
   const raw = values[field.name];
   if (typeof raw === 'boolean') return { value: raw, error: null };
   const required = Boolean(resolve(field.required ?? false, values, ctx));

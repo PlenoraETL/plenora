@@ -75,7 +75,7 @@ function nameKind(expr, start, end, text) {
 }
 
 /** Token dell'espressione: { kind, start, end, text }. */
-export function expressionTokens(expression) {
+function expressionTokens(expression) {
   const tokens = [];
   if (typeof expression !== 'string') return tokens;
   const expr = expression;
@@ -136,10 +136,6 @@ export function expressionColumnRefs(expression) {
   return [...new Set(expressionTokens(expression).map(tokenRef).filter(r => r !== null))];
 }
 
-export function expressionHasToken(expression, token) {
-  if (!expression || !token || typeof expression !== 'string') return false;
-  return expressionTokens(expression).some(t => tokenRef(t) === token);
-}
 
 export function rewriteExpressionToken(expression, oldName, newName) {
   if (!expression || !oldName || !newName || oldName === newName) return expression;

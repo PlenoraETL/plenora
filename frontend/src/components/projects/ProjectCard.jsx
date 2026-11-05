@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import ActionMenu from '../common/ActionMenu';
 
 /**
  * Card di un singolo progetto (Estrai / Manipola / Arricchisci).
- * Click sulla card apre il progetto; bottoni interni gestiscono
- * delete e schedule. `meta` e' una lista di {key, val} renderizzata
- * come grid di info secondarie.
+ * Il nome e «Apri →» aprono il progetto (pulsanti veri, a11y-1: niente
+ * <div onClick>); rinomina, clona ed elimina stanno nel menu «⋯» (G3, DB1:
+ * l'eliminazione non è a vista accanto ad «Apri»). Campi vuoti nascosti
+ * (DB3: niente «Nessuna descrizione»). `meta` e' una lista di {key, val}.
  */
 function ProjectCard({
   project,
@@ -36,11 +38,6 @@ function ProjectCard({
   };
   const removeTag = (t) => onSetTags(tags.filter(x => x !== t));
 
-  const startRename = (e) => {
-    e.stopPropagation();
-    setTempName(project.name);
-    setEditing(true);
-  };
   const commitRename = () => {
     setEditing(false);
     const v = tempName.trim();
@@ -69,7 +66,7 @@ function ProjectCard({
     : '';
 
   return (
-    <div className="pl__card" onClick={onOpen}>
+    <div className="pl__card">
       <div className={`pl__card-accent ${accentClass}`} />
       <div className="pl__card-body">
         <div className="pl__card-header-row">
@@ -87,11 +84,11 @@ function ProjectCard({
               }}
             />
           ) : (
-            <div className="pl__card-name">{project.name}</div>
+            <button type="button" className="pl__card-name pl__card-open" onClick={onOpen} title={project.name}>{project.name}</button>
           )}
           <span className="pl__card-mod">{modLabel}</span>
         </div>
-        <div className="pl__card-desc">{project.description || 'Nessuna descrizione'}</div>
+        {project.description && <div className="pl__card-desc">{project.description}</div>}
         <div className="pl__card-meta">
           {meta.map(({ key, val }) => (
             <div key={key}>
@@ -143,24 +140,14 @@ function ProjectCard({
                 ⏰ <span className="pl__schedule-badge">{scheduleCount}</span>
               </button>
             )}
-            {onRename && (
-              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
-                onClick={startRename}
-                title="Rinomina progetto"
-              >✎</button>
-            )}
-            {onClone && (
-              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
-                onClick={e => { e.stopPropagation(); onClone(); }}
-                title="Clona progetto"
-              >⧉</button>
-            )}
-            {onDelete && (
-              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
-                onClick={e => { e.stopPropagation(); onDelete(); }}
-                title="Elimina progetto"
-              >🗑</button>
-            )}
+            <ActionMenu
+              label={`Azioni per ${project.name}`}
+              items={[
+                onRename && { label: '✎ Rinomina', onSelect: () => { setTempName(project.name); setEditing(true); } },
+                onClone && { label: '⧉ Clona', onSelect: onClone },
+                onDelete && { label: '🗑 Elimina', onSelect: onDelete, danger: true },
+              ]}
+            />
             <button type="button" className="pl__btn pl__btn--primary pl__btn--sm"
               onClick={e => { e.stopPropagation(); onOpen(); }}
             >Apri →</button>

@@ -209,13 +209,3 @@ export function isGeometryType(type) {
   return type.toLowerCase().startsWith('geometry');
 }
 
-/**
- * Deduplica array di colonne per nome
- * Mantiene l'ultima occorrenza (che potrebbe avere tipo più preciso)
- * 
- * @param {Array} columns - Array di colonne
- * @returns {Array} Array deduplicato
- */
-export function deduplicateColumns(columns) {
-  return [...new Map(columns.map(col => [col.name, col])).values()];
-}

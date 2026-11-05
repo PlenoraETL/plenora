@@ -11,7 +11,9 @@
  * unico delle modifiche non salvate (components/common/NavigationGuard).
  */
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { role } from '../../utils/permissions';
 import useDialog from '../../hooks/useDialog';
 import { isShortcutBlocked } from '../../utils/dialogStack';
 import './CommandPalette.css';
@@ -43,12 +45,21 @@ export default function CommandPalette() {
   const dialog = useDialog({ isOpen: open, onClose: close, labelledBy: false });
   const dialogIdRef = useRef(dialog.id);
   dialogIdRef.current = dialog.id;
+  // P28 (Fase 5 T7): niente palette senza sessione, sul login e nel kiosk
+  // dell'esecutore (/run): le sue destinazioni li' non esistono.
+  const { token, user } = useAuth();
+  const { pathname } = useLocation();
+  const enabled = Boolean(token) && !role.isEsecutore(user) && !/^\/(login|run)(\/|$)/.test(pathname);
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+  useEffect(() => { if (!enabled) setOpen(false); }, [enabled]);
 
   // Toggle globale Cmd/Ctrl+K: non sopra un'altra finestra (regola unica);
   // con la palette in cima la richiude.
   useEffect(() => {
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        if (!enabledRef.current) return;
         if (isShortcutBlocked(e, { ownDialogId: dialogIdRef.current })) return;
         e.preventDefault();
         setOpen((v) => !v);

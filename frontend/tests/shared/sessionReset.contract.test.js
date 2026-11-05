@@ -44,8 +44,9 @@ const MODULE_STATE = [
 // Stato di modulo che NON contiene dati dell'utente, col motivo.
 const NOT_USER_DATA = {
   'hooks/useTransformRegistry.js': 'insieme dei setter dei componenti montati (avviso quando il catalogo arriva): nessun dato dell utente, il catalogo vive in utils/transformRegistry che e registrato',
-  'api/openapiClient.js': 'schema OpenAPI pubblico del server, uguale per ogni utente',
   'components/canvas/compactNodeTypes.js': 'WeakMap con chiave i tipi di nodo: muore con gli oggetti',
+  'store/saveState.js': 'WeakMap delle firme con chiave gli array del canvas: muore con gli oggetti',
+  'utils/format.js': 'formattatori Intl per opzioni (locale fissa it-IT): nessun dato dell\'utente',
   'context/ToastContext.jsx': 'contatore degli id dei toast',
   'hooks/useTheme.js': 'tema chiaro/scuro: preferenza del dispositivo, non dell\'account',
   'utils/authBus.js': 'iscritti agli eventi di uscita, non dati',

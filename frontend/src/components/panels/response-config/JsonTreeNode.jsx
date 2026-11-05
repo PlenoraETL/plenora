@@ -22,7 +22,6 @@ function formatSampleValue(value) {
   return String(value);
 }
 
-export { formatSampleValue };
 
 export default function JsonTreeNode({
   node,

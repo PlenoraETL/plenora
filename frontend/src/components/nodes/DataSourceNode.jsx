@@ -22,6 +22,7 @@ import OptionSelect from '../common/OptionSelect';
 import FieldInput from '../common/FieldInput';
 import { integer } from '../../utils/fieldCodecs';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import { pressable } from '../../utils/pressable';
 
 // Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
 const FILE_OFFSET = integer({ min: 0 });
@@ -505,7 +506,7 @@ return (
               <div
                 key={f.path}
                 className={`dsn__browser-item ${f.type === 'folder' ? 'dsn__browser-item--folder' : ''}`}
-                onClick={() => handleSelectFile(f)}
+                {...pressable(() => handleSelectFile(f))}
               >
                 <span className="dsn__browser-icon">
                   {f.type === 'folder' ? '📁' :

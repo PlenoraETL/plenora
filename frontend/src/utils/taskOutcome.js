@@ -23,8 +23,8 @@
 import { taskFailureMessage } from './taskFailureMessage';
 
 export const TASK_PHASES = Object.freeze(['idle', 'starting', 'running', 'success', 'failure', 'revoked', 'permission_revoked', 'lost']);
-export const RUNNING_STATUSES = Object.freeze(['pending', 'started', 'progress', 'retry']);
-export const TERMINAL_PHASES = Object.freeze(['success', 'failure', 'revoked', 'permission_revoked', 'lost']);
+const RUNNING_STATUSES = Object.freeze(['pending', 'started', 'progress', 'retry']);
+const TERMINAL_PHASES = Object.freeze(['success', 'failure', 'revoked', 'permission_revoked', 'lost']);
 const BUSINESS_OK = new Set(['success', 'completed', 'partial_success']);
 
 /** Fase attiva: avvio in corso o task che gira. */

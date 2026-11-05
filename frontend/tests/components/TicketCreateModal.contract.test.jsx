@@ -262,8 +262,8 @@ describe('TicketCreateModal', () => {
     );
 
     // Severity options (4 livelli)
-    expect(screen.getByRole('option', { name: 'low' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'critical' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Bassa' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Critica' })).toBeInTheDocument();
     // Categorie con label IT
     expect(screen.getByRole('option', { name: 'Autenticazione' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Pipeline' })).toBeInTheDocument();
@@ -276,7 +276,7 @@ describe('TicketCreateModal', () => {
         onClose={() => {}} onCreated={() => {}}
       />,
     );
-    expect(screen.getByRole('option', { name: 'low' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Bassa' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Altro' })).toBeInTheDocument();
   });
 });

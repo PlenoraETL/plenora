@@ -19,35 +19,11 @@ import * as ct from '../../src/constants/canvasTypes';
 import { WRITE_MODES as DB_WRITE_MODES } from '../../src/components/nodes/carica/DbDestinationSection';
 
 describe('canvasTypes lockin', () => {
-  it('NODE_TYPES contiene esattamente i 14 valori del canvas', () => {
-    expect([...ct.NODE_TYPES].sort()).toEqual([
-      'api_enrich', 'carica', 'carica_arcgis', 'comment',
-      'datasource_node', 'feature_source', 'file_source',
-      'multi_join', 'project_input', 'project_source', 'result', 'source',
-      'staticValues', 'transform',
-    ]);
-  });
-
-  it('COLUMN_TYPES_BASE contiene i 6 tipi base', () => {
-    expect([...ct.COLUMN_TYPES_BASE].sort()).toEqual([
-      'bool', 'date', 'geometry', 'int', 'real', 'str',
-    ]);
-  });
 
   it('WRITE_MODES contiene i 6 modi canvas', () => {
     expect([...ct.WRITE_MODES].sort()).toEqual([
       'append', 'create', 'replace', 'truncate_insert', 'update', 'upsert',
     ]);
-  });
-
-  it('DEST_TYPES contiene i 3 canonici (db/arcgis/rest)', () => {
-    expect([...ct.DEST_TYPES].sort()).toEqual(['arcgis', 'db', 'rest']);
-  });
-
-  it('DEST_TYPES_CARICAN_UI subset 2-way del selettore CaricanNode', () => {
-    // `arcgis` non e' qui perche` ha il suo componente dedicato
-    // (CaricanArcGISNode + factory caricaArcgis in canvasSerializer.js).
-    expect([...ct.DEST_TYPES_CARICAN_UI].sort()).toEqual(['db', 'rest']);
   });
 
   it('TRANSACTION_MODES contiene 2 valori', () => {
@@ -68,12 +44,7 @@ describe('canvasTypes lockin', () => {
     expect([...ct.REST_BATCH_MODES].sort()).toEqual(['batch', 'per_record']);
   });
 
-  it('MULTI_JOIN_TYPES contiene 3 valori', () => {
-    expect([...ct.MULTI_JOIN_TYPES].sort()).toEqual(['inner', 'left', 'outer']);
-  });
-
   it('costanti sono frozen (immutabili a runtime)', () => {
-    expect(Object.isFrozen(ct.NODE_TYPES)).toBe(true);
     expect(Object.isFrozen(ct.WRITE_MODES)).toBe(true);
     expect(Object.isFrozen(ct.CONFLICT_POLICIES)).toBe(true);
     expect(Object.isFrozen(ct.REST_METHODS)).toBe(true);

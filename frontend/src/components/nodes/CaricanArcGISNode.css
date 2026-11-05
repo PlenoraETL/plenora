@@ -81,7 +81,7 @@
 
 .carica-arcgis-node__select,
 .carica-arcgis-node__input {
-  background: var(--plen-input-bg, #141825);
+  background: var(--plen-surface-2);
   border: 1px solid var(--cn-accent-bdr);
   border-radius: 5px;
   color: var(--plen-text, #DDE4F2);
@@ -167,7 +167,7 @@
 
 .carica-arcgis-node__mapping-select {
   flex: 1;
-  background: var(--plen-input-bg, #141825);
+  background: var(--plen-surface-2);
   border: 1px solid var(--cn-accent-bdr);
   border-radius: 4px;
   color: var(--plen-text, #DDE4F2);
@@ -182,7 +182,7 @@
 
 .carica-arcgis-node__mapping-input {
   flex: 1;
-  background: var(--plen-input-bg, #141825);
+  background: var(--plen-surface-2);
   border: 1px solid var(--cn-accent-bdr);
   border-radius: 4px;
   color: var(--plen-text, #DDE4F2);
@@ -259,31 +259,6 @@
 }
 
 /* ── Result ────────────────────────────────────────────────────── */
-.carica-arcgis-node__result {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 5px;
-  font-size: 11px;
-  align-items: center;
-}
-.carica-arcgis-node__result--success {
-  background: rgba(34,197,94,0.1);
-  color: #22c55e;
-}
-.carica-arcgis-node__result--error {
-  background: rgba(248,113,113,0.1);
-  color: #f87171;
-}
-.carica-arcgis-node__result-count {
-  font-weight: 600;
-}
-.carica-arcgis-node__result-url {
-  font-size: 10px;
-  text-decoration: underline;
-  cursor: pointer;
-}
 
 /* ── Auto info ─────────────────────────────────────────────────── */
 .carica-arcgis-node__auto-info {

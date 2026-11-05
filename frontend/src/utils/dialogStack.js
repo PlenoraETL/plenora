@@ -82,9 +82,8 @@ export function removeDialog(id) {
   }
 }
 
-export const isDialogOpen = () => stack.length > 0;
 
-export const topDialogId = () => (stack.length ? stack[stack.length - 1].id : null);
+const topDialogId = () => (stack.length ? stack[stack.length - 1].id : null);
 
 export const isTopDialog = (id) => topDialogId() === id;
 

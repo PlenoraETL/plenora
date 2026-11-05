@@ -1,5 +1,6 @@
 import React from 'react';
 import EseguibileCard from './EseguibileCard';
+import EmptyState from '../common/EmptyState';
 
 /**
  * Sezione "Eseguibili" della dashboard. Non riutilizza `ProjectSection`
@@ -14,6 +15,7 @@ function EseguibiliSection({
   onNew,
   onExecute,
   onDelete,
+  filtered = false,
 }) {
   return (
     <section id="pl-section-eseguibili" className="pl__section">
@@ -27,22 +29,22 @@ function EseguibiliSection({
             type="button"
             className="pl__btn pl__btn--ghost pl__btn--sm"
             onClick={onNew}
-            title="Pubblica un progetto Arricchisci come eseguibile"
+            title="Pubblica un progetto come eseguibile"
           >＋ Nuovo</button>
         )}
       </div>
 
       {items.length === 0 ? (
-        <div className="pl__empty">
-          <canvas className="pl__empty-hex" />
-          <div className="pl__empty-icon">🚀</div>
-          <div className="pl__empty-title">Nessun eseguibile pubblicato</div>
-          <div className="pl__empty-text">
-            {canCreate
-              ? 'Pubblica un progetto Arricchisci come eseguibile usando il pulsante 📢 sulla sua card o "+ Nuovo" qui sopra.'
+        <EmptyState
+          compact
+          icon="🚀"
+          title={filtered ? 'Nessun eseguibile con questa ricerca' : 'Nessun eseguibile pubblicato'}
+          text={filtered
+            ? 'Cambia o cancella la ricerca.'
+            : canCreate
+              ? 'Pubblica un progetto come eseguibile con «＋ Nuovo» qui sopra.'
               : 'Chiedi a un amministratore di pubblicare una catena come eseguibile.'}
-          </div>
-        </div>
+        />
       ) : (
         <div className="pl__cards-grid">
           {items.map(item => (

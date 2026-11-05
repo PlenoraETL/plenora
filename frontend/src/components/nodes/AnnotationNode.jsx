@@ -43,7 +43,8 @@ function AnnotationNode({ id, data, selected }) {
   const { canDelete } = useCanvasDeletion();
   const confirm = useConfirmOrDeny();
 
-  const [editingTitle, setEditingTitle] = useState(!title);
+  // P27 (Fase 5 T7): mai in modifica (e col focus) al caricamento; doppio clic sul titolo.
+  const [editingTitle, setEditingTitle] = useState(false);
   const [editingNote,  setEditingNote]  = useState(false);
   const [showColors,   setShowColors]   = useState(false);
 

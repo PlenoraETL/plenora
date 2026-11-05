@@ -23,7 +23,7 @@ import useCanvasStore from '../store/useCanvasStore';
 import { hasUnsavedChanges } from '../store/saveState';
 import { useConfirmOrDeny } from '../context/ConfirmContext';
 
-export const UNSAVED_MESSAGE = 'Hai modifiche non salvate. Vuoi davvero uscire?';
+const UNSAVED_MESSAGE = 'Hai modifiche non salvate. Vuoi davvero uscire?';
 
 /** Il dialog di OGNI uscita con modifiche non salvate. */
 export const LEAVE_DIALOG = {
@@ -42,7 +42,7 @@ let activeEditors = 0;
 export const isLeaveGuardActive = () => activeEditors > 0;
 
 /** Regola UNICA: c'e' qualcosa da perdere uscendo dall'editor? */
-export const hasSomethingToLose = () => (
+const hasSomethingToLose = () => (
   isLeaveGuardActive() && hasUnsavedChanges(useCanvasStore.getState())
 );
 

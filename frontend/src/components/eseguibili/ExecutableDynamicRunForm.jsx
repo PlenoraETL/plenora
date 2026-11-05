@@ -28,6 +28,7 @@ import { executionResult } from '../../hooks/useExecution';
 import { useEseguibileRun } from './useEseguibileRun';
 import { initialOutputFormat, outputFormatOptions } from '../../constants/outputFormats';
 import './EseguibileExecuteWizard.css';
+import { formatBytes, formatNumber } from '../../utils/format';
 
 
 /** Definizioni del manifest nel formato della finestra «Prima di avviare». */
@@ -135,7 +136,7 @@ function FileInputs({ definitions, files, setFiles, eseguibileId }) {
                 <span>▤</span>
                 <div>
                   <strong title={item.file?.name}>{item.file?.name}</strong>
-                  <small>{item.file ? `${Math.max(1, Math.round(item.file.size / 1024)).toLocaleString()} KB` : ''}</small>
+                  <small>{item.file ? formatBytes(item.file.size) : ''}</small>
                 </div>
               </div>
               <button
@@ -152,7 +153,7 @@ function FileInputs({ definitions, files, setFiles, eseguibileId }) {
               <div className="esw-run__analysis">
                 <div className="esw-run__analysis-summary">
                   <span className="esw-run__check">✓</span>
-                  <strong>{item.analysis.row_count.toLocaleString()} righe rilevate</strong>
+                  <strong>{formatNumber(item.analysis.row_count)} righe rilevate</strong>
                   <span>{item.analysis.detected_columns.length} colonne</span>
                 </div>
                 {(definition.expected_columns || []).length > 0 && (

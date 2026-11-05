@@ -285,5 +285,3 @@ export function numberPair() {
   };
 }
 
-/** Converte con un codec un valore gia' tipizzato o un testo (helper dei form). */
-export const parseWith = (codec, raw) => codec.parse(typeof raw === 'string' ? raw : codec.format(raw));

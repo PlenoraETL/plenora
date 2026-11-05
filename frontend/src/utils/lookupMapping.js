@@ -16,7 +16,7 @@ export const isPythonFloat = (v) => {
  * (shared/execution/lookup_mapping.lookup_value_text): null -> null,
  * booleano True/False, numero intero senza decimali, testo invariato.
  */
-export function lookupValueText(v) {
+function lookupValueText(v) {
   if (v === null || v === undefined) return null;
   if (typeof v === 'string') return v;
   if (typeof v === 'boolean') return v ? 'True' : 'False';

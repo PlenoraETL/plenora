@@ -5,7 +5,7 @@
  * - Admin: vede e gestisce utenti del proprio gruppo
  * - Superadmin: vede tutti gli utenti + gestisce i gruppi
  */
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { useResource } from '../hooks/useResource';
 import { ResourceError } from '../components/common/ListState';
 import { useNavigate } from 'react-router-dom';
@@ -15,8 +15,8 @@ import {
   listUsers, createUser, updateUser, deleteUser, resetPassword,
   listGroups, createGroup, deleteGroup, getGroupSummary,
 } from '../api/users';
-import ChangePasswordModal from '../components/ChangePasswordModal';
-import AppSidebar from '../components/AppSidebar';
+import PageLayout from '../components/common/PageLayout';
+import EmptyState from '../components/common/EmptyState';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
 import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
@@ -80,6 +80,7 @@ function UserAvatar({ username, role }) {
 }
 // MODAL — Crea/Modifica Utente
 function UserModal({ user, groups, currentUser, onClose, onSave }) {
+  const fid = useId();
   const isEdit = !!user;
   const [form, setForm] = useState({
     username:  user?.username  || '',
@@ -132,28 +133,29 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
         </>
       }
     >
+      <form className="um__form" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
           {error && <div className="um__error">{error}</div>}
           <div className="um__field">
-            <label>Username</label>
-            <input value={form.username} onChange={e => set('username', e.target.value)} placeholder="es. mario.rossi" disabled={isEdit} />
+            <label htmlFor={`${fid}-username`}>Username</label>
+            <input id={`${fid}-username`} value={form.username} onChange={e => set('username', e.target.value)} placeholder="es. mario.rossi" disabled={isEdit} />
           </div>
           {!isEdit && (
             <div className="um__field">
-              <label>Password</label>
-              <input type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder={`Almeno ${PASSWORD_MIN_LENGTH} caratteri`} />
+              <label htmlFor={`${fid}-password`}>Password</label>
+              <input id={`${fid}-password`} type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder={`Almeno ${PASSWORD_MIN_LENGTH} caratteri`} />
             </div>
           )}
           {isEdit && (
             <div className="um__field">
-              <label>Password</label>
-              <div className="um__field-hint um__field-hint--padded">
+              <label htmlFor={`${fid}-password-hint`}>Password</label>
+              <div id={`${fid}-password-hint`} className="um__field-hint um__field-hint--padded">
                 Per cambiare la password usa il pulsante <strong>🔑 Reimposta password</strong> nella lista utenti.
               </div>
             </div>
           )}
           <div className="um__field">
-            <label>Ruolo</label>
-            <select value={form.role} onChange={e => set('role', e.target.value)} disabled={!rules.role}>
+            <label htmlFor={`${fid}-role`}>Ruolo</label>
+            <select id={`${fid}-role`} value={form.role} onChange={e => set('role', e.target.value)} disabled={!rules.role}>
               {roleOptions.map(r => (
                 <option key={r.value} value={r.value} disabled={r.superOnly && !isSuperadmin}>{r.option}</option>
               ))}
@@ -181,26 +183,29 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
           </div>
           {isSuperadmin && (
             <div className="um__field">
-              <label>Gruppo</label>
-              <select value={form.group_id} onChange={e => set('group_id', e.target.value)} disabled={!rules.group_id}>
+              <label htmlFor={`${fid}-group`}>Gruppo</label>
+              <select id={`${fid}-group`} value={form.group_id} onChange={e => set('group_id', e.target.value)} disabled={!rules.group_id}>
                 {groups.map(g => <option key={g.group_id} value={g.group_id}>{g.name} ({g.group_id})</option>)}
               </select>
             </div>
           )}
           {isEdit && (
             <div className="um__field">
-              <label>Stato</label>
-              <select value={form.is_active ? 'true' : 'false'} onChange={e => set('is_active', e.target.value === 'true')}>
+              <label htmlFor={`${fid}-active`}>Stato</label>
+              <select id={`${fid}-active`} value={form.is_active ? 'true' : 'false'} onChange={e => set('is_active', e.target.value === 'true')}>
                 <option value="true">● Attivo</option>
                 <option value="false">● Disabilitato</option>
               </select>
             </div>
           )}
+        <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
+      </form>
     </ModalWrapper>
   );
 }
 // MODAL — Reset Password
 function ResetPasswordModal({ user, onClose, onSave }) {
+  const fid = useId();
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
@@ -232,17 +237,21 @@ function ResetPasswordModal({ user, onClose, onSave }) {
         </>
       }
     >
+      <form className="um__form" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
       {error && <div className="um__error">{error}</div>}
       <div className="um__field">
-        <label>Nuova password</label>
-        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder={`Almeno ${PASSWORD_MIN_LENGTH} caratteri`} autoFocus />
+        <label htmlFor={`${fid}-new-password`}>Nuova password</label>
+        <input id={`${fid}-new-password`} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder={`Almeno ${PASSWORD_MIN_LENGTH} caratteri`} autoFocus />
         <span className="um__field-hint">L'utente dovrà usare questa password al prossimo accesso.</span>
       </div>
+        <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
+      </form>
     </ModalWrapper>
   );
 }
 // MODAL — Crea Gruppo
 function GroupModal({ onClose, onSave }) {
+  const fid = useId();
   const [form, setForm] = useState({ group_id: '', name: '', description: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
@@ -275,20 +284,23 @@ function GroupModal({ onClose, onSave }) {
         </>
       }
     >
+      <form className="um__form" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
       {error && <div className="um__error">{error}</div>}
       <div className="um__field">
-        <label>ID gruppo</label>
-        <input value={form.group_id} onChange={e => set('group_id', e.target.value.toLowerCase())} placeholder="es. comune-milano" />
+        <label htmlFor={`${fid}-group-id`}>ID gruppo</label>
+        <input id={`${fid}-group-id`} value={form.group_id} onChange={e => set('group_id', e.target.value.toLowerCase())} placeholder="es. comune-milano" />
         <span className="um__field-hint">Identificatore unico — solo lettere minuscole, numeri, - e _</span>
       </div>
       <div className="um__field">
-        <label>Nome</label>
-        <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="es. Comune di Milano" />
+        <label htmlFor={`${fid}-name`}>Nome</label>
+        <input id={`${fid}-name`} value={form.name} onChange={e => set('name', e.target.value)} placeholder="es. Comune di Milano" />
       </div>
       <div className="um__field">
-        <label>Descrizione (opzionale)</label>
-        <input value={form.description} onChange={e => set('description', e.target.value)} placeholder="Breve descrizione..." />
+        <label htmlFor={`${fid}-description`}>Descrizione (opzionale)</label>
+        <input id={`${fid}-description`} value={form.description} onChange={e => set('description', e.target.value)} placeholder="Breve descrizione..." />
       </div>
+        <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
+      </form>
     </ModalWrapper>
   );
 }
@@ -457,7 +469,6 @@ export default function UserManager() {
   const [modalGroup,   setModalGroup]   = useState(false);
   const [resetUser,    setResetUser]    = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [showPwdModal, setShowPwdModal] = useState(false);
 
   const isSuperadmin = role.isSuperadmin(currentUser);
   const isAdmin      = can.manageUsers(currentUser);
@@ -494,18 +505,20 @@ export default function UserManager() {
   };
 
   if (loading) return (
-    <div className="um um--loading">
+    <PageLayout className="um" title="Utenti e gruppi">
       <div className="um__loading-inner">
         <div className="um__loading-icon">👥</div>
         <div>Caricamento...</div>
       </div>
-    </div>
+    </PageLayout>
   );
 
   return (
-    <div className="um">
-<AppSidebar />
-<main className="um__main">
+    <PageLayout
+      className="um"
+      title="Utenti e gruppi"
+      subtitle={role.isSuperadmin(currentUser) ? 'Tutti i gruppi' : 'Utenti del tuo gruppo'}
+    >
         {resource.status === 'error' && (
           <ResourceError resource={resource} title="Utenti e gruppi non caricati" />
         )}
@@ -561,7 +574,7 @@ export default function UserManager() {
                 </thead>
                 <tbody>
                   {filteredUsers.length === 0 ? (
-                    <tr><td colSpan={isSuperadmin ? 5 : 4}><div className="um__empty"><div className="um__empty-icon">👥</div><div className="um__empty-text">Nessun utente trovato</div></div></td></tr>
+                    <tr><td colSpan={isSuperadmin ? 5 : 4}><EmptyState icon="👥" title="Nessun utente trovato" /></td></tr>
                   ) : filteredUsers.map(u => (
                     <tr key={u.id}>
                       <td>
@@ -594,7 +607,7 @@ export default function UserManager() {
 {tab === 'groups' && (
             <div className="um__groups-grid">
               {groups.length === 0 ? (
-                <div className="um__empty um__empty--full"><div className="um__empty-icon">🏢</div><div className="um__empty-text">Nessun gruppo trovato</div></div>
+                <EmptyState className="um__empty--full" icon="🏢" title="Nessun gruppo trovato" />
               ) : groups.map(g => {
                 const groupUsers = users.filter(u => u.group_id === g.group_id);
                 return (
@@ -620,7 +633,6 @@ export default function UserManager() {
             </div>
           )}
         </div>
-      </main>
 {(modalUser === 'new' || (modalUser && typeof modalUser === 'object')) && (
         <UserModal user={modalUser === 'new' ? null : modalUser} groups={groups} currentUser={currentUser}
           onClose={() => setModalUser(null)}
@@ -635,7 +647,6 @@ export default function UserManager() {
       {deleteTarget?.type === 'group' && (
         <ConfirmDeleteGroupModal group={deleteTarget.item} onClose={() => setDeleteTarget(null)} onConfirm={() => handleDeleteGroup(deleteTarget.item)} />
       )}
-      {showPwdModal && <ChangePasswordModal onClose={() => setShowPwdModal(false)} />}
-    </div>
+    </PageLayout>
   );
 }

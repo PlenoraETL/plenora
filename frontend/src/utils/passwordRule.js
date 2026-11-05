@@ -15,7 +15,7 @@
 export const PASSWORD_MIN_LENGTH = 12;
 
 /** Lunghezza come Python len(): code point. */
-export const passwordLength = (value) => Array.from(typeof value === 'string' ? value : '').length;
+const passwordLength = (value) => Array.from(typeof value === 'string' ? value : '').length;
 
 /** Messaggio del problema della password, o null se va bene. */
 export function passwordProblem(value) {

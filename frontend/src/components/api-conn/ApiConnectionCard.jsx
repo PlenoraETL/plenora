@@ -11,6 +11,7 @@
  * dati visivi presentational a partire dalla connection.
  */
 import React from 'react';
+import { formatNumber } from '../../utils/format';
 
 const CATEGORY_ICONS = {
   geocoding:  '🌍',
@@ -45,7 +46,9 @@ function getApiStatus(api) {
   const er = api.usage?.calls_total > 0
     ? ((api.usage?.calls_error || 0) / api.usage.calls_total * 100).toFixed(1)
     : 0;
-  if (qp >= 90) return { status:'critical', statusLabel:'Quota esaurita', quotaPercent:qp, errorRate:er };
+  // P15 (Fase 5 T7): «esaurita» solo al 100%; dal 90% e' quasi esaurita.
+  if (qp >= 100) return { status:'critical', statusLabel:'Quota esaurita', quotaPercent:qp, errorRate:er };
+  if (qp >= 90) return { status:'critical', statusLabel:`Quota quasi esaurita (${qp}%)`, quotaPercent:qp, errorRate:er };
   if (qp >= 80 || er > 5) return { status:'warning', statusLabel:`Attenzione ${qp || er}%`, quotaPercent:qp, errorRate:er };
   return { status:'active', statusLabel:'Attiva', quotaPercent:qp, errorRate:er };
 }
@@ -62,8 +65,7 @@ function formatTimeAgo(d) {
 // Re-export per uso esterno (es. globalStats del page che oggi
 // chiama getApiStatus per contare warningApis). Mantengono il single
 // source per la logica derivata dalla connection.
-export { getApiStatus, getApiIcon, formatTimeAgo };
-
+export { getApiStatus };
 export default function ApiConnectionCard({
   connection,
   // can.editApiConnection / can.shareResources calcolati dalla pagina.
@@ -115,7 +117,7 @@ export default function ApiConnectionCard({
         </div>
         <div className="acm__card-desc">{api.description||'Nessuna descrizione'}</div>
         <div className="acm__card-stats">
-          <div className="acm__card-stat"><span className="acm__card-stat-val">{(api.usage?.calls_total||0).toLocaleString()}</span><span className="acm__card-stat-label">chiamate</span></div>
+          <div className="acm__card-stat"><span className="acm__card-stat-val">{formatNumber(api.usage?.calls_total || 0)}</span><span className="acm__card-stat-label">chiamate</span></div>
           {api.usage?.quota_limit > 0 && <div className="acm__card-stat"><span className="acm__card-stat-val">{quotaPercent}%</span><span className="acm__card-stat-label">quota</span></div>}
           <div className="acm__card-stat"><span className="acm__card-stat-val">{formatTimeAgo(api.usage?.last_call)}</span><span className="acm__card-stat-label">ultimo</span></div>
         </div>

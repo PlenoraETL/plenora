@@ -268,8 +268,8 @@ describe('TicketDetail', () => {
     });
     renderDetail();
     await waitFor(() => screen.getByText('screenshot.png'));
-    // size formattata 50.0 KB
-    expect(screen.getByText(/50\.0 KB/)).toBeInTheDocument();
+    // size dal formattatore unico (utils/format.formatBytes)
+    expect(screen.getByText(/50 KB/)).toBeInTheDocument();
     expect(screen.getByText(/mario/)).toBeInTheDocument();
   });
 
@@ -484,8 +484,8 @@ describe('TicketDetail', () => {
     getTicketMock.mockRejectedValue({ response: { status: 404, data: { detail: 'Not found' } } });
     renderDetail();
     expect(await screen.findByText('Ticket non trovato')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: '← Ticket' }));
-    expect(navigateMock).toHaveBeenCalledWith('/tickets');
+    // Ritorno alla lista: link alla pagina madre (PageLayout `parent`), non la storia.
+    expect(screen.getByRole('link', { name: '← Ticket' })).toHaveAttribute('href', '/tickets');
   });
 
   it('errore diverso da 404: messaggio e Riprova che ricarica', async () => {

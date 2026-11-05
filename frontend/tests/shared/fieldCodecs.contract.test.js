@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import * as codecs from '../../src/utils/fieldCodecs';
-import { cronProblem, isValidCron } from '../../src/utils/cron';
+import { cronProblem } from '../../src/utils/cron';
 import { TIMEZONES, timezoneOptions, DEFAULT_TIMEZONE } from '../../src/utils/timezones';
 import { runtimeInputCodec } from '../../src/utils/runtimeInputKinds';
 import { runInputErrors, runInputs } from '../../src/utils/beforeRun';
@@ -117,7 +117,7 @@ describe('convertitori unici dei campi', () => {
 
 describe('cron: la regola dello scheduler (tabella condivisa col backend)', () => {
   it.each(cronCases)('%o', ({ expr, valid }) => {
-    expect(isValidCron(expr)).toBe(valid);
+    expect(cronProblem(expr) === null).toBe(valid);
   });
 
   it('il codec cron normalizza gli spazi e spiega l\'errore', () => {

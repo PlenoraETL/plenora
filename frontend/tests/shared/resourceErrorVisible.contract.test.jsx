@@ -179,6 +179,7 @@ const DECLARED = {
     catalogResource: 'catalogError -> EstraiEditor, al posto delle tabelle, con Riprova',
     sourcesResource: 'sourcesError -> EditorSidebar, sempre, con Riprova',
   },
+  'hooks/useProjectNames.js': { resource: 'dato secondario (nomi dei progetti nel Log Viewer): con errore restano gli id, interi' },
   'hooks/useRuntimeInputDefinitions.js': { sets: 'connection_options_error nella definizione: BeforeRunModal lo mostra sotto la scelta' },
   'hooks/useTransformRegistry.js': { resource: 'restituita ai componenti: TransformNode (ResourceError resource), ManipolaEditor (avviso della palette), ProjectInputNode (Riprova)' },
   'pages/DataSourceManager.jsx': { resource: 'banner d\'errore sempre, con Riprova', browser: 'browserError sempre' },

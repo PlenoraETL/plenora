@@ -20,17 +20,16 @@
 import { isPythonFloat, readValueMapping } from '../../../utils/lookupMapping';
 import { selectColumnPlan } from '../../../utils/columnPlans';
 
-export { isPythonFloat, readValueMapping };
-
+export { readValueMapping };
 // ── Colonne e riferimenti ────────────────────────────────────────────────
 export const columnId = (col) => col?.id || col?.column_id || null;
 
 /** Id allineati ai nomi (null dove la colonna non ha id): stessa posizione. */
-export const idsFor = (names, columns) =>
+const idsFor = (names, columns) =>
   names.map(n => columnId(columns.find(c => c.name === n)));
 
 /** Nome attuale di una colonna: prima per id (sopravvive alle rinomine), poi per nome. */
-export function resolveName(columns, id, name) {
+function resolveName(columns, id, name) {
   if (id) {
     const byId = columns.find(c => columnId(c) === id);
     if (byId) return byId.name;
@@ -215,8 +214,6 @@ export const gridConfig = (rows, upstream = [], { withIds = true } = {}) => rows
   return out;
 });
 
-/** Nome in uscita di una riga. */
-export const outputName = (r) => (r.label ? r.label : (r.display ? '' : r.name));
 
 /**
  * Errore della griglia, o null.

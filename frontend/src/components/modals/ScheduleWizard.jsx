@@ -15,6 +15,7 @@ import * as codecs from '../../utils/fieldCodecs';
 import { formErrors, formPayload } from '../../utils/formSchema';
 import { DEFAULT_TIMEZONE, timezoneOptions } from '../../utils/timezones';
 import './ScheduleWizard.css';
+import { pressable } from '../../utils/pressable';
 
 const STEPS = [
   { num: 1, label: 'Pipeline',     icon: '⬡' },
@@ -256,7 +257,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                   return (
                     <div key={p.id}
                       className={`wiz-project-card${selected ? ' wiz-project-card--selected' : ''}`}
-                      onClick={() => updateForm('project_id', p.id)}>
+                      {...pressable(() => updateForm('project_id', p.id))}>
                       <span className="wiz-project-card__icon" style={{ background: getTypeDim(p.project_type), color: getTypeColor(p.project_type) }}>
                         {getTypeIcon(p.project_type)}
                       </span>
@@ -350,7 +351,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                   <div className="wiz-toggle-row__desc">Riutilizza output precedente se la pipeline non è cambiata</div>
                 </div>
                 <div className={`wiz-toggle${form.use_cache ? ' wiz-toggle--on' : ''}`}
-                  onClick={() => updateForm('use_cache', !form.use_cache)}>
+                  {...pressable(() => updateForm('use_cache', !form.use_cache))}>
                   <div className="wiz-toggle__knob" />
                 </div>
               </label>
@@ -388,7 +389,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                   <div className="wiz-toggle-row__desc">Dopo l'esecuzione, scrivi i risultati su una tabella</div>
                 </div>
                 <div className={`wiz-toggle${form.enable_destination ? ' wiz-toggle--on' : ''}`}
-                  onClick={() => updateForm('enable_destination', !form.enable_destination)}>
+                  {...pressable(() => updateForm('enable_destination', !form.enable_destination))}>
                   <div className="wiz-toggle__knob" />
                 </div>
               </label>

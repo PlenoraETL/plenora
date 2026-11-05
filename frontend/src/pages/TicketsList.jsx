@@ -17,7 +17,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import AppSidebar from '../components/AppSidebar';
+import PageLayout from '../components/common/PageLayout';
+import EmptyState from '../components/common/EmptyState';
 import TicketCreateModal from '../components/TicketCreateModal';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
@@ -26,46 +27,24 @@ import ListState, { ResourceError } from '../components/common/ListState';
 import { can } from '../utils/permissions';
 import { getTicketsMeta, listTickets } from '../api/tickets';
 import '../styles/TicketsList.css';
+import { formatDateTime as fmtDate, formatNumber, enumLabel, optionLabel } from '../utils/format';
+import { pressable } from '../utils/pressable';
+
+// Massimo di GET /tickets (backend core/tickets/router.py: limit=500).
+const TICKET_LIST_LIMIT = 500;
 
 
-function fmtDate(iso) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString('it-IT', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  } catch { return iso; }
-}
 
 function SeverityBadge({ value }) {
-  const map = {
-    low:      { label: 'Bassa',    cls: 'tk__sev--low' },
-    medium:   { label: 'Media',    cls: 'tk__sev--medium' },
-    high:     { label: 'Alta',     cls: 'tk__sev--high' },
-    critical: { label: 'Critica',  cls: 'tk__sev--critical' },
-  };
-  const v = map[value] || { label: value, cls: '' };
-  return <span className={`tk__sev ${v.cls}`}>{v.label}</span>;
+  return <span className={`tk__sev tk__sev--${value}`}>{enumLabel('ticketSeverity', value)}</span>;
 }
 
 function StatusBadge({ value }) {
-  const map = {
-    open:          'Aperto',
-    in_progress:   'In lavorazione',
-    waiting_user:  'Attesa utente',
-    resolved:      'Risolto',
-    closed:        'Chiuso',
-    reopened:      'Riaperto',
-  };
-  return <span className={`tk__status tk__status--${value}`}>{map[value] || value}</span>;
+  return <span className={`tk__status tk__status--${value}`}>{enumLabel('ticketStatus', value)}</span>;
 }
 
 function KindBadge({ value }) {
-  if (value === 'tech_debt') {
-    return <span className="tk__kind tk__kind--td">Debito tecnico</span>;
-  }
-  return <span className="tk__kind tk__kind--us">Supporto utente</span>;
+  return <span className={`tk__kind tk__kind--${value === 'tech_debt' ? 'td' : 'us'}`}>{enumLabel('ticketKind', value)}</span>;
 }
 
 
@@ -86,13 +65,16 @@ export default function TicketsList() {
 
   const isAdmin = can.manageTickets(user);
 
+  // P22: nessuno stato selezionato = nessun ticket (non "tutti", chiusi
+  // compresi); la richiesta non parte e la lista lo dice.
+  const noStatus = statusFilter.length === 0;
   const filters = {
     kind: kindFilter || undefined,
-    status: statusFilter.length ? statusFilter : undefined,
+    status: statusFilter,
     severity: severityFilter.length ? severityFilter : undefined,
     mine: mineOnly || undefined,
   };
-  const resource = useResource(() => listTickets(filters), { key: filters, keepPreviousData: true });
+  const resource = useResource(() => listTickets(filters), { key: filters, keepPreviousData: true, enabled: !noStatus });
   const tickets = resource.data || [];
   const loading = resource.loading;
 
@@ -107,24 +89,20 @@ export default function TicketsList() {
   };
 
   return (
-    <div className="tk-page">
-      <AppSidebar />
-      <main className="tk-page__main">
-        <header className="tk-page__header">
-          <div>
-            <h1 className="tk-page__title">Ticket</h1>
-            <div className="tk-page__subtitle">
-              {loading ? 'Caricamento…' : `${tickets.length} ticket`}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="tk-page__btn tk-page__btn--primary"
-            onClick={() => setShowCreate(true)}
-          >
-            + Apri ticket
-          </button>
-        </header>
+    <PageLayout
+      className="tk-page"
+      title="Ticket"
+      subtitle={noStatus ? 'Nessuno stato selezionato' : loading ? 'Caricamento…' : `${formatNumber(tickets.length)} ticket`}
+      actions={(
+        <button
+          type="button"
+          className="tk-page__btn tk-page__btn--primary"
+          onClick={() => setShowCreate(true)}
+        >
+          + Apri ticket
+        </button>
+      )}
+    >
 
         <section className="tk-filters">
           <label className="tk-filters__row">
@@ -137,7 +115,7 @@ export default function TicketsList() {
           </label>
 
           <div className="tk-filters__row">
-            <span>Status:</span>
+            <span>Stato:</span>
             {(meta?.statuses || []).map((s) => (
               <label key={s} className="tk-filters__chip">
                 <input
@@ -145,13 +123,13 @@ export default function TicketsList() {
                   checked={statusFilter.includes(s)}
                   onChange={() => toggleArr(setStatusFilter, statusFilter, s)}
                 />
-                {s}
+                {enumLabel('ticketStatus', s)}
               </label>
             ))}
           </div>
 
           <div className="tk-filters__row">
-            <span>Severity:</span>
+            <span>Gravità:</span>
             {(meta?.severities || []).map((s) => (
               <label key={s} className="tk-filters__chip">
                 <input
@@ -159,7 +137,7 @@ export default function TicketsList() {
                   checked={severityFilter.includes(s)}
                   onChange={() => toggleArr(setSeverityFilter, severityFilter, s)}
                 />
-                {s}
+                {enumLabel('ticketSeverity', s)}
               </label>
             ))}
           </div>
@@ -177,18 +155,24 @@ export default function TicketsList() {
         {/* Stati e categorie dei filtri: senza, i filtri sono incompleti. */}
         <ResourceError compact resource={metaResource} title="Opzioni dei ticket non caricate" />
         <section className="tk-list">
+          {noStatus && <EmptyState icon="🎫" title="Nessuno stato selezionato" text="Seleziona almeno uno stato per vedere i ticket." />}
+          {tickets.length >= TICKET_LIST_LIMIT && (
+            <div className="plen-banner-warn" role="status">
+              Mostrati i primi {formatNumber(TICKET_LIST_LIMIT)} ticket (limite del server): restringi i filtri per vedere gli altri.
+            </div>
+          )}
           <ListState
             resource={resource}
             errorTitle="Ticket non caricati"
-            empty={<div className="tk-list__empty">Nessun ticket con questi filtri</div>}
+            empty={<EmptyState icon="🎫" title="Nessun ticket con questi filtri" text="Cambia i filtri o apri un nuovo ticket." />}
           >
           <table className="tk-list__table">
             <thead>
               <tr>
                 <th>Titolo</th>
                 <th>Tipo</th>
-                <th>Severity</th>
-                <th>Status</th>
+                <th>Gravità</th>
+                <th>Stato</th>
                 <th>Categoria</th>
                 <th>Aggiornato</th>
               </tr>
@@ -198,13 +182,13 @@ export default function TicketsList() {
                 <tr
                   key={t.id}
                   className="tk-list__row"
-                  onClick={() => navigate(`/tickets/${t.id}`)}
+                  {...pressable(() => navigate(`/tickets/${t.id}`))}
                 >
                   <td className="tk-list__title">{t.title}</td>
                   <td><KindBadge value={t.kind} /></td>
                   <td><SeverityBadge value={t.severity} /></td>
                   <td><StatusBadge value={t.status} /></td>
-                  <td className="tk-list__cat">{t.category}</td>
+                  <td className="tk-list__cat">{optionLabel(meta?.categories, t.category)}</td>
                   <td className="tk-list__date">{fmtDate(t.updated_at)}</td>
                 </tr>
               ))}
@@ -221,7 +205,6 @@ export default function TicketsList() {
             onCreated={handleCreated}
           />
         )}
-      </main>
-    </div>
+    </PageLayout>
   );
 }

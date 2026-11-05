@@ -3,21 +3,7 @@
    Modal generico per selezionare connessioni salvate
    ========================================== */
 
-
-.connection-selector {
-  background: white;
-  border-radius: 16px;
-  width: 90%;
-  max-width: 700px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
-  animation: slideUp 0.3s ease;
-}
-
 /* Header - Colori per categoria */
-
 
 /* Toolbar */
 .connection-selector__toolbar {
@@ -34,7 +20,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: white;
+  background: var(--plen-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 14px;
@@ -76,7 +62,6 @@
 }
 
 /* Loading */
-
 
 /* Error */
 .connection-selector__error {
@@ -155,7 +140,7 @@
 
 /* Item */
 .connection-selector__item {
-  background: white;
+  background: var(--plen-surface);
   border: 2px solid var(--color-border);
   border-radius: 10px;
   padding: 15px;
@@ -298,15 +283,6 @@
 }
 
 /* Footer */
-.connection-selector__footer {
-  padding: 15px 25px;
-  border-top: 1px solid #eee;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: var(--color-bg-secondary);
-  border-radius: 0 0 16px 16px;
-}
 
 .connection-selector__footer-hint {
   font-size: 12px;
@@ -318,9 +294,7 @@
   gap: 10px;
 }
 
-
 /* Confirm button colors per categoria */
-
 
 /* Animations */
 /* Scrollbar */

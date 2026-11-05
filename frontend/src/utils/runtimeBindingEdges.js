@@ -1,6 +1,6 @@
 import { projectInputRole } from './runtimeInputKinds';
 
-export const PARAMETER_EDGE_KIND = 'parameter_binding';
+const PARAMETER_EDGE_KIND = 'parameter_binding';
 
 const SCALAR_PARAMETER_TYPES = new Set(['string', 'number', 'boolean', 'select']);
 const SCHEMA_AFFECTING_PARAMETER_IDS = new Set([
@@ -39,7 +39,7 @@ export function isBindableTransformParameter(param, transformDefinition = {}) {
     && !SCHEMA_AFFECTING_PARAMETER_IDS.has(param.id);
 }
 
-export function parameterEdgeStyle() {
+function parameterEdgeStyle() {
   return {
     type: 'smoothstep',
     animated: false,

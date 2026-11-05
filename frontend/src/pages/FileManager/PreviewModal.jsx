@@ -7,6 +7,7 @@
 
 import React from 'react';
 import ModalWrapper, { ModalButton } from '../../components/common/ModalWrapper';
+import { formatNumber } from '../../utils/format';
 
 function PreviewModal({ file, data, onClose }) {
   // columns può essere [{name, type}, ...] oppure ['col1', 'col2', ...]
@@ -17,7 +18,7 @@ function PreviewModal({ file, data, onClose }) {
       onClose={onClose}
       title={`Preview — ${file.name}`}
       icon="👁"
-      subtitle={`Prime ${data.rows?.length || 0} righe · ${(data.total_count ?? 0).toLocaleString()} totali`}
+      subtitle={`Prime ${data.rows?.length || 0} righe · ${formatNumber(data.total_count ?? 0)} totali`}
       size="xl"
       footer={<ModalButton variant="primary" onClick={onClose}>Chiudi</ModalButton>}
     >

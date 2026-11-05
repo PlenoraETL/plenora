@@ -17,11 +17,11 @@ export const OUTPUT_FORMATS = Object.freeze([
   { value: 'shp', label: 'Shapefile', fileLabel: 'Shapefile (.zip)', icon: '🗺️', geo: true },
 ].map(Object.freeze));
 
-export const OUTPUT_FORMAT_VALUES = Object.freeze(OUTPUT_FORMATS.map(f => f.value));
+const OUTPUT_FORMAT_VALUES = Object.freeze(OUTPUT_FORMATS.map(f => f.value));
 
 export const DEFAULT_OUTPUT_FORMAT = 'xlsx';
 
-export const isOutputFormat = (value) => OUTPUT_FORMAT_VALUES.includes(value);
+const isOutputFormat = (value) => OUTPUT_FORMAT_VALUES.includes(value);
 
 /**
  * Opzioni di un select: il catalogo, piu' il valore attuale se non c'e'

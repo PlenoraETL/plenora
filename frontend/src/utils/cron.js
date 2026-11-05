@@ -26,7 +26,7 @@
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
-export const CRON_FIELDS = Object.freeze([
+const CRON_FIELDS = Object.freeze([
   { name: 'minuto', min: 0, max: 59 },
   { name: 'ora', min: 0, max: 23 },
   { name: 'giorno del mese', min: 1, max: 31 },
@@ -82,7 +82,6 @@ export function cronProblem(expression) {
   return null;
 }
 
-export const isValidCron = (expression) => cronProblem(expression) === null;
 
 /** Forma normalizzata (spazi singoli), quella che si salva. */
 export const normalizeCron = (expression) => String(expression ?? '').trim().split(/\s+/).join(' ');

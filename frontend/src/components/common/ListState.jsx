@@ -25,7 +25,7 @@ import './ListState.css';
 import { READ_ONLY_SAFE } from './readOnlySafe';
 
 export const STALE_TITLE = 'Dati non aggiornati';
-export const STALE_NOTE = "Sono mostrati i dati dell'ultimo caricamento riuscito.";
+const STALE_NOTE = "Sono mostrati i dati dell'ultimo caricamento riuscito.";
 
 /**
  * Errore di una risorsa. Due usi:

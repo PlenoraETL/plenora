@@ -144,11 +144,6 @@ export const INPUT_KIND_LABELS = Object.freeze({
 });
 export const inputKindLabel = (kind) => INPUT_KIND_LABELS[String(kind || 'file').toLowerCase()] || String(kind);
 
-/** Entita' di un tipo di nodo (null se il tipo non e' nel glossario). */
-export function nodeTerm(type) {
-  const key = NODE_TYPE_TERMS[type];
-  return key ? T[key] : null;
-}
 
 /**
  * Voce del menu "⋯" di un editor: nome, icona e descrizione dal glossario.
@@ -256,7 +251,7 @@ export const TRANSFORM_TERMS = Object.freeze({
  * parola comune e' "in uscita" (Output e' solo il passo finale), "join"
  * e' il nome dell'entita' Join, "dataset" e' la tabella.
  */
-export const CATALOG_PHRASES = Object.freeze([
+const CATALOG_PHRASES = Object.freeze([
   [/\b([Cc])olonna output\b/g, '$1olonna in uscita'],
   [/\b([Cc])olonne output\b/g, '$1olonne in uscita'],
   [/\bCRS output\b/g, 'CRS in uscita'],

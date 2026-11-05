@@ -18,19 +18,15 @@ import {
 } from '../api/schedules';
 import ScheduleWizard from '../components/modals/ScheduleWizard';
 import { useHexCanvas } from '../utils/hexCanvas';
-import AppSidebar from '../components/AppSidebar';
-import ThemeToggle from '../components/common/ThemeToggle';
+import PageLayout from '../components/common/PageLayout';
+import EmptyState from '../components/common/EmptyState';
 import { can } from '../utils/permissions';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { toastApiError } from '../utils/toastApiError';
 import '../styles/ScheduleList.css';
 import { requestErrorMessage, backendMessage } from '../utils/errorMessages';
-import { goBack } from '../utils/navigation';
-const formatDate = (s) => {
-  if (!s) return '—';
-  return new Date(s).toLocaleDateString('it-IT', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
-};
+import { formatDateTime as formatDate, formatBytes as formatSize, formatElapsed as getElapsed } from '../utils/format';
 const formatCron = (cron) => {
   if (!cron) return '';
   const map = {
@@ -40,27 +36,6 @@ const formatCron = (cron) => {
     '0 0 1 * *':'Il primo del mese',
   };
   return map[cron] || cron;
-};
-const formatSize = (bytes) => {
-  if (!bytes) return '—';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`;
-  return `${(bytes/1024/1024).toFixed(1)} MB`;
-};
-const formatRunTimestamp = (ts) => {
-  if (!ts || ts.length < 15) return ts;
-  const [y,m,d,hh,mm] = [ts.slice(0,4),ts.slice(4,6),ts.slice(6,8),ts.slice(9,11),ts.slice(11,13)];
-  const date = new Date(`${y}-${m}-${d}T${hh}:${mm}:00`);
-  return date.toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'})+', '+date.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
-};
-const getElapsed = (v, now = Date.now()) => {
-  if (!v) return null;
-  const ms = typeof v === 'number' ? v : new Date(v).getTime();
-  const s = Math.floor((now-ms)/1000);
-  if (s < 0) return '0s';
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s`;
-  return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
 };
 // Tempo trascorso che si aggiorna da solo: solo questa etichetta si
 // ridisegna ogni secondo, non l'intera lista (Fase 5 T2, R4.16).
@@ -282,27 +257,25 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
   });
 
   if (loading) return (
-    <div className="sl sl--loading"><div className="sl__loading-inner"><div className="sl__loading-icon">⬡</div>Caricamento schedule...</div></div>
+    <PageLayout className="sl" title="Scheduler">
+      <div className="sl__loading-inner"><div className="sl__loading-icon">⬡</div>Caricamento schedule...</div>
+    </PageLayout>
   );
 
   return (
-    <div className="sl">
-      {/* SIDEBAR */}
-      <AppSidebar counts={{ schedules: schedules.length }} />
-
-      {/* MAIN */}
-      <div className="sl__main">
-        <header className="sl__topbar">
-          <button type="button" className="sl__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
-          <div className="sl__page-title">{projectFilter ? 'Scheduler (filtrato)' : 'Scheduler'}</div>
-          <div className="sl__topbar-right">
-            {projectFilter && <button type="button" className="sl__btn sl__btn--ghost" onClick={() => navigate('/schedules')}>Mostra tutti</button>}
-            <ThemeToggle classPrefix="sl" />
-            {can.createSchedule(user) && (
-              <button type="button" className="sl__btn sl__btn--primary" onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Nuovo Schedule</button>
-            )}
-          </div>
-        </header>
+    <PageLayout
+      className="sl"
+      bare
+      title={projectFilter ? 'Scheduler (filtrato)' : 'Scheduler'}
+      actions={(
+        <>
+          {projectFilter && <button type="button" className="sl__btn sl__btn--ghost" onClick={() => navigate('/schedules')}>Mostra tutti</button>}
+          {can.createSchedule(user) && (
+            <button type="button" className="sl__btn sl__btn--primary" onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Nuovo Schedule</button>
+          )}
+        </>
+      )}
+    >
 
         <div className="sl__content">
           <canvas ref={canvasRef} className="sl__hex-bg" />
@@ -325,7 +298,8 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
             </div>
           )}
 
-          {/* Stats */}
+          {/* Stats e filtri solo con dati (G2, S4): a zero c'e' lo stato vuoto. */}
+          {schedules.length > 0 && (<>
           <div className="sl__stats">
             {[
               { label:'Totali',        val:schedules.length, sub:'configurati',      mod:'total' },
@@ -351,18 +325,18 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
               </button>
             ))}
           </div>
+          </>)}
 
           {/* List */}
           {resource.status === 'error' && !resource.hasData ? null : filteredSchedules.length === 0 ? (
-            <div className="sl__empty">
-              <div className="sl__empty-icon">{activeFilter === 'all' ? '⏰' : filterConfigs[activeFilter]?.icon}</div>
-              <div className="sl__empty-title">{activeFilter === 'all' ? (projectFilter ? 'Nessuno schedule per questo progetto' : 'Nessuno schedule configurato') : `Nessuno schedule ${filterConfigs[activeFilter]?.label?.toLowerCase()}`}</div>
-              <div className="sl__empty-text">{activeFilter === 'all' ? 'Crea uno schedule per eseguire le pipeline automaticamente' : 'Cambia filtro o crea un nuovo schedule'}</div>
-              {activeFilter === 'all'
-                ? (can.createSchedule(user) && <button type="button" className="sl__btn sl__btn--primary sl__btn--mt-md" onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Crea il primo schedule</button>)
-                : <button type="button" className="sl__btn sl__btn--ghost sl__btn--mt-md" onClick={() => setActiveFilter('all')}>Mostra tutti</button>
-              }
-            </div>
+            <EmptyState
+              icon={activeFilter === 'all' ? '⏰' : filterConfigs[activeFilter]?.icon}
+              title={activeFilter === 'all' ? (projectFilter ? 'Nessuno schedule per questo progetto' : 'Nessuno schedule configurato') : `Nessuno schedule ${filterConfigs[activeFilter]?.label?.toLowerCase()}`}
+              text={activeFilter === 'all' ? 'Crea uno schedule per eseguire le pipeline automaticamente' : 'Cambia filtro o crea un nuovo schedule'}
+              action={activeFilter === 'all'
+                ? (can.createSchedule(user) && <button type="button" className="sl__btn sl__btn--primary" onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Crea il primo schedule</button>)
+                : <button type="button" className="sl__btn sl__btn--ghost" onClick={() => setActiveFilter('all')}>Mostra tutti</button>}
+            />
           ) : (
             <div className="sl__list">
               <div className="sl__list-count">{filteredSchedules.length} schedule{activeFilter !== 'all' ? ' '+filterConfigs[activeFilter]?.label?.toLowerCase() : ''}</div>
@@ -392,7 +366,6 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
             </div>
           )}
         </div>
-      </div>
 
       {/* Wizard */}
       {showWizard && (
@@ -404,7 +377,7 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
         />
       )}
       <ConfirmDialog {...confirmModal} />
-    </div>
+    </PageLayout>
   );
 }
 // `canManage` (can.manageSchedule): esegui, attiva, modifica ed elimina si
@@ -540,7 +513,7 @@ function ScheduleCard({ schedule, canManage, isRunning, runStartTime, logs, runs
                     key={run.id || `${schedule.id}-run-${run.timestamp || ''}-${i}`}
                     className="sl__run-entry"
                   >
-                    <span className="sl__run-ts">{formatRunTimestamp(run.timestamp)}</span>
+                    <span className="sl__run-ts">{formatDate(run.timestamp)}</span>
                     <span className="sl__run-files">{run.files.map(f => f.name).join(', ')}</span>
                     <span className="sl__run-size">{formatSize(run.files.reduce((s,f) => s+f.size_bytes, 0))}</span>
                     <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={() => onDownloadRun(run.timestamp)} aria-label="Scarica output di questa esecuzione">📥</button>

@@ -26,7 +26,7 @@ import { pollTask } from '../utils/taskPoller';
 import { syncOutcome, isActivePhase, isTerminalPhase } from '../utils/taskOutcome';
 import { requestErrorMessage } from '../utils/errorMessages';
 
-export const IDLE_TASK = Object.freeze({
+const IDLE_TASK = Object.freeze({
   phase: 'idle', taskId: null, progress: 0, message: '', status: null,
   result: null, error: null, code: null, cancelling: false, cancelError: null,
 });

@@ -32,6 +32,7 @@
 import { errorReason } from '../api/errors';
 import { role } from './permissions';
 import { isServerInjectedKind, runtimeInputCodec } from './runtimeInputKinds';
+import { formatNumber } from './format';
 
 export const BEFORE_RUN_REASONS = Object.freeze(['inputs', 'staff', 'estimate', 'blocking', 'changed', 'migrate']);
 
@@ -142,9 +143,9 @@ export const INPUT_ROWS_STATUS_LABEL = Object.freeze({
 export function describeInputRows(node) {
   const status = node?.input_rows_status || (node?.input_rows == null ? 'unknown' : 'exact');
   if (status === 'unknown' || node?.input_rows == null) return 'righe in ingresso non conoscibili prima di avviare';
-  const n = Number(node.input_rows).toLocaleString('it-IT');
+  const n = formatNumber(node.input_rows);
   const label = INPUT_ROWS_STATUS_LABEL[status] || status;
-  const sampled = node.sampled ? `, su un campione di ${Number(node.sampled_rows || 0).toLocaleString('it-IT')} righe` : '';
+  const sampled = node.sampled ? `, su un campione di ${formatNumber(node.sampled_rows || 0)} righe` : '';
   return `${n} righe in ingresso (${label}${sampled})`;
 }
 
@@ -152,5 +153,5 @@ export function describeInputRows(node) {
 export function describeApiCalls(node) {
   if (node?.api_calls == null) return 'chiamate non conoscibili prima di avviare';
   const n = Number(node.api_calls);
-  return n === 1 ? '1 chiamata stimata' : `${n.toLocaleString('it-IT')} chiamate stimate`;
+  return n === 1 ? '1 chiamata stimata' : `${formatNumber(n)} chiamate stimate`;
 }

@@ -184,7 +184,7 @@ export function joinFieldOptions(node, kind) {
 }
 
 /** Ogni riferimento a colonna della bozza, con il campo della tabella. */
-export function joinColumnRefs(draft) {
+function joinColumnRefs(draft) {
   const refs = [];
   for (const field of JOIN_COLUMN_FIELDS) {
     if (field.mode !== draft.mode) continue;
@@ -374,7 +374,7 @@ const STATUS_TEXT = { incomplete: 'da completare', missing: 'colonna non trovata
  * l'intestazione del pannello del join. `fromId`: la tabella da cui si
  * guarda (l'altra e' quella nominata).
  */
-export function joinEntry(edge, nodesById, fromId = edge.target) {
+function joinEntry(edge, nodesById, fromId = edge.target) {
   const source = nodesById.get(edge.source);
   const target = nodesById.get(edge.target);
   const other = fromId === edge.source ? target : source;

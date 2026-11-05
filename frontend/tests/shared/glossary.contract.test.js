@@ -24,7 +24,7 @@ import path from 'node:path';
 import * as espree from 'espree';
 import { describe, it, expect, vi } from 'vitest';
 import {
-  ALLOWED_ENGLISH, NODE_TYPE_TERMS, TERMS, TRANSFORM_TERMS, applyTransformTerms, flowEdgeLabel, nodeTerm,
+  ALLOWED_ENGLISH, NODE_TYPE_TERMS, TERMS, TRANSFORM_TERMS, applyTransformTerms, flowEdgeLabel,
   withFlowEdgeLabels,
 } from '../../src/utils/glossary';
 import {
@@ -247,7 +247,7 @@ describe('glossario: ogni entita\' ha un nome, un\'icona e una descrizione', () 
     for (const type of nodeTypesOf(editorSource(file))) {
       expect({ type, inGlossary: Boolean(NODE_TYPE_TERMS[type] && TERMS[NODE_TYPE_TERMS[type]]) }).toEqual({ type, inGlossary: true });
       if (type === 'comment' || type === 'transform') continue;
-      const t = nodeTerm(type);
+      const t = TERMS[NODE_TYPE_TERMS[type]];
       expect({ type, kind: nodeDescriptor(type).kind({}), icon: nodeIcon(type, {}) }).toEqual({ type, kind: t.name, icon: t.icon });
     }
   });

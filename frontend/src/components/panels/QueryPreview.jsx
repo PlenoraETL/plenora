@@ -25,6 +25,7 @@ import { ResourceError } from '../common/ListState';
 import '../common/ListState.css';
 import './QueryPreview.css';
 import { term } from '../../utils/glossary';
+import { pressable } from '../../utils/pressable';
 
 const formatValue = (value) => {
   if (value === null || value === undefined) return 'NULL';
@@ -83,6 +84,7 @@ function QueryPreview() {
     }
     return result.sql || '';
   }, [hasNodes, result, query.initialLoading]);
+  const highlighted = useMemo(() => (sql ? highlightSQL(sql) : null), [sql]);
 
   const resultInfo = useCanvasStore(s => {
     const out = (s.nodes || []).find(n => n.type === 'resultNode');
@@ -92,15 +94,20 @@ function QueryPreview() {
   const tablesCount = result?.kind === 'sql' ? (result.tables_used || []).length : null;
   const params = result?.params || [];
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(sql);
-    setCopySuccess(true);
+  // P9 (Fase 5 T7): la clipboard c'e' solo in HTTPS/localhost; «Copiato»
+  // solo se la copia e' riuscita, altrimenti lo si dice.
+  const handleCopy = async () => {
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(sql); ok = true; }
+    } catch { ok = false; }
+    setCopySuccess(ok ? 'ok' : 'fail');
     setTimeout(() => setCopySuccess(false), 2000);
   };
 
   return (
     <div className={`query-preview ${isCollapsed ? 'query-preview--collapsed' : 'query-preview--expanded'}`}>
-      <div className="query-preview__header" onClick={() => setIsCollapsed(!isCollapsed)}>
+      <div className="query-preview__header" {...pressable(() => setIsCollapsed(!isCollapsed))}>
         <div className="query-preview__header-left">
           <span className="query-preview__toggle-icon">{isCollapsed ? '▲' : '▼'}</span>
           <span className="query-preview__title">🔍 {term('preview').name} della query</span>
@@ -113,9 +120,9 @@ function QueryPreview() {
         {!isCollapsed && sql && (
           <button type="button"
             onClick={(e) => { e.stopPropagation(); handleCopy(); }}
-            className={`query-preview__copy-btn ${copySuccess ? 'query-preview__copy-btn--success' : ''}`}
+            className={`query-preview__copy-btn ${copySuccess === 'ok' ? 'query-preview__copy-btn--success' : ''}`}
           >
-            {copySuccess ? '✓ Copiato!' : '📋 Copia SQL'}
+            {copySuccess === 'ok' ? '✓ Copiato!' : copySuccess === 'fail' ? 'Copia non disponibile: seleziona il testo' : '📋 Copia SQL'}
           </button>
         )}
       </div>
@@ -134,7 +141,7 @@ function QueryPreview() {
             </div>
           )}
 
-          {sql && <pre className="query-preview__sql">{highlightSQL(sql)}</pre>}
+          {sql && <pre className="query-preview__sql">{highlighted}</pre>}
 
           {params.length > 0 && (
             <div className="query-preview__output-info" aria-label="Parametri della query">
@@ -162,10 +169,11 @@ function QueryPreview() {
 }
 
 /**
- * Syntax highlighting per SQL
+ * Syntax highlighting per SQL. perf-2 (Fase 5 T7): UNA espressione regolare
+ * compilata una volta (prima ~40 regex per riga a ogni render) e il
+ * risultato memorizzato per testo (useMemo al chiamante).
  */
-function highlightSQL(sql) {
-  const keywords = [
+const SQL_KEYWORDS = [
     'SELECT', 'FROM', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'JOIN', 'ON', 'AS',
     'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'DISTINCT', 'HAVING', 'AND', 'OR', 'IN', 'BETWEEN',
     'ASC', 'DESC', 'FETCH', 'TOP',
@@ -175,33 +183,21 @@ function highlightSQL(sql) {
     'ST_Overlaps', 'ST_Equals', 'ST_Disjoint', 'ST_Covers', 'ST_CoveredBy',
     'ST_DWithin', 'ST_Distance', 'ST_Buffer', 'ST_Centroid', 'ST_AsText',
   ];
+const KEYWORD_RE = new RegExp(`\\b(${[...SQL_KEYWORDS].sort((x, y) => y.length - x.length).join('|')})\\b`, 'gi');
+const KEYWORD_SET = new Set(SQL_KEYWORDS.map(k => k.toUpperCase()));
 
+function highlightSQL(sql) {
   const lines = sql.split('\n');
-  let keyCounter = 0;
-
-  return lines.map((line, lineIdx) => {
-    let parts = [line];
-    keywords.forEach(keyword => {
-      const newParts = [];
-      parts.forEach(part => {
-        if (typeof part !== 'string') { newParts.push(part); return; }
-        part.split(new RegExp(`\\b(${keyword})\\b`, 'gi')).forEach((segment) => {
-          if (segment.toUpperCase() === keyword.toUpperCase()) {
-            newParts.push(<span key={`kw-${keyCounter++}`} className="query-preview__sql-keyword">{segment}</span>);
-          } else if (segment) {
-            newParts.push(segment);
-          }
-        });
-      });
-      parts = newParts;
-    });
-    return (
-      <React.Fragment key={lineIdx}>
-        {parts}
-        {lineIdx < lines.length - 1 && '\n'}
-      </React.Fragment>
-    );
-  });
+  return lines.map((line, lineIdx) => (
+    <React.Fragment key={lineIdx}>
+      {line.split(KEYWORD_RE).map((segment, i) => (
+        KEYWORD_SET.has(segment.toUpperCase()) && i % 2 === 1
+          ? <span key={i} className="query-preview__sql-keyword">{segment}</span>
+          : segment
+      ))}
+      {lineIdx < lines.length - 1 && '\n'}
+    </React.Fragment>
+  ));
 }
 
 export default QueryPreview;

@@ -10,7 +10,6 @@ import React, { useState } from 'react';
 import { useResource } from '../hooks/useResource';
 import { useBusy } from '../hooks/useBusy';
 import ListState, { ResourceError } from '../components/common/ListState';
-import { useNavigate } from 'react-router-dom';
 import {
   listEseguibili,
   updateEseguibile,
@@ -22,7 +21,9 @@ import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteW
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
 import EseguibileVersionsModal from '../components/eseguibili/EseguibileVersionsModal';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
-import AppSidebar from '../components/AppSidebar';
+import PageLayout from '../components/common/PageLayout';
+import EmptyState from '../components/common/EmptyState';
+import ActionMenu from '../components/common/ActionMenu';
 import { useToast } from '../hooks/useToast';
 import { can } from '../utils/permissions';
 import ConfirmDialog from '../components/common/ConfirmDialog';
@@ -30,9 +31,9 @@ import { useConfirmModal } from '../hooks/useConfirmModal';
 import useDialog from '../hooks/useDialog';
 import { toastApiError } from '../utils/toastApiError';
 import './EseguibiliList.css';
+import { pressable } from '../utils/pressable';
 
 function EseguibiliList() {
-  const navigate = useNavigate();
   const toast = useToast();
   const confirmModal = useConfirmModal();
   const { user } = useAuth();
@@ -130,38 +131,32 @@ function EseguibiliList() {
   };
 
   return (
-    <div className="esl esl--row">
-      <AppSidebar counts={{ eseguibili: items.length }} />
-      <div className="esl__main">
-      <div className="esl__header">
-        <div>
-          <button type="button" className="esl__back" onClick={() => navigate('/')}>← Dashboard</button>
-          <h1 className="esl__title">🚀 Eseguibili</h1>
-          <p className="esl__subtitle">
-            Progetti Estrai, Manipola e Arricchisci eseguibili on-demand
-          </p>
-        </div>
-        {canCreate && (
-          <button type="button" className="esl__btn esl__btn--primary esl__btn--new" onClick={openSelector}>
-            ➕ Nuovo Eseguibile
-          </button>
-        )}
-      </div>
+    <PageLayout
+      className="esl"
+      title="Eseguibili"
+      subtitle="Progetti Estrai, Manipola e Arricchisci eseguibili on-demand"
+      actions={canCreate && (
+        <button type="button" className="esl__btn esl__btn--primary esl__btn--new" onClick={openSelector}>
+          ＋ Nuovo Eseguibile
+        </button>
+      )}
+    >
 
       <ListState
         resource={resource}
         loading={<div className="esl__loading">Caricamento...</div>}
         errorTitle="Eseguibili non caricati"
         empty={(
-          <div className="esl__empty">
-            <div className="esl__empty-icon">📭</div>
-            <h3>Nessun eseguibile disponibile</h3>
-            <p>
-              {canCreate
-                ? 'Seleziona un progetto Estrai, Manipola o Arricchisci e pubblicalo come eseguibile.'
-                : 'Chiedi a un amministratore del gruppo di pubblicare una catena come eseguibile.'}
-            </p>
-          </div>
+          <EmptyState
+            icon="📭"
+            title="Nessun eseguibile disponibile"
+            text={canCreate
+              ? 'Seleziona un progetto Estrai, Manipola o Arricchisci e pubblicalo come eseguibile.'
+              : 'Chiedi a un amministratore del gruppo di pubblicare una catena come eseguibile.'}
+            action={canCreate && (
+              <button type="button" className="esl__btn esl__btn--primary" onClick={openSelector}>＋ Nuovo Eseguibile</button>
+            )}
+          />
         )}
       >
         <div className="esl__grid">
@@ -216,27 +211,15 @@ function EseguibiliList() {
                   <span>{item.project_type?.toUpperCase()} - v{item.active_version} - {item.inputs_count} input</span>
                 </div>
                 <div className="esl__card-actions">
-                  {canShare && (
-                    <button type="button" className="esl__btn esl__btn--ghost"
-                      onClick={() => setSharingEseguibile(item)}
-                      title="Gestisci condivisione cross-gruppo (solo superadmin)"
-                    >🔗 Condividi</button>
-                  )}
-                  {canEdit && (
-                    <button type="button" className="esl__btn esl__btn--ghost"
-                      onClick={() => startRename(item)}
-                    >✎ Rinomina</button>
-                  )}
-                  {canEdit && (
-                    <button type="button" className="esl__btn esl__btn--ghost"
-                      onClick={() => setVersioningEseguibile(item)}
-                    >Versioni</button>
-                  )}
-                  {canEdit && (
-                    <button type="button" className="esl__btn esl__btn--ghost"
-                      onClick={() => handleDelete(item.id, item.name)}
-                    >🗑 Elimina</button>
-                  )}
+                  <ActionMenu
+                    label={`Azioni per ${item.name}`}
+                    items={[
+                      canShare && { label: '🔗 Condividi', onSelect: () => setSharingEseguibile(item), title: 'Gestisci condivisione cross-gruppo (solo superadmin)' },
+                      canEdit && { label: '✎ Rinomina', onSelect: () => startRename(item) },
+                      canEdit && { label: 'Versioni', onSelect: () => setVersioningEseguibile(item) },
+                      canEdit && { label: '🗑 Elimina', onSelect: () => handleDelete(item.id, item.name), danger: true },
+                    ]}
+                  />
                   <button type="button" className="esl__btn esl__btn--primary"
                     onClick={() => setSelectedId(item.id)}
                   >▶ Esegui</button>
@@ -291,10 +274,10 @@ function EseguibiliList() {
                   {projects
                     .filter(p => !projectSearch || (p.name || '').toLowerCase().includes(projectSearch.toLowerCase()))
                     .map(p => (
-                      <div key={p.id} className="esl__selector-item" onClick={() => {
+                      <div key={p.id} className="esl__selector-item" {...pressable(() => {
                         setSelectedSourceProject(p);
                         setShowSelector(false);
-                      }}>
+                      })}>
                         <div className="esl__selector-item-icon">◈</div>
                         <div className="esl__selector-item-info">
                           <div className="esl__selector-item-name">{p.name}</div>
@@ -354,8 +337,7 @@ function EseguibiliList() {
         />
       )}
       <ConfirmDialog {...confirmModal} />
-      </div>
-    </div>
+    </PageLayout>
   );
 }
 

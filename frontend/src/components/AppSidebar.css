@@ -242,3 +242,16 @@
 .app-sidebar__item {
   position: relative;
 }
+
+/* Fase 5 T7 (a11y-1): voci e righe admin sono <button>: aspetto invariato. */
+button.app-sidebar__item,
+button.app-sidebar__user-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+button.app-sidebar__item.app-sidebar__item--active { background: rgba(75, 139, 255, 0.14); color: var(--plen-blue); }
+button.app-sidebar__user-row:hover { background: var(--plen-surface-2); }

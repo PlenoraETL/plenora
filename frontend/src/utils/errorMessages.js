@@ -121,7 +121,7 @@ const CANCELED = { title: 'Richiesta annullata', message: 'La richiesta è stata
 
 // Testo italiano per famiglia HTTP — quando il backend non da' un messaggio e
 // il codice non e' mappato.
-export function statusFamilyMessage(status) {
+function statusFamilyMessage(status) {
   if (status == null) return null;
   if (status === 401) return { title: 'Sessione scaduta', message: 'Devi effettuare di nuovo l’accesso.' };
   if (status === 403) return { title: 'Accesso negato', message: 'Non hai i permessi per questa operazione.' };

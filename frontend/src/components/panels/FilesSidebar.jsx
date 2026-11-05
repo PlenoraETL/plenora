@@ -4,6 +4,7 @@
  */
 import './SourcesSidebar.css';
 import React, { useState, useMemo } from 'react';
+import { formatNumber } from '../../utils/format';
 
 const PAGE_SIZE = 10;
 
@@ -114,7 +115,7 @@ function FilesSidebar({
                     <div className="sources-sidebar__item-info">
                       <span className="sources-sidebar__item-name">{file.name}</span>
                       {showRowCount && file.row_count && (
-                        <span className="sources-sidebar__item-meta">{file.row_count.toLocaleString()} righe</span>
+                        <span className="sources-sidebar__item-meta">{formatNumber(file.row_count)} righe</span>
                       )}
                     </div>
                     <span

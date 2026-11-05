@@ -10,13 +10,6 @@
  */
 import http from './http';
 
-export const VALID_RESOURCE_TYPES = [
-  'connections',
-  'datasources',
-  'eseguibili',
-  'api_connections',
-  'arcgis_connections',
-];
 
 /**
  * Lista i group_id con cui la risorsa è condivisa.
@@ -32,14 +25,4 @@ export const getShares = (resourceType, resourceId) =>
 export const setShares = (resourceType, resourceId, groupIds) =>
   http.put(`/shares/${resourceType}/${resourceId}`, { group_ids: groupIds }).then(r => r.data);
 
-/**
- * Aggiunge un singolo gruppo. Idempotente.
- */
-export const addShare = (resourceType, resourceId, groupId) =>
-  http.post(`/shares/${resourceType}/${resourceId}/${groupId}`).then(r => r.data);
 
-/**
- * Rimuove una singola riga di sharing.
- */
-export const removeShare = (resourceType, resourceId, groupId) =>
-  http.delete(`/shares/${resourceType}/${resourceId}/${groupId}`).then(r => r.data);

@@ -9,9 +9,11 @@
  * Le classi `nodrag`/`nowheel` impediscono a React Flow di trascinare il nodo
  * o zoomare il canvas mentre si interagisce con la tabella.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
+import { usePreviewStale, currentCanvasContentKey } from '../../../hooks/usePreviewStale';
 import { isGeometryType } from '../../../utils/columnUtils';
-import { formatNumber } from '../../../utils/previewFormat';
+import { formatCellNumber } from '../../../utils/previewFormat';
+import { formatNumber } from '../../../utils/format';
 import { term } from '../../../utils/glossary';
 import { READ_ONLY_SAFE } from '../../common/readOnlySafe';
 
@@ -27,12 +29,16 @@ function formatCell(value, type) {
     return j.length > CELL_MAX ? `${j.slice(0, CELL_MAX - 1)}…` : j;
   }
   if (type === 'bool') return value ? '✔' : '✗';
-  const s = formatNumber(value);
+  const s = formatCellNumber(value);
   return s.length > CELL_MAX ? `${s.slice(0, CELL_MAX - 1)}…` : s;
 }
 
 export default function ResultInlinePreview({ state, onExpand, onRefresh }) {
   const { status, data, error } = state;
+  // P27 (Fase 5 T7): l'impronta del canvas all'arrivo dei dati; se il canvas
+  // cambia dopo, l'anteprima lo dice (stessa regola dell'anteprima del passo).
+  const shownKey = useMemo(() => (status === 'success' || status === 'empty' ? currentCanvasContentKey() : null), [status, data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stale = usePreviewStale(shownKey);
   if (status === 'idle') return null;
 
   const rows = data?.rows || [];
@@ -47,8 +53,8 @@ export default function ResultInlinePreview({ state, onExpand, onRefresh }) {
     const total = data?.total_count;
     const preview = data?.preview_count ?? rows.length;
     return data?.truncated && total
-      ? `${preview.toLocaleString()} / ${total.toLocaleString()} righe`
-      : `${rows.length.toLocaleString()} righe`;
+      ? `${formatNumber(preview)} / ${formatNumber(total)} righe`
+      : `${formatNumber(rows.length)} righe`;
   })();
 
   return (
@@ -56,6 +62,7 @@ export default function ResultInlinePreview({ state, onExpand, onRefresh }) {
       <div className="result-node__preview-inline-head">
         <span className="result-node__preview-inline-title">{term('preview').icon} {term('preview').name}</span>
         {countLabel && <span className="result-node__preview-inline-count">{countLabel}</span>}
+        {stale && <span className="result-node__preview-inline-stale" role="status">Il canvas è cambiato: dati non aggiornati</span>}
         <div className="result-node__preview-inline-actions">
           {onRefresh && (
             <button
@@ -124,7 +131,7 @@ export default function ResultInlinePreview({ state, onExpand, onRefresh }) {
           </table>
           {rows.length > MAX_ROWS && (
             <div className="result-node__preview-inline-foot">
-              +{(rows.length - MAX_ROWS).toLocaleString()} righe — usa “Espandi”
+              +{formatNumber(rows.length - MAX_ROWS)} righe — usa “Espandi”
             </div>
           )}
         </div>

@@ -43,7 +43,6 @@ const ALLOWED_NON_OPENAPI_PATHS = new Set([
 // Path BE che il FE chiama tramite `${baseUrl}/...` o altri pattern
 // non staticamente parsable. Skip esplicito.
 const SKIP_FILES = new Set([
-  'openapiClient.js',  // chiama /openapi.json (relativo a API_BASE_URL, non /api)
 ]);
 
 /**

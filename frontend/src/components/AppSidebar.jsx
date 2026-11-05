@@ -17,15 +17,12 @@
  * sempre alla dashboard "/" e poi scrollano alla sezione corrispondente
  * (via hash). ProjectList ascolta location.hash e fa lo scroll smooth.
  *
- * Props:
- *  - counts?: { projects, connections, files, schedules, apiConnections, eseguibili, ... }
- *             — opzionale, mostra badge numerici accanto alle voci
+ * Nessuna prop (Fase 5 T7, L12): i badge sono gli stessi su ogni pagina (oggi
+ * solo i ticket attivi, letti qui); prima comparivano solo sulla pagina che
+ * passava il suo conteggio. Ogni voce è un <button> (a11y-1).
  *
  * Uso:
- *   <div className="page">
- *     <AppSidebar />
- *     <main className="page__main">...</main>
- *   </div>
+ *   la monta components/common/PageLayout (G1), nessun'altra pagina.
  */
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -37,6 +34,7 @@ import { useResource } from '../hooks/useResource';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
 import PlenoraLogo from './common/PlenoraLogo';
+import { enumLabel } from '../utils/format';
 import './AppSidebar.css';
 function Logo() {
   const { theme } = useTheme();
@@ -58,19 +56,19 @@ const WORKSPACE_ITEMS = [
   { key: 'estrai',      label: 'Estrai',      path: '/#estrai',       dot: 'estrai' },
   { key: 'manipola',    label: 'Manipola',    path: '/#manipola',     dot: 'manipola' },
   { key: 'arricchisci', label: 'Arricchisci', path: '/#arricchisci',  dot: 'arricchisci' },
-  { key: 'eseguibili',  label: 'Eseguibili',  path: '/#eseguibili',   dot: 'eseguibili' },
+  { key: 'eseguibili',  label: 'Eseguibili',  path: '/eseguibili',    dot: 'eseguibili' },
 ];
 
 const SYSTEM_ITEMS = [
-  { key: 'connections',  label: 'Connessioni',  path: '/connections',         countKey: 'connections' },
-  { key: 'apis',         label: 'API Esterne',  path: '/external-connectors', countKey: 'apiConnections' },
-  { key: 'datasources',  label: 'Data Source',  path: '/datasources',         countKey: 'datasources' },
-  { key: 'files',        label: 'File Manager', path: '/files',               countKey: 'files' },
-  { key: 'schedules',    label: 'Scheduler',    path: '/schedules',           countKey: 'schedules' },
+  { key: 'connections',  label: 'Connessioni',  path: '/connections' },
+  { key: 'apis',         label: 'API Esterne',  path: '/external-connectors' },
+  { key: 'datasources',  label: 'Data Source',  path: '/datasources' },
+  { key: 'files',        label: 'File Manager', path: '/files' },
+  { key: 'schedules',    label: 'Scheduler',    path: '/schedules' },
   { key: 'logs',         label: 'Log Viewer',   path: '/logs' },
   { key: 'tickets',      label: 'Ticket',       path: '/tickets',             countKey: 'tickets' },
 ];
-export default function AppSidebar({ counts = {} }) {
+export default function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -86,15 +84,7 @@ export default function AppSidebar({ counts = {} }) {
   }, { key: ['tickets-counts', user?.user_id || null], enabled: Boolean(user) && !role.isEsecutore(user), refreshInterval: 60_000 });
   const ticketsActiveCount = countsResource.status === 'error' ? null : (countsResource.data ?? null);
 
-  // Merge del count ticket dentro `counts` senza modificare la prop
-  // passata dall'esterno (alcuni chiamanti potrebbero gia' popolare
-  // counts.tickets — in quel caso il prop esterno vince).
-  const mergedCounts = {
-    ...counts,
-    tickets: counts.tickets != null
-      ? counts.tickets
-      : (ticketsActiveCount || undefined),
-  };
+  const counts = { tickets: ticketsActiveCount || undefined };
 
   // Per le voci workspace l'highlight si basa sul fatto che siamo sulla
   // dashboard e l'hash corrisponde. Per il sistema basta confrontare il
@@ -103,6 +93,7 @@ export default function AppSidebar({ counts = {} }) {
     if (item.key === 'dashboard') {
       return location.pathname === '/' && (location.hash === '' || location.hash === '#');
     }
+    if (!item.path.startsWith('/#')) return location.pathname === item.path;
     return location.pathname === '/' && location.hash === `#${item.key}`;
   };
   const isSystemActive = (item) => location.pathname === item.path;
@@ -126,34 +117,35 @@ export default function AppSidebar({ counts = {} }) {
         {WORKSPACE_ITEMS.map(item => {
           const active = isWorkspaceActive(item);
           return (
-            <div
+            <button
+              type="button"
               key={item.key}
               className={`app-sidebar__item${active ? ' app-sidebar__item--active' : ''}`}
+              aria-current={active ? 'page' : undefined}
               onClick={() => navigate(item.path)}
             >
               <span className={`app-sidebar__dot${item.dot ? ` app-sidebar__dot--${item.dot}` : ''}`} />
               {item.label}
-              {mergedCounts.workspace?.[item.key] != null && (
-                <span className="app-sidebar__count">{mergedCounts.workspace[item.key]}</span>
-              )}
-            </div>
+            </button>
           );
         })}
 
         <div className="app-sidebar__nav-label" style={{ marginTop: 8 }}>Sistema</div>
         {SYSTEM_ITEMS.map(item => {
           const active = isSystemActive(item);
-          const count = item.countKey ? mergedCounts[item.countKey] : null;
+          const count = item.countKey ? counts[item.countKey] : null;
           return (
-            <div
+            <button
+              type="button"
               key={item.key}
               className={`app-sidebar__item${active ? ' app-sidebar__item--active' : ''}`}
+              aria-current={active ? 'page' : undefined}
               onClick={() => navigate(item.path)}
             >
               <span className="app-sidebar__dot" />
               {item.label}
               {count != null && <span className="app-sidebar__count">{count}</span>}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -161,7 +153,8 @@ export default function AppSidebar({ counts = {} }) {
       {/* Footer utente */}
       <div className="app-sidebar__footer">
         {can.manageUsers(user) && (
-          <div
+          <button
+            type="button"
             className="app-sidebar__user-row app-sidebar__user-row--admin"
             onClick={() => navigate('/admin/users')}
             title="Gestione utenti e gruppi"
@@ -171,10 +164,11 @@ export default function AppSidebar({ counts = {} }) {
               <div className="app-sidebar__user-name">Admin Panel</div>
               <div className="app-sidebar__user-role">utenti &amp; gruppi</div>
             </div>
-          </div>
+          </button>
         )}
         {role.isSuperadmin(user) && (
-          <div
+          <button
+            type="button"
             className="app-sidebar__user-row app-sidebar__user-row--admin"
             onClick={() => navigate('/admin/task-runtime')}
             title="Code RabbitMQ, worker e task attivi"
@@ -184,10 +178,11 @@ export default function AppSidebar({ counts = {} }) {
               <div className="app-sidebar__user-name">Code e Worker</div>
               <div className="app-sidebar__user-role">RabbitMQ · superadmin</div>
             </div>
-          </div>
+          </button>
         )}
         {role.isSuperadmin(user) && (
-          <div
+          <button
+            type="button"
             className="app-sidebar__user-row app-sidebar__user-row--admin"
             onClick={() => navigate('/admin/object-storage')}
             title="Explorer object storage runtime"
@@ -197,10 +192,11 @@ export default function AppSidebar({ counts = {} }) {
               <div className="app-sidebar__user-name">Object Storage</div>
               <div className="app-sidebar__user-role">file runtime · superadmin</div>
             </div>
-          </div>
+          </button>
         )}
         {role.isSuperadmin(user) && (
-          <div
+          <button
+            type="button"
             className="app-sidebar__user-row app-sidebar__user-row--admin"
             onClick={() => navigate('/admin/system-status')}
             title="Dashboard stato sistema"
@@ -210,10 +206,11 @@ export default function AppSidebar({ counts = {} }) {
               <div className="app-sidebar__user-name">Stato Sistema</div>
               <div className="app-sidebar__user-role">overview · superadmin</div>
             </div>
-          </div>
+          </button>
         )}
         {role.isSuperadmin(user) && (
-          <div
+          <button
+            type="button"
             className="app-sidebar__user-row app-sidebar__user-row--admin"
             onClick={() => navigate('/admin/backups')}
             title="Backup database su S3"
@@ -223,10 +220,11 @@ export default function AppSidebar({ counts = {} }) {
               <div className="app-sidebar__user-name">Backup DB</div>
               <div className="app-sidebar__user-role">S3 · solo superadmin</div>
             </div>
-          </div>
+          </button>
         )}
         {role.isSuperadmin(user) && (
-          <div
+          <button
+            type="button"
             className="app-sidebar__user-row app-sidebar__user-row--admin"
             onClick={() => navigate('/admin/runtime-config')}
             title="Configurazione runtime"
@@ -236,7 +234,7 @@ export default function AppSidebar({ counts = {} }) {
               <div className="app-sidebar__user-name">Config Runtime</div>
               <div className="app-sidebar__user-role">read-only · superadmin</div>
             </div>
-          </div>
+          </button>
         )}
         <div className="app-sidebar__user-row">
           <div className="app-sidebar__avatar">
@@ -244,7 +242,7 @@ export default function AppSidebar({ counts = {} }) {
           </div>
           <div className="app-sidebar__user-info">
             <div className="app-sidebar__user-name">{user?.username || 'Utente'}</div>
-            <div className="app-sidebar__user-role">{user?.role || '—'}</div>
+            <div className="app-sidebar__user-role">{enumLabel('role', user?.role)}</div>
           </div>
           <button
             type="button"

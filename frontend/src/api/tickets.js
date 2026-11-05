@@ -135,6 +135,7 @@ export const openAttachment = async (ticketId, attachmentId, filename) => {
   );
   const disposition = res.headers['content-disposition'] || '';
   const isInline = disposition.toLowerCase().startsWith('inline');
-  if (isInline) openBlob(res.data);
-  else saveBlob(res.data, filename || 'attachment');
+  if (isInline) return openBlob(res.data, filename || 'attachment');
+  saveBlob(res.data, filename || 'attachment');
+  return 'downloaded';
 };

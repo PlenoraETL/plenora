@@ -46,47 +46,6 @@
 [data-theme='light'] .file-source-node__handle { border-color: #EFF2F9 !important; }
 
 /* ── Header ───────────────────────────────────────────────────── */
-.file-source-node__header {
-  background: rgba(75,139,255,0.07);
-  border-bottom: 1px solid rgba(75,139,255,0.12);
-  padding: 8px 11px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-[data-theme='light'] .file-source-node__header {
-  background: rgba(75,139,255,0.05);
-  border-bottom-color: rgba(75,139,255,0.15);
-}
-
-.file-source-node__title {
-  font-family: var(--plen-font-display);
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--plen-text, #DDE4F2);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-[data-theme='light'] .file-source-node__title { color: #0F1729; }
-
-.file-source-node__delete-btn {
-  background: transparent;
-  border: none;
-  color: var(--plen-text-dim, #3F4D68);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0 3px;
-  line-height: 1;
-  border-radius: 4px;
-  flex-shrink: 0;
-  transition: all 0.12s;
-}
-.file-source-node__delete-btn:hover {
-  color: var(--plen-err, #F87171);
-  background: rgba(248,113,113,0.1);
-}
 
 /* ── File name ────────────────────────────────────────────────── */
 .file-source-node__name {

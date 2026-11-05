@@ -17,7 +17,6 @@ import {
   getColumnTypeLabel,
   getColumnSRID,
   isGeometryType,
-  deduplicateColumns,
 } from '../../src/utils/columnUtils';
 
 
@@ -162,27 +161,6 @@ describe('getColumnTypeLabel', () => {
   });
 });
 
-
-describe('deduplicateColumns', () => {
-  it('deduplica per name mantenendo ultima occorrenza', () => {
-    const out = deduplicateColumns([
-      { name: 'a', type: 'str' },
-      { name: 'b', type: 'int' },
-      { name: 'a', type: 'real' }, // sostituisce la prima
-    ]);
-    expect(out).toHaveLength(2);
-    expect(out.find(c => c.name === 'a').type).toBe('real');
-  });
-
-  it('input vuoto -> []', () => {
-    expect(deduplicateColumns([])).toEqual([]);
-  });
-
-  it('input senza duplicati -> invariato in lunghezza', () => {
-    const cols = [{ name: 'a' }, { name: 'b' }, { name: 'c' }];
-    expect(deduplicateColumns(cols)).toHaveLength(3);
-  });
-});
 
 // calculateOutputColumnsRecursive (Estrai) e' uscito con la F2 del Blocco A
 // (regola 4): le colonne dell'Output di Estrai le prevede il server con la

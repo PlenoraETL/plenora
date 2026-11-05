@@ -23,7 +23,7 @@ import { assertNoRestSecrets } from '../utils/restSecrets';
 import { COLUMN_STEP, findFreePosition, nodeSize, planInsertAfter, settleNodes } from '../utils/canvasPlacement';
 import { bindingListResolution, isParameterBindingEdge, uniqueDataEdges } from '../utils/runtimeBindingEdges';
 import { EDITOR_ACTION_NAMES } from '../components/editor/editorActions';
-import { hasUnsavedChanges } from './saveState';
+import { hasUnsavedChanges, matchesSavedGraph } from './saveState';
 import { derivedColumnsForSave } from './useColumnStore';
 import { requestErrorMessage } from '../utils/errorMessages';
 import { registerSessionReset } from '../utils/session';
@@ -167,7 +167,17 @@ export const createCanvasStore = () => create(
             const snapshot = get();
             // Si salva per modifiche utente (isDirty) E per correzioni
             // automatiche da persistere (pendingSync).
-            if (snapshot.isReadOnly || (!snapshot.isDirty && !snapshot.pendingSync) || !snapshot.projectId) continue;
+            // Regola unica (store/saveState): un canvas uguale all'ultimo
+            // salvato non si risalva (es. modifiche annullate a mano).
+            if (snapshot.isReadOnly || (!hasUnsavedChanges(snapshot) && !snapshot.pendingSync) || !snapshot.projectId) {
+              // Modifiche annullate fino allo stato salvato: il server ha gia'
+              // questo canvas, e' «salvato» (stesso evento di un salvataggio
+              // per chi ascolta, es. la copia di sicurezza).
+              if (snapshot.isDirty && !snapshot.isReadOnly && matchesSavedGraph(snapshot)) {
+                set({ isDirty: false, saveStatus: 'idle', lastSavedAt: Date.now() }, false, 'save:unchanged');
+              }
+              continue;
+            }
 
             // Stato per l'indicatore della barra (Fase 4, M7): tutti i
             // salvataggi passano da qui, quindi l'indicatore li vede tutti.

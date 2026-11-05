@@ -33,6 +33,8 @@ import { term } from '../../utils/glossary';
 import FieldInput from '../common/FieldInput';
 import { integer } from '../../utils/fieldCodecs';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import { formatBytes } from '../../utils/format';
+import { pressable } from '../../utils/pressable';
 
 // Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
 const MAX_ERRORS = integer({ min: 0 });
@@ -585,7 +587,7 @@ const handleExecParamChange = (key, value) => {
           <div className="api-enrich-node__section api-enrich-node__section--advanced">
             <div
               className="api-enrich-node__advanced-toggle"
-              onClick={() => useCanvasStore.getState().updateNodeData(id, { _advOpen: !data._advOpen }, { derived: true })}
+              {...pressable(() => useCanvasStore.getState().updateNodeData(id, { _advOpen: !data._advOpen }, { derived: true }))}
             >
               <span>⚙️ Opzioni avanzate</span>
               <span className="api-enrich-node__advanced-arrow">{data._advOpen ? '▲' : '▼'}</span>
@@ -756,7 +758,7 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
       {current ? (
         <div className="api-enrich-node__file-field-success">
           ✓ {current.original_filename}
-          {current.size ? ` (${Math.round(current.size / 1024)} KB)` : ''}
+          {current.size ? ` (${formatBytes(current.size)})` : ''}
         </div>
       ) : isReadOnly ? (
         <div className="api-enrich-node__file-field-format-hint">Nessun file (sola lettura)</div>

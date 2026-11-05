@@ -11,7 +11,7 @@
 
 export const DEFAULT_TIMEZONE = 'Europe/Rome';
 
-export const PREFERRED_TIMEZONES = Object.freeze(['Europe/Rome', 'UTC', 'Europe/London']);
+const PREFERRED_TIMEZONES = Object.freeze(['Europe/Rome', 'UTC', 'Europe/London']);
 
 const LABELS = Object.freeze({
   'Europe/Rome': 'Europe/Rome (CET/CEST)',

@@ -19,6 +19,8 @@ import './RunHistoryModal.css';
 import { term } from '../../utils/glossary';
 import { requestErrorMessage, backendMessage } from '../../utils/errorMessages';
 import { errorReason } from '../../api/errors';
+import { formatDateTime as formatTimestamp, formatNumber as formatRows } from '../../utils/format';
+import { pressable } from '../../utils/pressable';
 
 /**
  * Mappa un errore di /compare/l2 al messaggio user-facing in base al
@@ -44,14 +46,6 @@ export function mapCompareErrorReason(reason, beMessage) {
   return safeBe || 'Errore durante il confronto';
 }
 
-const formatTimestamp = (ts) => {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  return d.toLocaleString('it-IT', {
-    day: '2-digit', month: '2-digit', year: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  });
-};
 
 const formatDuration = (secs) => {
   if (secs == null) return '—';
@@ -59,10 +53,6 @@ const formatDuration = (secs) => {
   return `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s`;
 };
 
-const formatRows = (n) => {
-  if (n == null) return '—';
-  return n.toLocaleString('it-IT');
-};
 
 const StatusBadge = ({ status }) => {
   const map = {
@@ -220,7 +210,7 @@ const colKeys = nodeData?.rows?.length > 0
                 <div
                   key={run.run_id}
                   className={`rh-run-item ${isA ? 'rh-run-item--selected-a' : ''} ${isB ? 'rh-run-item--selected-b' : ''}`}
-                  onClick={() => handleSelectRun(run)}
+                  {...pressable(() => handleSelectRun(run))}
                 >
                   <div className="rh-run-item__top">
                     <StatusBadge status={run.status} />

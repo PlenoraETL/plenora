@@ -92,7 +92,12 @@ function ResponseConfigBuilder({
   // (il parent passa una funzione inline che cambia riferimento ad ogni render)
   const onChangeRef = React.useRef(onChange);
   React.useEffect(() => { onChangeRef.current = onChange; });
+  // P11 (Fase 5 T7): al montaggio la config e' quella ricevuta: nessuna
+  // scrittura (prima il mount riscriveva la config, `output_mapping` compreso).
+  const mountedConfigRef = React.useRef(generatedConfig);
   React.useEffect(() => {
+    if (generatedConfig === mountedConfigRef.current) return;
+    mountedConfigRef.current = null;
     onChangeRef.current?.(generatedConfig);
   }, [generatedConfig]);
 

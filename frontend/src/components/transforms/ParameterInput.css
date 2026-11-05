@@ -85,7 +85,7 @@
   font-size: 13px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  background: white;
+  background: var(--plen-surface);
   transition: border-color 0.2s;
   box-sizing: border-box;
 }
@@ -270,8 +270,8 @@
   box-sizing: border-box;
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  background: var(--color-bg, #fff);
-  color: var(--color-text, inherit);
+  background: var(--plen-surface);
+  color: var(--plen-text);
 }
 
 .aggregation-list-input__row > input[type="text"]:focus,
@@ -282,7 +282,7 @@
 
 .aggregation-list-input__remove {
   padding: 4px 8px;
-  background: #f8d7da;
+  background: var(--plen-err-bg);
   color: #dc3545;
   border: none;
   border-radius: 4px;
@@ -340,7 +340,7 @@
   border: 1px solid var(--color-slate-200);
   border-radius: 4px;
   font-size: 11px;
-  background: white;
+  background: var(--plen-surface);
 }
 
 .masking-list-input__type-select {
@@ -349,7 +349,7 @@
   border: 1px solid var(--color-slate-200);
   border-radius: 4px;
   font-size: 11px;
-  background: white;
+  background: var(--plen-surface);
 }
 
 .masking-list-input__remove {
@@ -364,7 +364,7 @@
 }
 
 .masking-list-input__remove:hover {
-  background: #fef0f0;
+  background: var(--plen-err-bg);
   border-color: var(--color-danger);
 }
 
@@ -448,7 +448,7 @@
   border: 1px solid var(--color-slate-200);
   border-radius: 4px;
   font-size: 11px;
-  background: white;
+  background: var(--plen-surface);
 }
 
 .masking-list-input__type-select {
@@ -457,7 +457,7 @@
   border: 1px solid var(--color-slate-200);
   border-radius: 4px;
   font-size: 11px;
-  background: white;
+  background: var(--plen-surface);
 }
 
 .masking-list-input__remove {
@@ -472,7 +472,7 @@
 }
 
 .masking-list-input__remove:hover {
-  background: #fef0f0;
+  background: var(--plen-err-bg);
   border-color: var(--color-danger);
 }
 
@@ -558,7 +558,7 @@
   border: 1px solid var(--color-slate-200);
   border-radius: 4px;
   font-size: 11px;
-  background: white;
+  background: var(--plen-surface);
 }
 
 .condition-list-input__value {
@@ -581,7 +581,7 @@
 }
 
 .condition-list-input__remove:hover {
-  background: #fef0f0;
+  background: var(--plen-err-bg);
   border-color: var(--color-danger);
 }
 
@@ -607,7 +607,7 @@
   border: 1px solid var(--color-slate-200);
   border-radius: 4px;
   font-size: 11px;
-  background: #f0fdf4;
+  background: var(--plen-ok-bg);
 }
 
 .condition-list-input__add {
@@ -649,7 +649,7 @@
   border: 1px solid var(--color-slate-200);
   border-radius: 4px;
   font-size: 12px;
-  background: white;
+  background: var(--plen-surface);
   min-width: 0;
 }
 
@@ -693,7 +693,7 @@
 }
 
 .rename-list-input__remove:hover {
-  background: #fef0f0;
+  background: var(--plen-err-bg);
   border-color: var(--color-danger);
 }
 
@@ -769,7 +769,7 @@
 .rename-list-input__csv-panel {
   margin-top: 6px;
   padding: 10px;
-  background: #f8faf8;
+  background: var(--plen-surface-2);
   border: 1px solid var(--color-success-border);
   border-radius: 6px;
   display: flex;
@@ -882,7 +882,7 @@
   align-items: center;
   gap: 6px;
   padding: 5px 8px;
-  background: white;
+  background: var(--plen-surface);
   border: 1px solid var(--color-slate-200);
   border-radius: 4px;
   cursor: grab;
@@ -893,7 +893,7 @@
 
 .column-order-input__item:hover {
   border-color: var(--color-manipola);
-  background: #faf5ff;
+  background: var(--plen-blue-bg);
 }
 
 .column-order-input__item--dragging {

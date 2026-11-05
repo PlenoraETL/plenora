@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import { pressable } from '../../utils/pressable';
 
 /**
  * Modal di selezione progetto Arricchisci da pubblicare come Eseguibile.
@@ -65,7 +66,7 @@ function EsegSelectorModal({
             <div
               key={p.id}
               className="pl__modal-row"
-              onClick={() => onSelect?.(p)}
+              {...pressable(() => onSelect?.(p))}
             >
               <span className="pl__modal-row-icon">◈</span>
               <div className="pl__modal-row-body">

@@ -23,12 +23,6 @@ export const getFormatConfig = (fmt) =>
     rgb: '107,114,128',
   };
 
-export const formatFileSize = (bytes) => {
-  if (!bytes) return '—';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-};
 
 export const SPATIAL_FORMATS = ['gpkg', 'shp', 'gdb', 'geojson'];
 

@@ -30,6 +30,7 @@ import PlenoraLogo from '../components/common/PlenoraLogo';
 import { useResource } from '../hooks/useResource';
 import ListState from '../components/common/ListState';
 import './EsecutoreHome.css';
+import EmptyState from '../components/common/EmptyState';
 function Logo() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
@@ -43,7 +44,8 @@ function Logo() {
 }
 function EseguibileCard({ item, onRun }) {
   return (
-    <div className="esh__card" onClick={() => onRun(item)}>
+    // a11y-1: la scheda e' un pulsante vero (tastiera, lettori di schermo).
+    <button type="button" className="esh__card" onClick={() => onRun(item)}>
       <div className="esh__card-icon">{item.icon || '▶'}</div>
       <div className="esh__card-body">
         <div className="esh__card-title">{item.name}</div>
@@ -64,7 +66,7 @@ function EseguibileCard({ item, onRun }) {
       <div className="esh__card-cta">
         Esegui →
       </div>
-    </div>
+    </button>
   );
 }
 function EsecutoreHome() {
@@ -167,14 +169,11 @@ function EsecutoreHome() {
           loading={<div className="esh__loading">Caricamento azioni disponibili…</div>}
           errorTitle="Azioni non caricate"
           empty={(
-            <div className="esh__empty">
-              <div className="esh__empty-icon">📭</div>
-              <h3>Nessuna azione disponibile</h3>
-              <p>
-                Al momento non ci sono azioni configurate per il tuo gruppo.
-                Contatta un amministratore.
-              </p>
-            </div>
+            <EmptyState
+              icon="📭"
+              title="Nessuna azione disponibile"
+              text="Al momento non ci sono azioni configurate per il tuo gruppo. Contatta un amministratore."
+            />
           )}
         >
           <>
@@ -199,11 +198,7 @@ function EsecutoreHome() {
               )}
             </div>
             {filteredItems.length === 0 ? (
-              <div className="esh__empty">
-                <div className="esh__empty-icon">🔎</div>
-                <h3>Nessun risultato</h3>
-                <p>Nessuna azione corrisponde a "{searchQuery}".</p>
-              </div>
+              <EmptyState icon="🔎" title="Nessun risultato" text={`Nessuna azione corrisponde a "${searchQuery}".`} />
             ) : (
               <div className="esh__grid">
                 {filteredItems.map(item => (

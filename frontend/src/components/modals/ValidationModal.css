@@ -2,87 +2,14 @@
    ValidationModal.css — Plenora design system
    Prefix: .validation-modal
    ═══════════════════════════════════════════════════════════════ */
-
-.validation-modal__overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(4,6,14,0.75);
-  backdrop-filter: blur(3px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal-priority, 10000);
-}
-
-.validation-modal {
-  background: var(--plen-surface, #0C0F18);
-  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
-  border-radius: 10px;
-  width: 680px;
-  max-width: 95vw;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.65);
-  overflow: hidden;
-  animation: vm-in 0.16s cubic-bezier(.22,.68,0,1.2) both;
-}
 @keyframes vm-in {
   from { opacity:0; transform: scale(.97) translateY(6px); }
   to   { opacity:1; transform: scale(1)  translateY(0); }
 }
 
 /* accent bar top */
-.validation-modal::before {
-  content: '';
-  display: block;
-  height: 3px;
-  background: linear-gradient(90deg, var(--plen-err, #F87171), var(--plen-warn, #FBBF24));
-  flex-shrink: 0;
-}
-
-[data-theme='light'] .validation-modal {
-  background: #FFFFFF;
-  border-color: rgba(0,0,0,0.10);
-  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-}
 
 /* ── Header ─────────────────────────────────────────────────────── */
-.validation-modal__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px 12px;
-  border-bottom: 1px solid var(--plen-border, rgba(255,255,255,0.06));
-  flex-shrink: 0;
-}
-[data-theme='light'] .validation-modal__header { border-bottom-color: rgba(0,0,0,0.08); }
-
-.validation-modal__title {
-  font-family: var(--plen-font-display);
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--plen-text, #DDE4F2);
-  letter-spacing: -0.01em;
-}
-[data-theme='light'] .validation-modal__title { color: #0F1729; }
-
-.validation-modal__close {
-  width: 26px; height: 26px;
-  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
-  border-radius: 5px;
-  background: transparent;
-  color: var(--plen-text-dim, #3F4D68);
-  font-size: 14px;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.12s;
-}
-.validation-modal__close:hover {
-  border-color: rgba(248,113,113,0.4);
-  color: var(--plen-err, #F87171);
-  background: rgba(248,113,113,0.07);
-}
 
 /* ── Body ───────────────────────────────────────────────────────── */
 .validation-modal__body {
@@ -224,30 +151,3 @@
 }
 
 /* ── Footer ─────────────────────────────────────────────────────── */
-.validation-modal__footer {
-  padding: 11px 16px;
-  border-top: 1px solid var(--plen-border, rgba(255,255,255,0.06));
-  display: flex;
-  justify-content: flex-end;
-  flex-shrink: 0;
-}
-[data-theme='light'] .validation-modal__footer { border-top-color: rgba(0,0,0,0.08); }
-
-.validation-modal__btn {
-  padding: 7px 16px;
-  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
-  border-radius: 6px;
-  background: transparent;
-  color: var(--plen-text-sub, #7D8BA8);
-  font-size: 12px;
-  font-weight: 600;
-  font-family: var(--plen-font-body);
-  cursor: pointer;
-  transition: all 0.12s;
-}
-.validation-modal__btn:hover {
-  border-color: var(--plen-text-dim, #3F4D68);
-  color: var(--plen-text, #DDE4F2);
-}
-[data-theme='light'] .validation-modal__btn { border-color: rgba(0,0,0,0.12); color: #4A5568; }
-[data-theme='light'] .validation-modal__btn:hover { background: #F4F7FD; color: #0F1729; }

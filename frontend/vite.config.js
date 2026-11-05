@@ -44,42 +44,16 @@ export default defineConfig(({ mode }) => {
             if (!id.includes('node_modules')) return undefined;
 
             // React core — cambia raramente, cached a lungo dal browser.
-            // Include anche @deck.gl/react (wrapper React per DeckGL): tecnicamente
-            // sta in @deck.gl ma importa da react come peerDep, quindi tenerlo
-            // nel chunk react evita il ciclo deckgl↔react osservato con il
-            // grouping precedente.
-            if (/[\\/]node_modules[\\/](react|react-dom|react-router-dom|scheduler)[\\/]/.test(id) ||
-                /[\\/]node_modules[\\/]@deck\.gl[\\/]react[\\/]/.test(id)) {
+            if (/[\\/]node_modules[\\/](react|react-dom|react-router-dom|scheduler)[\\/]/.test(id)) {
               return 'vendor-react';
             }
             // ReactFlow — libreria pesante, bundle separato
             if (/[\\/]node_modules[\\/]@xyflow[\\/]/.test(id)) {
               return 'vendor-reactflow';
             }
-            // Grafo geospatial — usato SOLO dalle pagine lazy-loaded che
-            // renderizzano mappe (ImdfPreviewModal, EstraiEditor geo panels).
-            // Splittato in 2 chunk per dominio: cache granulare, HTTP/2
-            // scarica parallelo. Soglia warning 1MB rispettata.
-            //
-            // NOTA: @loaders.gl e' unito a vendor-deckgl perche' deck.gl
-            // core ne dipende e splittarli causa ciclo chunk (loaders
-            // importa da luma.gl che e' in deckgl, deckgl importa loaders).
-            // Mergiandoli, 27KB extra in vendor-deckgl ma grafo pulito.
-            // @deck.gl/react invece e' in vendor-react (vedi sopra).
-
-            // Deck.gl (core/layers/geo-layers) + luma/math/probe/loaders + deps
-            if (/[\\/]node_modules[\\/](@deck\.gl|deck\.gl|@luma\.gl|@math\.gl|@probe\.gl|@loaders\.gl|mjolnir\.js|earcut|ml-matrix)[\\/]/.test(id)) {
-              return 'vendor-deckgl';
-            }
-            // Maplibre-gl + deps (global/long/pbf sono transitive di maplibre)
-            if (/[\\/]node_modules[\\/](maplibre-gl|global|long|pbf)[\\/]/.test(id)) {
-              return 'vendor-maplibre';
-            }
-            // Nota: Leaflet e' importato da `PreviewModal` via npm
-            // (`import L from 'leaflet'`) ma il modal e' lazy-loaded dai 3
-            // editor; lo lasciamo nel chunk del consumer (PreviewModal-*.js)
-            // invece di splittare un `vendor-leaflet` dedicato — coerente
-            // col pattern di `ImdfPreviewModal` per maplibre/deckgl.
+            // Leaflet resta nel chunk del suo unico consumatore (PreviewModal,
+            // caricato su richiesta). Fase 5 T7 (D6b): tolte le regole per
+            // deck.gl e maplibre-gl, che l'app non usa piu'.
             return undefined; // default: rollup decide
           },
         },

@@ -16,6 +16,7 @@ import { useToast } from '../hooks/useToast';
 import useDialog from '../hooks/useDialog';
 import { toastApiError } from '../utils/toastApiError';
 import { can } from '../utils/permissions';
+import { enumLabel } from '../utils/format';
 
 
 export default function TicketCreateModal({ meta, user, onClose, onCreated }) {
@@ -80,8 +81,8 @@ export default function TicketCreateModal({ meta, user, onClose, onCreated }) {
                 value={form.kind}
                 onChange={(e) => handle('kind', e.target.value)}
               >
-                <option value="user_support">Supporto utente</option>
-                <option value="tech_debt">Debito tecnico</option>
+                <option value="user_support">{enumLabel('ticketKind', 'user_support')}</option>
+                <option value="tech_debt">{enumLabel('ticketKind', 'tech_debt')}</option>
               </select>
             </label>
           )}
@@ -116,7 +117,7 @@ export default function TicketCreateModal({ meta, user, onClose, onCreated }) {
                 onChange={(e) => handle('severity', e.target.value)}
               >
                 {(meta?.severities || ['low', 'medium', 'high', 'critical']).map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <option key={s} value={s}>{enumLabel('ticketSeverity', s)}</option>
                 ))}
               </select>
             </label>

@@ -10,11 +10,12 @@
  */
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AppSidebar from '../components/AppSidebar';
+import PageLayout from '../components/common/PageLayout';
 import { getSystemStatus } from '../api/adminSystemStatus';
 import '../styles/AdminSystemStatusPage.css';
 import { useResource } from '../hooks/useResource';
 import { ResourceError } from '../components/common/ListState';
+import { formatDateTime as fmtDate, formatBytes as fmtBytes, formatNumber, formatTime } from '../utils/format';
 const STATUS_LABELS = { ok: 'OK', warn: 'WARN', error: 'ERRORE', unknown: 'N/D' };
 const STATUS_ICONS = { ok: '✓', warn: '⚠', error: '✗', unknown: '?' };
 
@@ -28,25 +29,7 @@ function Badge({ status }) {
   );
 }
 
-function fmtBytes(n) {
-  if (n == null) return '—';
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
 
-function fmtDate(iso) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString('it-IT', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
-}
 
 function ProgressBar({ percent, warnAt = 80, errorAt = 92 }) {
   if (percent == null) return null;
@@ -170,13 +153,13 @@ function HostResourcesCard({ data }) {
         <>
           {data.disk && (
             <div className="sys__mb-sm">
-              <div>Disco <b>{data.disk.percent}%</b> · {data.disk.free_gb} GB liberi / {data.disk.total_gb} GB</div>
+              <div>Disco <b>{data.disk.percent}%</b> · {fmtBytes(data.disk.free_gb, { from: 'GB' })} liberi / {fmtBytes(data.disk.total_gb, { from: 'GB' })}</div>
               <ProgressBar percent={data.disk.percent} warnAt={80} errorAt={92} />
             </div>
           )}
           {data.memory && (
             <div className="sys__mb-sm">
-              <div>RAM <b>{data.memory.percent}%</b> · {data.memory.available_gb} GB liberi / {data.memory.total_gb} GB</div>
+              <div>RAM <b>{data.memory.percent}%</b> · {fmtBytes(data.memory.available_gb, { from: 'GB' })} liberi / {fmtBytes(data.memory.total_gb, { from: 'GB' })}</div>
               <ProgressBar percent={data.memory.percent} warnAt={85} errorAt={95} />
             </div>
           )}
@@ -256,7 +239,7 @@ function JwtBlacklistCard({ data }) {
         <>
           <div>Ultimo OK: <b>{lastOk}</b></div>
           {data.status === 'warn' && (
-            <div className="sys__mt-sm" style={{ color: 'var(--sys-warn, #b45309)' }}>
+            <div className="sys__mt-sm" style={{ color: 'var(--plen-warn)' }}>
               ⚠️ Operazioni inoperanti da troppo tempo
             </div>
           )}
@@ -264,24 +247,24 @@ function JwtBlacklistCard({ data }) {
             <li className="sys__kv">
               <span className="sys__kv-key">Write OK / Fail</span>
               <span className="sys__kv-val">
-                {(c.write_ok || 0).toLocaleString('it-IT')}
+                {formatNumber(c.write_ok || 0)}
                 {' / '}
-                {(c.write_fail || 0).toLocaleString('it-IT')}
+                {formatNumber(c.write_fail || 0)}
               </span>
             </li>
             <li className="sys__kv">
               <span className="sys__kv-key">Read OK / Fail</span>
               <span className="sys__kv-val">
-                {(c.read_ok || 0).toLocaleString('it-IT')}
+                {formatNumber(c.read_ok || 0)}
                 {' / '}
-                {(c.read_fail || 0).toLocaleString('it-IT')}
+                {formatNumber(c.read_fail || 0)}
               </span>
             </li>
             {c.client_missing > 0 && (
               <li className="sys__kv">
                 <span className="sys__kv-key">Client missing</span>
                 <span className="sys__kv-val">
-                  {c.client_missing.toLocaleString('it-IT')}
+                  {formatNumber(c.client_missing)}
                 </span>
               </li>
             )}
@@ -304,7 +287,7 @@ function DbSchemaCard({ data }) {
                 <li key={t.name} className="sys__kv">
                   <span className="sys__kv-key">{t.name}</span>
                   <span className="sys__kv-val">
-                    {t.rows.toLocaleString('it-IT')} · {t.size_pretty}
+                    {formatNumber(t.rows)} · {t.size_pretty}
                   </span>
                 </li>
               ))}
@@ -339,40 +322,39 @@ export default function AdminSystemStatusPage() {
 
   const overall = useMemo(() => {
     if (!status) return null;
-    const vals = STATUS_KEYS.map((k) => status[k]?.status).filter(Boolean);
+    // P19 (Fase 5 T7): un componente senza stato non si ignora: il
+    // riepilogo e' «ok» solo se TUTTI i componenti attesi sono ok.
+    const vals = STATUS_KEYS.map((k) => status[k]?.status || 'unknown');
     if (vals.includes('error')) return 'error';
     if (vals.includes('warn')) return 'warn';
-    if (vals.every((v) => v === 'ok')) return 'ok';
+    if (vals.length > 0 && vals.every((v) => v === 'ok')) return 'ok';
     return 'unknown';
   }, [status]);
 
   return (
-    <div className="sys">
-      <AppSidebar />
-      <main className="sys__main">
-        <header className="sys__header">
-          <div>
-            <h1 className="sys__title">
-              Stato Sistema
-              {overall && <Badge status={overall} />}
-            </h1>
-            <div className="sys__subtitle">
-              {refreshedAt
-                ? `Ultimo aggiornamento: ${refreshedAt.toLocaleTimeString('it-IT')}`
-                : 'Caricamento…'}
-              {loading && <span className="sys__ml-xs">↻</span>}
-            </div>
-          </div>
-          <div className="sys__header-actions">
-            <button
-              onClick={() => load()}
-              disabled={loading}
-              className="sys__btn sys__btn--primary"
-            >
-              {loading ? 'Aggiornamento…' : '↻ Aggiorna ora'}
-            </button>
-          </div>
-        </header>
+    <PageLayout
+      className="sys"
+      title="Stato Sistema"
+      badge={overall && <Badge status={overall} />}
+      subtitle={(
+        <>
+          {refreshedAt
+            ? `Ultimo aggiornamento: ${formatTime(refreshedAt, { seconds: true })}`
+            : 'Caricamento…'}
+          {loading && <span className="sys__ml-xs">↻</span>}
+        </>
+      )}
+      actions={(
+        <button
+          type="button"
+          onClick={() => load()}
+          disabled={loading}
+          className="sys__btn sys__btn--primary"
+        >
+          {loading ? 'Aggiornamento…' : '↻ Aggiorna ora'}
+        </button>
+      )}
+    >
 
         {/* Con le schede gia' caricate: «Dati non aggiornati» + Riprova. */}
         <ResourceError resource={resource} title="Stato del sistema non caricato" />
@@ -403,7 +385,6 @@ export default function AdminSystemStatusPage() {
           stato <i>N/D</i> indicano servizi non interrogabili (non
           necessariamente fallimenti).
         </footer>
-      </main>
-    </div>
+    </PageLayout>
   );
 }

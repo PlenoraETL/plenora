@@ -33,7 +33,7 @@ export function LoadingOverlay({
 /**
  * Spinner standalone (usato internamente da LoadingOverlay).
  */
-export function LoadingSpinner({ size = 'md', color = 'primary' }) {
+function LoadingSpinner({ size = 'md', color = 'primary' }) {
   return (
     <div className={`loading-spinner loading-spinner--${size} loading-spinner--${color}`}>
       <div className="loading-spinner__circle"></div>

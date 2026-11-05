@@ -32,11 +32,25 @@ export function saveBlob(blob, filename = 'download') {
   revokeLater(url);
 }
 
-/** Apre un Blob in una nuova scheda (allegati inline). */
-export function openBlob(blob) {
+/**
+ * Apre un Blob in una nuova scheda (allegati inline). Dopo un `await` il
+ * browser puo' bloccare la finestra (P22): allora il file si SCARICA, mai
+ * niente in silenzio. Niente 'noopener' nelle opzioni (con 'noopener'
+ * window.open restituisce sempre null e il blocco non si vedrebbe): il
+ * riferimento all'opener si toglie a mano.
+ * @returns {'opened'|'downloaded'}
+ */
+export function openBlob(blob, filename = 'download') {
   const url = window.URL.createObjectURL(blob);
-  window.open(url, '_blank', 'noopener,noreferrer');
+  const win = window.open(url, '_blank');
+  if (!win) {
+    window.URL.revokeObjectURL(url);
+    saveBlob(blob, filename);
+    return 'downloaded';
+  }
+  try { win.opener = null; } catch { /* finestra gia' isolata */ }
   revokeLater(url);
+  return 'opened';
 }
 
 /**

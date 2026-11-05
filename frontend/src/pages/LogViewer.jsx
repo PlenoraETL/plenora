@@ -13,20 +13,26 @@ import { useNavigate } from 'react-router-dom';
 import { getLogs, getLogsStats } from '../api/logs';
 import { useAuth } from '../context/AuthContext';
 import RunsTab from '../components/logviewer/RunsTab';
-import { formatTime, truncateProjectId } from '../utils/logViewerHelpers.jsx';
+import { formatLogTime, projectLabel } from '../utils/logViewerHelpers.jsx';
+import { useProjectNames } from '../hooks/useProjectNames';
 
 import { useHexCanvas } from '../utils/hexCanvas';
-import AppSidebar from '../components/AppSidebar';
-import ThemeToggle from '../components/common/ThemeToggle';
+import PageLayout from '../components/common/PageLayout';
+import EmptyState from '../components/common/EmptyState';
+import { useToast } from '../hooks/useToast';
+import { toastApiError } from '../utils/toastApiError';
+import { formatNumber } from '../utils/format';
 import { can } from '../utils/permissions';
 import '../styles/LogViewer.css';
-import { goBack } from '../utils/navigation';
 import { openProjectPath } from '../utils/projectRoutes';
+import { pressable } from '../utils/pressable';
 
 const LEVELS   = ['INFO', 'WARNING', 'ERROR'];
 const MODULES  = ['estrai', 'manipola', 'arricchisci', 'carica', 'orchestrator', 'scheduler', 'connections', 'projects', 'files', 'services', 'db', 'utils', 'workers'];
 const OPS      = ['execute', 'preview', 'save', 'load', 'transform', 'enrich', 'carica', 'validate'];
 const PAGE_SIZE = 50;
+const EXPORT_PAGE_SIZE = 1000; // massimo di GET /logs (core/logs/router.py)
+const EXPORT_MAX_ROWS = 20000;
 
 const LEVEL_CONFIG = {
   INFO:    { cls: 'lv__badge--info',  dot: 'var(--lv-blue)', label: 'INFO' },
@@ -42,6 +48,8 @@ const MODULE_COLORS = {
 function LogViewer() {
   const navigate     = useNavigate();
   const { user } = useAuth();
+  const toast = useToast();
+  const projectNames = useProjectNames();
   const canvasRef    = useRef(null);
   useHexCanvas(canvasRef);
 
@@ -98,43 +106,60 @@ function LogViewer() {
   const entryKey = (entry) => entry.id || `${entry.ts}|${entry.module}|${entry.op}|${entry.msg}`;
 
   const handleSearch = e => { e.preventDefault(); setSearchText(searchInput); };
-  const handleExportCSV = () => {
-    if (!logs.length) return;
-    const headers = ['Timestamp', 'Livello', 'Modulo', 'Operazione', 'Messaggio', 'Progetto', 'Dettagli'];
-    const rows = logs.map(l => [l.ts||'', l.level||'', l.module||'', l.op||'', `"${(l.msg||'').replace(/"/g,'""')}"`, l.project_id||'', l.details?`"${JSON.stringify(l.details).replace(/"/g,'""')}"`:'' ]);
-    const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
-    const blob = new Blob(['\uFEFF'+csv], { type: 'text/csv;charset=utf-8;' });
-    saveBlob(blob, `plenora-logs-${new Date().toISOString().slice(0,10)}.csv`);
+  // P21: l'export contiene TUTTE le righe del filtro corrente (pagine da
+  // EXPORT_PAGE_SIZE fino a EXPORT_MAX_ROWS), non solo la pagina mostrata.
+  const [exporting, setExporting] = useState(false);
+  const handleExportCSV = async () => {
+    if (exporting || !total) return;
+    setExporting(true);
+    try {
+      const rowsOut = [];
+      const filters = { level: filterLevel, module: filterModule, op: filterOp, search: searchText };
+      for (let page = 0; rowsOut.length < EXPORT_MAX_ROWS; page += 1) {
+        const data = await getLogs({ ...filters, limit: EXPORT_PAGE_SIZE, offset: page * EXPORT_PAGE_SIZE });
+        rowsOut.push(...(data?.entries || []));
+        if (!data?.has_more || !(data?.entries || []).length) break;
+      }
+      const truncated = total > EXPORT_MAX_ROWS;
+      const headers = ['Timestamp (UTC)', 'Livello', 'Modulo', 'Operazione', 'Messaggio', 'Progetto', 'Dettagli'];
+      const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const rows = rowsOut.slice(0, EXPORT_MAX_ROWS).map(l => [l.ts || '', l.level || '', l.module || '', l.op || '', q(l.msg), q(projectLabel(l.project_id, projectNames)), l.details ? q(JSON.stringify(l.details)) : '']);
+      const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      saveBlob(blob, `plenora-logs-${new Date().toISOString().slice(0, 10)}.csv`);
+      if (truncated) toast.warning(`Esportate le prime ${formatNumber(EXPORT_MAX_ROWS)} righe di ${formatNumber(total)}: restringi i filtri per il resto.`);
+    } catch (e) {
+      toastApiError(toast, e, 'Export non riuscito');
+    } finally {
+      setExporting(false);
+    }
   };
   const resetFilters = () => { setFilterLevel(''); setFilterModule(''); setFilterOp(''); setSearchText(''); setSearchInput(''); };
   const hasFilters = filterLevel || filterModule || filterOp || searchText;
 
   return (
-    <>
-    <div className="lv">
-      {/* SIDEBAR */}
-      <AppSidebar />
-
-      {/* MAIN */}
-      <div className="lv__main">
-        <header className="lv__topbar">
-          <button type="button" className="lv__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
-          <div className="lv__page-title">{canSeeTechnicalLog ? 'Log di Sistema' : 'Cronologia Esecuzioni'}</div>
-          <div className="lv__topbar-right">
-            {/* Live: aggiorna sia i log tecnici che le run, utile su entrambi i tab */}
-            <button type="button"
-              className={`lv__btn lv__btn--ghost${autoRefresh ? ' lv__btn--live' : ''}`}
-              onClick={() => setAutoRefresh(!autoRefresh)}>
-              {autoRefresh ? '⏸ Stop Live' : '▶ Live'}
+    <PageLayout
+      className="lv"
+      bare
+      title={canSeeTechnicalLog ? 'Log di Sistema' : 'Cronologia Esecuzioni'}
+      subtitle="Orari nel fuso di questo browser"
+      actions={(
+        <>
+          {/* Live: aggiorna sia i log tecnici che le run, utile su entrambi i tab */}
+          <button type="button"
+            className={`lv__btn lv__btn--ghost${autoRefresh ? ' lv__btn--live' : ''}`}
+            onClick={() => setAutoRefresh(!autoRefresh)}>
+            {autoRefresh ? '⏸ Stop Live' : '▶ Live'}
+          </button>
+          {/* Export CSV dei log tecnici (solo admin, sul loro tab) */}
+          {canSeeTechnicalLog && mainTab === 'logs' && (
+            <button type="button" className="lv__btn lv__btn--ghost" onClick={handleExportCSV} disabled={exporting || !total}>
+              {exporting ? 'Esportazione…' : `↓ Export CSV (${formatNumber(total)})`}
             </button>
-            {/* Export CSV: esporta i log tecnici → mostrato solo quando si è
-                effettivamente sul tab "Log Tecnici" (cioè solo per admin) */}
-            {canSeeTechnicalLog && mainTab === 'logs' && (
-              <button type="button" className="lv__btn lv__btn--ghost" onClick={handleExportCSV}>↓ Export CSV</button>
-            )}
-            <ThemeToggle classPrefix="lv" />
-          </div>
-        </header>
+          )}
+        </>
+      )}
+    >
 
         <div className="lv__content">
           <canvas ref={canvasRef} className="lv__hex-bg" />
@@ -158,7 +183,7 @@ function LogViewer() {
           )}
 
           {/* Tab Esecuzioni — visibile a tutti gli utenti loggati */}
-          {mainTab === 'runs' && <RunsTab live={autoRefresh} />}
+          {mainTab === 'runs' && <RunsTab projectNames={projectNames} live={autoRefresh} />}
 
           {/* Tab Log Tecnici — solo admin/superadmin */}
           {mainTab === 'logs' && canSeeTechnicalLog && <>
@@ -242,10 +267,12 @@ function LogViewer() {
                   <tr><td colSpan="6" className="lv__empty">Caricamento...</td></tr>
                 ) : logsResource.status === 'error' && !logsResource.hasData ? null : logs.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="lv__empty">
-                      <div className="lv__empty-icon">📋</div>
-                      <div>Nessun log trovato</div>
-                      {hasFilters && <button type="button" className="lv__btn lv__btn--ghost lv__btn--sm lv__btn--mt-md" onClick={resetFilters}>Reset filtri</button>}
+                    <td colSpan="6">
+                      <EmptyState
+                        icon="📋"
+                        title={hasFilters ? 'Nessun log con questi filtri' : 'Nessun log trovato'}
+                        action={hasFilters && <button type="button" className="lv__btn lv__btn--ghost lv__btn--sm" onClick={resetFilters}>Reset filtri</button>}
+                      />
                     </td>
                   </tr>
                 ) : logs.map((entry, idx) => {
@@ -259,7 +286,7 @@ function LogViewer() {
                     <React.Fragment key={`${rowKey}|${idx}`}>
                       <tr
                         className={`lv__row lv__row--${(entry.level||'').toLowerCase()} ${hasDetails ? 'lv__row--expandable' : 'lv__row--inert'}${isExpanded ? ' lv__row--expanded' : ''}`}
-                        onClick={() => hasDetails && setExpandedRow(isExpanded ? null : rowKey)}>
+                        {...pressable(() => hasDetails && setExpandedRow(isExpanded ? null : rowKey))}>
                         <td className="lv__td lv__td--time">
                           {hasDetails && (
                             <button
@@ -273,7 +300,7 @@ function LogViewer() {
                               {isExpanded ? '▾' : '▸'}
                             </button>
                           )}
-                          {' '}{formatTime(entry.ts)}
+                          {' '}{formatLogTime(entry.ts)}
                         </td>
                         <td className="lv__td lv__td--level">
                           <span className={`lv__badge ${levelCfg.cls || ''}`}>{entry.level}</span>
@@ -291,11 +318,11 @@ function LogViewer() {
                         </td>
                         <td className="lv__td lv__td--project">
                           {entry.project_id ? (
-                            <span className="lv__project-link"
+                            <button type="button" className="lv__project-link"
                               onClick={e => { e.stopPropagation(); navigate(openProjectPath(entry.project_id)); }}
                               title={entry.project_id}>
-                              {truncateProjectId(entry.project_id)}
-                            </span>
+                              {projectLabel(entry.project_id, projectNames)}
+                            </button>
                           ) : '—'}
                         </td>
                       </tr>
@@ -343,9 +370,7 @@ function LogViewer() {
           )}
           </>}
         </div>
-      </div>
-    </div>
-    </>
+    </PageLayout>
   );
 }
 

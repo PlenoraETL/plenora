@@ -5,7 +5,6 @@
  */
 import React, { useState, useRef } from 'react';
 import { useToast } from '../hooks/useToast';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   listConnections, createConnection, updateConnection,
@@ -17,8 +16,8 @@ import {
 } from '../api/features';
 import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
-import AppSidebar from '../components/AppSidebar';
-import ThemeToggle from '../components/common/ThemeToggle';
+import PageLayout from '../components/common/PageLayout';
+import EmptyState from '../components/common/EmptyState';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import ConnectionSetsPanel from '../components/connections/ConnectionSetsPanel';
@@ -31,7 +30,6 @@ import { useBusy } from '../hooks/useBusy';
 import { ResourceError } from '../components/common/ListState';
 import '../styles/ConnectionManager.css';
 import { requestErrorMessage } from '../utils/errorMessages';
-import { goBack } from '../utils/navigation';
 import FieldInput, { FieldScope } from '../components/common/FieldInput';
 import { useFieldScope } from '../hooks/useFieldBuffer';
 import { integer } from '../utils/fieldCodecs';
@@ -57,7 +55,6 @@ const ALL_TYPES = [
 function ConnectionManager() {
   const toast    = useToast();
   const confirmModal = useConfirmModal();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const canvasRef = useRef(null);
   useHexCanvas(canvasRef);
@@ -171,7 +168,7 @@ function ConnectionManager() {
       const cascade = handleCascade409(err);
       if (cascade) {
         toast.error(
-          `Impossibile eliminare "${conn.name}": ${formatCascadeDependencies(cascade.dependencies)}. Rimuovili prima.`,
+          `Impossibile eliminare "${conn.name}": ${formatCascadeDependencies(cascade)}. Rimuovili prima.`,
           10000
         );
         return;
@@ -201,26 +198,20 @@ function ConnectionManager() {
   const visibleArc = ['database', 'sets'].includes(activeTab) ? [] : arcConns;
 
   if (resource.initialLoading) return (
-    <div className="cm cm--loading">
+    <PageLayout className="cm" title="Connessioni">
       <div className="cm__loading-inner"><div className="cm__loading-icon">⬡</div>Caricamento...</div>
-    </div>
+    </PageLayout>
   );
 
   return (
-    <div className="cm">
-<AppSidebar counts={{ connections: allConnections.length }} />
-<div className="cm__main">
-        <header className="cm__topbar">
-          <button type="button" className="cm__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
-          <div className="cm__page-title">Connessioni</div>
-          <div className="cm__topbar-right">
-            <ThemeToggle classPrefix="cm" />
-            {canCreateConnection && (
-              <button type="button" className="cm__btn cm__btn--primary" onClick={() => handleOpenModal()}>＋ Nuova Connessione</button>
-            )}
-          </div>
-        </header>
-
+    <PageLayout
+      className="cm"
+      bare
+      title="Connessioni"
+      actions={canCreateConnection && (
+        <button type="button" className="cm__btn cm__btn--primary" onClick={() => handleOpenModal()}>＋ Nuova Connessione</button>
+      )}
+    >
         <div className="cm__content">
           <canvas ref={canvasRef} className="cm__hex-bg" />
 
@@ -308,7 +299,6 @@ function ConnectionManager() {
             </>
           )}
         </div>
-      </div>
 {/* ── MODAL ── */}
       {showModal && (
         <ModalWrapper
@@ -476,23 +466,21 @@ function ConnectionManager() {
         </ModalWrapper>
       )}
       <ConfirmDialog {...confirmModal} />
-    </div>
+    </PageLayout>
   );
 }
-function EmptyState({ onNew, canCreate = true }) {
+function NoConnections({ onNew, canCreate = true }) {
   return (
-    <div className="cm__empty">
-      <div className="cm__empty-icon">🔌</div>
-      <div className="cm__empty-title">Nessuna connessione</div>
-      <div className="cm__empty-text">
-        {canCreate
-          ? 'Crea la tua prima connessione per iniziare ad estrarre dati'
-          : 'Nessuna connessione disponibile. Contatta un amministratore.'}
-      </div>
-      {canCreate && (
-        <button type="button" className="cm__btn cm__btn--primary cm__btn--mt-md" onClick={onNew}>＋ Crea connessione</button>
+    <EmptyState
+      icon="🔌"
+      title="Nessuna connessione"
+      text={canCreate
+        ? 'Crea la tua prima connessione per iniziare ad estrarre dati'
+        : 'Nessuna connessione disponibile. Contatta un amministratore.'}
+      action={canCreate && (
+        <button type="button" className="cm__btn cm__btn--primary" onClick={onNew}>＋ Crea connessione</button>
       )}
-    </div>
+    />
   );
 }
 function ConnTable({ title, subtitle, connections, testResults, isTesting: isTestingOf, onTest, onEdit, onDelete, onShare, canEditOf, canShare, arcgis }) {
@@ -562,7 +550,7 @@ function ConnTable({ title, subtitle, connections, testResults, isTesting: isTes
                         {testResult.success ? 'OK' : 'Errore'}
                       </span>
                     ) : (
-                      <span className="cm__status-dot cm__status-none">Non testata</span>
+                      <span className="cm__status-dot cm__status-none" title="L'esito del test non viene salvato: premi «Testa» per verificarla ora">Da verificare</span>
                     )}
                   </td>
                   <td>

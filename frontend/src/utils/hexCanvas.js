@@ -8,7 +8,7 @@
  * Disegna un pattern di esagoni sovrapposti con opacità variabile e
  * supporto automatico per tema chiaro/scuro + resize.
  */
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 
 /**
  * Disegna lo sfondo esagonale sul canvas fornito.
@@ -84,17 +84,29 @@ export function useHexCanvas(canvasRef) {
     window.addEventListener('resize', onResize);
     const obs = new MutationObserver(() => requestAnimationFrame(draw));
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    let resObs;
-    if (canvasRef.current && window.ResizeObserver) {
-      resObs = new ResizeObserver(() => requestAnimationFrame(draw));
-      resObs.observe(canvasRef.current.parentElement || canvasRef.current);
-    }
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(t);
       window.removeEventListener('resize', onResize);
       obs.disconnect();
-      resObs?.disconnect();
     };
   }, [canvasRef, draw]);
+
+  // P26 (Fase 5 T7): il <canvas> puo' comparire DOPO il primo effetto (pagina
+  // in caricamento): a ogni render si controlla se l'elemento e' cambiato e
+  // l'osservatore delle dimensioni si collega a quello attuale.
+  const observed = useRef({ el: null, obs: null });
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (el === observed.current.el) return;
+    observed.current.obs?.disconnect();
+    observed.current = { el, obs: null };
+    if (el && window.ResizeObserver) {
+      const obs = new ResizeObserver(() => requestAnimationFrame(draw));
+      obs.observe(el.parentElement || el);
+      observed.current.obs = obs;
+      requestAnimationFrame(draw);
+    }
+  });
+  useEffect(() => () => observed.current.obs?.disconnect(), []);
 }

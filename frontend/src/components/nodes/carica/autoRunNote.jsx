@@ -14,7 +14,7 @@ const AFTER = {
   arricchisci: "dopo l'arricchimento",
 };
 
-export function autoRunAfter(mode) {
+function autoRunAfter(mode) {
   return AFTER[mode] || `dopo l'${term('output').name}`;
 }
 

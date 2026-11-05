@@ -16,6 +16,7 @@ import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
 import './ProjectSourceNode.css';
 import NodeHandle from '../canvas/NodeHandle';
+import { pressable } from '../../utils/pressable';
 
 /**
  * ProjectSourceNode - Nodo sorgente per progetti SQL (tipo "estrai") o Manipola
@@ -212,7 +213,7 @@ const ProjectSourceNode = ({ id, data }) => {
                 <div
                   key={columnId || idx}
                   className={`project-source-node__column ${!isVisible ? 'project-source-node__column--hidden' : ''}`}
-                  onClick={() => handleToggleColumn(columnId)}
+                  {...pressable(() => handleToggleColumn(columnId))}
                 >
                   {/* Icona tipo */}
                   <span 

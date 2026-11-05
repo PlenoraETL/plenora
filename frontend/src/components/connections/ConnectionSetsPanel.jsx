@@ -1,3 +1,4 @@
+import EmptyState from '../common/EmptyState';
 import React, { useRef, useState } from 'react';
 import { useResource } from '../../hooks/useResource';
 import { ResourceError } from '../common/ListState';
@@ -184,7 +185,15 @@ function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, 
       {loading ? (
         <div className="cset__empty">Caricamento set…</div>
       ) : resource.status === 'error' && !resource.hasData ? null : sets.length === 0 ? (
-        <div className="cset__empty">Nessun Connection Set configurato.</div>
+        // S3, G2: stato vuoto centrato con l'azione, come le altre schede.
+        <EmptyState
+          icon="🧩"
+          title="Nessun Connection Set configurato"
+          text="Un Connection Set instrada ogni cliente alla sua connessione nei progetti Estrai."
+          action={canEdit && (
+            <button type="button" className="cm__btn cm__btn--primary" onClick={() => open(null)}>＋ Nuovo set</button>
+          )}
+        />
       ) : (
         <div className="cset__grid">
           {sets.map(item => (

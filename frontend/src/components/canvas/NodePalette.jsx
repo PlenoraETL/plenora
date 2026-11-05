@@ -12,6 +12,7 @@ import useDialog from '../../hooks/useDialog';
 import { displayIcon } from './nodeDescriptors';
 import './NodePalette.css';
 import '../common/ListState.css';
+import { pressable } from '../../utils/pressable';
 
 const norm = (s) => String(s || '').toLowerCase();
 
@@ -20,7 +21,7 @@ const norm = (s) => String(s || '').toLowerCase();
  * NOME: "filtra" deve proporre "Filtra" prima di "Campiona", che sta nel
  * gruppo Filtra solo per scopo.
  */
-export function matchScore(item, groupLabel, q) {
+function matchScore(item, groupLabel, q) {
   const label = norm(item.label);
   if (label === q) return 100;
   if (label.startsWith(q)) return 90;
@@ -122,7 +123,7 @@ export default function NodePalette({ open, context, groups = [], onPick, onClos
                     key={`${g.label}:${item.id}`}
                     className={`npal__item${i === active ? ' npal__item--active' : ''}`}
                     onMouseMove={() => { if (i !== active) setActive(i); }}
-                    onClick={() => pick(item)}
+                    {...pressable(() => pick(item))}
                     role="option"
                     aria-selected={i === active}
                   >

@@ -66,7 +66,8 @@ describe('ResponseConfigBuilder — contract', () => {
     );
 
     // Aspetta il primo onChange (effect su mount).
-    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    // P11 (Fase 5 T7): il montaggio non riscrive la config.
+    expect(onChange).not.toHaveBeenCalled();
     const initialCalls = onChange.mock.calls.length;
 
     // I campi scalar hanno checkbox accessibile via name "Estrai".
@@ -97,7 +98,8 @@ describe('ResponseConfigBuilder — contract', () => {
       />,
     );
 
-    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    // P11 (Fase 5 T7): il montaggio non riscrive la config.
+    expect(onChange).not.toHaveBeenCalled();
     const initialCalls = onChange.mock.calls.length;
 
     // Bottone "💫 Esplodi" su array node (titolo "Esplodi questo array").
@@ -148,7 +150,8 @@ describe('ResponseConfigBuilder — contract', () => {
       />,
     );
 
-    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    // P11 (Fase 5 T7): il montaggio non riscrive la config.
+    expect(onChange).not.toHaveBeenCalled();
     const initialCalls = onChange.mock.calls.length;
 
     // Preset select e' la prima combobox (header "🎯 Preset:").

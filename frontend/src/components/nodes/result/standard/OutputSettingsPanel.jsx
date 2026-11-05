@@ -24,6 +24,7 @@ import OptionSelect from '../../../common/OptionSelect';
 import FieldInput from '../../../common/FieldInput';
 import { fileStem, integer } from '../../../../utils/fieldCodecs';
 import { OUTPUT_FORMATS } from '../../../../constants/outputFormats';
+import { pressable } from '../../../../utils/pressable';
 
 // Catalogo unico dei formati (constants/outputFormats, R8.11).
 const STANDARD_FORMATS = OUTPUT_FORMATS.filter(f => !f.geo);
@@ -84,7 +85,7 @@ export default function OutputSettingsPanel({
           />
         ) : (
           <div
-            onClick={() => setIsEditingFileName(true)}
+            {...pressable(() => setIsEditingFileName(true))}
             className="result-node__filename-display"
             title="Clic per modificare"
           >

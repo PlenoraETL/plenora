@@ -1,9 +1,11 @@
 import React from 'react';
+import EmptyState from '../common/EmptyState';
 
 /**
  * Sezione di gruppo della dashboard progetti (Estrai / Manipola /
- * Arricchisci). Header con chip etichetta + bottone "+ Nuovo" +
- * empty state decorato + griglia dei children (cards).
+ * Arricchisci). Header con chip etichetta + bottone "+ Nuovo" + griglia dei
+ * children (cards). Vuota: una riga compatta (DB6, G2), col testo del
+ * filtro quando la lista è vuota per un filtro (P18).
  */
 function ProjectSection({
   id,
@@ -31,12 +33,7 @@ function ProjectSection({
       </div>
 
       {empty ? (
-        <div className="pl__empty">
-          <canvas className="pl__empty-hex" />
-          <div className="pl__empty-icon">{emptyIcon}</div>
-          <div className="pl__empty-title">{emptyTitle}</div>
-          <div className="pl__empty-text">{emptyText}</div>
-        </div>
+        <EmptyState compact icon={emptyIcon} title={emptyTitle} text={emptyText} />
       ) : (
         <div className="pl__cards-grid">{children}</div>
       )}

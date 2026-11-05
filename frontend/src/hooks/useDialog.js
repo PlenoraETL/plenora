@@ -32,7 +32,6 @@ import {
 } from '../utils/dialogStack';
 import { endTyping } from '../store/typingAction';
 
-export const CLOSE_REASONS = ['esc', 'overlay', 'button'];
 
 export default function useDialog({
   isOpen,

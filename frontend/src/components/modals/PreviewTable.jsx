@@ -10,6 +10,7 @@
  */
 import React, { useMemo } from 'react';
 import { getColumnTypeIcon } from '../../utils/columnUtils';
+import { pressable } from '../../utils/pressable';
 import './PreviewModal.css';
 
 /* Inferisce gruppi sorgente dal prefisso colonna. */
@@ -120,9 +121,15 @@ const PreviewTable = ({
 
   const visibleColumns = useMemo(() => {
     if (!columnGroups) return columns;
-    return columns.filter(col => {
+    // P8 (Fase 5 T7): un gruppo chiuso resta come UNA colonna segnaposto,
+    // cosi' la sua intestazione (che lo riapre) non sparisce.
+    const seen = new Set();
+    return columns.flatMap(col => {
       const prefix = getColPrefix(col);
-      return !collapsedGroups[prefix];
+      if (!collapsedGroups[prefix]) return [col];
+      if (seen.has(prefix)) return [];
+      seen.add(prefix);
+      return [{ ...col, collapsedGroup: prefix }];
     });
   }, [columns, columnGroups, collapsedGroups]);
 
@@ -192,7 +199,7 @@ const PreviewTable = ({
                   <th
                     key={`g${prefix}_${idx}`}
                     colSpan={span}
-                    onClick={() => prefix !== '__none__' && onToggleGroup(prefix)}
+                    {...(prefix !== '__none__' ? pressable(() => onToggleGroup(prefix), { label: `${collapsedGroups[prefix] ? 'Apri' : 'Chiudi'} il gruppo ${group?.label || prefix}` }) : {})}
                     className={`pm-group-th${prefix === '__none__' ? ' pm-group-th--none' : ''}`}
                     style={{
                       background: group?.bg || 'transparent',
@@ -221,6 +228,11 @@ const PreviewTable = ({
               {visibleColumns.map((col) => {
                 const prefix = getColPrefix(col);
                 const group = columnGroups?.[prefix];
+                if (col.collapsedGroup) {
+                  return (
+                    <th key={`collapsed_${prefix}`} className="preview-modal__th preview-modal__th--collapsed" title="Gruppo chiuso: clic sull'intestazione del gruppo per riaprirlo">…</th>
+                  );
+                }
                 const isGeo = typeof col.type === 'string' && (
                   col.type.startsWith('geometry') || col.type.startsWith('geography') ||
                   col.type === 'geom' || col.type === 'geojson' || col.type === 'geo'
@@ -256,11 +268,13 @@ const PreviewTable = ({
                 <td className="preview-modal__row-num">
                   {(currentPage - 1) * rowsPerPage + rowIdx + 1}
                 </td>
-                {visibleColumns.map((col) => (
+                {visibleColumns.map((col) => (col.collapsedGroup ? (
+                  <td key={`collapsed_${col.collapsedGroup}`} className="preview-modal__cell preview-modal__cell--collapsed">…</td>
+                ) : (
                   <td key={col.name} className="preview-modal__cell">
                     {formatCellValue(row[col.name], col.type)}
                   </td>
-                ))}
+                )))}
               </tr>
             ))}
           </tbody>

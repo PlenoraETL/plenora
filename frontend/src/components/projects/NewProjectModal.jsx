@@ -4,6 +4,7 @@ import { createProject } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { toastApiError } from '../../utils/toastApiError';
+import { pressable } from '../../utils/pressable';
 
 const TYPE_META = {
   estrai:      { icon: '↓', label: 'Estrai',      btn: '↓ Estrai' },
@@ -142,7 +143,7 @@ function NewProjectModal({
               Nessuna connessione.{' '}
               <span
                 className="pl__modal-error-link"
-                onClick={() => { onClose?.(); navigate('/connections'); }}
+                {...pressable(() => { onClose?.(); navigate('/connections'); })}
               >
                 Creane una
               </span>

@@ -5,13 +5,13 @@
  * `CanvasValidationResult` consumato dalla UI (ValidationModal, badge, highlight).
  * Post-migrazione (Epic CanvasVal §12) la validazione è on-demand via backend:
  * `utils/backendValidationResult.js` mappa la risposta di POST /validate in questo
- * shape usando `createIssue`/`buildResult`. Le `RULE_IDS` restano l'enum stabile
- * condiviso FE/BE (il backend emette issue con gli stessi `code`).
+ * shape usando `createIssue`/`buildResult`. Il `code` di ogni issue è quello
+ * del backend (core/projects/canvas_validation.py): nessun elenco copiato qui
+ * (Fase 5 T7: `RULE_IDS` e `isCanvasEmpty` non avevano chiamanti).
  *
  * Esporta:
  *   - typedef `Severity`, `ValidationIssue`, `CanvasValidationResult` (JSDoc)
- *   - enum stabili `SEVERITY` e `RULE_IDS`
- *   - helper `isCanvasEmpty(nodes)`
+ *   - enum stabile `SEVERITY`
  *   - factory `createIssue({...})`
  *   - builder `buildResult(issues)`
  *
@@ -23,8 +23,7 @@
  *     restano verdi.
  *
  * Boundary FE/BE:
- *   - `RULE_IDS` sono stringhe stabili enum-like; il backend emette issue con
- *     gli stessi `code`, mappati su questi `id` (handshake FE/BE).
+ *   - il `code` dell'issue è quello emesso dal backend, invariato.
  *   - `ValidationIssue.source` distingue origine ('frontend' | 'backend'); dopo
  *     la migrazione gli issue arrivano col `source: 'backend'`.
  */
@@ -59,73 +58,7 @@ export const SEVERITY = Object.freeze({
   INFO: 'info',
 });
 
-/**
- * Rule id stabili. Stringhe SCREAMING_SNAKE. NON cambiare i valori senza una
- * coordinata FE/BE: i test e l'eventuale BE handshake leggono questi id.
- */
-export const RULE_IDS = Object.freeze({
-  // Strutturali (S)
-  CANVAS_EMPTY:           'CANVAS_EMPTY',
-  RESULT_NODE_MISSING:    'RESULT_NODE_MISSING',
-  RESULT_NODE_DUPLICATED: 'RESULT_NODE_DUPLICATED',
-  CARICA_DUPLICATED:      'CARICA_DUPLICATED',
-  CYCLE_DETECTED:         'CYCLE_DETECTED',
-  SOURCE_ISOLATED:        'SOURCE_ISOLATED',
-  SOURCE_UNSUPPORTED:     'SOURCE_UNSUPPORTED',
-  TRANSFORM_ORPHAN:       'TRANSFORM_ORPHAN',
 
-  // Result (R)
-  RESULT_NOT_CONNECTED:   'RESULT_NOT_CONNECTED',
-  RESULT_NO_SOURCE:       'RESULT_NO_SOURCE',
-  RESULT_GEO_NO_GEOMETRY: 'RESULT_GEO_NO_GEOMETRY',
-
-  // Edge / join (J)
-  JOIN_NOT_CONFIGURED:    'JOIN_NOT_CONFIGURED',
-  JOIN_SPATIAL_NO_GEOM:   'JOIN_SPATIAL_NO_GEOM',
-  JOIN_COLUMN_NOT_FOUND:  'JOIN_COLUMN_NOT_FOUND',
-
-  // Source / projection (P)
-  SOURCE_NO_VISIBLE_COLUMNS: 'SOURCE_NO_VISIBLE_COLUMNS',
-  COLUMN_NAME_CONFLICT:      'COLUMN_NAME_CONFLICT',
-
-  // Carica DB (C)
-  CARICA_NOT_CONNECTED:                   'CARICA_NOT_CONNECTED',
-  CARICA_DB_CONNECTION_MISSING:           'CARICA_DB_CONNECTION_MISSING',
-  CARICA_DB_SCHEMA_MISSING:               'CARICA_DB_SCHEMA_MISSING',
-  CARICA_DB_TABLE_MISSING:                'CARICA_DB_TABLE_MISSING',
-  CARICA_DB_MATCH_COLUMNS_MISSING:        'CARICA_DB_MATCH_COLUMNS_MISSING',
-  CARICA_REST_URL_MISSING:                'CARICA_REST_URL_MISSING',
-  CARICA_REST_METHOD_INVALID:             'CARICA_REST_METHOD_INVALID',
-  CARICA_ARCGIS_NOT_CONNECTED:            'CARICA_ARCGIS_NOT_CONNECTED',
-  CARICA_ARCGIS_CONNECTION_MISSING:       'CARICA_ARCGIS_CONNECTION_MISSING',
-  CARICA_ARCGIS_LAYER_URL_MISSING:        'CARICA_ARCGIS_LAYER_URL_MISSING',
-  CARICA_ARCGIS_NEW_SERVICE_NAME_MISSING: 'CARICA_ARCGIS_NEW_SERVICE_NAME_MISSING',
-  CARICA_ARCGIS_MATCH_COLUMN_MISSING:     'CARICA_ARCGIS_MATCH_COLUMN_MISSING',
-
-  // Transform (T) — Manipola
-  TRANSFORM_OP_MISSING:            'TRANSFORM_OP_MISSING',
-  TRANSFORM_PARAM_REQUIRED:        'TRANSFORM_PARAM_REQUIRED',
-  TRANSFORM_COLUMN_NOT_FOUND:      'TRANSFORM_COLUMN_NOT_FOUND',
-  TRANSFORM_GEOMETRY_TYPE_INVALID: 'TRANSFORM_GEOMETRY_TYPE_INVALID',
-
-  // Arricchisci (A)
-  ARRICCHISCI_NO_SOURCES:            'ARRICCHISCI_NO_SOURCES',
-  ARRICCHISCI_NO_ENRICHER:           'ARRICCHISCI_NO_ENRICHER',
-  ARRICCHISCI_API_NOT_SELECTED:      'ARRICCHISCI_API_NOT_SELECTED',
-  ARRICCHISCI_API_CONNECTION_STALE:  'ARRICCHISCI_API_CONNECTION_STALE',
-  ARRICCHISCI_PARAM_MAPPING_MISSING: 'ARRICCHISCI_PARAM_MAPPING_MISSING',
-  ARRICCHISCI_NODE_ISOLATED:         'ARRICCHISCI_NODE_ISOLATED',
-});
-
-/**
- * Vero se il canvas e' vuoto (nodes null/undefined o lunghezza zero).
- *
- * @param {Array|null|undefined} nodes
- * @returns {boolean}
- */
-export function isCanvasEmpty(nodes) {
-  return !nodes || nodes.length === 0;
-}
 
 /**
  * Factory di un `ValidationIssue` con campi opzionali normalizzati e

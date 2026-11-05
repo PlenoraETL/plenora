@@ -9,6 +9,25 @@
  */
 import { serializeCanvas } from './canvasSerializer';
 
+/**
+ * Firma di ciò che si SALVA del canvas (Fase 5 T7, regola "non salvato =
+ * diverso dall'ultimo salvato", store/saveState): la serializzazione del
+ * salvataggio, posizioni e note comprese, senza lo stato di interfaccia degli
+ * archi (selezione, stile del momento).
+ */
+export function savedCanvasSignature(nodes, edges) {
+  const { nodes: sn, edges: se } = serializeCanvas(nodes || [], edges || []);
+  return JSON.stringify({
+    nodes: sn,
+    edges: se.map(e => ('join_type' in e ? e : {
+      id: e.id, type: e.type ?? null,
+      source: e.source, sourceHandle: e.sourceHandle ?? null,
+      target: e.target, targetHandle: e.targetHandle ?? null,
+      data: e.data ?? null,
+    })),
+  });
+}
+
 export function canvasContentKey(nodes, edges) {
   const { nodes: sn, edges: se } = serializeCanvas(nodes || [], edges || []);
   return JSON.stringify({

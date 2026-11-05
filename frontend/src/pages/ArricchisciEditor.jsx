@@ -374,8 +374,6 @@ const ArricchisciEditorContent = () => {
       data: { source_project_id: nodeData.source_project_id || nodeData.id, columns: [] } };
     else if (nodeType === 'file_source') newNode = { id: newNodeId, type: 'file_source', position,
       data: { file_source_id: nodeData.file_source_id || nodeData.id, columns: [] } };
-    else if (nodeType === 'api_enrich') newNode = { id: newNodeId, type: 'api_enrich', position,
-      data: { api_id: '', param_mapping: {} } };
 
     if (newNode) addNodes(newNode);
   }, [screenToFlowPosition, addNodes]);
@@ -438,15 +436,10 @@ const ArricchisciEditorContent = () => {
 
   // modals slot — `modals` (var name) e' gia' occupato da useMultiModal:
   // usiamo `modalsSlot` per evitare collisione col chiamante .isOpen/.close.
-  const modalsSlot = (
-    <ModalErrorBoundary>
-      <Suspense fallback={null}>
-      {showVersions && (
-        <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
-      )}
-      <ExecutionModal {...executionModalProps(execution)} title={`${term('run').icon} Esecuzione dell'arricchimento`} projectType="arricchisci" />
-      <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
-        data={(() => {
+  // P5 (Fase 5 T7): colonne arricchite UNA volta per risposta, non a ogni
+  // render (un oggetto nuovo azzerava pagina, ordinamento, ricerca e scheda).
+  // Le colonne del canvas si leggono quando arriva la risposta.
+  const previewData = useMemo(() => {
           if (!preview.data?.columns) return preview.data;
           const resultNode = nodes.find(n => n.type === 'result');
           const nodeLabelMap  = buildNodeLabelMap(nodes);
@@ -474,10 +467,22 @@ const ArricchisciEditorContent = () => {
             sourceOrder.indexOf(a.source || '__none__') - sourceOrder.indexOf(b.source || '__none__')
           );
           return { ...preview.data, columns: enrichedColumns };
-        })()}
+        }, [preview.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const modalsSlot = (
+    <ModalErrorBoundary>
+      <Suspense fallback={null}>
+      {showVersions && (
+        <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
+      )}
+      <ExecutionModal {...executionModalProps(execution)} title={`${term('run').icon} Esecuzione dell'arricchimento`} projectType="arricchisci" />
+      {preview.showModal && (
+      <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
+        data={previewData}
         loading={preview.loading} error={preview.error}
         permissionRevoked={preview.permissionRevoked}
         title={`${term('preview').name} dell'arricchimento`} projectType="arricchisci" />
+      )}
       <ConnectionSelectorModal isOpen={modals.isOpen('template')} onClose={() => modals.close('template')} onSelect={conn => handleSelectConnection(conn, 'template')} category="template" title="Seleziona un modello di API" icon={term('connector_template').icon} emptyMessage="Nessun modello di API configurato" emptyHint="Crea una connessione da un modello nella pagina API Esterne" createLink="/external-connectors" />
       <ConnectionSelectorModal isOpen={modals.isOpen('manual')} onClose={() => modals.close('manual')} onSelect={conn => handleSelectConnection(conn, 'manual')} category="manual" title="Seleziona un'API manuale" icon={term('connector_manual').icon} emptyMessage="Nessuna API manuale configurata" emptyHint="Crea una nuova connessione API nella pagina API Esterne" createLink="/external-connectors" />
       <ConnectionSelectorModal isOpen={modals.isOpen('openapi')} onClose={() => modals.close('openapi')} onSelect={conn => handleSelectConnection(conn, 'openapi')} category="openapi" title="Seleziona un'API OpenAPI" icon={term('connector_openapi').icon} emptyMessage="Nessuna API OpenAPI importata" emptyHint="Importa uno schema OpenAPI nella pagina API Esterne" createLink="/external-connectors" />

@@ -86,7 +86,7 @@ function broadcastHighlights(result) {
 }
 
 /** Controlli prima di salvare: risorse non accessibili, tipi di input. */
-export function runBlockedResult(nodes, mode) {
+function runBlockedResult(nodes, mode) {
   const denied = describeAccessDeniedNodes(nodes);
   if (denied) {
     console.warn(`[run-blocked] access_denied nodes:\n${denied.summary}`);

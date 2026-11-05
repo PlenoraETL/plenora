@@ -29,6 +29,8 @@ import './CaricanArcGISNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import AutoRunNote from './carica/autoRunNote';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import { formatNumber } from '../../utils/format';
+import { pressable } from '../../utils/pressable';
 
 const CaricanArcGISNode = memo(({ data, id }) => {
   const [showMapping, setShowMapping] = useState(false);
@@ -49,7 +51,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   // dalla fonte unica (Blocco A, regola 4), non salvate nel nodo.
   const inputResult = useColumnsOf(id, { side: 'input' });
   const availableColumns = inputResult.columns;
-  const executeResult = data.executeResult || null;
 
   // Multi-layer: se a monte c'e' un api_enrich con output_kind='imdf', l'upstream
   // e' un bundle `plenora.indoor.bundle`. In quel caso il sink ArcGIS scrive N
@@ -442,7 +443,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
                   <span>{arcgisLayerSchema.geometry_type || 'Tabella'}</span>
                   <span>{arcgisLayerSchema.fields?.length || 0} campi</span>
                   {arcgisLayerSchema.feature_count != null && (
-                    <span>{arcgisLayerSchema.feature_count.toLocaleString()} elementi</span>
+                    <span>{formatNumber(arcgisLayerSchema.feature_count)} elementi</span>
                   )}
                 </div>
               )}
@@ -484,7 +485,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
           {!isMultiLayerUpstream && (arcgisLayerUrl || arcgisOperation === 'create_service') && (
             <div className="carica-arcgis-node__section">
               <div className="carica-arcgis-node__section-header"
-                onClick={() => setShowMapping(!showMapping)}>
+                {...pressable(() => setShowMapping(!showMapping))}>
                 <span>Mappatura delle colonne</span>
                 <span className="carica-arcgis-node__toggle">{showMapping ? '▼' : '▶'}</span>
               </div>
@@ -607,21 +608,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
             </div>
           )}
 
-          {/* RISULTATO */}
-          {executeResult && (
-            <div className={`carica-arcgis-node__result ${executeResult.success ? 'carica-arcgis-node__result--success' : 'carica-arcgis-node__result--error'}`}>
-              <span>{executeResult.success ? 'OK' : 'Errore'}</span>
-              <span>{executeResult.message || (executeResult.success ? 'Completato!' : 'Errore')}</span>
-              {executeResult.count != null && (
-                <span className="carica-arcgis-node__result-count">{executeResult.count} elementi</span>
-              )}
-              {executeResult.service_url && (
-                <span className="carica-arcgis-node__result-url" title={executeResult.service_url}>
-                  Servizio creato
-                </span>
-              )}
-            </div>
-          )}
 
           <AutoRunNote className="carica-arcgis-node__auto-info" />
       </div>

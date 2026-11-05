@@ -11,6 +11,7 @@ import { listApiConnections } from '../../api/apiConnections';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { humanizeError } from '../../utils/errorMessages';
 import './ConnectionSelectorModal.css';
+import { pressable } from '../../utils/pressable';
 
 /**
  * ConnectionSelectorModal - REFACTORED with ModalWrapper
@@ -172,7 +173,7 @@ function ConnectionSelectorModal({
               <div
                 key={connection.id}
                 className={`connection-selector__item ${selectedId === connection.id ? 'connection-selector__item--selected' : ''}`}
-                onClick={() => setSelectedId(connection.id)}
+                {...pressable(() => setSelectedId(connection.id))}
                 onDoubleClick={() => {
                   setSelectedId(connection.id);
                   handleConfirm();
@@ -216,7 +217,7 @@ function ConnectionSelectorModal({
                         📤 {connection.output_mapping.length} campi in uscita
                       </span>
                     )}
-                    {connection.auth?.type !== 'none' && (
+                    {connection.auth?.type && connection.auth.type !== 'none' && (
                       <span className="connection-selector__meta-item">
                         🔐 {connection.auth.type}
                       </span>

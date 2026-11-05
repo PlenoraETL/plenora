@@ -1,52 +1,24 @@
 /**
- * logViewerHelpers.js — Helper puri di formattazione per la log view.
+ * logViewerHelpers — formati del Log Viewer (Fase 5 T7, R11.1, S5).
  *
- * Funzioni pure estratte per essere testabili in isolamento senza
- * montare il componente.
- *
- * Importato da: pages/LogViewer.jsx, components/logviewer/RunsTab.jsx,
- * components/logviewer/RunDetail.jsx.
+ * Nessun formattatore proprio: data e ora dal modulo unico (utils/format),
+ * nel fuso del browser con anno, secondi e sigla del fuso (gli orari dei
+ * log sono UTC del server); il progetto per NOME, non per id troncato.
  */
-/**
- * Formatta una durata in millisecondi in stringa leggibile.
- * @param {number|undefined} ms
- * @returns {string}
- */
-export function fmtDuration(ms) {
-  if (!ms) return '—';
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+import { formatDateTime } from './format';
+
+/** Ora di una riga di log o di un'esecuzione: «05/11/2026, 14:03:12 CET». */
+export function formatLogTime(ts) {
+  return formatDateTime(ts, { seconds: true, zone: true });
 }
 
 /**
- * Formatta un numero di righe con separatore migliaia (locale it-IT).
- * @param {number|undefined} n
- * @returns {string}
- */
-export function fmtRows(n) {
-  return n ? n.toLocaleString('it-IT') : '—';
-}
-
-/**
- * Formatta un timestamp ISO in formato leggibile MM-DD HH:mm:ss.
- * @param {string|undefined} ts
- * @returns {string}
- */
-export function formatTime(ts) {
-  if (!ts) return '—';
-  const parts = ts.split('T');
-  if (parts.length !== 2) return ts;
-  return `${parts[0].slice(5)} ${parts[1].slice(0, 8)}`;
-}
-
-/**
- * Tronca un project ID lungo a 18 caratteri + ellipsis.
+ * Nome del progetto di una riga: dal catalogo dei progetti visibili;
+ * un progetto che non c'è più (o non visibile) mostra il suo id intero.
  * @param {string|undefined} id
- * @returns {string|undefined}
+ * @param {Map<string,string>|null} names
  */
-export function truncateProjectId(id) {
-  if (!id || id.length <= 20) return id;
-  return id.slice(0, 18) + '…';
+export function projectLabel(id, names) {
+  if (!id) return '—';
+  return names?.get(String(id)) || id;
 }
-

@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import Wizard from '../common/Wizard';
 import './DataSourceConfigModal.css';
+import { pressable } from '../../utils/pressable';
 
 const DATASOURCE_TYPES = [
   { id:'sharepoint_365',   label:'SharePoint 365',        icon:'📊', authType:'OAuth2',  fields:['tenant_id','client_id','client_secret','site_url'] },
@@ -45,7 +46,7 @@ const OPTIONAL_CREDENTIALS = new Set(['port', 'domain', 'private_key', 'folder_i
 const ONE_OF_CREDENTIALS = { sftp: [['password', 'private_key']] };
 
 /** Messaggio della prima credenziale mancante, o null (R6.2). */
-export function missingCredentials(source, credentials = {}) {
+function missingCredentials(source, credentials = {}) {
   if (!source) return 'Scegli il tipo di sorgente.';
   const filled = (k) => String(credentials[k] ?? '').trim() !== '';
   const groups = ONE_OF_CREDENTIALS[source.id] || [];
@@ -97,7 +98,7 @@ function DataSourceConfigModal({ onClose, onSave }) {
                 {DATASOURCE_TYPES.map(src => (
                   <div key={src.id}
                     className={`dsm__type-tile${formData.source_type===src.id?' dsm__type-tile--on':''}${src.status==='future'?' dsm__type-tile--future':''}`}
-                    onClick={() => setFormData(prev => ((src.status || prev.source_type === src.id) ? prev : { ...prev, source_type: src.id, credentials: {} }))}>
+                    {...pressable(() => setFormData(prev => ((src.status || prev.source_type === src.id) ? prev : { ...prev, source_type: src.id, credentials: {} })))}>
                     <span className="dsm__type-icon">{src.icon}</span>
                     <span className="dsm__type-label">{src.label}</span>
                     <span className="dsm__type-auth">{src.authType}</span>

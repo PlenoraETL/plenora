@@ -61,10 +61,6 @@ export const getBeatHealthcheck = async () => {
   return res.data;
 };
 
-export const getDownloadUrl = (scheduleId, run = null) => {
-  const base = `${API_ENDPOINT}/schedules/${scheduleId}/download`;
-  return run ? `${base}?run=${run}` : base;
-};
 
 export const listScheduleRuns = async (scheduleId) => {
   return fetchAllOffsetPages(`/schedules/${scheduleId}/runs`, {
@@ -79,7 +75,6 @@ export const listScheduleRuns = async (scheduleId) => {
 
 /**
  * Scarica l'output di uno schedule con autenticazione Bearer.
- * Sostituisce href={getDownloadUrl(...)} che non allega il token.
  *
  * @param {string} scheduleId
  * @param {string|null} run - timestamp run opzionale

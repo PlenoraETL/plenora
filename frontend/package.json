@@ -1,15 +1,14 @@
 {
-  "name": "canvas-query-builder-frontend",
+  "name": "plenora-frontend",
   "version": "0.1.0",
   "private": true,
-  "description": "Frontend per Canvas Query Builder - Gestione configurazioni query DB",
+  "description": "Frontend di Plenora (Estrai, Manipola, Arricchisci e pagine di sistema)",
   "dependencies": {
     "@dagrejs/dagre": "^1.1.8",
     "@sentry/react": "^10.56.0",
     "@xyflow/react": "^12.12.1",
     "axios": "^1.16.0",
     "leaflet": "^1.9.4",
-    "maplibre-gl": "^3.6.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.30.4",

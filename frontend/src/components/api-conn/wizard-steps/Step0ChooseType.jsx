@@ -8,6 +8,7 @@
  * interno, nessuna fetch, nessuna chiamata API.
  */
 import React from 'react';
+import { pressable } from '../../../utils/pressable';
 
 const CATEGORIES_NEW = [
   { id:'geocoding',  label:'Geocoding',   icon:'🌍' },
@@ -34,7 +35,7 @@ export default function Step0ChooseType({ formData, setFormData }) {
           {v:'enricher',icon:'🔄',label:'Arricchitore',desc:'Chiamata per ogni riga del dataset',ex:'Geocoding, lookup, validazione'},
           {v:'generator',icon:'📥',label:'Generatore',desc:'Chiamata singola, genera nuovo dataset',ex:'POI, meteo, cataloghi'},
         ].map(t=>(
-          <div key={t.v} className={`acm__type-card${formData.api_type===t.v?' acm__type-card--on':''}`} onClick={()=>setFormData({...formData,api_type:t.v})}>
+          <div key={t.v} className={`acm__type-card${formData.api_type===t.v?' acm__type-card--on':''}`} {...pressable(()=>setFormData({...formData,api_type:t.v}))}>
             <div className="acm__type-card-icon">{t.icon}</div>
             <div className="acm__type-card-label">{t.label}</div>
             <div className="acm__type-card-desc">{t.desc}</div>
@@ -56,7 +57,7 @@ export default function Step0ChooseType({ formData, setFormData }) {
       <div className="acm__wlabel acm__wlabel--mt-md">Tipo connessione</div>
       <div className="acm__conn-type-list">
         {CONNECTION_TYPES.map(ct=>(
-          <div key={ct.id} className={`acm__conn-type${formData.connection_type===ct.id?' acm__conn-type--on':''}`} onClick={()=>setFormData({...formData,connection_type:ct.id})}>
+          <div key={ct.id} className={`acm__conn-type${formData.connection_type===ct.id?' acm__conn-type--on':''}`} {...pressable(()=>setFormData({...formData,connection_type:ct.id}))}>
             <span className="acm__conn-type-icon">{ct.icon}</span>
             <div><div className="acm__conn-type-label">{ct.label}</div><div className="acm__conn-type-desc">{ct.desc}</div></div>
           </div>

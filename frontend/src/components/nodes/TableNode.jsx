@@ -16,6 +16,7 @@ import useCanvasStore from '../../store/useCanvasStore';
 import { useStoreDraft } from '../../hooks/useStoreDraft';
 import './TableNode.css';
 import NodeHandle from '../canvas/NodeHandle';
+import { pressable } from '../../utils/pressable';
 
 /**
  * Componente nodo tabella personalizzato
@@ -145,7 +146,7 @@ const TableNode = memo(({ data, id }) => {
             alias && (
               <div 
                 className="table-node__alias-display"
-                onClick={() => aliasDraft.begin()}
+                {...pressable(() => aliasDraft.begin())}
                 title="Clic per modificare l'alias"
               >
                 → {alias}
@@ -272,7 +273,7 @@ const TableNode = memo(({ data, id }) => {
               ) : column.alias ? (
                 <span 
                   className="table-node__column-alias"
-                  onClick={() => handleStartEditColumnAlias(column._origIndex)}
+                  {...pressable(() => handleStartEditColumnAlias(column._origIndex))}
                   title="Clic per modificare l'alias"
                 >
                   → {column.alias}
@@ -280,7 +281,7 @@ const TableNode = memo(({ data, id }) => {
               ) : (
                 <span
                   className="table-node__column-add-alias"
-                  onClick={() => handleStartEditColumnAlias(column._origIndex)}
+                  {...pressable(() => handleStartEditColumnAlias(column._origIndex))}
                   title="Clic per aggiungere un alias"
                 >
                   + alias
@@ -367,6 +368,8 @@ const TableNode = memo(({ data, id }) => {
       </div>
 
       {/* FilterModal - riceve colonne complete con tipo */}
+      {/* perf-3 (Fase 5 T7): finestre montate solo da aperte. */}
+      {isModalOpen && (
       <FilterModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -376,8 +379,10 @@ const TableNode = memo(({ data, id }) => {
         tableName={tableName}
         onSave={handleSaveFilters}
       />
+      )}
 
       {/* ColumnBuilderModal - per colonne calcolate */}
+      {isColumnBuilderOpen && (
       <ColumnBuilderModal
         isOpen={isColumnBuilderOpen}
         onClose={() => setIsColumnBuilderOpen(false)}
@@ -388,6 +393,7 @@ const TableNode = memo(({ data, id }) => {
         tableName={tableName}
         tableAlias={alias || 't'}
       />
+      )}
 
 
       {/* Handle output (destra) */}

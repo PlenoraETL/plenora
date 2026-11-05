@@ -14,6 +14,7 @@ import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { humanizeError, ERROR_MESSAGES } from '../../utils/errorMessages';
 import { useSmoothProgress } from '../../hooks/useSmoothProgress';
 import './ExecutionModal.css';
+import { formatNumber } from '../../utils/format';
 
 // Etichette umane per i bare status token dei task carica (quando il backend
 // non fornisce né un codice né un error_message più specifico).
@@ -219,7 +220,7 @@ function ExecutionModal({
                 <div className="execution-modal__stat">
                   <div className="execution-modal__stat-label">Righe processate</div>
                   <div className="execution-modal__stat-value">
-                    {(result.rows_count || result.rows_processed || 0).toLocaleString()}
+                    {formatNumber(result.rows_count || result.rows_processed || 0)}
                   </div>
                 </div>
                 <div className="execution-modal__stat">
@@ -343,7 +344,7 @@ function ExecutionModal({
                       </span>
                       <span className="execution-modal__carica-info">
                         {t.status === 'success'
-                          ? `${(t.rows_written || 0).toLocaleString()} righe scritte`
+                          ? `${formatNumber(t.rows_written || 0)} righe scritte`
                           : (t.status === 'failure' || t.status === 'validation_error' || t.status === 'write_error' || t.status === 'connection_error')
                           ? caricaTaskErrorText(t)
                           : (t.message || 'In coda...')}

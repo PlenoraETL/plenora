@@ -513,10 +513,12 @@ const ManipolaEditorContent = () => {
           <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
         )}
         <ExecutionModal {...executionModalProps(execution)} title={`${term('run').icon} Esecuzione del flusso Manipola`} projectType="manipola" />
-        <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
+        {preview.showModal && (
+<PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
           data={preview.data} loading={preview.loading} error={preview.error}
           permissionRevoked={preview.permissionRevoked}
           title={`${term('preview').name} del flusso Manipola`} projectType="manipola" disableGrouping />
+)}
       </Suspense>
     </ModalErrorBoundary>
   );

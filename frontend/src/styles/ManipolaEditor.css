@@ -4,33 +4,10 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Editor container ─────────────────────────────────────────── */
-.manipola-editor {
-  width: 100%;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--plen-bg, #07090F);
-  color: var(--plen-text, #DDE4F2);
-  font-family: var(--plen-font-body);
-}
 
 /* ── Toolbar ──────────────────────────────────────────────────── */
 
 /* accent bar — manipola purple */
-
-.manipola-toolbar__badge {
-  font-family: var(--plen-font-mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 3px 8px;
-  border-radius: 5px;
-  background: rgba(155,109,255,0.12);
-  border: 1px solid rgba(155,109,255,0.28);
-  color: var(--plen-manipola, #9B6DFF);
-  flex-shrink: 0;
-}
 
 /* ── Toolbar buttons base ─────────────────────────────────────── */
 
@@ -53,24 +30,10 @@
 /* save */
 
 /* ── Main layout ──────────────────────────────────────────────── */
-.manipola-main {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  min-height: 0;
-}
 
 /* ── Canvas area ──────────────────────────────────────────────── */
-.manipola-canvas {
-  flex: 1;
-  position: relative;
-  height: 100%;
-  background: var(--plen-bg, #07090F);
-}
-[data-theme='light'] .manipola-canvas { background: #EFF2F9; }
 
 /* ReactFlow overrides */
-.manipola-canvas .react-flow__background { opacity: 0.4; }
 
 .react-flow__controls {
   background: var(--plen-surface-2, #111525) !important;
@@ -106,55 +69,12 @@
 }
 
 /* Edges — viola Manipola */
-.manipola-canvas .react-flow__edge-path {
-  stroke: var(--plen-manipola, #9B6DFF);
-  stroke-opacity: 0.6;
-}
-.manipola-canvas .react-flow__edge.selected .react-flow__edge-path {
-  stroke-opacity: 1;
-}
-.manipola-canvas .react-flow__arrowhead path {
-  fill: var(--plen-manipola, #9B6DFF);
-}
 
 /* ── Error state ──────────────────────────────────────────────── */
-.manipola-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 14px;
-  color: var(--plen-err, #F87171);
-  padding: 24px;
-  text-align: center;
-}
-.manipola-error p { font-size: 13.5px; }
-.manipola-error button {
-  padding: 7px 16px;
-  border-radius: 6px;
-  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
-  background: transparent;
-  color: var(--plen-text-sub, #7D8BA8);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.12s;
-}
-.manipola-error button:hover { border-color: var(--plen-manipola, #9B6DFF); color: var(--plen-manipola, #9B6DFF); }
 
 /* ── Responsive ───────────────────────────────────────────────── */
 
 /* ── Hex background canvas ────────────────────────────────────── */
-.manipola-hex-canvas,
-.manipola-canvas__hex {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
-}
 
 /* ── Theme toggle pill ────────────────────────────────────────── */
 

@@ -23,14 +23,8 @@ export const API_TIMEOUT = 600000;
 // del contratto FE↔BE.
 export const EXPECTED_API_VERSION = "1.0";
 
-// Headers default
-export const DEFAULT_HEADERS = {
-  'Content-Type': 'application/json',
-};
-
 export default {
   API_BASE_URL,
   API_ENDPOINT,
   API_TIMEOUT,
-  DEFAULT_HEADERS,
 };

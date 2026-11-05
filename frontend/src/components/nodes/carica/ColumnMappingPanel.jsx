@@ -4,6 +4,7 @@ import { requestErrorMessage } from '../../../utils/errorMessages';
 import { useBusy } from '../../../hooks/useBusy';
 import '../../common/ListState.css';
 import { READ_ONLY_SAFE } from '../../common/readOnlySafe';
+import { pressable } from '../../../utils/pressable';
 
 function ColumnMappingPanel({
   columnMappings,
@@ -68,7 +69,7 @@ function ColumnMappingPanel({
     <div className="carica-node__section">
       <div
         className="carica-node__section-header"
-        onClick={onToggleMapping}
+        {...pressable(onToggleMapping)}
       >
         <span>🔀 Mappatura delle colonne</span>
         <span className="carica-node__toggle">{showMapping ? '▼' : '▶'}</span>

@@ -99,7 +99,8 @@ describe('ProjectList contract', () => {
 
     render(<ProjectList />);
     await screen.findByText('Orders ETL');
-    await userEvent.click(screen.getByRole('button', { name: '🗑' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Azioni per Orders ETL' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: '🗑 Elimina' }));
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );
@@ -140,7 +141,8 @@ describe('ProjectList contract', () => {
     render(<ProjectList />);
     await screen.findByText('Orders ETL');
 
-    await userEvent.click(screen.getByRole('button', { name: '🗑' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Azioni per Orders ETL' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: '🗑 Elimina' }));
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );
@@ -178,7 +180,8 @@ describe('ProjectList contract', () => {
     render(<ProjectList />);
     await screen.findByText('Orders ETL');
 
-    await userEvent.click(screen.getByRole('button', { name: '🗑' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Azioni per Orders ETL' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: '🗑 Elimina' }));
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );

@@ -2,36 +2,31 @@
  * ProjectListSkeleton.jsx — Skeleton screen della dashboard (Epic C).
  *
  * Sostituisce il vecchio "⬡ Caricamento..." a schermo vuoto durante le fetch
- * iniziali. Rispecchia la struttura reale (sidebar + topbar + stats row + due
- * sezioni di card) con placeholder shimmer, così il passaggio a contenuto
- * caricato è senza salti di layout e la latenza è percepita come minore.
+ * iniziali. Stesso layout della pagina (PageLayout, G1) con placeholder
+ * shimmer, così il passaggio a contenuto caricato è senza salti di layout.
  */
 import React from 'react';
-import AppSidebar from '../AppSidebar';
-
-const ZERO_COUNTS = {
-  projects: 0, connections: 0, apiConnections: 0,
-  datasources: 0, files: 0, schedules: 0,
-};
+import PageLayout from '../common/PageLayout';
 
 export default function ProjectListSkeleton() {
   return (
-    <div className="pl" aria-busy="true" aria-label="Caricamento dashboard">
-      <AppSidebar counts={ZERO_COUNTS} />
-      <div className="pl__main">
-        <header className="pl__topbar">
-          <div className="pl__page-title">Dashboard</div>
-          <div className="pl__topbar-right">
-            <div className="pl__skel pl__skel--field" />
-            <div className="pl__skel pl__skel--chip" />
-            <div className="pl__skel pl__skel--chip" />
-          </div>
-        </header>
-
+    <PageLayout
+      className="pl"
+      bare
+      aria-busy="true"
+      aria-label="Caricamento dashboard"
+      title="Dashboard"
+      actions={(
+        <>
+          <div className="pl__skel pl__skel--field" />
+          <div className="pl__skel pl__skel--chip" />
+          <div className="pl__skel pl__skel--chip" />
+        </>
+      )}
+    >
         <div className="pl__content">
-          {/* Stats row: 9 box come la griglia reale */}
           <div className="pl__stats-row">
-            {Array.from({ length: 9 }).map((_, i) => (
+            {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="pl__stat pl__skel pl__skel--stat" />
             ))}
           </div>
@@ -54,7 +49,6 @@ export default function ProjectListSkeleton() {
             </section>
           ))}
         </div>
-      </div>
-    </div>
+    </PageLayout>
   );
 }

@@ -25,7 +25,7 @@
 /* Header */
 .response-config-builder__header {
   padding: 16px;
-  background: white;
+  background: var(--plen-surface);
   border-bottom: 1px solid var(--color-slate-200);
 }
 
@@ -43,9 +43,9 @@
 
 .response-config-builder__select {
   padding: 8px 12px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--plen-border-hi);
   border-radius: 6px;
-  background: white;
+  background: var(--plen-surface);
   font-size: 14px;
   min-width: 200px;
 }
@@ -62,8 +62,8 @@
 }
 
 .response-config-builder__info-box {
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
+  background: var(--plen-ok-bg);
+  border: 1px solid var(--plen-ok);
   border-radius: 8px;
   padding: 20px;
 }
@@ -81,7 +81,7 @@
 /* Tabs */
 .response-config-builder__tabs {
   display: flex;
-  background: white;
+  background: var(--plen-surface);
   border-bottom: 1px solid var(--color-slate-200);
 }
 
@@ -120,7 +120,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background: white;
+  background: var(--plen-surface);
   border-radius: 6px;
   margin-bottom: 12px;
 }
@@ -146,9 +146,9 @@
 /* Buttons */
 .response-config-builder__btn {
   padding: 8px 16px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--plen-border-hi);
   border-radius: 6px;
-  background: white;
+  background: var(--plen-surface);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
@@ -228,7 +228,7 @@
 
 /* Tree */
 .response-config-builder__tree {
-  background: white;
+  background: var(--plen-surface);
   border: 1px solid var(--color-slate-200);
   border-radius: 6px;
   padding: 8px;
@@ -255,7 +255,7 @@
 }
 
 .json-tree-node__row--selected {
-  background: #dcfce7 !important;
+  background: var(--plen-ok-bg) !important;
 }
 
 .json-tree-node__toggle {
@@ -298,19 +298,19 @@
 }
 
 .json-tree-node__badge--string {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--plen-ok-bg);
+  color: var(--plen-ok);
 }
 
 .json-tree-node__badge--number,
 .json-tree-node__badge--integer {
-  background: #fae8ff;
-  color: #86198f;
+  background: var(--plen-blue-bg);
+  color: var(--plen-blue);
 }
 
 .json-tree-node__badge--boolean {
-  background: #ffedd5;
-  color: #c2410c;
+  background: var(--plen-warn-bg);
+  color: var(--plen-err);
 }
 
 .json-tree-node__badge--null {
@@ -327,9 +327,9 @@
 
 .json-tree-node__action {
   padding: 4px 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--plen-border-hi);
   border-radius: 4px;
-  background: white;
+  background: var(--plen-surface);
   font-size: 11px;
   cursor: pointer;
   opacity: 0.7;
@@ -396,7 +396,7 @@
 .response-config-builder__empty-section {
   padding: 32px;
   text-align: center;
-  background: white;
+  background: var(--plen-surface);
   border-radius: 6px;
   color: var(--color-slate-500);
 }
@@ -425,7 +425,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: white;
+  background: var(--plen-surface);
   padding: 8px 12px;
   border-radius: 6px;
 }
@@ -449,7 +449,7 @@
 
 /* Mappings List */
 .response-config-builder__mappings-list {
-  background: white;
+  background: var(--plen-surface);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -504,19 +504,19 @@
 }
 
 .response-config-builder__type-badge--string {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--plen-ok-bg);
+  color: var(--plen-ok);
 }
 
 .response-config-builder__type-badge--number,
 .response-config-builder__type-badge--integer {
-  background: #fae8ff;
-  color: #86198f;
+  background: var(--plen-blue-bg);
+  color: var(--plen-blue);
 }
 
 .response-config-builder__type-badge--boolean {
-  background: #ffedd5;
-  color: #c2410c;
+  background: var(--plen-warn-bg);
+  color: var(--plen-err);
 }
 
 /* Transforms List */
@@ -527,7 +527,7 @@
 }
 
 .response-config-builder__transform-item {
-  background: white;
+  background: var(--plen-surface);
   border: 1px solid var(--color-slate-200);
   border-radius: 8px;
   padding: 16px;
@@ -573,7 +573,7 @@
 /* Preview Table */
 .response-config-builder__preview-table-wrapper {
   overflow-x: auto;
-  background: white;
+  background: var(--plen-surface);
   border-radius: 6px;
   margin-bottom: 16px;
 }
@@ -647,42 +647,8 @@
    ============================================ */
 
 /* Toggle per struttura complessa */
-.api-manager__config-toggle {
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  border-radius: 8px;
-  padding: 16px;
-  margin: 16px 0;
-}
-
-.api-manager__toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 600;
-  color: #0369a1;
-  cursor: pointer;
-}
-
-.api-manager__toggle-label input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-.api-manager__toggle-hint {
-  margin: 8px 0 0 28px;
-  font-size: 13px;
-  color: var(--color-slate-500);
-}
 
 /* Response Builder wrapper */
-.api-manager__response-builder {
-  margin-top: 16px;
-  border: 2px solid var(--color-info);
-  border-radius: 8px;
-  overflow: hidden;
-}
 
 /* ============================================================
    CLASSI MANCANTI — Fase 13 Bucket 2

@@ -45,54 +45,21 @@
 }
 
 /* Root */
-.lv { width:100vw; height:100vh; display:flex; overflow:hidden; background:var(--lv-bg); color:var(--lv-text); font-family:var(--lv-font-b); font-size:13px; }
+.lv { width: 100%; height:100vh; display:flex; overflow:hidden; background:var(--lv-bg); color:var(--lv-text); font-family:var(--lv-font-b); font-size:13px; }
 
 /* ── Sidebar ── */
-.lv__sidebar { width:var(--lv-sidebar-w); background:var(--lv-surface); border-right:1px solid var(--lv-border); display:flex; flex-direction:column; flex-shrink:0; position:relative; overflow:hidden; }
-.lv__sidebar::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--lv-blue),transparent); opacity:.35; }
-.lv__sidebar-logo { padding:16px 18px 14px; border-bottom:1px solid var(--lv-border); }
-.lv__sidebar-sub  { font-size:9px; color:var(--lv-text-dim); letter-spacing:.14em; text-transform:uppercase; margin-top:4px; font-family:var(--lv-font-m); }
-.lv__sidebar-nav  { padding:14px 10px; flex:1; display:flex; flex-direction:column; gap:1px; overflow-y:auto; }
-.lv__nav-label    { font-size:9px; letter-spacing:.13em; text-transform:uppercase; color:var(--lv-text-dim); padding:10px 8px 5px; font-family:var(--lv-font-m); }
-.lv__nav-item     { display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:7px; cursor:pointer; color:var(--lv-text-sub); font-size:12.5px; font-weight:500; position:relative; }
-.lv__nav-item:hover { background:var(--lv-surface-2); color:var(--lv-text); }
-.lv__nav-item--active { background:var(--lv-blue-dim); color:var(--lv-text); }
-.lv__nav-item--active::before { content:''; position:absolute; left:0; top:50%; transform:translateY(-50%); width:2px; height:18px; background:var(--lv-blue); border-radius:0 2px 2px 0; }
-.lv__nav-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; background:var(--lv-text-dim); }
-.lv__nav-dot--estrai      { background:#34C17A; }
-.lv__nav-dot--manipola    { background:#9B6DFF; }
-.lv__nav-dot--arricchisci { background:#F5A623; }
-.lv__sidebar-footer { padding:12px 10px; border-top:1px solid var(--lv-border); }
-.lv__user-row    { display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:7px; }
-.lv__user-row:hover { background:var(--lv-surface-2); }
-.lv__user-avatar { width:28px; height:28px; border-radius:8px; background:var(--lv-blue-mid); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:white; flex-shrink:0; }
-.lv__user-name   { font-size:12px; font-weight:600; color:var(--lv-text); }
-.lv__user-role   { font-size:10px; color:var(--lv-text-dim); font-family:var(--lv-font-m); }
-.lv__logout-btn  { margin-left:auto; background:transparent; border:none; color:var(--lv-text-dim); font-size:14px; cursor:pointer; padding:4px 6px; border-radius:5px; }
-.lv__logout-btn:hover { color:var(--lv-err); background:rgba(248,113,113,0.08); }
 
 /* ── Main ── */
-.lv__main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
-.lv__topbar { height:var(--lv-topbar-h); display:flex; align-items:center; padding:0 28px; gap:10px; border-bottom:1px solid var(--lv-border); background:var(--lv-bg); flex-shrink:0; }
-.lv__back-btn   { padding:6px 12px; background:transparent; border:1px solid var(--lv-border-hi); border-radius:7px; color:var(--lv-text-sub); cursor:pointer; font-size:12px; }
-.lv__back-btn:hover { background:var(--lv-surface-2); color:var(--lv-text); }
-.lv__page-title { font-family:var(--lv-font-d); font-size:17px; font-weight:700; letter-spacing:-.02em; flex:1; }
-.lv__topbar-right { display:flex; align-items:center; gap:8px; }
 
 /* Buttons */
 .lv__btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; border:none; font-family:var(--lv-font-b); white-space:nowrap; }
 .lv__btn--ghost  { background:transparent; border:1px solid var(--lv-border-hi); color:var(--lv-text-sub); }
 .lv__btn--ghost:hover { background:var(--lv-surface-2); color:var(--lv-text); }
 .lv__btn--ghost:disabled { opacity:.4; cursor:not-allowed; }
-.lv__btn--danger { background:transparent; border:1px solid rgba(248,113,113,0.25); color:var(--lv-err); }
-.lv__btn--danger:hover { background:rgba(248,113,113,0.08); }
 .lv__btn--live   { border-color:rgba(52,211,153,0.4); color:var(--lv-ok); background:rgba(52,211,153,0.07); }
 .lv__btn--sm { padding:5px 10px; font-size:11px; }
 
 /* Theme toggle */
-.lv__theme-toggle { display:flex; background:var(--lv-surface-2); border:1px solid var(--lv-border-hi); border-radius:20px; padding:3px; }
-.lv__theme-opt    { padding:4px 11px; border-radius:16px; font-size:11px; font-family:var(--lv-font-m); color:var(--lv-text-dim); cursor:pointer; user-select:none; }
-.lv__theme-opt--on { background:var(--lv-surface); color:var(--lv-text); box-shadow:0 1px 4px rgba(0,0,0,.2); }
 
 /* ── Content ── */
 .lv__content { flex:1; overflow-y:auto; padding:24px 28px; position:relative; display:flex; flex-direction:column; gap:16px; }
@@ -166,7 +133,6 @@
 .lv__op-empty     { color:var(--lv-text-dim); }
 
 .lv__msg-text     { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:20px; color:var(--lv-text-sub); }
-.lv__expand-icon  { position:absolute; right:14px; top:50%; transform:translateY(-50%); color:var(--lv-text-dim); font-size:11px; }
 
 /* Toggle button per espansione riga (LogViewer + RunsTab).
    Reset UA + classi BEM esistenti non lo coprono. */
@@ -184,7 +150,7 @@
   vertical-align: middle;
 }
 .lv__expand-toggle:hover { color: var(--lv-text); }
-.lv__project-link { color:var(--lv-blue); font-size:11.5px; font-weight:500; cursor:pointer; font-family:var(--lv-font-m); }
+.lv__project-link { padding:0; border:0; background:none; color:var(--lv-blue); font-size:11.5px; font-weight:500; cursor:pointer; font-family:var(--lv-font-m); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
 .lv__project-link:hover { text-decoration:underline; }
 
 /* Detail row */
@@ -200,7 +166,6 @@
 
 /* Empty */
 .lv__empty { padding:56px 20px; text-align:center; color:var(--lv-text-dim); font-family:var(--lv-font-m); font-size:12px; }
-.lv__empty-icon { font-size:28px; margin-bottom:12px; opacity:.2; }
 
 /* Pagination */
 .lv__pagination { display:flex; justify-content:center; align-items:center; gap:16px; padding:8px 0 4px; }
@@ -209,7 +174,7 @@
 /* Responsive */
 @media (max-width:1200px) { .lv__th--project, .lv__td--project { display:none; } }
 @media (max-width:900px)  { .lv__th--op, .lv__td--op { display:none; } .lv__filters-row { flex-direction:column; align-items:stretch; } }
-@media (max-width:600px)  { .lv__sidebar { display:none; } .lv__stats { grid-template-columns:1fr 1fr; } .lv__content { padding:16px; } }
+@media (max-width:600px)  { .lv__stats { grid-template-columns:1fr 1fr; } .lv__content { padding:16px; } }
 
 /* ─────────────────────────────────────────────────────────────────────────
    Tab principali Esecuzioni / Log Tecnici
@@ -358,7 +323,6 @@
 .lv__row--inert      { cursor: default; }
 
 /* Helper margin per button residual (es. "Reset filtri" empty state). */
-.lv__btn--mt-md { margin-top: 12px; }
 
 /* Cella mono (DM Mono) per project_id/durata/righe out. Variante size
    11px ha colore sub; size 12px ha colore default cell. */

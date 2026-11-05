@@ -3,7 +3,7 @@
  * Redesign con sidebar + hex canvas background
  * Route: /
  */
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -23,8 +23,7 @@ import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useHexCanvas } from '../utils/hexCanvas';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
-import AppSidebar from '../components/AppSidebar';
-import ThemeToggle from '../components/common/ThemeToggle';
+import PageLayout from '../components/common/PageLayout';
 import { useTheme } from '../hooks/useTheme';
 import { can } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
@@ -33,6 +32,10 @@ import { useBusy } from '../hooks/useBusy';
 import { ResourceError } from '../components/common/ListState';
 import '../styles/ProjectList.css';
 import { projectEditorPath } from '../utils/projectRoutes';
+import { formatDateTime } from '../utils/format';
+// Sezioni della dashboard raggiungibili dalla sidebar (hash dell'URL).
+const DASHBOARD_SECTIONS = { estrai: 'Estrai', manipola: 'Manipola', arricchisci: 'Arricchisci' };
+
 function ProjectList() {
   const toast    = useToast();
   const confirmModal = useConfirmModal();
@@ -81,21 +84,12 @@ function ProjectList() {
   const canvasRef = useRef(null);
   useHexCanvas(canvasRef);
 
-  // Quando si arriva sulla dashboard con un hash (es. /#estrai), scrolliamo
-  // alla sezione corrispondente. Aspettiamo che `loading` sia false così
-  // le sezioni sono già renderizzate. Funziona sia all'arrivo iniziale sia
-  // ai click successivi nella sidebar (che cambiano l'hash).
-  useEffect(() => {
-    if (loading) return;
-    const hash = location.hash?.replace('#', '');
-    if (!hash) return;
-    // Defer di un tick per assicurarsi che il DOM sia montato
-    const t = setTimeout(() => {
-      const el = document.getElementById(`pl-section-${hash}`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
-    return () => clearTimeout(t);
-  }, [loading, location.hash]);
+  // DB5: le voci Estrai/Manipola/Arricchisci della sidebar (/#estrai, ...)
+  // mostrano SOLO quella sezione, col suo titolo (prima scorrevano a
+  // un'ancora e il titolo restava «Dashboard»).
+  const sectionKey = location.hash?.replace('#', '') || '';
+  const section = DASHBOARD_SECTIONS[sectionKey] ? sectionKey : null;
+  const showSection = (key) => !section || section === key;
 
   const handleDeleteProject = async (id, name) => {
     const ok = await confirmModal.confirm({
@@ -120,7 +114,7 @@ function ProjectList() {
       const cascade = handleCascade409(err);
       if (cascade) {
         toast.error(
-          `Impossibile eliminare "${name}": ${formatCascadeDependencies(cascade.dependencies)}. Rimuovili prima.`,
+          `Impossibile eliminare "${name}": ${formatCascadeDependencies(cascade)}. Rimuovili prima.`,
           10000
         );
         return;
@@ -223,13 +217,6 @@ function ProjectList() {
 
   const activeSchedules = useMemo(() => schedules.filter(s => s.schedule?.enabled), [schedules]);
 
-  const formatDate = (d) => {
-    if (!d) return 'N/A';
-    return new Date(d).toLocaleDateString('it-IT', {
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    });
-  };
 
   const estraiProjects     = useMemo(() => projects.filter(p => p.project_type === 'estrai' || !p.project_type), [projects]);
   const manipolaProjects   = useMemo(() => projects.filter(p => p.project_type === 'manipola'), [projects]);
@@ -281,29 +268,32 @@ function ProjectList() {
 
   // Filtri non-default attivi? (per badge "azzera").
   const filtersActive = statusFilter !== 'all' || tagFilter !== 'all' || sortBy !== 'recent';
+  // Lista vuota per un filtro o per la ricerca (P18): il testo lo dice.
+  const narrowed = Boolean(search.trim()) || statusFilter !== 'all' || tagFilter !== 'all';
+
+  // perf-6: i filtri si applicano UNA volta per sezione (prima due volte a
+  // render: per lo stato vuoto e per le card).
+  const shownEstrai = useMemo(() => applyFilters(estraiProjects), [applyFilters, estraiProjects]);
+  const shownManipola = useMemo(() => applyFilters(manipolaProjects), [applyFilters, manipolaProjects]);
+  const shownArricchisci = useMemo(() => applyFilters(arricchisciProjects), [applyFilters, arricchisciProjects]);
+  const fileNameById = useMemo(() => new Map(files.map(f => [f.id, f.name])), [files]);
+  const emptyFor = (what, firstText) => (narrowed
+    ? { title: `Nessun progetto ${what} con questi filtri`, text: 'Cambia o azzera la ricerca e i filtri.' }
+    : { title: `Nessun progetto ${what}`, text: firstText });
 
   if (loading) {
     return <ProjectListSkeleton />;
   }
 
   return (
-    <div className="pl" data-theme-local={theme}>
-<AppSidebar
-        counts={{
-          projects: projects.length,
-          connections: connections.length + arcgisConnections.length,
-          apiConnections: apiConnections.length,
-          datasources: dataSources.length,
-          files: files.length,
-          schedules: activeSchedules.length,
-        }}
-      />
-<div className="pl__main">
-
-        {/* Topbar */}
-        <header className="pl__topbar">
-          <div className="pl__page-title">Dashboard</div>
-          <div className="pl__topbar-right">
+    <PageLayout
+      className="pl"
+      data-theme-local={theme}
+      bare
+      title={section ? DASHBOARD_SECTIONS[section] : 'Dashboard'}
+      subtitle={section ? 'Progetti di questa sezione — «Dashboard» nella barra laterale per tutti' : null}
+      actions={(
+        <>
             <div className="pl__search-box">
               <span className="pl__search-icon">⌕</span>
               <input
@@ -357,15 +347,13 @@ function ProjectList() {
                 ✕ Filtri
               </button>
             )}
-            <ThemeToggle classPrefix="pl" />
             <button type="button" className="pl__btn pl__btn--ghost" onClick={() => loadData()} disabled={resource.refreshing}>{resource.refreshing ? '⟳ Aggiornamento…' : '⟳ Aggiorna'}</button>
             {canCreateProj && (
               <button type="button" className="pl__btn pl__btn--primary" onClick={() => setShowModal(true)}>＋ Nuovo Progetto</button>
             )}
-          </div>
-        </header>
-
-        {/* Content */}
+        </>
+      )}
+    >
         <div className="pl__content">
           <canvas ref={canvasRef} className="pl__hex-bg" />
 
@@ -376,32 +364,38 @@ function ProjectList() {
             <ResourceError compact title="Alcuni dati non caricati" message={failures.join(', ')} onRetry={resource.reload} />
           )}
 
-          {/* Stats */}
-          <div className="pl__stats-row">
-            {[
-              { val: projects.length,                                   label: 'Progetti',    accent: 'var(--pl-blue)' },
-              { val: estraiProjects.length,                             label: 'Estrai',      accent: 'var(--pl-estrai)' },
-              { val: manipolaProjects.length,                           label: 'Manipola',    accent: 'var(--pl-manipola)' },
-              { val: arricchisciProjects.length,                        label: 'Arricchisci', accent: 'var(--pl-arricch)' },
-              { val: eseguibili.length,                                 label: 'Eseguibili',  accent: 'var(--pl-blue)',
-                onClick: () => document.getElementById('pl-section-eseguibili')?.scrollIntoView({ behavior: 'smooth' }) },
-              { val: connections.length + arcgisConnections.length,     label: 'Connessioni', accent: 'var(--pl-blue)' },
-              { val: activeSchedules.length,                            label: 'Schedule',    accent: 'var(--pl-estrai)', onClick: () => navigate('/schedules') },
-              { val: apiConnections.length,                             label: 'API Esterne', accent: 'var(--pl-manipola)' },
-              { val: files.length,                                      label: 'File',        accent: 'var(--pl-arricch)', onClick: () => navigate('/files') },
-            ].map(({ val, label, accent, onClick }) => (
-              <div
-                key={label}
-                className={`pl__stat ${onClick ? 'pl__stat--clickable' : ''}`}
-                style={{ '--stat-accent': accent }}
-                onClick={onClick}
-              >
-                <div className="pl__stat-val">{val}</div>
-                <div className="pl__stat-label">{label}</div>
+          {/* KPI (DB2, G2): solo per ciò che esiste; ognuno porta alla sua
+              pagina o sezione (pulsanti veri, a11y-1). */}
+          {(() => {
+            const tiles = [
+              { val: estraiProjects.length,                         label: 'Estrai',      accent: 'var(--pl-estrai)',   to: '/#estrai' },
+              { val: manipolaProjects.length,                       label: 'Manipola',    accent: 'var(--pl-manipola)', to: '/#manipola' },
+              { val: arricchisciProjects.length,                    label: 'Arricchisci', accent: 'var(--pl-arricch)',  to: '/#arricchisci' },
+              { val: eseguibili.length,                             label: 'Eseguibili',  accent: 'var(--pl-blue)',     to: '/eseguibili' },
+              { val: connections.length + arcgisConnections.length, label: 'Connessioni', accent: 'var(--pl-blue)',     to: '/connections' },
+              { val: activeSchedules.length,                        label: 'Schedule attivi', accent: 'var(--pl-estrai)', to: '/schedules' },
+              { val: apiConnections.length,                         label: 'API Esterne', accent: 'var(--pl-manipola)', to: '/external-connectors' },
+              { val: files.length,                                  label: 'File',        accent: 'var(--pl-arricch)',  to: '/files' },
+            ].filter(t => t.val > 0);
+            if (tiles.length === 0) return null;
+            return (
+              <div className="pl__stats-row">
+                {tiles.map(({ val, label, accent, to }) => (
+                  <button
+                    type="button"
+                    key={label}
+                    className="pl__stat pl__stat--clickable"
+                    style={{ '--stat-accent': accent }}
+                    onClick={() => navigate(to)}
+                  >
+                    <span className="pl__stat-val">{val}</span>
+                    <span className="pl__stat-label">{label}</span>
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
-          {projects.length === 0 ? (
+            );
+          })()}
+          {projects.length === 0 && !section ? (
             <QuickStart
               hasDataSource={connections.length + arcgisConnections.length + apiConnections.length + dataSources.length > 0}
               canCreate={canCreateProj}
@@ -409,19 +403,19 @@ function ProjectList() {
             />
           ) : (
             <>
-<ProjectSection
+{showSection('estrai') && <ProjectSection
             id="pl-section-estrai"
             chipClass="pl__chip--estrai"
             chipLabel="↓ Estrai"
             subtitle="Estrazione da sorgenti SQL e GIS"
             onNew={() => openModalForType('estrai')}
             canCreate={canCreateProj}
-            empty={applyFilters(estraiProjects).length === 0}
+            empty={shownEstrai.length === 0}
             emptyIcon="↓"
-            emptyTitle="Nessun progetto Estrai"
-            emptyText="Crea il tuo primo progetto per estrarre dati"
+            emptyTitle={emptyFor('Estrai').title}
+            emptyText={emptyFor('Estrai', 'Crea il tuo primo progetto per estrarre dati').text}
           >
-            {applyFilters(estraiProjects).map(project => {
+            {shownEstrai.map(project => {
               const conn = getConn(project.default_connection_id);
               return (
                 <ProjectCard
@@ -432,7 +426,7 @@ function ProjectList() {
                   modLabel="↓ Estrai"
                   meta={[
                     { key: 'Connessione', val: conn ? conn.name : 'N/A', ok: !!conn },
-                    { key: 'Creato',      val: formatDate(project.created_at) },
+                    { key: 'Creato',      val: formatDateTime(project.created_at) },
                   ]}
                   scheduleCount={getScheduleCount(project.id)}
                   onOpen={() => handleOpenProject(project)}
@@ -444,23 +438,23 @@ function ProjectList() {
                 />
               );
             })}
-          </ProjectSection>
-<ProjectSection
+          </ProjectSection>}
+{showSection('manipola') && <ProjectSection
             id="pl-section-manipola"
             chipClass="pl__chip--manipola"
             chipLabel="⚙ Manipola"
             subtitle="Trasformazione e join spaziale"
             onNew={() => openModalForType('manipola')}
             canCreate={canCreateProj}
-            empty={applyFilters(manipolaProjects).length === 0}
+            empty={shownManipola.length === 0}
             emptyIcon="⚙"
-            emptyTitle="Nessun progetto Manipola"
-            emptyText="Crea un pipeline di trasformazione"
+            emptyTitle={emptyFor('Manipola').title}
+            emptyText={emptyFor('Manipola', 'Crea un pipeline di trasformazione').text}
           >
-            {applyFilters(manipolaProjects).map(project => {
+            {shownManipola.map(project => {
               const srcProjects = getSourceProjects(project.id);
               const fileIds = projectFileSources[project.id] || [];
-              const fileNames = fileIds.map(id => files.find(f => f.id === id)?.name).filter(Boolean);
+              const fileNames = fileIds.map(id => fileNameById.get(id)).filter(Boolean);
               const srcCount = srcProjects.length + fileNames.length;
               return (
                 <ProjectCard
@@ -471,7 +465,7 @@ function ProjectList() {
                   modLabel="⚙ Manipola"
                   meta={[
                     { key: 'Sorgenti', val: `${srcCount} progett${srcCount !== 1 ? 'i' : 'o'}` },
-                    { key: 'Creato',   val: formatDate(project.created_at) },
+                    { key: 'Creato',   val: formatDateTime(project.created_at) },
                   ]}
                   scheduleCount={getScheduleCount(project.id)}
                   onOpen={() => handleOpenProject(project)}
@@ -483,20 +477,20 @@ function ProjectList() {
                 />
               );
             })}
-          </ProjectSection>
-<ProjectSection
+          </ProjectSection>}
+{showSection('arricchisci') && <ProjectSection
             id="pl-section-arricchisci"
             chipClass="pl__chip--arricchisci"
             chipLabel="◈ Arricchisci"
             subtitle="API enrichment geospaziale"
             onNew={() => openModalForType('arricchisci')}
             canCreate={canCreateProj}
-            empty={applyFilters(arricchisciProjects).length === 0}
+            empty={shownArricchisci.length === 0}
             emptyIcon="◈"
-            emptyTitle="Nessun progetto Arricchisci"
-            emptyText="Crea un nuovo pipeline di arricchimento"
+            emptyTitle={emptyFor('Arricchisci').title}
+            emptyText={emptyFor('Arricchisci', 'Crea un nuovo pipeline di arricchimento').text}
           >
-            {applyFilters(arricchisciProjects).map(project => (
+            {shownArricchisci.map(project => (
               <ProjectCard
                 key={project.id}
                 project={project}
@@ -505,7 +499,7 @@ function ProjectList() {
                 modLabel="◈ Arricchisci"
                 meta={[
                   { key: 'API', val: 'Enrichment' },
-                  { key: 'Creato', val: formatDate(project.created_at) },
+                  { key: 'Creato', val: formatDateTime(project.created_at) },
                 ]}
                 scheduleCount={getScheduleCount(project.id)}
                 onOpen={() => handleOpenProject(project)}
@@ -516,20 +510,23 @@ function ProjectList() {
                 onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
               />
             ))}
-          </ProjectSection>
-<EseguibiliSection
+          </ProjectSection>}
+            </>
+          )}
+          {/* P17: la sezione Eseguibili c'è anche senza progetti. */}
+          {!section && (eseguibili.length > 0 || projects.length > 0) && (
+          <EseguibiliSection
             items={filterBySearch(eseguibili)}
+            filtered={Boolean(search.trim())}
             canCreate={can.createEseguibile(user)}
             canDelete={(item) => can.manageEseguibile(user, item)}
             onNew={openEsegSelector}
             onExecute={(item) => setExecuteEseguibileId(item.id)}
             onDelete={(item) => handleDeleteEseguibile(item.id, item.name)}
           />
-            </>
           )}
 
         </div>{/* /content */}
-      </div>{/* /main */}
       <NewProjectModal
         isOpen={showModal}
         initialType={newProjectInitialType}
@@ -543,7 +540,7 @@ function ProjectList() {
           project={publishProject}
           onClose={() => setPublishProject(null)}
           onSuccess={() => {
-            toast.success('Eseguibile pubblicato — visibile nella sezione 🚀 Eseguibili');
+            // Il toast lo mostra PublishEseguibileModal (P18: niente doppione).
             loadData();
           }}
         />
@@ -566,7 +563,7 @@ function ProjectList() {
       />
 
       <ConfirmDialog {...confirmModal} />
-    </div>
+    </PageLayout>
   );
 }
 // Pre-fix (P2 frontend-pages): `useEmptyHexCanvases` + `EmptyHexDrawer`

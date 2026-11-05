@@ -23,18 +23,12 @@ const START_PAGE = integer({ min: 0 });
 export default function Step2Params({
   formData,
   setFormData,
-  wizardStepError,
   addParameter,
   updateParameter,
   removeParameter,
 }) {
   return (
     <div className="acm__wstep-content">
-      {wizardStepError && (
-        <div className="acm__validation-error">
-          <span>⚠️</span><span>{wizardStepError}</span>
-        </div>
-      )}
 {formData.connection_type==='rest_file' ? (
         <>
           <div className="acm__info-box">📦 Configura i campi multipart che invierai al servizio REST e il formato del file di output.</div>

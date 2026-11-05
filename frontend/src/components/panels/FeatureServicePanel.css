@@ -187,7 +187,7 @@
 }
 
 .fs-panel__item:hover {
-  background: #fdf2e9;
+  background: var(--plen-warn-bg);
   border-color: var(--color-feature-layer);
 }
 
@@ -261,33 +261,6 @@
 /* ============================================================
    MODAL NUOVA CONNESSIONE
    ============================================================ */
-.fs-panel__modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal, 1000);
-}
-
-.fs-panel__modal {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  width: 100%;
-  max-width: 450px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.fs-panel__modal-title {
-  margin: 0 0 20px 0;
-  font-size: 18px;
-  font-weight: 600;
-}
 
 /* Form */
 .fs-panel__form-group {
@@ -329,45 +302,9 @@
   margin-bottom: 12px;
 }
 
-.fs-panel__form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.fs-panel__form-actions button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.fs-panel__form-actions button:first-child {
-  background: var(--color-bg-secondary);
-  color: var(--color-text-muted);
-}
-
-.fs-panel__form-submit {
-  background: var(--color-feature-layer) !important;
-  color: white !important;
-  font-weight: 600;
-}
-
-.fs-panel__form-submit:hover {
-  background: #D35400 !important;
-}
-
-.fs-panel__form-submit:disabled {
-  opacity: 0.6;
-  cursor: not-allowed !important;
-}
-
 /* ============================================================
    SOURCE TYPE TOGGLE (va nella sidebar EstraiEditor)
    ============================================================ */
-
 
 /* ============================================================
    CLASSI MANCANTI — Fase 13 Bucket 2
@@ -379,7 +316,7 @@
 }
 
 .fs-panel__item--connection:hover {
-  background: #fdf2e9;
+  background: var(--plen-warn-bg);
   border-color: var(--color-feature-layer-dark);
 }
 

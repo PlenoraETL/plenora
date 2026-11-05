@@ -19,7 +19,7 @@
  *   schedules.js      → schedulazioni task
  */
 
-export { API_BASE_URL, API_ENDPOINT, API_TIMEOUT, DEFAULT_HEADERS } from './config';
+export { API_BASE_URL, API_ENDPOINT, API_TIMEOUT } from './config';
 
 export { default as http } from './http';
 
@@ -36,7 +36,6 @@ export {
   deleteProject,
   executeProjectQuery,
   previewProject,
-  getDownloadUrl,
   downloadProjectOutput,
 } from './projects';
 
@@ -135,7 +134,4 @@ export {
 export {
   getShares,
   setShares,
-  addShare,
-  removeShare,
-  VALID_RESOURCE_TYPES as SHARES_VALID_RESOURCE_TYPES,
 } from './shares';

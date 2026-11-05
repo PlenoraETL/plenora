@@ -23,18 +23,10 @@
  */
 
 // Node types del canvas.
-export const NODE_TYPES = Object.freeze([
-  'source', 'result', 'project_source', 'file_source', 'feature_source',
-  'transform', 'api_enrich', 'staticValues', 'carica', 'carica_arcgis',
-  'multi_join', 'comment', 'datasource_node', 'project_input',
-]);
 
 // 6 column types base. I sottotipi geometry (geometry:point, ecc.)
 // vivono in `utils/columnUtils.js` perche' la normalizzazione UI ha
 // regole proprie (display label, icona).
-export const COLUMN_TYPES_BASE = Object.freeze([
-  'int', 'real', 'str', 'bool', 'date', 'geometry',
-]);
 
 // Write mode CARICA (DB). Lista completa accettata dal canvas Pydantic.
 // `ScheduleWizard` espone solo il subset CRON-safe (append/replace/upsert).
@@ -50,10 +42,8 @@ export const WRITE_MODES = Object.freeze([
 // componente dedicato CaricanArcGISNode; entrambi i percorsi
 // arrivano allo stesso `dest_type` literal lato BE per il branch
 // logic dell'executor (`workers/tasks/carica_task.py:293`).
-export const DEST_TYPES = Object.freeze(['db', 'arcgis', 'rest']);
 // Subset offerto dal nodo CaricanNode UI (selettore dest_type 2-way):
 // arcgis ha il suo componente dedicato e non e' selezionabile qui.
-export const DEST_TYPES_CARICAN_UI = Object.freeze(['db', 'rest']);
 
 // Transaction granularity DB.
 export const TRANSACTION_MODES = Object.freeze(['all_or_nothing', 'per_batch']);
@@ -73,4 +63,3 @@ export const REST_METHODS = Object.freeze(['POST', 'PUT', 'PATCH']);
 export const REST_BATCH_MODES = Object.freeze(['batch', 'per_record']);
 
 // Multi-join semantica.
-export const MULTI_JOIN_TYPES = Object.freeze(['inner', 'left', 'outer']);

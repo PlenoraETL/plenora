@@ -20,7 +20,7 @@
  */
 import { getErrorCode, humanizeError } from './errorMessages';
 
-export const MFA_REQUIRED_CODE = 'auth_mfa_required';
+const MFA_REQUIRED_CODE = 'auth_mfa_required';
 
 export const LOGIN_ERROR_TEXT = Object.freeze({
   auth_invalid_credentials: 'Credenziali errate: username o password non corretti.',

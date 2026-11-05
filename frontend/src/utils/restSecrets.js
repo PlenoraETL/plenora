@@ -97,7 +97,7 @@ export function withoutSecretHeaders(headers) {
 }
 
 /** Errore del salvataggio bloccato da un nodo da migrare. */
-export class RestSecretsMigrationError extends Error {
+class RestSecretsMigrationError extends Error {
   constructor(issues) {
     super(restMigrationMessage(issues));
     this.name = 'RestSecretsMigrationError';

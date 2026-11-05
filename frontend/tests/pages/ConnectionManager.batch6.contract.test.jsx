@@ -147,7 +147,7 @@ describe('ConnectionManager contract', () => {
 
     render(<ConnectionManager />);
     await screen.findByText('Warehouse DB');
-    expect(screen.getByText('Non testata')).toBeInTheDocument();
+    expect(screen.getByText('Da verificare')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /🔌 Test/i }));
 
@@ -155,7 +155,7 @@ describe('ConnectionManager contract', () => {
       expect(testConnectionMock).toHaveBeenCalledWith('conn-1'),
     );
     expect(await screen.findByText('OK')).toBeInTheDocument();
-    expect(screen.queryByText('Non testata')).not.toBeInTheDocument();
+    expect(screen.queryByText('Da verificare')).not.toBeInTheDocument();
   });
   it('shows the error badge and inline error banner when test fails', async () => {
     testConnectionMock.mockResolvedValueOnce({

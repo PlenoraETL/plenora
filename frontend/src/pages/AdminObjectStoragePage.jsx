@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import AppSidebar from '../components/AppSidebar';
+import PageLayout from '../components/common/PageLayout';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import ActionMenu from '../components/common/ActionMenu';
 import {
   cleanupOrphanStorage,
   deleteAllStoragePreviews,
@@ -18,6 +20,7 @@ import { ResourceError } from '../components/common/ListState';
 import { useBusy } from '../hooks/useBusy';
 import { useDownload } from '../hooks/useDownload';
 import '../styles/AdminObjectStoragePage.css';
+import { formatDateTime, formatBytes } from '../utils/format';
 
 const DOMAINS = [
   ['results', 'Risultati'],
@@ -28,13 +31,6 @@ const DOMAINS = [
   ['imdf-bundles', 'Bundle IMDF'],
 ];
 
-function formatBytes(value) {
-  const bytes = Number(value || 0);
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
-}
 
 export default function AdminObjectStoragePage() {
   // Fase 5 T2 (R4.5, R9.10): pagina dall'hook comune con filtri e cursore
@@ -59,8 +55,11 @@ export default function AdminObjectStoragePage() {
   const setGroupId = (v) => { resetPaging(); setGroupIdRaw(v); };
   const setDomain = (v) => { resetPaging(); setDomainRaw(v); };
 
+  // P23 (Fase 5 T7): il gruppo scritto a mano si chiede al server dopo una
+  // pausa, non a ogni tasto.
+  const typedGroup = useDebouncedValue(groupId, 400).value;
   const resource = useResource(async () => {
-    const group = groupId.trim();
+    const group = typedGroup.trim();
     const objectRequest = listObjectStorage({
       scope,
       group_id: scope === 'canonical' && group ? group : undefined,
@@ -76,7 +75,7 @@ export default function AdminObjectStoragePage() {
       return { page: data, catalog, catalogGroup: group };
     }
     return { page: await objectRequest, catalog: null, catalogGroup: '' };
-  }, { key: { scope, groupId, domain, cursor }, keepPreviousData: true, errorMessage: humanizeErrorMessage });
+  }, { key: { scope, groupId: typedGroup, domain, cursor }, keepPreviousData: true, errorMessage: humanizeErrorMessage });
   const page = resource.data?.page || null;
   const projectCatalog = resource.data?.catalog || null;
   // Gruppo del catalogo caricato: e' il perimetro mostrato e chiesto.
@@ -219,22 +218,27 @@ export default function AdminObjectStoragePage() {
   );
 
   return (
-    <div className="storage-admin">
-      <AppSidebar />
-      <main className="storage-admin__main">
-        <header className="storage-admin__header">
-          <div><h1>Object Storage</h1><p>Explorer del bucket runtime, riservato ai superadmin.</p></div>
-          <div className="storage-admin__header-actions">
-            {canManage && (
-              <button type="button" className="storage-admin__purge" onClick={purgePreviews} disabled={loading || purgingPreviews}>
-                {purgingPreviews ? 'Eliminazione preview...' : 'Elimina tutte le preview'}
-              </button>
-            )}
-            <button type="button" onClick={() => load()} disabled={loading}>
-              {loading ? 'Caricamento…' : 'Aggiorna'}
-            </button>
-          </div>
-        </header>
+    <PageLayout
+      className="storage-admin"
+      title="Object Storage"
+      subtitle="Explorer del bucket runtime, riservato ai superadmin."
+      actions={(
+        <>
+          <button type="button" onClick={() => load()} disabled={loading}>
+            {loading ? 'Caricamento…' : 'Aggiorna'}
+          </button>
+          {/* S7, G3: l'azione distruttiva non e' il primo pulsante rosso
+              accanto ad «Aggiorna»: sta nel menu «⋯», con conferma. */}
+          {canManage && (
+            <ActionMenu
+              label="Altre azioni dell'object storage"
+              disabled={loading || purgingPreviews}
+              items={[{ label: purgingPreviews ? 'Eliminazione preview...' : 'Elimina tutte le preview', onSelect: purgePreviews, danger: true }]}
+            />
+          )}
+        </>
+      )}
+    >
 
         <section className="storage-admin__filters">
           <label>Namespace<select value={scope} onChange={(event) => setScope(event.target.value)}><option value="canonical">Tenant canonici</option><option value="legacy">Chiavi legacy</option></select></label>
@@ -293,7 +297,7 @@ export default function AdminObjectStoragePage() {
                 <div className="storage-admin__result-list">
                   {project.results.map((result) => (
                     <div className="storage-admin__result" key={result.id}>
-                      <div><strong>{result.filename}</strong><span>{result.format.toUpperCase()} · {result.rows_count ?? '—'} righe · {formatBytes(result.size_bytes)}</span><small>{new Date(result.created_at).toLocaleString('it-IT')}</small></div>
+                      <div><strong>{result.filename}</strong><span>{result.format.toUpperCase()} · {result.rows_count ?? '—'} righe · {formatBytes(result.size_bytes)}</span><small>{formatDateTime(result.created_at)}</small></div>
                       <button type="button" className="storage-admin__download" onClick={() => download(result.key)} disabled={downloading(result.key)}>{downloading(result.key) ? '…' : 'Scarica'}</button>
                     </div>
                   ))}
@@ -310,7 +314,7 @@ export default function AdminObjectStoragePage() {
                 {(page?.objects || []).map((item) => (
                   <tr key={item.key}>
                     <td>{item.tenant_group_id || <span className="storage-admin__legacy">legacy</span>}</td><td>{item.domain}</td><td>{item.resource_id || '—'}</td>
-                    <td className="storage-admin__key" title={item.key}>{item.key}</td><td>{formatBytes(item.size_bytes)}</td><td>{new Date(item.last_modified).toLocaleString('it-IT')}</td>
+                    <td className="storage-admin__key" title={item.key}>{item.key}</td><td>{formatBytes(item.size_bytes)}</td><td>{formatDateTime(item.last_modified)}</td>
                     <td className="storage-admin__actions">
                       <button type="button" className="storage-admin__download" onClick={() => download(item.key)} disabled={downloading(item.key) || deleting(item.key)}>{downloading(item.key) ? '…' : 'Scarica'}</button>
                       {canManage && <button type="button" className="storage-admin__delete" onClick={() => remove(item)} disabled={deleting(item.key) || downloading(item.key)}>{deleting(item.key) ? 'Eliminazione…' : 'Elimina'}</button>}
@@ -325,7 +329,6 @@ export default function AdminObjectStoragePage() {
 
         {!groupedResults && <footer className="storage-admin__pager"><button type="button" onClick={previous} disabled={!history.length || loading}>Indietro</button><button type="button" onClick={next} disabled={!page?.next_cursor || loading}>Avanti</button></footer>}
         <ConfirmDialog {...confirmModal} />
-      </main>
-    </div>
+    </PageLayout>
   );
 }

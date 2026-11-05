@@ -4,7 +4,7 @@
 ───────────────────────────────────────────────────────────────────────── */
 
 .sys {
-  width: 100vw;
+  width: 100%;
   height: 100vh;
   display: flex;
   overflow: hidden;
@@ -22,45 +22,7 @@
   box-sizing: border-box;
 }
 
-.sys__main {
-  flex: 1;
-  min-width: 0;
-  padding: 24px 32px;
-  overflow-y: auto;
-}
-
 /* ── Header ───────────────────────────────────────────────────────────── */
-.sys__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-}
-.sys__title {
-  margin: 0 0 4px 0;
-  font-family: var(--plen-font-display);
-  font-size: 26px;
-  font-weight: 700;
-  color: #DDE4F2;
-  letter-spacing: -0.5px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-[data-theme='light'] .sys__title { color: #0B1120; }
-
-.sys__subtitle {
-  font-size: 13px;
-  color: #7D8BA8;
-}
-
-.sys__header-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
 
 .sys__btn {
   padding: 8px 14px;
@@ -228,9 +190,6 @@
 /* Layout utilities riusate ≥2 volte nella pagina (FE-PHASE1-CLOSURE-2 +
    FE-PHASE2-INLINE-STYLES-001). */
 .sys__mt-sm { margin-top: 6px; }
-.sys__mt-xs { margin-top: 4px; }
-.sys__mt-2  { margin-top: 2px; }
-.sys__ml-sm { margin-left: 6px; }
 .sys__ml-xs { margin-left: 8px; }
 .sys__mb-sm { margin-bottom: 8px; }
 .sys__kv-key--cap { text-transform: capitalize; }
@@ -239,21 +198,10 @@
    dalla palette `sys__badge--*` / `sys__progress-fill--*`). */
 .sys__txt-warn  { color: #FBBF24; }
 .sys__txt-error { color: #F87171; }
-.sys__txt-meta  { color: #7D8BA8; font-size: 11px; }
 
 /* Variante compact + colorata per il badge inline "in coda" worker. */
-.sys__txt-warn-bold { color: #FBBF24; font-weight: 600; }
 
 /* ── Footer / errore ──────────────────────────────────────────────────── */
-.sys__error-box {
-  background: rgba(248,113,113,0.08);
-  border: 1px solid rgba(248,113,113,0.3);
-  color: #F87171;
-  padding: 12px 16px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  font-size: 14px;
-}
 .sys__footer {
   margin-top: 32px;
   font-size: 12px;

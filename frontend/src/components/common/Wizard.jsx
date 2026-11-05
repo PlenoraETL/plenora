@@ -42,7 +42,7 @@ import { FieldScope } from './FieldInput';
 import { useFieldScope } from '../../hooks/useFieldBuffer';
 import './Wizard.css';
 
-export const STEP_INCOMPLETE = 'Completa questo passo prima di proseguire.';
+const STEP_INCOMPLETE = 'Completa questo passo prima di proseguire.';
 export const FIELDS_INVALID = 'Correggi i campi segnati prima di proseguire.';
 
 /**
@@ -67,7 +67,7 @@ export function firstInvalidStep(steps, upTo) {
   return -1;
 }
 
-export const WIZARD_DISCARD_DIALOG = {
+const WIZARD_DISCARD_DIALOG = {
   title: 'Chiudere senza salvare?',
   message: 'I dati inseriti in questa procedura andranno persi.',
   confirmText: 'Chiudi senza salvare',

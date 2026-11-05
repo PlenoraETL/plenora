@@ -5,6 +5,7 @@ import {
 } from '../../../constants/canvasTypes';
 import FieldInput from '../../common/FieldInput';
 import { integer } from '../../../utils/fieldCodecs';
+import { pressable } from '../../../utils/pressable';
 
 // Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
 const DB_BATCH = integer({ min: 100, max: 10000 });
@@ -40,7 +41,7 @@ function DbAdvancedOptions({
     <div className="carica-node__section">
       <div
         className="carica-node__section-header"
-        onClick={onToggleAdvanced}
+        {...pressable(onToggleAdvanced)}
       >
         <span>⚡ Opzioni Avanzate</span>
         <span className="carica-node__toggle">{showAdvanced ? '▼' : '▶'}</span>

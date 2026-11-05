@@ -50,45 +50,6 @@
 .filter-modal__filter-item:last-child { margin-bottom: 0; }
 
 /* ── Form group ─────────────────────────────────────────────────── */
-.filter-modal .form-group { margin-bottom: 10px; }
-.filter-modal .form-group:last-of-type { margin-bottom: 0; }
-
-.filter-modal .form-group label {
-  display: block;
-  font-family: var(--plen-font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--plen-text-dim, #3F4D68);
-  margin-bottom: 5px;
-}
-
-.filter-modal .form-group select,
-.filter-modal .form-group input {
-  width: 100%;
-  padding: 7px 10px;
-  font-size: 12.5px;
-  font-family: var(--plen-font-body);
-  background: var(--plen-surface, #0C0F18);
-  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
-  border-radius: 6px;
-  color: var(--plen-text, #DDE4F2);
-  outline: none;
-  box-sizing: border-box;
-  transition: border-color 0.15s;
-}
-[data-theme='light'] .filter-modal .form-group select,
-[data-theme='light'] .filter-modal .form-group input {
-  background: #FFFFFF;
-  border-color: rgba(0,0,0,0.10);
-  color: #0F1729;
-}
-.filter-modal .form-group select:focus,
-.filter-modal .form-group input:focus {
-  border-color: #34C17A;
-  box-shadow: 0 0 0 2px rgba(52,193,122,0.15);
-}
 
 /* ── Remove button ──────────────────────────────────────────────── */
 .filter-modal__remove-btn {

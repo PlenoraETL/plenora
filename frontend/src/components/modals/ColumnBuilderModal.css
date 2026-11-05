@@ -4,7 +4,6 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Loading / Error ────────────────────────────────────────────── */
-.column-builder-loading,
 .column-builder-error {
   text-align: center;
   padding: 40px;
@@ -73,8 +72,6 @@
   border-color: #9B6DFF;
   box-shadow: 0 0 0 2px rgba(155,109,255,0.15);
 }
-
-.column-builder-input--small  { padding: 5px 8px; font-size: 12px; }
 .column-builder-input--number { width: 120px; }
 .column-builder-input--srid   { width: 100px; }
 
@@ -101,7 +98,6 @@
   border-color: #9B6DFF;
   box-shadow: 0 0 0 2px rgba(155,109,255,0.15);
 }
-.column-builder-select--small { padding: 5px 8px; font-size: 12px; }
 
 /* ── Categories ─────────────────────────────────────────────────── */
 .column-builder-categories {
@@ -385,7 +381,7 @@
 }
 .column-builder-func-example code {
   font-family: var(--plen-font-mono);
-  color: var(--plen-accent, var(--color-primary, #3b82f6));
+  color: var(--plen-blue);
   background: var(--plen-surface-2, rgba(59,130,246,.06));
   padding: 1px 6px;
   border-radius: 5px;

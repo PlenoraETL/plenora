@@ -10,7 +10,6 @@ import { useResource } from '../hooks/useResource';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   getFiles,
@@ -24,16 +23,16 @@ import {
 } from '../api/files';
 import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
-import AppSidebar from '../components/AppSidebar';
-import ThemeToggle from '../components/common/ThemeToggle';
+import PageLayout from '../components/common/PageLayout';
+import EmptyState from '../components/common/EmptyState';
 import ModalWrapper from '../components/common/ModalWrapper';
 import { can } from '../utils/permissions';
 import { humanizeErrorMessage } from '../utils/errorMessages';
 import '../styles/FileManager.css';
+import { formatBytes as formatFileSize } from '../utils/format';
 import {
   FORMAT_CONFIG,
   getFormatConfig,
-  formatFileSize,
   SPATIAL_FORMATS,
   buildMultiSourceSelection,
   resolveMultiSourcePreview,
@@ -42,7 +41,7 @@ import FileCard from './FileManager/FileCard';
 import UploadModal from './FileManager/UploadModal';
 import LayerModal from './FileManager/LayerModal';
 import PreviewModal from './FileManager/PreviewModal';
-import { goBack } from '../utils/navigation';
+import { pressable } from '../utils/pressable';
 
 // SRID dal convertitore unico (R8.23): "4326", "EPSG:4326" -> 4326.
 const SRID = sridCodec({ optional: true });
@@ -55,7 +54,6 @@ const FILTER_TABS = [
   { key: 'spatial', label: 'Spaziali' },
 ];
 const FileManager = () => {
-  const navigate     = useNavigate();
   const toast        = useToast();
   const confirmModal = useConfirmModal();
   const { user } = useAuth();
@@ -127,6 +125,8 @@ const handleDrag = (e) => {
     e.preventDefault(); e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files?.[0]) {
+      // P16: si carica un file alla volta; con piu' file lo si dice.
+      if (e.dataTransfer.files.length > 1) toast.warning(`Si carica un file alla volta: scelto "${e.dataTransfer.files[0].name}".`);
       handleFileSelect(e.dataTransfer.files[0]);
       setShowUploadModal(true);
     }
@@ -293,10 +293,11 @@ const handleUpload = async () => {
       const result = await uploadFile(uploadFile_, uploadName, uploadDescription, uploadLayer, uploadSheet, columnsToImport, srid);
       if (result.format === 'gdb' || result.format === 'gpkg') {
         const info = await getFileLayers(result.id);
-        if (info.layers?.length > 1) { setPendingFile(result); setAvailableLayers(info.layers); resetUploadModal(); setShowLayerModal(true); return; }
+        // P4: resetUploadModal azzera i layer: va chiamato PRIMA di impostarli.
+        if (info.layers?.length > 1) { resetUploadModal(); setPendingFile(result); setAvailableLayers(info.layers); setShowLayerModal(true); return; }
       } else if (result.format === 'xlsx') {
         const info = await getFileLayers(result.id);
-        if (info.sheets?.length > 1) { setPendingFile(result); setAvailableSheets(info.sheets); resetUploadModal(); setShowLayerModal(true); return; }
+        if (info.sheets?.length > 1) { resetUploadModal(); setPendingFile(result); setAvailableSheets(info.sheets); setShowLayerModal(true); return; }
       }
       await loadFiles(); resetUploadModal();
     } catch (err) {
@@ -369,7 +370,13 @@ const resetUploadModal = () => {
     setIsMultiLayerFile(false); setMultiSourceKind(null); setCheckedLayers({}); setLayerColumns({}); setLayerSelectedCols({}); setActiveLayerTab(null); setAvailableLayers([]);
     setLoadingLayers({}); selectionRef.current += 1;
   };
-  const resetLayerModal = () => { setShowLayerModal(false); setPendingFile(null); setAvailableLayers([]); setAvailableSheets([]); setSelectedLayer(''); setSelectedSheet(''); };
+  const resetLayerModal = () => {
+    // P4: il file e' gia' caricato anche se si annulla la scelta del layer:
+    // la lista lo deve mostrare.
+    const uploaded = Boolean(pendingFile);
+    setShowLayerModal(false); setPendingFile(null); setAvailableLayers([]); setAvailableSheets([]); setSelectedLayer(''); setSelectedSheet('');
+    if (uploaded) loadFiles();
+  };
   const filteredFiles = files.filter(f => {
     const matchSearch = !search || f.name.toLowerCase().includes(search.toLowerCase()) || f.original_filename?.toLowerCase().includes(search.toLowerCase());
     const matchTab =
@@ -382,27 +389,21 @@ const resetUploadModal = () => {
   const totalSize = files.reduce((s, f) => s + (f.file_size || 0), 0);
 
   if (loading) return (
-    <div className="fm fm--loading">
+    <PageLayout className="fm" title="File Manager">
       <div className="fm__loading-inner"><div className="fm__loading-icon">⬡</div>Caricamento...</div>
-    </div>
+    </PageLayout>
   );
 
   return (
-    <>
+    <PageLayout
+      className="fm"
+      bare
+      title="File Manager"
+      actions={can.uploadFile(user) && (
+        <button type="button" className="fm__btn fm__btn--primary" onClick={() => setShowUploadModal(true)}>↑ Carica File</button>
+      )}
+    >
     <ConfirmDialog {...confirmModal} />
-    <div className="fm">
-<AppSidebar counts={{ files: files.length }} />
-<div className="fm__main">
-        <header className="fm__topbar">
-          <button type="button" className="fm__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
-          <div className="fm__page-title">File Manager</div>
-          <div className="fm__topbar-right">
-            <ThemeToggle classPrefix="fm" />
-            {can.uploadFile(user) && (
-              <button type="button" className="fm__btn fm__btn--primary" onClick={() => setShowUploadModal(true)}>↑ Carica File</button>
-            )}
-          </div>
-        </header>
 
         <div className="fm__content">
           <canvas ref={canvasRef} className="fm__hex-bg" />
@@ -445,7 +446,7 @@ const resetUploadModal = () => {
           <div
             className={`fm__drop-zone${dragActive ? ' fm__drop-zone--active' : ''}`}
             onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
-            onClick={() => setShowUploadModal(true)}
+            {...pressable(() => setShowUploadModal(true))}
           >
             {uploadFile_ && !showUploadModal ? (
               <>
@@ -457,7 +458,7 @@ const resetUploadModal = () => {
               <>
                 <div className="fm__drop-icon">↑</div>
                 <div className="fm__drop-title">Trascina i file qui oppure clicca per caricare</div>
-                <div className="fm__drop-sub">Supporta upload multiplo</div>
+                <div className="fm__drop-sub">Un file alla volta</div>
                 <div className="fm__drop-formats">
                   {Object.entries(FORMAT_CONFIG).map(([key, cfg]) => (
                     <span key={key} className="fm__format-chip" style={{ color: cfg.color, background: `rgba(${cfg.rgb},0.08)`, borderColor: `rgba(${cfg.rgb},0.22)` }}>
@@ -472,16 +473,20 @@ const resetUploadModal = () => {
 
           {/* Empty state */}
           {filteredFiles.length === 0 && !error && (
-            <div className="fm__empty">
-              <div className="fm__empty-icon">📂</div>
-              <div className="fm__empty-title">{search ? 'Nessun file trovato' : 'Nessun file caricato'}</div>
-              <div className="fm__empty-text">{search ? `Nessun risultato per "${search}"` : 'Carica file CSV, Excel, GeoJSON o altri formati per usarli nei tuoi progetti'}</div>
-              {!search && can.uploadFile(user) && (
-                <button type="button" className="fm__btn fm__btn--primary fm__btn--mt-md" onClick={() => setShowUploadModal(true)}>
+            <EmptyState
+              icon="📂"
+              title={search ? 'Nessun file trovato' : activeTab !== 'all' && files.length > 0 ? 'Nessun file di questo formato' : 'Nessun file caricato'}
+              text={search
+                ? `Nessun risultato per "${search}"`
+                : activeTab !== 'all' && files.length > 0
+                  ? 'Cambia scheda per vedere gli altri file.'
+                  : 'Carica file CSV, Excel, GeoJSON o altri formati per usarli nei tuoi progetti'}
+              action={!search && activeTab === 'all' && can.uploadFile(user) && (
+                <button type="button" className="fm__btn fm__btn--primary" onClick={() => setShowUploadModal(true)}>
                   ↑ Carica il primo file
                 </button>
               )}
-            </div>
+            />
           )}
 
           {/* Files grid */}
@@ -499,7 +504,6 @@ const resetUploadModal = () => {
             </div>
           )}
         </div>
-      </div>
 {showUploadModal && (
         <UploadModal
           step={uploadStep}
@@ -579,8 +583,7 @@ const resetUploadModal = () => {
           />
         </ModalWrapper>
       )}
-    </div>
-    </>
+    </PageLayout>
   );
 };
 

@@ -10,8 +10,10 @@
  */
 import { http, HttpResponse } from 'msw';
 
+// D6c: stessa forma del backend (auth/router.py) e di quello che legge
+// AuthContext.login: campi del profilo in radice, accanto al token.
 const MOCK_USER = {
-  id: 'u-mock', username: 'dev', role: 'admin', group_id: 'g-mock', email: 'dev@plenora.local',
+  user_id: 'u-mock', username: 'dev', role: 'admin', group_id: 'g-mock', email: 'dev@plenora.local',
 };
 
 const MOCK_PROJECTS = [
@@ -22,7 +24,7 @@ const MOCK_PROJECTS = [
 
 export const handlers = [
   http.post('*/auth/login', () =>
-    HttpResponse.json({ access_token: 'mock-token', token_type: 'bearer', user: MOCK_USER })),
+    HttpResponse.json({ access_token: 'mock-token', token_type: 'bearer', ...MOCK_USER })),
   http.post('*/auth/logout', () => HttpResponse.json({ success: true })),
   http.get('*/auth/me', () => HttpResponse.json(MOCK_USER)),
 

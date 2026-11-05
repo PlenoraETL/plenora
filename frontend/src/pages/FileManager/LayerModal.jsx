@@ -7,6 +7,7 @@
 
 import React from 'react';
 import ModalWrapper, { ModalButton } from '../../components/common/ModalWrapper';
+import { pressable } from '../../utils/pressable';
 
 function LayerModal({ pendingFile, availableLayers, availableSheets, selectedLayer, selectedSheet, onLayerChange, onSheetChange, onConfirm, onClose }) {
   const isSheet = availableSheets.length > 0;
@@ -31,7 +32,7 @@ function LayerModal({ pendingFile, availableLayers, availableSheets, selectedLay
         <label className="fm__modal-label">{isSheet ? 'Sheet disponibili' : 'Layer disponibili'}</label>
         <div className="fm__col-list">
           {items.map(item => (
-            <div key={item} className="fm__col-item" onClick={() => onChange(item)}>
+            <div key={item} className="fm__col-item" {...pressable(() => onChange(item))}>
               <div className={`fm__col-check${value === item ? ' fm__col-check--on' : ''}`}>{value === item ? '✓' : ''}</div>
               <span className="fm__col-name">{item}</span>
             </div>

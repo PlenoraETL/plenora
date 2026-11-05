@@ -13,11 +13,9 @@ import React, { useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { overwriteServer, reloadServerVersion } from '../../utils/serverActions';
 import { requestErrorMessage, asSentence } from '../../utils/errorMessages';
+import { parseServerDate, formatTime } from '../../utils/format';
 
-const hhmm = (iso) => {
-  const t = iso ? Date.parse(iso) : NaN;
-  return Number.isFinite(t) ? new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : null;
-};
+const hhmm = (iso) => (parseServerDate(iso) ? formatTime(iso) : null);
 
 export default function SaveConflictNotice() {
   const conflict = useCanvasStore(s => s.saveConflict);

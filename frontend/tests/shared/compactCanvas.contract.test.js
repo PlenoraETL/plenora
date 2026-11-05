@@ -8,7 +8,7 @@ vi.mock('../../src/utils/transformRegistry', () => ({
   isMultiInputOp: (op) => op === 'join',
 }));
 
-import { hasNodeDescriptor, nodeDescriptor, nodeTitle, transformSummary } from '../../src/components/canvas/nodeDescriptors';
+import { nodeDescriptor, nodeTitle, transformSummary } from '../../src/components/canvas/nodeDescriptors';
 import { mergeHandles } from '../../src/components/canvas/CompactNode';
 
 /**
@@ -28,7 +28,7 @@ const editorTypes = ['EstraiEditor.jsx', 'ManipolaEditor.jsx', 'ArricchisciEdito
 
 describe('compact canvas contract', () => {
   it('every editor node type (except notes) has a dedicated descriptor', () => {
-    const missing = editorTypes.filter(([, t]) => t !== 'comment' && !hasNodeDescriptor(t));
+    const missing = editorTypes.filter(([, t]) => t !== 'comment' && nodeDescriptor(t) === nodeDescriptor('__tipo_senza_descrittore__'));
     expect(missing).toEqual([]);
   });
 

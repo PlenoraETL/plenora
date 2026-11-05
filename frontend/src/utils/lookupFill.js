@@ -43,6 +43,7 @@ import { distinctNodeValues } from '../api';
 import { serializeCanvas } from './canvasSerializer';
 import useCanvasStore from '../store/useCanvasStore';
 import { rowHasSavedKey, rowHasSavedTarget, savedCellValue } from './lookupMapping';
+import { formatNumber } from './format';
 
 export const FILL_LIMIT = 200;
 
@@ -73,7 +74,7 @@ export const hasKey = (r) => isUsableValue(r?.from) || rowHasSavedKey(r);
  * d'origine che resta sulla riga) con «diventa» non utilizzabile. Scrivere
  * «diventa» la fa entrare nella mappa; cancellarlo la riporta a proposta.
  */
-export const isPendingProposal = (r) => Boolean(r?.proposed) && !isUsableValue(r?.to);
+const isPendingProposal = (r) => Boolean(r?.proposed) && !isUsableValue(r?.to);
 
 /** Righe da salvare: non vuote e non proposte da compilare (non cambiano il risultato). */
 export const toSavedRows = (rows) => (rows || [])
@@ -122,7 +123,7 @@ export function mergePresentValues(rows, values, source = null) {
   return { rows: [...live, ...added.map(t => ({ from: t, to: '', proposed: true, source }))], added, skipped };
 }
 
-const fmt = (n) => Number(n || 0).toLocaleString('it-IT');
+const fmt = (n) => formatNumber(n || 0);
 
 /** Frase per l'utente sull'esito della lettura. */
 export function describeFill(res, addedCount, skipped = { nulls: 0, blanks: 0, blankValues: 0 }) {

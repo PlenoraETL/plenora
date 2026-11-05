@@ -710,14 +710,6 @@
 }
 
 /* ── Legacy compat ──────────────────────────────────────────────── */
-.preview-modal__geom {
-  font-family: var(--plen-font-mono);
-  font-size: 10.5px;
-  color: var(--plen-estrai, #34C17A);
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: rgba(52,193,122,0.08);
-}
 
 /* ── Variant: manipola ────────────────────────────────────────── */
 .modal-wrapper--manipola .pm-tab.active,
@@ -725,7 +717,6 @@
 .modal-wrapper--manipola .pm-tab--map.active { border-bottom-color: var(--plen-manipola, #9B6DFF); }
 .modal-wrapper--manipola .preview-modal__search-input:focus { border-color: var(--plen-manipola, #9B6DFF); }
 .modal-wrapper--manipola .preview-modal__limit-select:focus { border-color: var(--plen-manipola, #9B6DFF); }
-.modal-wrapper--manipola .pm-map-basemap-btn.active { background: rgba(155,109,255,0.15); border-color: rgba(155,109,255,0.4); color: #9B6DFF; }
 
 /* ── Variant: arricchisci ─────────────────────────────────────── */
 .modal-wrapper--arricchisci .pm-tab.active { border-bottom-color: var(--plen-arricchisci, #F5A623); color: var(--plen-arricchisci, #F5A623); }
@@ -737,7 +728,6 @@
 }
 .modal-wrapper--arricchisci .preview-modal__search-input:focus { border-color: var(--plen-arricchisci, #F5A623); }
 .modal-wrapper--arricchisci .preview-modal__limit-select:focus { border-color: var(--plen-arricchisci, #F5A623); }
-.modal-wrapper--arricchisci .pm-map-basemap-btn.active { background: rgba(245,166,35,0.12); border-color: rgba(245,166,35,0.35); color: #F5A623; }
 
 /* ═══════════════════════════════════════════════════════════════
    GROUPED SOURCE HEADER
@@ -790,15 +780,5 @@
 [data-theme='light'] .pm-group-meta { color: #9AA5B8; }
 
 /* Colonne header con bordi colorati per gruppo */
-.preview-modal__th--grouped {
-  border-left-width: 1px;
-  border-left-style: solid;
-  border-right-width: 1px;
-  border-right-style: solid;
-}
 
 /* Celle dati con bordo gruppo laterale sottile */
-.preview-modal__cell--grouped {
-  border-left: 1px solid;
-  border-right: 1px solid;
-}

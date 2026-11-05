@@ -53,7 +53,9 @@ const load = () => {
   const st = useCanvasStore.getState();
   st.init('p1', 'manipola');
   st.loadGraph(NODES, EDGES);
-  useCanvasStore.setState({ isDirty: true });
+  // Canvas diverso dall'ultimo salvato (regola unica di store/saveState):
+  // senza differenza il salvataggio non parte.
+  useCanvasStore.setState({ isDirty: true, savedGraph: { nodes: [], edges: [] } });
 };
 
 beforeEach(() => {

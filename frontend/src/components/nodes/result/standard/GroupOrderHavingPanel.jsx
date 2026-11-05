@@ -32,6 +32,7 @@
 import { uniqueName } from '../../../../utils/uniqueName';
 import React, { useState } from 'react';
 import { getColumnTypeIcon } from '../../../../utils/columnUtils';
+import { pressable } from '../../../../utils/pressable';
 
 /**
  * Voci dell'"Output previsto" del GROUP BY: [tipo ('group'|'agg'), nome].
@@ -238,7 +239,7 @@ export default function GroupOrderHavingPanel({
         <div className="result-node__section result-node__section--bordered">
           <div
             className="result-node__groupby-header"
-            onClick={() => setShowGroupBySection(!showGroupBySection)}
+            {...pressable(() => setShowGroupBySection(!showGroupBySection))}
           >
             <div className="result-node__label result-node__label--clickable">
               <span>📊 GROUP BY (Raggruppamento)</span>
@@ -380,7 +381,7 @@ export default function GroupOrderHavingPanel({
         <div className="result-node__section result-node__section--bordered">
           <div
             className="result-node__groupby-header"
-            onClick={() => setShowOrderBySection(!showOrderBySection)}
+            {...pressable(() => setShowOrderBySection(!showOrderBySection))}
           >
             <div className="result-node__label result-node__label--clickable">
               <span>↕️ ORDER BY (Ordinamento)</span>

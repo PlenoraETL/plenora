@@ -225,10 +225,6 @@ const FALLBACK = {
   defaultHandles: () => [IN, OUT],
 };
 
-/** True se il tipo ha un descrittore dedicato (non quello generico). */
-export function hasNodeDescriptor(type) {
-  return Boolean(D[ALIASES[type] || type]);
-}
 
 export function nodeDescriptor(type) {
   return D[ALIASES[type] || type] || FALLBACK;
@@ -333,4 +329,3 @@ export function titlePatch(type, data, text) {
   return { title: next, title_source: 'user' };
 }
 
-export const DESCRIBED_NODE_TYPES = [...Object.keys(D), ...Object.keys(ALIASES)];

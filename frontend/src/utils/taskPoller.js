@@ -20,9 +20,9 @@ import { getTaskStatus } from '../api';
 import { requestErrorMessage } from './errorMessages';
 import { taskOutcome } from './taskOutcome';
 
-export const TASK_POLL_DEFAULTS = Object.freeze({ interval: 1000, notFoundLimit: 15, errorLimit: 5 });
+const TASK_POLL_DEFAULTS = Object.freeze({ interval: 1000, notFoundLimit: 15, errorLimit: 5 });
 
-export const LOST_NOT_FOUND_MESSAGE = "L'operazione non è più disponibile sul server: potrebbe essere stata rimossa o scaduta.";
+const LOST_NOT_FOUND_MESSAGE = "L'operazione non è più disponibile sul server: potrebbe essere stata rimossa o scaduta.";
 
 const lostOutcome = (error, code) => ({
   phase: 'lost', done: true, status: null, progress: 0, message: '', result: null, error, code,

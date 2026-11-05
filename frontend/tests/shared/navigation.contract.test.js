@@ -5,15 +5,16 @@
  *    doppia domanda); il logout chiede (SaveRules);
  *  - una sola mappa tipo -> editor (utils/projectRoutes), uguale alle Route;
  *    nessun percorso di editor costruito altrove;
- *  - "Indietro" solo da utils/navigation.goBack (un link diretto non esce
- *    dall'app); rimando a /login con `state.from`; pagina 404.
+ *  - nessun "Indietro" nella storia (Fase 5 T7, G1/S8: le pagine di primo
+ *    livello sono nella sidebar, i dettagli hanno il link alla loro lista);
+ *    rimando a /login con `state.from`; pagina 404.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 
 import { PROJECT_EDITOR_ROUTES, OPEN_PROJECT_ROUTE, projectEditorPath, openProjectPath } from '../../src/utils/projectRoutes';
-import { goBack, returnPathAfterLogin } from '../../src/utils/navigation';
+import { returnPathAfterLogin } from '../../src/utils/navigation';
 
 const SRC = path.resolve(import.meta.dirname, '../../src');
 function files(dir) {
@@ -65,19 +66,8 @@ describe('mappa unica tipo -> editor (R7.4)', () => {
 });
 
 describe('Indietro, login e 404 (R7.5)', () => {
-  it('navigate(-1) solo in utils/navigation.goBack', () => {
-    expect(usersOf(/navigate\(\s*-1\s*\)/)).toEqual(['utils/navigation.js']);
-  });
-
-  it('goBack: con una pagina precedente torna indietro, da link diretto va al ripiego', () => {
-    const navigate = vi.fn();
-    window.history.replaceState({ idx: 0 }, '');
-    goBack(navigate, '/files');
-    expect(navigate).toHaveBeenLastCalledWith('/files', { replace: true });
-    window.history.replaceState({ idx: 2 }, '');
-    goBack(navigate, '/files');
-    expect(navigate).toHaveBeenLastCalledWith(-1);
-    window.history.replaceState(null, '');
+  it('navigate(-1) mai: nessun «Indietro» nella storia (G1/S8, Fase 5 T7)', () => {
+    expect(usersOf(/navigate\(\s*-1\s*\)/)).toEqual([]);
   });
 
   it('dopo il login si torna alla pagina richiesta (se si puo\' vedere)', () => {

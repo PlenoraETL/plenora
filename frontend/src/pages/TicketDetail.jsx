@@ -21,7 +21,7 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import AppSidebar from '../components/AppSidebar';
+import PageLayout from '../components/common/PageLayout';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useAuth } from '../context/AuthContext';
 import { useConfirmModal } from '../hooks/useConfirmModal';
@@ -35,24 +35,10 @@ import {
   openAttachment, updateTicket, uploadAttachment,
 } from '../api/tickets';
 import '../styles/TicketsList.css';
+import { formatDateTime as fmtDateTime, formatBytes as fmtBytes, enumLabel, optionLabel } from '../utils/format';
 
 
-function fmtDateTime(iso) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString('it-IT', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  } catch { return iso; }
-}
 
-function fmtBytes(n) {
-  if (n == null) return '—';
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
-}
 
 
 export default function TicketDetail() {
@@ -189,64 +175,49 @@ export default function TicketDetail() {
     }
   };
 
+  const parent = { to: '/tickets', label: '← Ticket' };
+
   if (resource.initialLoading) {
     return (
-      <div className="tk-page">
-        <AppSidebar />
-        <main className="tk-page__main"><div role="status">Caricamento…</div></main>
-      </div>
+      <PageLayout className="tk-page" title="Ticket" parent={parent}>
+        <div role="status">Caricamento…</div>
+      </PageLayout>
     );
   }
 
   if (!ticket) {
     return (
-      <div className="tk-page">
-        <AppSidebar />
-        <main className="tk-page__main">
-          <button type="button" className="tk-detail__back" onClick={() => navigate('/tickets')}>← Ticket</button>
-          {resource.status === 'error' ? (
-            <ResourceError
-              resource={resource}
-              title={resource.rawError?.response?.status === 404 ? 'Ticket non trovato' : 'Ticket non caricato'}
-            />
-          ) : (
-            <ResourceError title="Ticket non caricato" message="Il ticket non è disponibile." onRetry={resource.reload} />
-          )}
-        </main>
-      </div>
+      <PageLayout className="tk-page" title="Ticket" parent={parent}>
+        {resource.status === 'error' ? (
+          <ResourceError
+            resource={resource}
+            title={resource.rawError?.response?.status === 404 ? 'Ticket non trovato' : 'Ticket non caricato'}
+          />
+        ) : (
+          <ResourceError title="Ticket non caricato" message="Il ticket non è disponibile." onRetry={resource.reload} />
+        )}
+      </PageLayout>
     );
   }
 
   return (
-    <div className="tk-page">
-      <AppSidebar />
-      <main className="tk-page__main">
-        <header className="tk-page__header">
-          <div>
-            <button
-              type="button"
-              className="tk-detail__back"
-              onClick={() => navigate('/tickets')}
-            >
-              ← Ticket
-            </button>
-            <h1 className="tk-page__title">{ticket.title}</h1>
-            <div className="tk-page__subtitle">
-              #{ticket.id.slice(0, 8)} · {ticket.kind === 'tech_debt' ? 'Debito tecnico' : 'Supporto utente'}
-              {' · aggiornato '}{fmtDateTime(ticket.updated_at)}
-            </div>
-          </div>
-          {canManage && (
-            <button
-              type="button"
-              className="tk-page__btn tk-page__btn--danger"
-              onClick={handleDeleteTicket}
-              disabled={saving}
-            >
-              Elimina ticket
-            </button>
-          )}
-        </header>
+    <PageLayout
+      className="tk-page"
+      parent={parent}
+      title={ticket.title}
+      subtitle={<>#{ticket.id.slice(0, 8)} · {enumLabel('ticketKind', ticket.kind)}{' · aggiornato '}{fmtDateTime(ticket.updated_at)}</>}
+      actions={canManage && (
+        // Unica azione della pagina (nessuna primaria accanto, G3), con conferma.
+        <button
+          type="button"
+          className="tk-page__btn tk-page__btn--danger"
+          onClick={handleDeleteTicket}
+          disabled={saving}
+        >
+          Elimina ticket
+        </button>
+      )}
+    >
         {/* Ricarica non riuscita (dopo un'azione): il ticket mostrato e' quello di prima. */}
         <ResourceError resource={resource} title="Ticket non aggiornato" />
         <ResourceError compact resource={metaResource} title="Opzioni dei ticket non caricate" />
@@ -263,13 +234,13 @@ export default function TicketDetail() {
                   disabled={saving}
                 >
                   {(meta?.statuses || []).map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                    <option key={s} value={s}>{enumLabel('ticketStatus', s)}</option>
                   ))}
                 </select>
               ) : (
                 <>
                   <span className={`tk__status tk__status--${ticket.status}`}>
-                    {ticket.status}
+                    {enumLabel('ticketStatus', ticket.status)}
                   </span>
                   {canReopen && (
                     <button
@@ -294,12 +265,12 @@ export default function TicketDetail() {
                   disabled={saving}
                 >
                   {(meta?.severities || []).map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                    <option key={s} value={s}>{enumLabel('ticketSeverity', s)}</option>
                   ))}
                 </select>
               ) : (
                 <span className={`tk__sev tk__sev--${ticket.severity}`}>
-                  {ticket.severity}
+                  {enumLabel('ticketSeverity', ticket.severity)}
                 </span>
               )}
             </div>
@@ -317,7 +288,7 @@ export default function TicketDetail() {
                   ))}
                 </select>
               ) : (
-                <span>{ticket.category}</span>
+                <span>{optionLabel(meta?.categories, ticket.category)}</span>
               )}
             </div>
 
@@ -414,8 +385,7 @@ export default function TicketDetail() {
             </form>
           </div>
         </section>
-      </main>
       <ConfirmDialog {...confirmModal} />
-    </div>
+    </PageLayout>
   );
 }

@@ -29,15 +29,8 @@ import {
   createCanvasVersion, listCanvasVersions,
 } from '../../api/projects';
 import './CanvasVersionsModal.css';
+import { formatDateTime as fmtDate } from '../../utils/format';
 
-function fmtDate(d) {
-  if (!d) return '';
-  try {
-    return new Date(d).toLocaleString('it-IT', {
-      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
-  } catch { return String(d); }
-}
 
 export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
   const toast = useToast();

@@ -27,6 +27,7 @@ import { requestErrorMessage } from '../../utils/errorMessages';
 import './EseguibileExecuteWizard.css';
 import ExecutableDynamicRunForm from './ExecutableDynamicRunForm';
 import { initialOutputFormat, outputFormatOptions, DEFAULT_OUTPUT_FORMAT } from '../../constants/outputFormats';
+import { formatBytes } from '../../utils/format';
 
 
 function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null }) {
@@ -244,7 +245,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                       <>
                         <div className="esw-dropzone-icon">📄</div>
                         <div className="esw-dropzone-text">{file.name}</div>
-                        <div className="esw-dropzone-hint">{(file.size / 1024).toFixed(1)} KB — Click o trascina per cambiare</div>
+                        <div className="esw-dropzone-hint">{formatBytes(file.size)} — Click o trascina per cambiare</div>
                       </>
                     ) : (
                       <>

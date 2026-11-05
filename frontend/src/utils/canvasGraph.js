@@ -17,7 +17,7 @@
 import { dataFlowEdges } from './runtimeBindingEdges';
 import { projectInputRole } from './runtimeInputKinds';
 
-export const OUTPUT_TYPES = ['result', 'resultNode'];
+const OUTPUT_TYPES = ['result', 'resultNode'];
 
 /**
  * Ruolo di un nodo:
@@ -182,19 +182,8 @@ export function analyzeCanvas(nodes, edges) {
   };
 }
 
-/** Id dei nodi che, seguendo il flusso, arrivano a un Output (Output compresi). */
-export const reachingOutput = (nodes, edges) => analyzeCanvas(nodes, edges).reaching;
 
-/** Id dei nodi i cui dati non arrivano a nessun Output (sorgenti e passi). */
-export const danglingNodeIds = (nodes, edges) => analyzeCanvas(nodes, edges).dangling;
 
-/** Corsie della vista Passi (con i nodi). */
-export function stepLanes(nodes, edges) {
-  const byId = new Map((nodes || []).map(n => [n.id, n]));
-  return analyzeCanvas(nodes, edges).lanes.map(l => ({
-    ...l, head: byId.get(l.headId), steps: l.stepIds.map(id => byId.get(id)), last: byId.get(l.lastId),
-  }));
-}
 
 /**
  * Passi del ramo di una sorgente: quelli alimentati SOLO da lei (anche oltre

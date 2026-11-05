@@ -232,13 +232,6 @@ export const previewProject = async (projectId, limit = 100, nodeId = null) => {
   return response.data;
 };
 
-/**
- * Restituisce l'URL di download dell'output di un progetto.
- * @param {string} projectId
- * @returns {string} URL completo
- */
-export const getDownloadUrl = (projectId) =>
-  `${API_ENDPOINT}/projects/${projectId}/download`;
 
 /**
  * Scarica l'output di un progetto nel browser.

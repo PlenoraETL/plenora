@@ -1,23 +1,24 @@
 import React from 'react';
+import ActionMenu from '../common/ActionMenu';
 
 /**
- * Card di un singolo eseguibile (catena on-demand). Click esegue
- * il wizard; bottoni interni gestiscono esecuzione e delete (admin
- * only). Visual style derivato dal modular system di ProjectCard
+ * Card di un singolo eseguibile (catena on-demand). Il nome ed
+ * «Esegui» aprono il wizard; l'eliminazione (admin) sta nel menu «⋯»
+ * (G3, DB1). Visual style derivato dal modular system di ProjectCard
  * ma piu' compatto (no schedule, no last-run status).
  */
 // onDelete arriva solo se l'utente puo' eliminare (can.manageEseguibile).
 function EseguibileCard({ item, onExecute, onDelete }) {
   const fmt = (item.default_output_format || 'xlsx').toUpperCase();
   return (
-    <div className="pl__card" onClick={onExecute}>
+    <div className="pl__card">
       <div className="pl__card-accent pl__card-accent--eseg" />
       <div className="pl__card-body">
         <div className="pl__card-header-row">
-          <div className="pl__card-name">{item.name}</div>
+          <button type="button" className="pl__card-name pl__card-open" onClick={onExecute} title={item.name}>{item.name}</button>
           <span className="pl__card-mod pl__card-mod--eseg">🚀 {fmt}</span>
         </div>
-        <div className="pl__card-desc">{item.description || 'Nessuna descrizione'}</div>
+        {item.description && <div className="pl__card-desc">{item.description}</div>}
         <div className="pl__card-meta">
           <div>
             <div className="pl__meta-key">Colonne attese</div>
@@ -31,12 +32,10 @@ function EseguibileCard({ item, onExecute, onDelete }) {
         <div className="pl__card-footer">
           <span className="pl__status">On-demand</span>
           <div className="pl__card-actions">
-            {onDelete && (
-              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
-                onClick={e => { e.stopPropagation(); onDelete(); }}
-                title="Elimina eseguibile"
-              >🗑</button>
-            )}
+            <ActionMenu
+              label={`Azioni per ${item.name}`}
+              items={[onDelete && { label: '🗑 Elimina', onSelect: onDelete, danger: true }]}
+            />
             <button type="button" className="pl__btn pl__btn--primary pl__btn--sm"
               onClick={e => { e.stopPropagation(); onExecute(); }}
             >▶ Esegui</button>

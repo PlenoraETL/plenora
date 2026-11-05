@@ -19,13 +19,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useCanvasStore from '../store/useCanvasStore';
-import { hasUnsavedChanges } from '../store/saveState';
+import { hasUnsavedChanges, matchesSavedGraph } from '../store/saveState';
 import { authBus } from '../utils/authBus';
 import { redactRestHeaders } from '../utils/restSecrets';
 import {
   announceSaved, currentDraftUser, currentTabId, draftOrigin, isProjectDeleted, listDrafts,
   parseDraftEvent, removeDraft, removeDraftIf, retireOwnDraft, serverMovedOn, touchTab, writeDraft,
 } from '../utils/localDrafts';
+import { formatTime } from '../utils/format';
 
 export const DRAFT_DELAY_MS = 1500;
 
@@ -49,7 +50,7 @@ export const DRAFT_ORIGIN_LABEL = {
   closed: 'Una scheda chiusa',
 };
 
-const hhmm = (at) => new Date(at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+const hhmm = (at) => formatTime(at);
 
 export default function useLocalDraft(projectId, notReady, {
   serverUpdatedAt = null,
@@ -131,6 +132,15 @@ export default function useLocalDraft(projectId, notReady, {
         // Offerta ancora aperta: le copie restano (decide l'utente), ma ora
         // sono piu' vecchie di quanto appena salvato.
         setOffer(o => (o ? o.map(c => ({ ...c, stale: true })) : o));
+        return;
+      }
+      // Fase 5 T7: tornati allo stato salvato (es. Ctrl+Z) la copia di QUESTA
+      // scheda non ha piu' nulla da conservare; quella adottata resta (h.8).
+      const graphChanged = s.nodes !== prev.nodes || s.edges !== prev.edges;
+      if (graphChanged && hasUnsavedChanges(prev) && matchesSavedGraph(s)) {
+        clearTimeout(timer);
+        timer = null;
+        removeDraft(currentDraftUser(), projectId, tabId);
         return;
       }
       if (!hasUnsavedChanges(s) || (s.nodes === prev.nodes && s.edges === prev.edges && hasUnsavedChanges(prev))) return;

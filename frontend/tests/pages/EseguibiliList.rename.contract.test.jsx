@@ -60,7 +60,8 @@ describe('EseguibiliList rename contract', () => {
     render(<EseguibiliList />);
 
     await screen.findByText('Nome precedente');
-    await user.click(screen.getByRole('button', { name: /Rinomina/i }));
+    await user.click(screen.getByRole('button', { name: 'Azioni per Nome precedente' }));
+    await user.click(screen.getByRole('menuitem', { name: /Rinomina/i }));
     const input = screen.getByRole('textbox', {
       name: 'Nuovo nome per Nome precedente',
     });

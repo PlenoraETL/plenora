@@ -21,11 +21,14 @@ import { can } from '../utils/permissions';
 import {
   listBackups, getBackupStatus, getBackupSchedule, triggerBackup,
 } from '../api/adminBackups';
-import AppSidebar from '../components/AppSidebar';
+import PageLayout from '../components/common/PageLayout';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import '../styles/AdminBackupsPage.css';
 import { requestErrorMessage } from '../utils/errorMessages';
+import { formatDateTime as fmtDate, formatBytes } from '../utils/format';
+
+const fmtSize = (mb) => formatBytes(mb, { from: 'MB' });
 //
 // RB.#9: il backend (RB.2 / admin_backups.router) ora ritorna 503 con
 //        body strutturato `{detail: {error, message}}` quando le credenziali
@@ -58,25 +61,7 @@ function isObjectStorageDisabled(code) {
   return code === 'object_storage_disabled';
 }
 
-function fmtDate(iso) {
-  if (!iso) return '—';
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString('it-IT', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
-}
 
-function fmtSize(mb) {
-  if (mb == null) return '—';
-  if (mb < 1) return `${(mb * 1024).toFixed(0)} KB`;
-  if (mb < 1024) return `${mb.toFixed(1)} MB`;
-  return `${(mb / 1024).toFixed(2)} GB`;
-}
 
 function StorageBadge({ cls }) {
   const labels = {
@@ -131,7 +116,7 @@ function StatusCard({ status, resource }) {
       <ResourceError resource={resource} title="Stato non caricato" />
       <div className="ab__card-title">{resultLabels[status.result] || status.result}</div>
       <div className="ab__card-body">
-        <div><strong>Terminato:</strong> {status.finished_at || '—'}</div>
+        <div><strong>Terminato:</strong> {fmtDate(status.finished_at)}</div>
         <div><strong>Exit code:</strong> {status.exit_code ?? '—'}</div>
         {status.log_tail && status.log_tail.length > 0 && (
           <details className="ab__log-details">
@@ -153,8 +138,8 @@ function ScheduleCard({ schedule, resource }) {
         {schedule.timer_active ? '⏰ Timer attivo' : '⚠ Timer disattivato'}
       </div>
       <div className="ab__card-body">
-        <div><strong>Prossimo run:</strong> {schedule.next_run || '—'}</div>
-        <div><strong>Ultimo run:</strong> {schedule.last_run || '—'}</div>
+        <div><strong>Prossimo run:</strong> {fmtDate(schedule.next_run)}</div>
+        <div><strong>Ultimo run:</strong> {fmtDate(schedule.last_run)}</div>
       </div>
     </div>
   );
@@ -281,9 +266,31 @@ export default function AdminBackupsPage() {
   };
 
   return (
-    <div className="ab">
-      <AppSidebar />
-      <main className="ab__main">
+    <PageLayout
+      className="ab"
+      title="Backup Database"
+      subtitle={<>Schema applicativo <code>plenora</code> su S3{data && <> · bucket <code>{data.bucket}</code></>}</>}
+      actions={(
+        <>
+          <button
+            type="button"
+            className="ab__btn ab__btn--secondary"
+            onClick={() => loadAll()}
+            disabled={loading}
+          >
+            {loading ? 'Aggiornamento...' : '↻ Aggiorna'}
+          </button>
+          {canTrigger && <button
+            type="button"
+            className="ab__btn ab__btn--primary"
+            onClick={handleTrigger}
+            disabled={triggering || loading || Boolean(backupUnavailable) || Boolean(awsCredentialsError)}
+          >
+            {triggering ? 'Avvio...' : '⚡ Esegui backup ora'}
+          </button>}
+        </>
+      )}
+    >
         {awsCredentialsError && (
           <div role="alert" className="plen-banner-warn plen-banner-warn--lg ab__aws-banner-row">
             <div className="ab__aws-banner-body">
@@ -307,31 +314,6 @@ export default function AdminBackupsPage() {
             </button>
           </div>
         )}
-        <header className="ab__header">
-          <div>
-            <h1 className="ab__title">Backup Database</h1>
-            <div className="ab__subtitle">
-              Schema applicativo <code>plenora</code> su S3
-              {data && <> · bucket <code>{data.bucket}</code></>}
-            </div>
-          </div>
-          <div className="ab__header-actions">
-            <button
-              className="ab__btn ab__btn--secondary"
-              onClick={() => loadAll()}
-              disabled={loading}
-            >
-              {loading ? 'Aggiornamento...' : '↻ Aggiorna'}
-            </button>
-            {canTrigger && <button
-              className="ab__btn ab__btn--primary"
-              onClick={handleTrigger}
-              disabled={triggering || loading || Boolean(backupUnavailable) || Boolean(awsCredentialsError)}
-            >
-              {triggering ? 'Avvio...' : '⚡ Esegui backup ora'}
-            </button>}
-          </div>
-        </header>
 
         {backupUnavailable && (
           <section className="ab__disabled-panel" aria-live="polite">
@@ -434,8 +416,7 @@ export default function AdminBackupsPage() {
             </li>
           </ul>
         </section>
-      </main>
       <ConfirmDialog {...confirmModal} />
-    </div>
+    </PageLayout>
   );
 }

@@ -145,8 +145,8 @@ describe('TicketsList', () => {
     await waitFor(() => screen.getByText('Problema login SSO'));
     listTicketsMock.mockClear();
 
-    // Deseleziona "open" (era checked di default)
-    const openChip = screen.getAllByLabelText(/open/i)[0];
+    // Deseleziona "open" (era checked di default): etichetta italiana (R11.3)
+    const openChip = screen.getAllByLabelText(/^Aperto$/)[0];
     await user.click(openChip);
 
     await waitFor(() => {

@@ -12,6 +12,7 @@ import {
 import FieldInput from '../../common/FieldInput';
 import { integer } from '../../../utils/fieldCodecs';
 import { READ_ONLY_SAFE } from '../../common/readOnlySafe';
+import { pressable } from '../../../utils/pressable';
 
 // Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
 const REST_BATCH = integer({ min: 1, max: 10000 });
@@ -171,7 +172,7 @@ function RestDestinationSection({
       <div className="carica-node__section">
         <div
           className="carica-node__section-header"
-          onClick={onToggleMapping}
+          {...pressable(onToggleMapping)}
         >
           <span>Mappatura del corpo</span>
           <span className="carica-node__toggle">{showMapping ? '▼' : '▶'}</span>
@@ -226,7 +227,7 @@ function RestDestinationSection({
       <div className="carica-node__section">
         <div
           className="carica-node__section-header"
-          onClick={onToggleAdvanced}
+          {...pressable(onToggleAdvanced)}
         >
           <span>Intestazioni HTTP e lotti</span>
           <span className="carica-node__toggle">{showAdvanced ? '▼' : '▶'}</span>

@@ -23,6 +23,7 @@ import { isColumnVisible } from '../../utils/columnUtils';
 import './FeatureLayerNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import { formatNumber } from '../../utils/format';
 
 const FIELD_ICONS = {
   'int': '🔢',
@@ -161,7 +162,7 @@ const FeatureLayerNode = memo(({ data, id }) => {
             )}
             {featureCount != null && (
               <span className="fl-node__count-badge">
-                {featureCount.toLocaleString()}
+                {formatNumber(featureCount)}
               </span>
             )}
           </div>

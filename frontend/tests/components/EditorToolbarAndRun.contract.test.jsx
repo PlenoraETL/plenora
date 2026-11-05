@@ -19,7 +19,8 @@ describe('SaveIndicator', () => {
   it('always tells how things stand', () => {
     const { rerender } = render(<SaveIndicator onRetry={() => {}} />);
     expect(screen.getByText('Tutto salvato')).toBeTruthy();
-    act(() => useCanvasStore.setState({ isDirty: true }));
+    // Fase 5 T7: «non salvato» = canvas diverso dall'ultimo salvato.
+    act(() => useCanvasStore.getState().updateNodeData('s', { label: 'cambiato' }));
     rerender(<SaveIndicator onRetry={() => {}} />);
     expect(screen.getByText('Modifiche non salvate')).toBeTruthy();
     act(() => useCanvasStore.setState({ saveStatus: 'saving' }));

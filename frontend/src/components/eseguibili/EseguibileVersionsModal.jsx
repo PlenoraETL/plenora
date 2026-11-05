@@ -20,6 +20,7 @@ import { useConfirmModal } from '../../hooks/useConfirmModal';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import ConfirmDialog from '../common/ConfirmDialog';
 import ListState from '../common/ListState';
+import { formatDateTime } from '../../utils/format';
 
 function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
   const toast = useToast();
@@ -108,7 +109,7 @@ function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
                 <div>
                   <strong>Versione {version.version_number}</strong>
                   <span>{version.project_type.toUpperCase()} - {version.inputs_count} input</span>
-                  <small>{new Date(version.created_at).toLocaleString('it-IT')}</small>
+                  <small>{formatDateTime(version.created_at)}</small>
                 </div>
                 {version.active ? (
                   <span className="esv__active">Attiva</span>

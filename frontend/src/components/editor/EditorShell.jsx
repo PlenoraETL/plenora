@@ -83,6 +83,7 @@ import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
 import { withFlowEdgeLabels } from '../../utils/glossary';
 import { isShortcutBlocked, isTypingTarget } from '../../utils/dialogStack';
 import { requestCanvasDeletion } from '../../utils/canvasDeletion';
+import { formatDateTime } from '../../utils/format';
 
 const EMPTY_OBJ = {};
 
@@ -378,7 +379,7 @@ canvasConfig = EMPTY_OBJ,
             {draft.offer.map(copy => (
               <li key={copy.id} className="draft-offer__item">
                 <span>
-                  {DRAFT_ORIGIN_LABEL[copy.origin]}, {new Date(copy.savedAt).toLocaleString('it-IT')}.
+                  {DRAFT_ORIGIN_LABEL[copy.origin]}, {formatDateTime(copy.savedAt)}.
                   {copy.stale && (
                     <strong> Il progetto è stato salvato dopo: ripristinandole e salvando sostituiresti quella versione.</strong>
                   )}

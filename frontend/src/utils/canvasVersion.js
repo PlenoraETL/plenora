@@ -47,7 +47,7 @@
  */
 import { errorField, errorReason } from '../api/errors';
 
-export const CANVAS_VERSION_CONFLICT = 'canvas_version_conflict';
+const CANVAS_VERSION_CONFLICT = 'canvas_version_conflict';
 
 /**
  * Versione del server di un progetto letto con GET /projects/{id}: terzo

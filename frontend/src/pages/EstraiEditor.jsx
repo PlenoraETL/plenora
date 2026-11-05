@@ -59,6 +59,7 @@ import { useHexCanvas } from '../utils/hexCanvas';
 import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term } from '../utils/glossary';
 import useEditorActions from '../components/editor/useEditorActions';
 import { renderNodeType } from '../utils/nodeTypeRegistry';
+import { pressable } from '../utils/pressable';
 
 const nodeTypes = {
   tableNode: TableNode, resultNode: ResultNode, staticValues: StaticValuesNode,
@@ -440,7 +441,7 @@ function EstraiEditor() {
             <div className="estrai-sidebar__search">
               <span className="estrai-sidebar__search-icon">⌕</span>
               <input
-                placeholder="Cerca tabelle e viste…"
+                placeholder="Cerca tabelle…"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
@@ -483,7 +484,7 @@ function EstraiEditor() {
                               className="estrai-sidebar__table-item"
                               title="Clic per aggiungere al centro · trascina per posizionare"
                               draggable
-                              onClick={() => addTableAtCenter(t, false)}
+                              {...pressable(() => addTableAtCenter(t, false))}
                               onDragStart={e => {
                                 e.dataTransfer.setData('tableName', t);
                                 e.dataTransfer.effectAllowed = 'move';
@@ -545,7 +546,7 @@ function EstraiEditor() {
                                     className="estrai-sidebar__table-item estrai-sidebar__table-item--view"
                                     title="Clic per aggiungere al centro · trascina per posizionare"
                                     draggable
-                                    onClick={() => addTableAtCenter(v, true)}
+                                    {...pressable(() => addTableAtCenter(v, true))}
                                     onDragStart={e => {
                                       e.dataTransfer.setData('tableName', v);
                                       e.dataTransfer.setData('isView', 'true');
@@ -608,22 +609,10 @@ function EstraiEditor() {
   );
 
   // modals slot: lazy-loaded modal stack.
-  const modals = (
-    <ModalErrorBoundary>
-      <Suspense fallback={null}>
-        {showVersions && (
-          <CanvasVersionsModal
-            isOpen onClose={() => setShowVersions(false)} projectId={projectId}
-          />
-        )}
-        <ExecutionModal
-          {...executionModalProps(execution)}
-          title={`${term('run').icon} Esecuzione della query`} projectType="estrai"
-        />
-        <PreviewModal
-        isOpen={preview.showModal} onClose={preview.closeModal}
-        onRefresh={limit => preview.handlePreview(limit)}
-        data={(() => {
+  // P5 (Fase 5 T7): colonne arricchite UNA volta per risposta, non a ogni
+  // render (un oggetto nuovo azzerava pagina, ordinamento, ricerca e scheda).
+  // Le colonne del canvas si leggono quando arriva la risposta.
+  const previewData = useMemo(() => {
           // Arricchisce le colonne della preview con source_table dal resultNode,
           // così PreviewModal può raggruppare per vera sorgente invece di indovinare dal prefisso.
           if (!preview.data?.columns) return preview.data;
@@ -651,11 +640,30 @@ function EstraiEditor() {
             sourceOrder.indexOf(a.source || '__none__') - sourceOrder.indexOf(b.source || '__none__')
           );
           return { ...preview.data, columns: enrichedColumns };
-        })()}
+        }, [preview.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const modals = (
+    <ModalErrorBoundary>
+      <Suspense fallback={null}>
+        {showVersions && (
+          <CanvasVersionsModal
+            isOpen onClose={() => setShowVersions(false)} projectId={projectId}
+          />
+        )}
+        <ExecutionModal
+          {...executionModalProps(execution)}
+          title={`${term('run').icon} Esecuzione della query`} projectType="estrai"
+        />
+        {preview.showModal && (
+        <PreviewModal
+        isOpen={preview.showModal} onClose={preview.closeModal}
+        onRefresh={limit => preview.handlePreview(limit)}
+        data={previewData}
         loading={preview.loading} error={preview.error}
         permissionRevoked={preview.permissionRevoked}
         title={`${term('preview').name} della query SQL`} projectType="estrai"
       />
+        )}
       </Suspense>
     </ModalErrorBoundary>
   );

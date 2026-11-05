@@ -4,42 +4,8 @@
 ───────────────────────────────────────────────────────────────────────── */
 
 /* ══ Overlay & Shell ══════════════════════════════════════════════════════ */
-.tlm__overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.65);
-  backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center;
-  z-index: var(--z-modal, 1000); padding: 20px;
-}
-.tlm__modal {
-  background: var(--acm-surface, #0C0F18);
-  border: 1px solid var(--acm-border-hi, rgba(255,255,255,0.11));
-  border-radius: 14px;
-  width: 100%; max-width: 1100px; max-height: 90vh;
-  display: flex; flex-direction: column;
-  box-shadow: 0 24px 80px rgba(0,0,0,.55);
-  font-family: var(--plen-font-body);
-  color: var(--acm-text, #DDE4F2);
-  font-size: 13px;
-}
 
 /* ══ Header ═══════════════════════════════════════════════════════════════ */
-.tlm__header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 22px 16px;
-  border-bottom: 1px solid var(--acm-border, rgba(255,255,255,0.06));
-  flex-shrink: 0;
-}
-.tlm__header-left { display: flex; align-items: center; gap: 12px; }
-.tlm__header-icon { font-size: 22px; }
-.tlm__title    { font-family: var(--plen-font-display); font-size: 16px; font-weight: 700; color: var(--acm-text, #DDE4F2); }
-.tlm__subtitle { font-size: 11px; color: var(--acm-text-dim, #3F4D68); margin-top: 2px; font-family: var(--plen-font-mono); }
-.tlm__close {
-  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid var(--acm-border-hi, rgba(255,255,255,0.11));
-  border-radius: 7px; cursor: pointer; color: var(--acm-text-sub, #7D8BA8); font-size: 13px;
-}
-.tlm__close:hover { background: var(--acm-surface-2, #111525); color: var(--acm-text, #DDE4F2); }
 
 /* ══ Toolbar ══════════════════════════════════════════════════════════════ */
 .tlm__toolbar {
@@ -241,7 +207,6 @@
 .tlc__ol-btn:hover { background: #2563EB; }
 
 /* ══ Light theme overrides ════════════════════════════════════════════════ */
-[data-theme='light'] .tlm__modal    { background: #FFFFFF; }
 [data-theme='light'] .tlm__toolbar  { background: #F0F4FF; }
 [data-theme='light'] .tlm__search   { background: #FFFFFF; }
 [data-theme='light'] .tlm__hint     { background: #F0F4FF; }

@@ -149,7 +149,12 @@ export function extractRowsFromConfig(data, config) {
   // Se non ci sono iterate, estrai direttamente
   if (!iterate_on || iterate_on.length === 0) {
     const items = Array.isArray(rootData) ? rootData : [rootData];
-    return items.slice(0, 100).map(item => extractRow(item, mappings, {}));
+    // P11 (Fase 5 T7): senza iterazione i percorsi si leggono dall'elemento
+    // (prima si leggevano da un contesto vuoto: tutte le colonne null) e le
+    // trasformazioni si applicano come nel ramo con iterazione.
+    const direct = items.slice(0, 100).map(item => extractRow(item, mappings, {}));
+    applyTransforms(direct, transforms);
+    return direct;
   }
 
   // Itera ricorsivamente
@@ -162,7 +167,7 @@ export function extractRowsFromConfig(data, config) {
   return rows;
 }
 
-export function recursiveIterate(data, iterateOn, level, context, rows, mappings) {
+function recursiveIterate(data, iterateOn, level, context, rows, mappings) {
   if (level >= iterateOn.length) {
     rows.push(extractRow(null, mappings, context));
     return;
@@ -181,15 +186,17 @@ export function recursiveIterate(data, iterateOn, level, context, rows, mappings
   }
 }
 
-export function extractRow(_, mappings, context) {
+function extractRow(item, mappings, context) {
   const row = {};
 
   for (const mapping of mappings) {
     const { column, path } = mapping;
 
-    // Prova a estrarre dal context
+    // Dal contesto dell'iterazione (`as`) se il primo segmento lo nomina,
+    // altrimenti dall'elemento corrente.
     const parts = path.split('.');
-    let value = context[parts[0]];
+    const fromContext = Object.prototype.hasOwnProperty.call(context, parts[0]);
+    let value = fromContext ? context[parts[0]] : item?.[parts[0]];
 
     for (let i = 1; i < parts.length && value !== undefined; i++) {
       value = value?.[parts[i]];
@@ -201,7 +208,7 @@ export function extractRow(_, mappings, context) {
   return row;
 }
 
-export function navigatePath(data, path) {
+function navigatePath(data, path) {
   if (!path) return data;
 
   let current = data;
@@ -218,7 +225,7 @@ export function navigatePath(data, path) {
  * / round / multiply / divide / add / subtract / uppercase /
  * lowercase / prefix / suffix.
  */
-export function applyTransforms(rows, transforms) {
+function applyTransforms(rows, transforms) {
   if (!transforms || transforms.length === 0) return;
 
   for (const row of rows) {

@@ -11,10 +11,13 @@
 
 import React, { useState } from 'react';
 import { getLogRuns } from '../../api/logRuns';
-import { fmtDuration, fmtRows, formatTime, truncateProjectId } from '../../utils/logViewerHelpers.jsx';
+import { formatDuration, formatNumber } from '../../utils/format';
+import { formatLogTime, projectLabel } from '../../utils/logViewerHelpers.jsx';
 import RunDetail from './RunDetail';
 import { useResource } from '../../hooks/useResource';
 import { ResourceError } from '../common/ListState';
+import EmptyState from '../common/EmptyState';
+import { pressable } from '../../utils/pressable';
 
 export const LIVE_REFRESH_MS = 5000;
 
@@ -32,7 +35,7 @@ const STATUS_CONFIG = {
 
 const PAGE = 30;
 
-export default function RunsTab({ live = false }) {
+export default function RunsTab({ live = false, projectNames = null }) {
   const [offset,       setOffset]       = useState(0);
   const [expandedRun,  setExpandedRun]  = useState(null);
   const [filterStatus, setFilterStatusRaw] = useState('');
@@ -57,6 +60,8 @@ export default function RunsTab({ live = false }) {
   const load = (newOffset) => setOffset(newOffset);
 
 
+  // P21: «Run totali» e' il totale del filtro (server); completate e fallite
+  // contano le righe della pagina mostrata e lo dicono.
   const countOk  = runs.filter(r => r.status === 'success').length;
   const countErr = runs.filter(r => r.status === 'failure').length;
 
@@ -68,7 +73,7 @@ export default function RunsTab({ live = false }) {
         <div className="lv__stat lv__stat--total">
           <div className="lv__stat-label">Run Totali</div>
           <div className="lv__stat-val">{total}</div>
-          <div className="lv__stat-sub">questa pagina</div>
+          <div className="lv__stat-sub">con i filtri attuali</div>
         </div>
         <button
           type="button"
@@ -78,7 +83,7 @@ export default function RunsTab({ live = false }) {
           aria-label="Filtra esecuzioni completate">
           <span className="lv__stat-label">Completate</span>
           <span className="lv__stat-val lv__stat-val--ok">{countOk}</span>
-          <span className="lv__stat-sub">clicca per filtrare</span>
+          <span className="lv__stat-sub">in questa pagina · clicca per filtrare</span>
         </button>
         <button
           type="button"
@@ -88,7 +93,7 @@ export default function RunsTab({ live = false }) {
           aria-label="Filtra esecuzioni fallite">
           <span className="lv__stat-label">Fallite</span>
           <span className="lv__stat-val lv__stat-val--err">{countErr}</span>
-          <span className="lv__stat-sub">clicca per filtrare</span>
+          <span className="lv__stat-sub">in questa pagina · clicca per filtrare</span>
         </button>
       </div>
 
@@ -141,9 +146,8 @@ export default function RunsTab({ live = false }) {
             {resource.initialLoading ? (
               <tr><td colSpan="7" className="lv__empty">Caricamento...</td></tr>
             ) : resource.status === 'error' && !resource.hasData ? null : runs.length === 0 ? (
-              <tr><td colSpan="7" className="lv__empty">
-                <div className="lv__empty-icon">🚀</div>
-                <div>Nessuna esecuzione trovata</div>
+              <tr><td colSpan="7">
+                <EmptyState icon="🚀" title={filterStatus || filterModule ? 'Nessuna esecuzione con questi filtri' : 'Nessuna esecuzione trovata'} />
               </td></tr>
             ) : runs.map(run => {
               const st     = STATUS_CONFIG[run.status] || { label: run.status, cls: '', icon: '?' };
@@ -155,7 +159,7 @@ export default function RunsTab({ live = false }) {
                 <React.Fragment key={run.run_id}>
                   <tr
                     className={`lv__row lv__row--clickable${isFail ? ' lv__row--error' : ''}${isExp ? ' lv__row--expanded' : ''}`}
-                    onClick={() => setExpandedRun(isExp ? null : run.run_id)}>
+                    {...pressable(() => setExpandedRun(isExp ? null : run.run_id))}>
                     <td className="lv__td lv__td--time">
                       <button
                         type="button"
@@ -167,7 +171,7 @@ export default function RunsTab({ live = false }) {
                       >
                         {isExp ? '▾' : '▸'}
                       </button>
-                      {' '}{formatTime(run.ts_start)}
+                      {' '}{formatLogTime(run.ts_start)}
                     </td>
                     <td className="lv__td">
                       <span className={`lv__run-status ${st.cls}`}>
@@ -181,13 +185,13 @@ export default function RunsTab({ live = false }) {
                       }}>{run.module || '—'}</span>
                     </td>
                     <td className="lv__td lv__td--mono-11">
-                      {truncateProjectId(run.project_id)}
+                      {projectLabel(run.project_id, projectNames)}
                     </td>
                     <td className="lv__td lv__td--mono-12">
-                      {fmtDuration(run.duration_ms)}
+                      {formatDuration(run.duration_ms)}
                     </td>
                     <td className="lv__td lv__td--mono-12">
-                      {fmtRows(run.rows_out)}
+                      {formatNumber(run.rows_out)}
                     </td>
                     <td className="lv__td">
                       <span className="lv__op-tag">{run.triggered_by || '—'}</span>

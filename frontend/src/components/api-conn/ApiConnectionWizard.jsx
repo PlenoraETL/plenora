@@ -32,7 +32,7 @@ import { parseCurlCommand } from '../../utils/curlImport';
 import { requestErrorMessage } from '../../utils/errorMessages';
 import { toastApiError } from '../../utils/toastApiError';
 
-export const EMPTY_FORM = {
+const EMPTY_FORM = {
   name:'', description:'', api_type:'enricher', category:'custom', connection_type:'manual',
   url:'', method:'GET', auth:{ type:'none' }, custom_headers:{},
   parameters:[], static_parameters:{}, output_mapping:[], schema_fields:[],
@@ -285,7 +285,7 @@ const [editingApi, setEditingApi] = useState(null);
       setFormData(EMPTY_FORM);
       setCustomHeadersList([]);
       setWizardStep(0);
-      setTestResult(null);
+      setTestResult(null); setTestRawResponse(null);
       setTestParams({});
       return;
     }
@@ -306,7 +306,7 @@ const [editingApi, setEditingApi] = useState(null);
           })),
         });
       } else {
-        setTestResult(null);
+        setTestResult(null); setTestRawResponse(null);
       }
       setWizardStep(
         api.parameters?.length > 0 || Object.keys(api.static_parameters || {}).length > 0
@@ -323,7 +323,7 @@ const [editingApi, setEditingApi] = useState(null);
         seed.template.config?.custom_headers || {}
       ).map(([key, value]) => ({ key, value })));
       setWizardStep(1);
-      setTestResult(null);
+      setTestResult(null); setTestRawResponse(null);
       setTestParams({});
       return;
     }
@@ -525,7 +525,7 @@ const getCustomHeadersObject = () => {
       Object.entries(parsed.custom_headers || {})
         .map(([key, value]) => ({ key, value })),
     );
-    setTestResult(null);
+    setTestResult(null); setTestRawResponse(null);
     setTestRawResponse(null);
     setShowAdvancedConfig(false);
     return parsed;

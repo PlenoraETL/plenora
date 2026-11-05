@@ -24,6 +24,7 @@
  */
 
 import { backendMessage } from '../utils/errorMessages';
+import { formatBytes } from '../utils/format';
 
 /** Cap massimo upload in byte. Allineato a `settings.MAX_FILE_SIZE`
  * backend (`app/config.py:139`, default 100MB). */
@@ -53,7 +54,6 @@ export class UploadTooLargeError extends Error {
   }
 }
 
-const _formatMB = (bytes) => Math.round((bytes || 0) / (1024 * 1024));
 
 /**
  * Pre-check sincrona: rifiuta upload oltre il cap senza chiamare il backend.
@@ -69,8 +69,8 @@ export function assertFileSize(file, opts = {}) {
   if (!file || typeof file.size !== 'number') return;
   if (file.size > maxBytes) {
     throw new UploadTooLargeError(
-      `File troppo grande (${_formatMB(file.size)}MB). ` +
-        `Limite massimo: ${_formatMB(maxBytes)}MB.`,
+      `File troppo grande (${formatBytes(file.size)}). ` +
+        `Limite massimo: ${formatBytes(maxBytes)}.`,
       { fileSize: file.size, maxSize: maxBytes, source: 'client' },
     );
   }

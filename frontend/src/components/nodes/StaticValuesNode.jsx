@@ -264,11 +264,5 @@ function StaticValuesNode({ id, data }) {
   );
 }
 
-export const createStaticValuesNode = (position = { x: 100, y: 100 }) => ({
-  id: `static_${Date.now()}`,
-  type: 'staticValues',
-  position,
-  data: { label: termName('static_values'), fields: [] }
-});
 
 export default memo(StaticValuesNode);

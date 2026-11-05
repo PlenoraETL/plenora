@@ -244,7 +244,6 @@ export default function LoginPage() {
                   className="lp__pw-toggle"
                   type="button"
                   onClick={() => setShowPw(v => !v)}
-                  tabIndex={-1}
                   aria-label={showPw ? 'Nascondi password' : 'Mostra password'}
                 >
                   {showPw ? '🙈' : '👁'}
@@ -265,6 +264,8 @@ export default function LoginPage() {
                   value={mfaCode}
                   onChange={e => setMfaCode(e.target.value)}
                   autoComplete="one-time-code"
+                  // a11y-3: al passaggio MFA il cursore va sul codice.
+                  autoFocus
                   disabled={loading}
                 />
               </div>

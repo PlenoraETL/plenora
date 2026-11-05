@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-  COLUMN_ROLES, DERIVED_COLUMNS_TYPES, PROJECT_COLUMN_CAPABILITIES, addedColumns, columnOrigin, columnSignature,
+  COLUMN_ROLES, DERIVED_COLUMNS_TYPES, PROJECT_COLUMN_CAPABILITIES, columnOrigin, columnSignature,
   columnsOf, createColumnsMemo, normalizeSchemasResponse, outputColumnsAsRead, outputResolvesById,
   sortedInputEdges, uncertainAspects,
 } from '../../src/utils/columnSource';
@@ -191,11 +191,10 @@ describe('(c) il selettore da\' colonne con id, per nodo e memorizzato', () => {
     expect(r.columns.map(c => [c.input_node, c.id])).toEqual([['t2', 'i2'], ['t1', 'i1']]);
   });
 
-  it('colonne aggiunte e origine per id (etichette delle anteprime, colonne dell\'API)', () => {
+  it('origine delle colonne per id (etichette delle anteprime)', () => {
     const an = [{ id: 'src', type: 'file_source', data: {} }, { id: 'api', type: 'api_enrich', data: {} }, { id: 'res', type: 'result', data: {} }];
     const ae = [{ id: 'a', source: 'src', target: 'api' }, { id: 'b', source: 'api', target: 'res' }];
     const as = snap({ nodes: an, edges: ae, schemas: { src: [col('id', 'c1')], api: [col('id', 'c1'), col('meteo', 'c2')], res: [col('id', 'c1'), col('meteo', 'c2')] } });
-    expect(addedColumns(as, 'api').map(c => c.name)).toEqual(['meteo']);
     expect(columnOrigin(as, 'res', 'c1')).toBe('src');
     expect(columnOrigin(as, 'res', 'c2')).toBe('api');
   });

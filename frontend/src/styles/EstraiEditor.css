@@ -4,50 +4,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Variables ─────────────────────────────────────────────────── */
-.estrai-editor {
-  --ee-estrai:      #34C17A;
-  --ee-estrai-mid:  #22a65e;
-  --ee-blue:        #4B8BFF;
-  --ee-warn:        #FBBF24;
-  --ee-err:         #F87171;
-  --ee-ok:          #34D399;
-
-  --ee-bg:          var(--plen-bg,       #07090F);
-  --ee-surface:     var(--plen-surface,  #0C0F18);
-  --ee-surface-2:   var(--plen-surface-2,#111525);
-  --ee-surface-3:   var(--plen-surface-3,#171C2E);
-  --ee-border:      var(--plen-border,   rgba(255,255,255,0.06));
-  --ee-border-hi:   var(--plen-border-hi,rgba(255,255,255,0.11));
-  --ee-text:        var(--plen-text,     #DDE4F2);
-  --ee-text-sub:    var(--plen-text-sub, #7D8BA8);
-  --ee-text-dim:    var(--plen-text-dim, #3F4D68);
-
-  --ee-sidebar:     260px;
-  --ee-topbar:      52px;
-  --ee-radius:      8px;
-
-  width: 100%;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--ee-bg);
-  color: var(--ee-text);
-  font-family: var(--plen-font-body);
-  font-size: 13px;
-}
 
 /* ── Light overrides ────────────────────────────────────────────── */
-[data-theme='light'] .estrai-editor {
-  --ee-bg:        #EFF2F9;
-  --ee-surface:   #FFFFFF;
-  --ee-surface-2: #E8EDF8;
-  --ee-surface-3: #DDE4F2;
-  --ee-border:    rgba(0,0,0,0.06);
-  --ee-border-hi: rgba(0,0,0,0.11);
-  --ee-text:      #0F1729;
-  --ee-text-sub:  #4A5568;
-  --ee-text-dim:  #94A3B8;
-}
 
 /* ═══════════════════════════════════════════════════════════════
    TOPBAR
@@ -74,20 +32,15 @@
 /* ═══════════════════════════════════════════════════════════════
    MAIN LAYOUT
    ═══════════════════════════════════════════════════════════════ */
-.estrai-main {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
 
 /* ═══════════════════════════════════════════════════════════════
    SIDEBAR
    ═══════════════════════════════════════════════════════════════ */
 .estrai-sidebar {
-  width: var(--ee-sidebar);
+  width: 260px;
   flex-shrink: 0;
-  background: var(--ee-surface);
-  border-right: 1px solid var(--ee-border-hi);
+  background: var(--plen-surface);
+  border-right: 1px solid var(--plen-border-hi);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -95,7 +48,7 @@
 
 .estrai-sidebar__search-wrap {
   padding: 12px 14px;
-  border-bottom: 1px solid var(--ee-border);
+  border-bottom: 1px solid var(--plen-border);
   flex-shrink: 0;
 }
 
@@ -103,19 +56,19 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  background: var(--ee-surface-2);
-  border: 1px solid var(--ee-border-hi);
-  border-radius: var(--ee-radius);
+  background: var(--plen-surface-2);
+  border: 1px solid var(--plen-border-hi);
+  border-radius: 8px;
   padding: 7px 11px;
   transition: border-color 0.15s;
 }
-.estrai-sidebar__search:focus-within { border-color: var(--ee-estrai); }
+.estrai-sidebar__search:focus-within { border-color: var(--plen-estrai); }
 
 .estrai-sidebar__search-icon {
   font-size: 12px;
   opacity: 0.4;
   flex-shrink: 0;
-  color: var(--ee-text-sub);
+  color: var(--plen-text-sub);
 }
 
 .estrai-sidebar__search input {
@@ -124,10 +77,10 @@
   outline: none;
   background: transparent;
   font-size: 12.5px;
-  color: var(--ee-text);
+  color: var(--plen-text);
   font-family: var(--plen-font-body);
 }
-.estrai-sidebar__search input::placeholder { color: var(--ee-text-dim); }
+.estrai-sidebar__search input::placeholder { color: var(--plen-text-dim); }
 
 .estrai-sidebar__body {
   flex: 1;
@@ -136,7 +89,7 @@
 }
 .estrai-sidebar__body::-webkit-scrollbar { width: 3px; }
 .estrai-sidebar__body::-webkit-scrollbar-thumb {
-  background: var(--ee-surface-3);
+  background: var(--plen-surface-3);
   border-radius: 9px;
 }
 
@@ -150,16 +103,16 @@
   user-select: none;
   transition: background 0.1s;
 }
-.estrai-sidebar__section-header:hover { background: var(--ee-surface-2); }
+.estrai-sidebar__section-header:hover { background: var(--plen-surface-2); }
 .estrai-sidebar__section-header--views {
   margin-top: 4px;
   padding-top: 10px;
-  border-top: 1px solid var(--ee-border);
+  border-top: 1px solid var(--plen-border);
 }
 
 .estrai-sidebar__section-toggle {
   font-size: 9px;
-  color: var(--ee-text-dim);
+  color: var(--plen-text-dim);
   width: 12px;
   flex-shrink: 0;
   transition: transform 0.15s;
@@ -169,7 +122,7 @@
   font-family: var(--plen-font-display);
   font-size: 11.5px;
   font-weight: 700;
-  color: var(--ee-text);
+  color: var(--plen-text);
   flex: 1;
   margin: 0;
 }
@@ -177,24 +130,11 @@
 .estrai-sidebar__count-badge {
   font-family: var(--plen-font-mono);
   font-size: 10px;
-  color: var(--ee-text-dim);
-  background: var(--ee-surface-2);
-  border: 1px solid var(--ee-border-hi);
+  color: var(--plen-text-dim);
+  background: var(--plen-surface-2);
+  border: 1px solid var(--plen-border-hi);
   border-radius: 99px;
   padding: 1px 7px;
-}
-
-.estrai-sidebar__subtitle {
-  font-size: 11px;
-  color: var(--ee-text-dim);
-  padding: 2px 14px 6px;
-}
-
-.estrai-sidebar__count {
-  font-size: 10.5px;
-  color: var(--ee-text-dim);
-  padding: 0 14px 4px;
-  font-family: var(--plen-font-mono);
 }
 
 /* Table items */
@@ -206,14 +146,14 @@
   gap: 8px;
   padding: 7px 10px;
   margin: 3px 0;
-  background: var(--ee-surface-2);
-  border: 1px solid var(--ee-border);
-  border-radius: var(--ee-radius);
+  background: var(--plen-surface-2);
+  border: 1px solid var(--plen-border);
+  border-radius: 8px;
   cursor: grab;
   transition: all 0.12s;
 }
 .estrai-sidebar__table-item:hover {
-  border-color: var(--ee-estrai);
+  border-color: var(--plen-estrai);
   background: rgba(52,193,122,0.06);
 }
 .estrai-sidebar__table-item:active { cursor: grabbing; opacity: 0.8; }
@@ -229,7 +169,7 @@
 .estrai-sidebar__table-name {
   flex: 1;
   font-size: 12px;
-  color: var(--ee-text);
+  color: var(--plen-text);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -239,14 +179,14 @@
 .estrai-sidebar__table-cols {
   font-family: var(--plen-font-mono);
   font-size: 10px;
-  color: var(--ee-text-dim);
+  color: var(--plen-text-dim);
   flex-shrink: 0;
 }
 
 .estrai-sidebar__empty {
   padding: 16px 14px;
   text-align: center;
-  color: var(--ee-text-dim);
+  color: var(--plen-text-dim);
   font-style: italic;
   font-size: 12px;
 }
@@ -255,18 +195,18 @@
   width: 100%;
   margin-top: 4px;
   padding: 7px 10px;
-  background: var(--ee-surface-2);
-  border: 1px dashed var(--ee-border-hi);
-  border-radius: var(--ee-radius);
+  background: var(--plen-surface-2);
+  border: 1px dashed var(--plen-border-hi);
+  border-radius: 8px;
   cursor: pointer;
   font-size: 11.5px;
   font-family: var(--plen-font-body);
-  color: var(--ee-text-sub);
+  color: var(--plen-text-sub);
   text-align: center;
   transition: all 0.12s;
 }
 .estrai-sidebar__load-more:hover {
-  color: var(--ee-estrai);
+  color: var(--plen-estrai);
   border-color: rgba(52,193,122,0.3);
   background: rgba(52,193,122,0.04);
 }
@@ -277,19 +217,19 @@
   align-items: center;
   gap: 10px;
   padding: 11px 14px;
-  border-top: 1px solid var(--ee-border-hi);
-  background: var(--ee-surface);
+  border-top: 1px solid var(--plen-border-hi);
+  background: var(--plen-surface);
   flex-shrink: 0;
 }
 .estrai-sidebar__user-name {
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--ee-text);
+  color: var(--plen-text);
 }
 .estrai-sidebar__user-email {
   font-family: var(--plen-font-mono);
   font-size: 10.5px;
-  color: var(--ee-text-dim);
+  color: var(--plen-text-dim);
 }
 .estrai-sidebar__logout {
   margin-left: auto;
@@ -298,17 +238,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ee-surface-2);
-  border: 1px solid var(--ee-border-hi);
+  background: var(--plen-surface-2);
+  border: 1px solid var(--plen-border-hi);
   border-radius: 7px;
   cursor: pointer;
   font-size: 14px;
-  color: var(--ee-text-sub);
+  color: var(--plen-text-sub);
   flex-shrink: 0;
   transition: all 0.12s;
 }
 .estrai-sidebar__logout:hover {
-  color: var(--ee-err);
+  color: var(--plen-err);
   background: rgba(248,113,113,0.08);
   border-color: rgba(248,113,113,0.2);
 }
@@ -316,139 +256,26 @@
 /* ═══════════════════════════════════════════════════════════════
    CANVAS
    ═══════════════════════════════════════════════════════════════ */
-.estrai-canvas {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  background: var(--ee-bg);
-}
-
-.estrai-canvas__hex {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
-}
 
 /* ReactFlow sits above hex canvas */
-.estrai-canvas .react-flow {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: transparent !important;
-}
 
 /* ReactFlow overrides */
-.estrai-canvas .react-flow__background { opacity: 0 !important; }
 
 /* Override default ReactFlow node selection border */
-.estrai-canvas .react-flow__node {
-  outline: none !important;
-}
-.estrai-canvas .react-flow__node.selected > * {
-  box-shadow: 0 0 0 2px rgba(75,139,255,0.5) !important;
-}
-.estrai-canvas .react-flow__node.selected {
-  outline: none !important;
-}
 /* Remove any red border ReactFlow applies on nodes */
-.estrai-canvas .react-flow__node-tableNode,
-.estrai-canvas .react-flow__node-datasourceNode,
-.estrai-canvas .react-flow__node-resultNode,
-.estrai-canvas .react-flow__node-featureLayerNode,
-.estrai-canvas .react-flow__node-carica,
-.estrai-canvas .react-flow__node-staticValues,
-.estrai-canvas .react-flow__node-comment {
-  outline: none !important;
-  border: none !important;
-}
-
-.estrai-canvas .react-flow__controls {
-  background: var(--ee-surface);
-  border: 1px solid var(--ee-border-hi);
-  border-radius: var(--ee-radius);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-  overflow: hidden;
-}
-.estrai-canvas .react-flow__controls-button {
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--ee-border);
-  color: var(--ee-text-sub);
-  width: 32px;
-  height: 32px;
-}
-.estrai-canvas .react-flow__controls-button:hover {
-  background: var(--ee-surface-2);
-  color: var(--ee-text);
-}
-.estrai-canvas .react-flow__controls-button svg { fill: currentColor; }
-.estrai-canvas .react-flow__controls-button:last-child { border-bottom: none; }
-
-.estrai-canvas .react-flow__minimap {
-  background: var(--ee-surface) !important;
-  border: 1px solid var(--ee-border-hi) !important;
-  border-radius: 10px !important;
-  overflow: hidden;
-}
-.estrai-canvas .react-flow__minimap-mask { fill: var(--ee-surface-2) !important; opacity: 0.7; }
-.estrai-canvas .react-flow__minimap-node { fill: var(--ee-surface-3) !important; }
 
 /* Edge styles */
-.estrai-canvas .react-flow__edge-path {
-  stroke: rgba(52,193,122,0.5);
-  stroke-width: 2;
-}
-.estrai-canvas .react-flow__edge.selected .react-flow__edge-path {
-  stroke: var(--ee-estrai);
-  stroke-width: 2.5;
-}
-.estrai-canvas .react-flow__edge-text { fill: var(--ee-text-sub); font-size: 11px; font-family: var(--plen-font-mono); }
-.estrai-canvas .react-flow__edge-textbg { fill: var(--ee-surface); }
 
 /* Connection line */
-.estrai-canvas .react-flow__connection-path {
-  stroke: var(--ee-estrai);
-  stroke-width: 2;
-  stroke-dasharray: 5 3;
-}
 
 /* ═══════════════════════════════════════════════════════════════
    ERROR / LOADING
    ═══════════════════════════════════════════════════════════════ */
-.estrai-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--ee-err);
-  padding: 20px;
-  text-align: center;
-  gap: 12px;
-}
-.estrai-error__message { font-size: 15px; }
-.estrai-error__btn {
-  padding: 8px 20px;
-  background: var(--ee-err);
-  color: white;
-  border: none;
-  border-radius: var(--ee-radius);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-}
 
 /* ═══════════════════════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════════════════════ */
-@media (max-width: 1024px) {
-  .estrai-editor { --ee-sidebar: 220px; }
-}
 @media (max-width: 768px) {
-  .estrai-editor { --ee-sidebar: 0px; }
   .estrai-sidebar { display: none; }
   
 }

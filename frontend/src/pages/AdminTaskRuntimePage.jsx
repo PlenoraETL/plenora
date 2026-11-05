@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import AppSidebar from '../components/AppSidebar';
+import PageLayout from '../components/common/PageLayout';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { useAuth } from '../context/AuthContext';
 import { can } from '../utils/permissions';
@@ -9,6 +9,7 @@ import { useResource } from '../hooks/useResource';
 import { ResourceError } from '../components/common/ListState';
 import { useBusy } from '../hooks/useBusy';
 import '../styles/AdminTaskRuntimePage.css';
+import { formatDateTime } from '../utils/format';
 
 
 const REFRESH_MS = 5000;
@@ -116,21 +117,17 @@ export default function AdminTaskRuntimePage() {
   const deadQueues = (data?.queues || []).filter((item) => item.kind === 'dead_letter');
 
   return (
-    <div className="task-runtime">
-      <AppSidebar />
-      <main className="task-runtime__main">
-        <header className="task-runtime__header">
-          <div>
-            <div className="task-runtime__title-row">
-              <h1>Code e Worker</h1>
-              {data?.status && <StatusPill value={data.status} />}
-            </div>
-            <p>Stato operativo di RabbitMQ, worker Dramatiq e task in esecuzione.</p>
-          </div>
-          <button type="button" onClick={() => load()} disabled={loading}>
-            {loading ? 'Aggiornamento…' : 'Aggiorna'}
-          </button>
-        </header>
+    <PageLayout
+      className="task-runtime"
+      title="Code e Worker"
+      badge={data?.status && <StatusPill value={data.status} />}
+      subtitle="Stato operativo di RabbitMQ, worker Dramatiq e task in esecuzione."
+      actions={(
+        <button type="button" onClick={() => load()} disabled={loading}>
+          {loading ? 'Aggiornamento…' : 'Aggiorna'}
+        </button>
+      )}
+    >
 
         <ResourceError resource={resource} title="Stato dei task non caricato" />
         {actionError && <div className="task-runtime__error" role="alert">{actionError}</div>}
@@ -171,7 +168,7 @@ export default function AdminTaskRuntimePage() {
                       <td className="task-runtime__mono" title={run.run_id}>{run.run_id}</td>
                       <td className="task-runtime__mono">{run.project_id}</td>
                       <td>{run.group_id}</td>
-                      <td>{new Date(run.timestamp).toLocaleString()}</td>
+                      <td>{formatDateTime(run.timestamp, { seconds: true })}</td>
                       <td className="task-runtime__message" title={run.error_message || ''}>{run.error_message || '—'}</td>
                       <td className="task-runtime__actions">
                         {canResolve && <button type="button" disabled={busy.isBusy(run.run_id)} onClick={() => setResolveRequest({ run, resolution: 'confirm_completed' })}>Conferma completata</button>}
@@ -266,7 +263,6 @@ export default function AdminTaskRuntimePage() {
             </table>
           </div>
         </section>
-      </main>
       {resolveRequest && (
         <ResolveRunDialog
           request={resolveRequest}
@@ -275,6 +271,6 @@ export default function AdminTaskRuntimePage() {
           onConfirm={resolveRun}
         />
       )}
-    </div>
+    </PageLayout>
   );
 }

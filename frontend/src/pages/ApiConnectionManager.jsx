@@ -17,7 +17,6 @@ import { useBusy } from '../hooks/useBusy';
 import { ResourceError } from '../components/common/ListState';
 import { useToast } from '../hooks/useToast';
 import { toastApiError } from '../utils/toastApiError';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import TemplateLibraryModal from '../components/arricchisci/TemplateLibraryModal';
 import OpenAPIImportModal from '../components/arricchisci/OpenAPIImportModal';
@@ -29,8 +28,8 @@ import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import useDialog from '../hooks/useDialog';
-import AppSidebar from '../components/AppSidebar';
-import ThemeToggle from '../components/common/ThemeToggle';
+import PageLayout from '../components/common/PageLayout';
+import EmptyState from '../components/common/EmptyState';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import {
   listApiConnections,
@@ -43,7 +42,7 @@ import { can } from '../utils/permissions';
 import '../styles/ApiConnectionManager.css';
 import '../components/panels/ResponseConfigBuilder.css';
 import { requestErrorMessage } from '../utils/errorMessages';
-import { goBack } from '../utils/navigation';
+import { formatNumber } from '../utils/format';
 const CATEGORIES = [
   { id:'all',        label:'Tutte',       icon:'🔗' },
   { id:'geocoding',  label:'Geocoding',   icon:'🌍' },
@@ -94,7 +93,6 @@ const toDataSourcePayload = (dsConfig) => {
 function ApiConnectionManager() {
   const toast = useToast();
   const confirmModal = useConfirmModal();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const canvasRef = React.useRef(null);
   useHexCanvas(canvasRef);
@@ -196,7 +194,7 @@ const openWizardForNew = () => {
       const cascade = handleCascade409(e);
       if (cascade) {
         toast.error(
-          `Impossibile eliminare "${apiName}": ${formatCascadeDependencies(cascade.dependencies)}. Rimuovili prima.`,
+          `Impossibile eliminare "${apiName}": ${formatCascadeDependencies(cascade)}. Rimuovili prima.`,
           10000
         );
         return;
@@ -222,17 +220,12 @@ const openWizardForNew = () => {
   };
 
   return (
-    <div className="acm">
-      {/* SIDEBAR */}
-      <AppSidebar counts={{ apiConnections: apiConnections.length }} />
-
-      {/* MAIN */}
-      <div className="acm__main">
-        <header className="acm__topbar">
-          <button type="button" className="acm__back-btn" onClick={() => goBack(navigate)}>← Indietro</button>
-          <div className="acm__page-title">Connettori Esterni</div>
-          <div className="acm__topbar-right">
-            <ThemeToggle classPrefix="acm" />
+    <PageLayout
+      className="acm"
+      bare
+      title="Connettori Esterni"
+      actions={(
+        <>
             {canCreateApi && (
               <div className="acm__new-wrapper">
                 <button type="button" className="acm__btn acm__btn--primary" onClick={()=>setShowNewApiDropdown(!showNewApiDropdown)}>
@@ -240,24 +233,25 @@ const openWizardForNew = () => {
                 </button>
                 {showNewApiDropdown && (
                   <div className="acm__dropdown">
-                    <div className="acm__dropdown-item" onClick={()=>{setShowTemplateLibrary(true);setShowNewApiDropdown(false);}}>
+                    <button type="button" className="acm__dropdown-item" onClick={()=>{setShowTemplateLibrary(true);setShowNewApiDropdown(false);}}>
                       <span className="acm__dropdown-icon">📦</span>
                       <div><div className="acm__dropdown-label">Da Template</div><div className="acm__dropdown-sub">Nominatim, OSRM, Catasto…</div></div>
-                    </div>
-                    <div className="acm__dropdown-item" onClick={()=>{setShowOpenAPIImport(true);setShowNewApiDropdown(false);}}>
+                    </button>
+                    <button type="button" className="acm__dropdown-item" onClick={()=>{setShowOpenAPIImport(true);setShowNewApiDropdown(false);}}>
                       <span className="acm__dropdown-icon">📋</span>
                       <div><div className="acm__dropdown-label">Importa OpenAPI</div><div className="acm__dropdown-sub">Da URL o file JSON</div></div>
-                    </div>
-                    <div className="acm__dropdown-item" onClick={openWizardForNew}>
+                    </button>
+                    <button type="button" className="acm__dropdown-item" onClick={openWizardForNew}>
                       <span className="acm__dropdown-icon">✏️</span>
                       <div><div className="acm__dropdown-label">Configurazione Manuale</div><div className="acm__dropdown-sub">Wizard passo-passo</div></div>
-                    </div>
+                    </button>
                   </div>
                 )}
               </div>
             )}
-          </div>
-        </header>
+        </>
+      )}
+    >
 
         <div className="acm__content">
           <canvas ref={canvasRef} className="acm__hex-bg"/>
@@ -269,7 +263,7 @@ const openWizardForNew = () => {
               <div className="acm__stat-label">Connettori</div>
             </div>
             <div className="acm__stat acm__stat--calls">
-              <div className="acm__stat-val">{globalStats.totalCalls.toLocaleString()}</div>
+              <div className="acm__stat-val">{formatNumber(globalStats.totalCalls)}</div>
               <div className="acm__stat-label">Chiamate totali</div>
             </div>
             <div className="acm__stat acm__stat--err">
@@ -309,17 +303,17 @@ const openWizardForNew = () => {
             {loading ? (
               <div className="acm__loading">⬡ Caricamento connettori…</div>
             ) : resource.status === 'error' && !resource.hasData ? null : filteredApis.length === 0 ? (
-              <div className="acm__empty">
-                <div className="acm__empty-icon">🔗</div>
-                <div className="acm__empty-title">{apiConnections.length===0?'Nessun connettore configurato':'Nessun risultato'}</div>
-                <div className="acm__empty-text">{apiConnections.length===0?'Configura il tuo primo connettore API':'Modifica i filtri di ricerca'}</div>
-                {apiConnections.length===0 && canCreateApi && (
+              <EmptyState
+                icon="🔗"
+                title={apiConnections.length===0?'Nessun connettore configurato':'Nessun risultato'}
+                text={apiConnections.length===0?'Configura il tuo primo connettore API':'Modifica i filtri di ricerca'}
+                action={apiConnections.length===0 && canCreateApi && (
                   <div className="acm__empty-actions">
                     <button type="button" className="acm__btn acm__btn--ghost" onClick={()=>setShowTemplateLibrary(true)}>📦 Da Template</button>
                     <button type="button" className="acm__btn acm__btn--primary" onClick={openWizardForNew}>✏️ Manuale</button>
                   </div>
                 )}
-              </div>
+              />
             ) : (
               <>
                 {filteredApis.map(api => (
@@ -352,7 +346,6 @@ const openWizardForNew = () => {
             )}
           </div>
         </div>
-      </div>
 {showTemplateLibrary && <TemplateLibraryModal onClose={()=>setShowTemplateLibrary(false)} onSelectTemplate={openWizardForTemplate} />}
       {showOpenAPIImport   && <OpenAPIImportModal   onClose={()=>setShowOpenAPIImport(false)}   onImport={applyOpenAPIImport} />}
       {showDataSourceConfig && (
@@ -466,7 +459,7 @@ const openWizardForNew = () => {
         </div>
       )}
       <ConfirmDialog {...confirmModal} />
-    </div>
+    </PageLayout>
   );
 }
 

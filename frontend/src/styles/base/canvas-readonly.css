@@ -49,13 +49,7 @@
  *   *--del          (ann-group__btn--del — AnnotationNode)
  *   *__node-del     (svn__node-del — StaticValuesNode)
  */
-.canvas-readonly [class*="__delete-btn"],
-.canvas-readonly [class*="__delete"],
-.canvas-readonly [class*="__remove"],
-.canvas-readonly [class*="-remove"],
-.canvas-readonly [class*="--del"],
-.canvas-readonly [class*="__node-del"],
-.canvas-readonly .dsn__delete-btn {
+.canvas-readonly [class*="__delete-btn"],.canvas-readonly [class*="__delete"],.canvas-readonly [class*="__remove"],.canvas-readonly [class*="-remove"],.canvas-readonly [class*="--del"],.canvas-readonly [class*="__node-del"] {
   display: none !important;
 }
 

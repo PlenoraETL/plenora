@@ -61,7 +61,14 @@ export function handleCascade409(err) {
  * Backward compat: chiamate senza secondo argomento si comportano come
  * prima.
  */
-export function formatCascadeDependencies(dependencies, hiddenCount = 0) {
+export function formatCascadeDependencies(dependenciesOrCascade, hiddenCount = 0) {
+  // Fase 5 T7 (P25, N8): chi riceve l'esito di handleCascade409 passa
+  // l'esito intero, cosi' le dipendenze nascoste non si perdono.
+  let dependencies = dependenciesOrCascade;
+  if (dependenciesOrCascade && !Array.isArray(dependenciesOrCascade) && typeof dependenciesOrCascade === 'object') {
+    dependencies = dependenciesOrCascade.dependencies;
+    hiddenCount = dependenciesOrCascade.hiddenCount ?? hiddenCount;
+  }
   const safeHidden = (typeof hiddenCount === 'number' && hiddenCount > 0)
     ? hiddenCount
     : 0;

@@ -25,6 +25,8 @@ import {
 } from '../../api/features';
 import './FeatureServicePanel.css';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import { formatNumber } from '../../utils/format';
+import { pressable } from '../../utils/pressable';
 
 const GEOM_ICONS = {
   'geometry:point': '📍',
@@ -50,7 +52,7 @@ function getGeomLabel(geomType) {
 
 // canCreateConnection = can.createConnection(user) dalla pagina (EstraiEditor):
 // la '+' di una nuova connessione ArcGIS si mostra solo a chi puo' crearla.
-function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedConnection = null, canCreateConnection = false }) {
+function FeatureServicePanel({ layersInCanvas = new Set(), lockedConnection = null, canCreateConnection = false }) {
   // State navigazione: connections → services → layers
   const [view, setView] = useState(lockedConnection ? 'services' : 'connections'); // connections | services | layers
   
@@ -61,7 +63,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
   
   // Layer
   const [selectedService, setSelectedService] = useState(null);
-  const [layerSchemas, setLayerSchemas] = useState({});
   
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,19 +117,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
     setSearchQuery('');
   };
 
-  const loadLayerSchema = useCallback(async (layer) => {
-    const cacheKey = layer.url;
-    if (layerSchemas[cacheKey]) return layerSchemas[cacheKey];
-    
-    try {
-      const schema = await getLayerSchema(selectedConnection.id, layer.url);
-      setLayerSchemas(prev => ({ ...prev, [cacheKey]: schema }));
-      return schema;
-    } catch (err) {
-      console.error('Errore schema layer:', err);
-      return null;
-    }
-  }, [selectedConnection, layerSchemas]);
 
   const handleDragStart = useCallback((e, layer) => {
     const dragData = {
@@ -203,7 +191,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
                 <>
                   <span 
                     className="fs-panel__breadcrumb-link" 
-                    onClick={() => { setView('connections'); setSelectedConnection(null); }}
+                    {...pressable(() => { setView('connections'); setSelectedConnection(null); })}
                   >
                     Connessioni
                   </span>
@@ -221,7 +209,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
                 <>
                   <span 
                     className="fs-panel__breadcrumb-link"
-                    onClick={() => { setView('connections'); setSelectedConnection(null); }}
+                    {...pressable(() => { setView('connections'); setSelectedConnection(null); })}
                   >
                     Conn.
                   </span>
@@ -230,7 +218,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
               )}
               <span 
                 className="fs-panel__breadcrumb-link"
-                onClick={() => { setView('services'); setSelectedService(null); }}
+                {...pressable(() => { setView('services'); setSelectedService(null); })}
               >
                 {selectedConnection?.name}
               </span>
@@ -296,7 +284,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
               <div
                 key={conn.id}
                 className="fs-panel__item fs-panel__item--connection"
-                onClick={() => handleSelectConnection(conn)}
+                {...pressable(() => handleSelectConnection(conn))}
               >
                 <span className="fs-panel__item-icon">🌐</span>
                 <div className="fs-panel__item-info">
@@ -323,7 +311,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
               <div
                 key={`${svc.name}-${idx}`}
                 className="fs-panel__item fs-panel__item--service"
-                onClick={() => handleSelectService(svc)}
+                {...pressable(() => handleSelectService(svc))}
               >
                 <span className="fs-panel__item-icon">📦</span>
                 <div className="fs-panel__item-info">
@@ -367,7 +355,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
                         <span className="fs-panel__item-name">{layer.name}</span>
                         <span className="fs-panel__item-detail">
                           {getGeomLabel(layer.geometry_type)}
-                          {layer.feature_count != null && ` · ${layer.feature_count.toLocaleString()} feat.`}
+                          {layer.feature_count != null && ` · ${formatNumber(layer.feature_count)} feat.`}
                         </span>
                       </div>
                       {isInCanvas ? (

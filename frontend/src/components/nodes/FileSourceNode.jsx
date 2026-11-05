@@ -16,6 +16,8 @@ import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
 import './FileSourceNode.css';
 import NodeHandle from '../canvas/NodeHandle';
+import { formatNumber } from '../../utils/format';
+import { pressable } from '../../utils/pressable';
 
 /**
  * FileSourceNode - Nodo sorgente per file esterni in MANIPOLA
@@ -106,7 +108,7 @@ const FileSourceNode = ({ id, data }) => {
             {fileInfo.format.toUpperCase()}
           </span>
           <span className="file-source-node__row-count">
-            {fileInfo.row_count?.toLocaleString()} righe
+            {formatNumber(fileInfo.row_count)} righe
           </span>
         </div>
       )}
@@ -159,7 +161,7 @@ const FileSourceNode = ({ id, data }) => {
               return (
                 <div
                   key={idx}
-                  onClick={() => handleToggleColumn(col.name)}
+                  {...pressable(() => handleToggleColumn(col.name))}
                   className={`file-source-node__column ${col.visible === false ? 'file-source-node__column--hidden' : ''}`}
                   title={getColumnTypeLabel(colType)}
                 >

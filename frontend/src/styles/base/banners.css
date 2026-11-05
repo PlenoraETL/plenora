@@ -20,9 +20,9 @@
 ───────────────────────────────────────────────────────────────────────── */
 
 .plen-banner-warn {
-  background: #fff4e5;
+  background: var(--plen-warn-bg);
   border: 1px solid #d97706;
-  color: #92400e;
+  color: var(--plen-warn);
   border-radius: 4px;
   padding: 8px 10px;
   margin-bottom: 8px;

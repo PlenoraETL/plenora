@@ -25,15 +25,6 @@ describe('api/schedules.js', () => {
     vi.clearAllMocks();
   });
 
-  it('builds schedule download url with and without run parameter', async () => {
-    const { getDownloadUrl } = await import('../../src/api/schedules');
-
-    expect(getDownloadUrl('sch-1')).toBe('/api/schedules/sch-1/download');
-    expect(getDownloadUrl('sch-1', '2026-04-15T10:00:00')).toBe(
-      '/api/schedules/sch-1/download?run=2026-04-15T10:00:00',
-    );
-  });
-
   it('passes page and status filters to getScheduleLogs', async () => {
     httpMock.get.mockResolvedValueOnce({ data: { items: [] } });
     const { getScheduleLogs } = await import('../../src/api/schedules');

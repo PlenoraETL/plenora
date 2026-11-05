@@ -8,6 +8,7 @@ import { useResource } from '../../hooks/useResource';
 import ModalWrapper from '../common/ModalWrapper';
 import { humanizeError } from '../../utils/errorMessages';
 import './TemplateLibraryModal.css';
+import { pressable } from '../../utils/pressable';
 
 const CATEGORIES = {
   all:       { label: 'Tutti',      icon: '⊞' },
@@ -36,7 +37,7 @@ function TemplateCard({ template, onSelect }) {
   const hasAuth = template.config?.auth?.type && template.config.auth.type !== 'none';
 
   return (
-    <div className="tlc" onClick={() => onSelect(template)}>
+    <div className="tlc" {...pressable(() => onSelect(template))}>
       {/* Accent bar */}
       <div className="tlc__bar" style={{ background: colors.accent }} />
 

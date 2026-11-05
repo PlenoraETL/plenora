@@ -106,6 +106,8 @@ export default function EditorToolbar({
 }) {
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const canvasView = useCanvasStore(s => s.canvasView);
+  const canUndo = useCanvasStore(s => (s.past?.length ?? 0) > 0);
+  const canRedo = useCanvasStore(s => (s.future?.length ?? 0) > 0);
   const setCanvasView = useCanvasStore(s => s.setCanvasView);
   const runState = useCanvasStore(s => s.runState);
   // Esegui solo con l'Output montato (e' lui il percorso unico di esecuzione).
@@ -140,6 +142,13 @@ export default function EditorToolbar({
         <span className={`etb__mode etb__mode--${mode}`}>{MODE_LABEL[mode] || mode}</span>
         {leftExtra}
         <SaveIndicator onRetry={onSave} />
+        {/* P29 (Fase 5 T7): Annulla/Ripeti anche col mouse (stesse azioni di Ctrl+Z/Y). */}
+        {!isReadOnly && (
+          <div className="etb-seg" role="group" aria-label="Cronologia delle modifiche">
+            <button type="button" onClick={() => useCanvasStore.getState().undo()} disabled={!canUndo} title="Annulla (Ctrl+Z)" aria-label="Annulla">↶</button>
+            <button type="button" onClick={() => useCanvasStore.getState().redo()} disabled={!canRedo} title="Ripeti (Ctrl+Y)" aria-label="Ripeti">↷</button>
+          </div>
+        )}
       </div>
       <div className="etb__right">
         <div className="etb-seg" role="group" aria-label="Vista">

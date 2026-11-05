@@ -81,7 +81,7 @@ export function outputColumnsAsRead(config, mode) {
   });
 }
 
-export const CERTAIN_STATE = Object.freeze({
+const CERTAIN_STATE = Object.freeze({
   names_status: 'certain', types_status: 'certain', order_status: 'certain', reason: '',
 });
 const DECLARED_STATE = Object.freeze({
@@ -97,7 +97,7 @@ const EMPTY = Object.freeze([]);
 const SIDE_INDEX = { left: 0, right: 1 };
 
 /** Forma unica di una colonna: tutti i lettori ricevono questi campi. */
-export function normalizeColumn(col, sourceNode = null) {
+function normalizeColumn(col, sourceNode = null) {
   if (typeof col === 'string') {
     return { id: null, name: col, type: 'str', source_name: col, source_node: sourceNode, is_calculated: false, optional: false };
   }
@@ -114,7 +114,7 @@ export function normalizeColumn(col, sourceNode = null) {
 }
 
 /** Stato normalizzato di un nodo (certain se il server non ne manda). */
-export function normalizeState(state) {
+function normalizeState(state) {
   if (!state || typeof state !== 'object') return CERTAIN_STATE;
   return {
     names_status: state.names_status === 'indeterminate' ? 'indeterminate' : 'certain',
@@ -341,11 +341,6 @@ export function columnOrigin(snapshot, nodeId, columnId) {
   return visit(nodeId);
 }
 
-/** Colonne aggiunte da un nodo: in uscita, ma non nel suo ingresso (per id). */
-export function addedColumns(snapshot, nodeId) {
-  const inputIds = new Set(columnsOf(snapshot, nodeId, { side: 'input' }).columns.map(c => c.id).filter(Boolean));
-  return outputOf(snapshot, nodeId).columns.filter(c => !c.id || !inputIds.has(c.id));
-}
 
 /**
  * Firma di cio' che decide le colonne: la serializzazione che il backend

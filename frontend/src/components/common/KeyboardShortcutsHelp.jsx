@@ -32,7 +32,7 @@ const SHORTCUTS = [
   },
 ];
 
-export const SHORTCUTS_EVENT = 'plenora:open-shortcuts';
+const SHORTCUTS_EVENT = 'plenora:open-shortcuts';
 
 export default function KeyboardShortcutsHelp() {
   const [open, setOpen] = useState(false);

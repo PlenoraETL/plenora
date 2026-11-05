@@ -13,7 +13,8 @@
 import React from 'react';
 import { MAX_UPLOAD_SIZE_BYTES } from '../../api/uploadGuards';
 import Wizard from '../../components/common/Wizard';
-import { formatFileSize } from './helpers';
+import { formatBytes as formatFileSize } from '../../utils/format';
+import { pressable } from '../../utils/pressable';
 
 function UploadModal({
   step, uploadFile, uploadName, uploadDescription, uploading, uploadError, dragActive,
@@ -30,7 +31,7 @@ function UploadModal({
       <div
         className={`fm__modal-drop${dragActive ? ' fm__modal-drop--active' : ''}`}
         onDragEnter={onDrag} onDragOver={onDrag} onDragLeave={onDrag} onDrop={onDrop}
-        onClick={() => fileInputRef.current?.click()}
+        {...pressable(() => fileInputRef.current?.click())}
       >
         <input ref={fileInputRef} type="file" className="fm__file-input--hidden" onChange={onFileInput}
           accept=".csv,.xlsx,.xls,.json,.geojson,.gpkg,.zip,.gdb,.tar.gz" />
@@ -45,7 +46,7 @@ function UploadModal({
             <div className="fm__modal-drop-icon">↑</div>
             <div className="fm__modal-drop-text">Trascina qui il file oppure clicca</div>
             <div className="fm__modal-drop-sub">
-              Max {Math.round(MAX_UPLOAD_SIZE_BYTES / (1024 * 1024))} MB per file
+              Max {formatFileSize(MAX_UPLOAD_SIZE_BYTES)} per file
             </div>
           </>
         )}
@@ -82,7 +83,7 @@ function UploadModal({
             </div>
             <div className="fm__col-list">
               {availableColumns.map(col => (
-                <div key={col.name} className="fm__col-item" onClick={() => onToggleColumn(col.name)}>
+                <div key={col.name} className="fm__col-item" {...pressable(() => onToggleColumn(col.name))}>
                   <div className={`fm__col-check${selectedColumns.includes(col.name) ? ' fm__col-check--on' : ''}`}>{selectedColumns.includes(col.name) ? '✓' : ''}</div>
                   <span className="fm__col-name">{col.name}</span>
                   <span className="fm__col-type">{col.type}</span>
@@ -101,7 +102,7 @@ function UploadModal({
         <label className="fm__modal-label">Layer disponibili</label>
         <div className="fm__layer-list">
           {availableLayers.map(layer => (
-            <div key={layer} className={`fm__layer-item${checkedLayers[layer] ? ' fm__layer-item--on' : ''}`} onClick={() => onLayerCheck(layer, !checkedLayers[layer])}>
+            <div key={layer} className={`fm__layer-item${checkedLayers[layer] ? ' fm__layer-item--on' : ''}`} {...pressable(() => onLayerCheck(layer, !checkedLayers[layer]))}>
               <div className={`fm__col-check${checkedLayers[layer] ? ' fm__col-check--on' : ''}`}>{checkedLayers[layer] ? '✓' : ''}</div>
               <span className="fm__col-name">{layer}</span>
               {layerSelectedCols[layer]?.length > 0 && <span className="fm__col-type">{layerSelectedCols[layer].length} col.</span>}
@@ -121,7 +122,7 @@ function UploadModal({
           ) : (
             <div className="fm__col-list fm__col-list--mt-sm">
               {(layerColumns[activeLayerTab] || []).map(col => (
-                <div key={col.name} className="fm__col-item" onClick={() => onToggleLayerCol(activeLayerTab, col.name)}>
+                <div key={col.name} className="fm__col-item" {...pressable(() => onToggleLayerCol(activeLayerTab, col.name))}>
                   <div className={`fm__col-check${layerSelectedCols[activeLayerTab]?.includes(col.name) ? ' fm__col-check--on' : ''}`}>
                     {layerSelectedCols[activeLayerTab]?.includes(col.name) ? '✓' : ''}
                   </div>
@@ -141,7 +142,6 @@ function UploadModal({
   const steps = [
     { label: 'File', content: <>{step1Content}{errorBox}</> },
     { label: 'Colonne', content: <>{isMultiLayerFile ? step2Multi : step2Single}{errorBox}</> },
-    { label: 'Conferma', content: null },
   ];
 
   // Annulla come × ed Esc: con un file scelto chiede (regola del Wizard).

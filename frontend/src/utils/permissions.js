@@ -116,8 +116,6 @@ export const can = {
   manageUsers:       isAdminOrAbove,  // admin gestisce solo il proprio gruppo
   manageGroups:      isSuperadmin,    // solo superadmin tocca i gruppi
   deleteGroup:       (u, group) => isSuperadmin(u) && !!group?.group_id && group.group_id !== 'default',
-  assignAdminRole:   isSuperadmin,    // solo superadmin può creare admin/superadmin
-  createEsecutore:   isAdminOrAbove,  // sia superadmin che admin di gruppo
 
   // ── Pagine di sistema (solo superadmin) ──────────────────────────────
   manageObjectStorage: isSuperadmin,  // bonifica orfani, preview, oggetti
@@ -170,8 +168,6 @@ export const CAPABILITY_BACKEND = Object.freeze({
   manageUsers: { file: 'auth/users_router.py', fns: ['create_user', 'update_user', 'delete_user', 'reset_password'], depends: 'require_admin', rule: 'role' },
   manageGroups: { file: 'auth/groups_router.py', fns: ['create_group'], depends: 'require_superadmin', rule: 'role' },
   deleteGroup: { file: 'auth/groups_router.py', fns: ['delete_group'], depends: 'require_superadmin', rule: 'service' },
-  assignAdminRole: { file: 'auth/users_router.py', fns: ['create_user', 'update_user'], depends: 'require_admin', rule: 'service' },
-  createEsecutore: { file: 'auth/users_router.py', fns: ['create_user'], depends: 'require_admin', rule: 'role' },
   manageObjectStorage: { file: 'admin_object_storage/router.py', fns: ['delete_all_previews', 'delete_object'], depends: 'require_superadmin', rule: 'role' },
   manageTaskRuntime: { file: 'admin_task_runtime/router.py', fns: ['resolve_uncertain_carica'], depends: 'require_superadmin', rule: 'role' },
   manageBackups: { file: 'admin_backups/router.py', fns: ['backup_trigger_endpoint'], depends: 'require_superadmin', rule: 'role' },

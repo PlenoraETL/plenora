@@ -40,6 +40,7 @@ import {
 import '../common/FieldInput.css';
 import { restMigrationMessage } from '../../utils/restSecrets';
 import './BeforeRunModal.css';
+import { formatNumber } from '../../utils/format';
 
 // Valori ammessi dal backend per intermediate_mode; '' = non mandarlo
 // (vale l'impostazione globale).
@@ -179,7 +180,7 @@ function EstimateSection({ state, nodeLabel, onRetry }) {
             <span className="before-run__node-title">{nodeLabel(node.node_id)}</span>
             <span>{describeInputRows(node)}</span>
             {node.effective_rows != null && (
-              <span>{Number(node.effective_rows).toLocaleString('it-IT')} righe da arricchire</span>
+              <span>{formatNumber(node.effective_rows)} righe da arricchire</span>
             )}
             <span className="before-run__node-calls">{describeApiCalls(node)}</span>
             {node.reason && <span className="before-run__hint">{node.reason}</span>}

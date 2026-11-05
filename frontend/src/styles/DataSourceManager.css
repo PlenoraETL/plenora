@@ -46,54 +46,16 @@
 
 /* ── Layout root ── */
 .dsm {
-  width: 100vw; height: 100vh; display: flex; overflow: hidden;
+  width: 100%; height: 100vh; display: flex; overflow: hidden;
   background: var(--dsm-bg); color: var(--dsm-text);
   font-family: var(--dsm-font-b); font-size: 13px;
 }
 
 /* ── Sidebar ── */
-.dsm__sidebar {
-  width: var(--dsm-sidebar-w); background: var(--dsm-surface);
-  border-right: 1px solid var(--dsm-border); display: flex;
-  flex-direction: column; flex-shrink: 0; position: relative; overflow: hidden;
-}
-.dsm__sidebar::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg,transparent,var(--dsm-blue),transparent); opacity: .35;
-}
-.dsm__sidebar-logo  { padding: 16px 18px 14px; border-bottom: 1px solid var(--dsm-border); }
-.dsm__sidebar-sub   { font-size: 9px; color: var(--dsm-text-dim); letter-spacing: .14em; text-transform: uppercase; margin-top: 4px; font-family: var(--dsm-font-m); }
-.dsm__sidebar-nav   { padding: 14px 10px; flex: 1; display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
-.dsm__nav-label     { font-size: 9px; letter-spacing: .13em; text-transform: uppercase; color: var(--dsm-text-dim); padding: 10px 8px 5px; font-family: var(--dsm-font-m); }
-.dsm__nav-item      { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 7px; cursor: pointer; color: var(--dsm-text-sub); font-size: 12.5px; font-weight: 500; position: relative; }
-.dsm__nav-item:hover { background: var(--dsm-surface-2); color: var(--dsm-text); }
-.dsm__nav-item--active { background: var(--dsm-blue-dim); color: var(--dsm-text); }
-.dsm__nav-item--active::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 2px; height: 18px; background: var(--dsm-blue); border-radius: 0 2px 2px 0; }
-.dsm__nav-dot             { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--dsm-text-dim); }
-.dsm__nav-dot--estrai      { background: #34C17A; }
-.dsm__nav-dot--manipola    { background: #9B6DFF; }
-.dsm__nav-dot--arricchisci { background: #F5A623; }
-.dsm__sidebar-footer { padding: 12px 10px; border-top: 1px solid var(--dsm-border); }
-.dsm__user-row   { display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 7px; }
-.dsm__user-row:hover { background: var(--dsm-surface-2); }
-.dsm__user-avatar { width: 28px; height: 28px; border-radius: 8px; background: var(--dsm-blue-mid); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; flex-shrink: 0; }
-.dsm__user-name   { font-size: 12px; font-weight: 600; color: var(--dsm-text); }
-.dsm__user-role   { font-size: 10px; color: var(--dsm-text-dim); font-family: var(--dsm-font-m); }
-.dsm__logout-btn  { margin-left: auto; background: transparent; border: none; color: var(--dsm-text-dim); font-size: 14px; cursor: pointer; padding: 4px 6px; border-radius: 5px; }
-.dsm__logout-btn:hover { color: var(--dsm-err); background: rgba(248,113,113,0.08); }
 
 /* ── Main ── */
-.dsm__main    { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.dsm__topbar  { height: var(--dsm-topbar-h); display: flex; align-items: center; padding: 0 28px; gap: 10px; border-bottom: 1px solid var(--dsm-border); background: var(--dsm-bg); flex-shrink: 0; }
-.dsm__back-btn    { padding: 6px 12px; background: transparent; border: 1px solid var(--dsm-border-hi); border-radius: 7px; color: var(--dsm-text-sub); cursor: pointer; font-size: 12px; font-family: var(--dsm-font-b); }
-.dsm__back-btn:hover { background: var(--dsm-surface-2); color: var(--dsm-text); }
-.dsm__page-title  { font-family: var(--dsm-font-d); font-size: 17px; font-weight: 700; letter-spacing: -.02em; flex: 1; }
-.dsm__topbar-right { display: flex; align-items: center; gap: 8px; }
 
 /* Theme toggle */
-.dsm__theme-toggle { display: flex; background: var(--dsm-surface-2); border: 1px solid var(--dsm-border-hi); border-radius: 20px; padding: 3px; }
-.dsm__theme-opt    { padding: 4px 11px; border-radius: 16px; font-size: 11px; font-family: var(--dsm-font-m); color: var(--dsm-text-dim); cursor: pointer; user-select: none; }
-.dsm__theme-opt--on { background: var(--dsm-surface); color: var(--dsm-text); box-shadow: 0 1px 4px rgba(0,0,0,.2); }
 
 /* Buttons */
 .dsm__btn         { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; font-family: var(--dsm-font-b); white-space: nowrap; }
@@ -111,7 +73,7 @@
 .dsm__content::-webkit-scrollbar { width: 4px; }
 .dsm__content::-webkit-scrollbar-thumb { background: var(--dsm-surface-3); border-radius: 9px; }
 .dsm__hex-bg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
-.dsm__grid, .dsm__empty, .dsm__loading, .dsm__error-banner { position: relative; z-index: 1; }
+.dsm__grid, .dsm__loading, .dsm__error-banner { position: relative; z-index: 1; }
 
 /* Error banner */
 .dsm__error-banner { padding: 12px 18px; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); border-radius: 10px; color: var(--dsm-err); font-size: 13px; display: flex; align-items: center; gap: 12px; }
@@ -123,10 +85,6 @@
 @keyframes dsm-spin { to { transform: rotate(360deg); } }
 
 /* Empty */
-.dsm__empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 80px 0; }
-.dsm__empty-icon  { font-size: 48px; opacity: .15; margin-bottom: 16px; }
-.dsm__empty-title { font-family: var(--dsm-font-d); font-size: 18px; font-weight: 700; color: var(--dsm-text); margin-bottom: 8px; }
-.dsm__empty-text  { font-size: 13px; color: var(--dsm-text-dim); max-width: 420px; line-height: 1.6; }
 
 /* ── Cards grid ── */
 .dsm__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
@@ -206,12 +164,8 @@
 
 /* Form fields */
 .dsm__field-group { display: flex; flex-direction: column; gap: 8px; }
-.dsm__row         { display: flex; gap: 12px; }
 .dsm__field       { display: flex; flex-direction: column; gap: 5px; flex: 1; }
-.dsm__field--grow { flex: 2; }
-.dsm__field--sm   { flex: 0 0 90px; }
 .dsm__label       { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dsm-text-dim); font-family: var(--dsm-font-m); }
-.dsm__optional    { font-weight: 400; text-transform: none; letter-spacing: 0; }
 .dsm__hint        { font-size: 10.5px; color: var(--dsm-text-dim); font-family: var(--dsm-font-m); margin-top: 2px; }
 
 .dsm__input, .dsm__select, .dsm__textarea {
@@ -224,8 +178,6 @@
 .dsm__input::placeholder { color: var(--dsm-text-dim); }
 .dsm__textarea { resize: vertical; min-height: 80px; font-family: var(--dsm-font-m); font-size: 11.5px; line-height: 1.6; }
 .dsm__select   { cursor: pointer; }
-
-.dsm__checkboxes { display: flex; gap: 20px; }
 .dsm__check-label { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12px; color: var(--dsm-text-sub); user-select: none; }
 .dsm__check-label input[type='checkbox'] { accent-color: var(--dsm-blue); width: 14px; height: 14px; cursor: pointer; }
 
@@ -265,10 +217,9 @@
 
 /* ── Responsive ── */
 @media (max-width: 900px)  { .dsm__type-grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 600px)  { .dsm__sidebar { display: none; } .dsm__grid { grid-template-columns: 1fr; } .dsm__content { padding: 16px; } .dsm__row { flex-direction: column; } }
+@media (max-width: 600px)  { .dsm__grid { grid-template-columns: 1fr; } .dsm__content { padding: 16px; } }
 
 /* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-002) ──────────── */
-.dsm__btn--mt-lg          { margin-top: 20px; }
 .dsm__field-help-icon     { font-size: 14px; opacity: 0.7; cursor: help; padding: 0 4px; }
 .dsm__lock-badge          { display: inline-flex; align-items: center; justify-content: center; color: var(--dsm-text-dim); }
 .dsm__inline-row          { display: flex; gap: 6px; }
@@ -276,6 +227,5 @@
 
 /* Fase 5 T5 (R8.5): campi dallo schema unico, due colonne. */
 .dsm__schema-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 12px; margin-top: 12px; }
-.dsm__schema-grid .dsm__field--wide { grid-column: 1 / -1; }
 .dsm__schema-grid .dsm__check-label { align-self: end; }
 @media (max-width: 600px) { .dsm__schema-grid { grid-template-columns: 1fr; } }
