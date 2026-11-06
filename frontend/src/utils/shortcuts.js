@@ -42,14 +42,6 @@ export const SHORTCUTS = Object.freeze([
     label: 'Chiudi la finestra o il menu in primo piano',
     match: (e) => e.key === 'Escape',
   },
-  {
-    // Ricerca del browser (conferma A-K6): le liste lunghe
-    // (components/common/VirtualList) si disegnano intere, cosi' la ricerca
-    // trova anche le righe lontane. Nell'editor vale «Cerca un nodo».
-    id: 'find_in_page', group: 'Ovunque', keys: ['⌘/Ctrl', 'F'],
-    label: 'Cerca nella pagina (le liste lunghe si mostrano intere)',
-    match: (e) => mod(e) && !e.shiftKey && !e.altKey && key(e, 'f'),
-  },
 
   // ── Editor ───────────────────────────────────────────────────────────
   {
@@ -101,6 +93,9 @@ export const SHORTCUTS = Object.freeze([
   },
   {
     id: 'search_canvas', group: 'Editor', keys: ['⌘/Ctrl', 'F'],
+    // Fuori dall'editor lo stesso tasto e' la ricerca del browser: le liste
+    // lunghe (components/common/VirtualList) si disegnano intere perche' la
+    // ricerca trovi anche le righe lontane (conferma A-K6).
     label: 'Cerca un nodo nel canvas e vai lì',
     match: (e) => mod(e) && !e.shiftKey && !e.altKey && key(e, 'f'),
   },

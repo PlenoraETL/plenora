@@ -165,7 +165,7 @@ export default function VirtualList({
   useEffect(() => {
     if (!virtual || boxed || renderAll) return undefined;
     const onKey = (e) => {
-      if (!isShortcutBlocked(e) && matchesShortcut('find_in_page', e)) setRenderAll(true);
+      if (!isShortcutBlocked(e) && matchesShortcut('search_canvas', e)) setRenderAll(true);
     };
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
