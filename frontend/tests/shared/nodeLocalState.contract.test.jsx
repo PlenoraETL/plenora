@@ -22,6 +22,7 @@ import useCanvasStore from '../../src/store/useCanvasStore';
 import { useStoreDraft } from '../../src/hooks/useStoreDraft';
 import StaticValuesNode from '../../src/components/nodes/StaticValuesNode';
 import { ToastProvider } from '../../src/context/ToastContext';
+import { ALLOWED } from './canvasRenderRules';
 
 const SRC = path.resolve(import.meta.dirname, '../../src');
 const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
@@ -31,7 +32,10 @@ const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => 
 const COMPONENTS = walk(path.join(SRC, 'components')).concat(walk(path.join(SRC, 'pages')));
 const rel = (p) => path.relative(SRC, p).replace(/\\/g, '/');
 const code = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-const T5_EXCEPTIONS = new Set(); // unione T5+T6: nessuna eccezione (ProjectInputNode rientra nelle regole)
+// Unione T5+T6: nessuna eccezione (ProjectInputNode rientra nelle regole).
+// UI-2: l'unico iscritto al grafo intero e' FlowCanvas di EditorShell, che
+// disegna React Flow (eccezione dichiarata una volta in canvasRenderRules).
+const T5_EXCEPTIONS = new Set(ALLOWED.filter(a => a.whole === 'nodes').map(a => a.file));
 
 describe('regole enumerate su tutti i componenti', () => {
   it('nessuna copia locale dei dati del nodo (useState(data.x) / useState(config.x))', () => {

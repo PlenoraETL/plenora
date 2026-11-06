@@ -17,13 +17,27 @@ import './CompactNode.css';
 
 const POSITION = { left: Position.Left, right: Position.Right, top: Position.Top };
 
-// Handle usati dagli edge collegati a questo nodo, come stringa stabile
-// (il selettore restituisce una stringa: niente re-render a ogni drag).
-const connectedHandlesKey = (id) => (state) => state.edges
-  .filter(e => e.source === id || e.target === id)
-  .map(e => (e.source === id ? `source|${e.sourceHandle || ''}` : `target|${e.targetHandle || ''}`))
-  .sort()
-  .join(';');
+// Handle usati dagli edge collegati, per nodo, come stringa stabile (il
+// selettore restituisce una stringa: niente re-render a ogni drag). UI-2
+// (V5): la mappa di TUTTI i nodi si calcola una volta per array di archi;
+// ogni nodo la legge in tempo costante (prima: ogni nodo scorreva tutti gli
+// archi a ogni aggiornamento, O(N·E) per fotogramma).
+const handlesIndexCache = new WeakMap();
+function connectedHandlesIndex(edges) {
+  const list = edges || [];
+  let index = handlesIndexCache.get(list);
+  if (index) return index;
+  const parts = new Map();
+  const add = (id, key) => { if (!parts.has(id)) parts.set(id, []); parts.get(id).push(key); };
+  for (const e of list) {
+    add(e.source, `source|${e.sourceHandle || ''}`);
+    if (e.target !== e.source) add(e.target, `target|${e.targetHandle || ''}`);
+  }
+  index = new Map([...parts].map(([id, keys]) => [id, keys.sort().join(';')]));
+  handlesIndexCache.set(list, index);
+  return index;
+}
+const connectedHandlesKey = (id) => (state) => connectedHandlesIndex(state.edges).get(id) || '';
 
 export function mergeHandles(defaults, connectedKey, nextFreeInput) {
   const byKey = new Map(defaults.map(h => [`${h.type}|${h.id || ''}`, h]));

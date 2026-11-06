@@ -368,7 +368,7 @@ describe('sottoscrizione unica', () => {
     ['modifica e Annulla',
       cs => cs.getState().updateNodeData('e', { output_mapping: [{ path: 'x', column: 'z' }] }),
       cs => cs.getState().undo()],
-  ])('risposta scartata e ritorno alla STESSA firma (%s): si richiede, niente "in calcolo" per sempre', async (_, away, back) => {
+  ])('risposta scartata e ritorno alla STESSA firma (%s): la mappa della sua firma dalla cache, senza richiesta e mai "in calcolo" per sempre', async (_, away, back) => {
     vi.useFakeTimers();
     let release;
     const fetchSchemas = vi.fn()
@@ -389,10 +389,12 @@ describe('sottoscrizione unica', () => {
     expect(columnSignature(canvasStore.getState().nodes, canvasStore.getState().edges)).toBe(k1);
     await vi.advanceTimersByTimeAsync(250);
     const st = columnStore.getState();
-    expect(fetchSchemas).toHaveBeenCalledTimes(2);
+    // UI-2 (C12): la risposta scartata dallo store e' entrata nella cache
+    // delle mappe della SUA firma; tornati a quella firma si usa subito.
+    expect(fetchSchemas).toHaveBeenCalledTimes(1);
     expect(st.status).toBe('ok');
     expect(st.key).toBe(k1);
-    expect(st.schemas.e[0].name).toBe('k1-di-nuovo');
+    expect(st.schemas.e[0].name).toBe('k1');
     stop();
   });
 

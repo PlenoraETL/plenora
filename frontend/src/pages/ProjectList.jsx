@@ -35,6 +35,11 @@ import { projectEditorPath } from '../utils/projectRoutes';
 import { formatDateTime } from '../utils/format';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
+import VirtualList from '../components/common/VirtualList';
+
+// Griglia delle card (stessa di .pl__cards-grid): oltre la soglia di
+// VirtualList si disegnano solo le righe visibili (UI-2, V9).
+const CARD_GRID = { className: 'pl__cards-grid', minColumnWidth: 285, gap: 12, estimatedItemHeight: 190, itemKey: p => p.id };
 // Sezioni della dashboard raggiungibili dalla sidebar (hash dell'URL).
 const DASHBOARD_SECTIONS = { estrai: 'Estrai', manipola: 'Manipola', arricchisci: 'Arricchisci' };
 
@@ -208,17 +213,28 @@ function ProjectList() {
     setShowModal(true);
   };
 
-  const getConn = id =>
-    connections.find(c => c.id === id) || arcgisConnections.find(c => c.id === id);
+  // UI-2 (V11): mappe per id calcolate una volta per lista, non una
+  // ricerca lineare per ogni card.
+  const connById = useMemo(
+    () => new Map([...arcgisConnections, ...connections].map(c => [c.id, c])),
+    [connections, arcgisConnections],
+  );
+  const getConn = id => connById.get(id);
 
-  const getProjectById = id => projects.find(p => p.id === id);
+  const projectById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
+  const getProjectById = id => projectById.get(id);
 
   const getSourceProjects = pid => (projectSources[pid] || []).map(getProjectById).filter(Boolean);
 
-  const getScheduleCount = useCallback(
-    pid => schedules.filter(s => s.pipeline?.project_id === pid).length,
-    [schedules]
-  );
+  const scheduleCountByProject = useMemo(() => {
+    const out = new Map();
+    for (const s of schedules) {
+      const pid = s.pipeline?.project_id;
+      if (pid) out.set(pid, (out.get(pid) || 0) + 1);
+    }
+    return out;
+  }, [schedules]);
+  const getScheduleCount = useCallback(pid => scheduleCountByProject.get(pid) || 0, [scheduleCountByProject]);
 
   const activeSchedules = useMemo(() => schedules.filter(s => s.schedule?.enabled), [schedules]);
 
@@ -421,7 +437,7 @@ function ProjectList() {
             emptyTitle={emptyFor('Estrai').title}
             emptyText={emptyFor('Estrai', 'Crea il tuo primo progetto per estrarre dati').text}
           >
-            {shownEstrai.map(project => {
+            <VirtualList {...CARD_GRID} label="Progetti Estrai" items={shownEstrai} renderItem={(project) => {
               const conn = getConn(project.default_connection_id);
               return (
                 <ProjectCard
@@ -443,7 +459,7 @@ function ProjectList() {
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
-            })}
+            }} />
           </ProjectSection>}
 {showSection('manipola') && <ProjectSection
             id="pl-section-manipola"
@@ -457,7 +473,7 @@ function ProjectList() {
             emptyTitle={emptyFor('Manipola').title}
             emptyText={emptyFor('Manipola', 'Crea un pipeline di trasformazione').text}
           >
-            {shownManipola.map(project => {
+            <VirtualList {...CARD_GRID} label="Progetti Manipola" items={shownManipola} renderItem={(project) => {
               const srcProjects = getSourceProjects(project.id);
               const fileIds = projectFileSources[project.id] || [];
               const fileNames = fileIds.map(id => fileNameById.get(id)).filter(Boolean);
@@ -482,7 +498,7 @@ function ProjectList() {
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
-            })}
+            }} />
           </ProjectSection>}
 {showSection('arricchisci') && <ProjectSection
             id="pl-section-arricchisci"
@@ -496,7 +512,7 @@ function ProjectList() {
             emptyTitle={emptyFor('Arricchisci').title}
             emptyText={emptyFor('Arricchisci', 'Crea un nuovo pipeline di arricchimento').text}
           >
-            {shownArricchisci.map(project => (
+            <VirtualList {...CARD_GRID} label="Progetti Arricchisci" items={shownArricchisci} renderItem={(project) => (
               <ProjectCard
                 key={project.id}
                 project={project}
@@ -515,7 +531,7 @@ function ProjectList() {
                 onSetTags={can.editProjectMeta(user, project) ? (tags) => handleSetTags(project, tags) : null}
                 onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
               />
-            ))}
+            )} />
           </ProjectSection>}
             </>
           )}

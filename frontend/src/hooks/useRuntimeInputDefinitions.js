@@ -49,8 +49,10 @@ export default function useRuntimeInputDefinitions(nodes) {
   const inputsKey = JSON.stringify(inputNodes.map(n => [n.id, n.data]));
   // Set di connessioni condivisi (utils/connectionSets) dall'hook comune
   // (Fase 5 T2): chiesti solo se un input e' di tipo connessione; un errore
-  // si riprova con «Riprova» nella finestra (reload) o cambiando gli input.
-  const sets = useResource(loadSharedConnectionSets, { key: ['connection-sets', inputsKey], enabled: needsSets, keepPreviousData: true });
+  // si riprova con «Riprova» nella finestra (reload). La chiave NON contiene
+  // gli input (UI-2, C16): scrivere nel nodo di input non rilancia la
+  // richiesta; i set servono interi, gli input li scelgono qui sotto.
+  const sets = useResource(loadSharedConnectionSets, { key: 'connection-sets', enabled: needsSets, keepPreviousData: true });
   const connectionSets = sets.data || EMPTY;
   const setsError = sets.status === 'error' ? sets.error : null;
   const reloadSets = sets.reload;

@@ -19,6 +19,7 @@ vi.mock('../../src/api/enrichment', async (orig) => ({
 import useCanvasStore from '../../src/store/useCanvasStore';
 import PipelineRunner from '../../src/components/editor/PipelineRunner';
 import { preflightEnrichment } from '../../src/api/enrichment';
+import { validateProjectCanvas } from '../../src/api/projects';
 import { BEFORE_RUN_REASONS, beforeRunReasons } from '../../src/utils/beforeRun';
 
 /**
@@ -378,5 +379,45 @@ describe('enumeration: one window, one path', () => {
       expect(src).toMatch(/execution\.handleExecute\(/);
       expect(src).not.toMatch(/useRuntimeInputDefinitions/);
     });
+  });
+});
+
+// UI-2 (06/11/2026, C18): una validazione RIUSCITA della stessa versione
+// salvata, fatta da poco, vale per Esegui e Anteprima; «Valida» chiede sempre.
+describe('validazione riusata (C18)', () => {
+  const action = name => act(async () => { await useCanvasStore.getState().getEditorAction(name)(); });
+
+  it('Anteprima e poi Esegui sulla stessa versione salvata: una sola validazione', async () => {
+    validateProjectCanvas.mockClear();
+    openEditor('manipola');
+    const onPreview = vi.fn();
+    useCanvasStore.getState().setEditorActions({ onPreview });
+    await action('previewWithValidation');
+    await run();
+    expect(onPreview).toHaveBeenCalledTimes(1);
+    expect(onExecute).toHaveBeenCalledTimes(1);
+    expect(validateProjectCanvas).toHaveBeenCalledTimes(1);
+  });
+
+  it('«Valida» chiede sempre al server', async () => {
+    validateProjectCanvas.mockClear();
+    openEditor('manipola');
+    await action('onValidate');
+    await action('onValidate');
+    expect(validateProjectCanvas).toHaveBeenCalledTimes(2);
+  });
+
+  it('versione salvata diversa o esito con errori: si rivalida', async () => {
+    validateProjectCanvas.mockClear();
+    openEditor('manipola');
+    await run();
+    act(() => useCanvasStore.setState({ canvasVersion: 'c2:b' }));
+    await run();
+    expect(validateProjectCanvas).toHaveBeenCalledTimes(2);
+    validateProjectCanvas.mockResolvedValueOnce({ valid: false, has_errors: true, issues: [{ node_id: 'o', severity: 'error', code: 'x', message: 'no' }] });
+    act(() => useCanvasStore.setState({ canvasVersion: 'c3:c' }));
+    await run();
+    await run();
+    expect(validateProjectCanvas).toHaveBeenCalledTimes(4);
   });
 });

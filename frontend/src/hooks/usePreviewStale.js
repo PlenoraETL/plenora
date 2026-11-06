@@ -25,7 +25,8 @@ export function usePreviewStale(shownKey) {
     if (!shownKey) return undefined;
     let timer = null;
     const unsubscribe = useCanvasStore.subscribe((s, prev) => {
-      if (s.nodes === prev.nodes && s.edges === prev.edges) return;
+      // Solo il contenuto (store/graphRevisions): spostare non conta.
+      if (s.contentRev === prev.contentRev) return;
       clearTimeout(timer);
       timer = setTimeout(() => setStale(currentCanvasContentKey() !== shownKey), STALE_CHECK_MS);
     });

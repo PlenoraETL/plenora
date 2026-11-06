@@ -15,13 +15,15 @@ import { CanvasGraphContext } from './CanvasGraphContext';
 import { nodeDescriptor, nodeIcon, nodeTitle } from './nodeDescriptors';
 import './StepsView.css';
 import { useNodesContent } from '../../hooks/useColumns';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 const LANE_TITLE = { source: 'Ramo da', join: 'Da più ingressi:', fork: 'Dopo il bivio:' };
 
 export default function StepsView({ onAddAfter, edgeInspector = null }) {
   const graph = useContext(CanvasGraphContext);
   const nodes = useNodesContent();
-  const edges = useCanvasStore(s => s.edges);
+  // Gli archi si rileggono col contenuto, non con la selezione (UI-2).
+  const edges = useCanvasDerived(s => s.edges);
   const selectEdge = useCanvasStore(s => s.selectEdge);
   const focusNodeId = useCanvasStore(s => s.focusNodeId);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);

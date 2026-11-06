@@ -25,6 +25,7 @@ import { requestCanvasDeletion } from '../../utils/canvasDeletion';
 import { READ_ONLY_SAFE, useReadOnlyLock } from '../common/readOnlySafe';
 import GuideModal from '../common/GuideModal';
 import { IDENTITY_EXAMPLE, UTENTE_CHE_ESEGUE_GUIDE } from '../../utils/guides/utenteCheEsegue';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 const INPUT_TYPES = Object.entries(INPUT_KIND_LABELS);
 
@@ -110,7 +111,7 @@ function ProjectInputNode({ id, data }) {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   // Nodi senza posizioni (R9-U N6): un trascinamento non ridisegna il form.
   const nodes = useNodesContent();
-  const edges = useCanvasStore(s => s.edges);
+  const edges = useCanvasDerived(s => s.edges);
   const editGraph = useCanvasStore(s => s.editGraph);
   const confirm = useConfirmOrDeny();
   const updateEdge = useCanvasStore(s => s.updateEdge);

@@ -45,7 +45,7 @@ const MODULE_STATE = [
 const NOT_USER_DATA = {
   'hooks/useTransformRegistry.js': 'insieme dei setter dei componenti montati (avviso quando il catalogo arriva): nessun dato dell utente, il catalogo vive in utils/transformRegistry che e registrato',
   'components/canvas/compactNodeTypes.js': 'WeakMap con chiave i tipi di nodo: muore con gli oggetti',
-  'store/saveState.js': 'WeakMap delle firme con chiave gli array del canvas: muore con gli oggetti',
+  'components/canvas/CompactNode.jsx': 'WeakMap dell\'indice delle maniglie con chiave gli array degli archi (UI-2): muore con gli oggetti',
   'utils/format.js': 'formattatori Intl per opzioni (locale fissa it-IT): nessun dato dell\'utente',
   'context/ToastContext.jsx': 'contatore degli id dei toast',
   'hooks/useTheme.js': 'tema chiaro/scuro: preferenza del dispositivo, non dell\'account',

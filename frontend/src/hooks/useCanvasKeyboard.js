@@ -41,6 +41,9 @@ export function useCanvasKeyboard(options) {
     onUndo,          // #24: Ctrl/Cmd+Z
     onRedo,          // #24: Ctrl/Cmd+Shift+Z o Ctrl/Cmd+Y
     onBeforeDelete,  // #24: snapshot pre-delete (per rendere annullabile la cancellazione)
+    // UI-2 (V4): lettura del grafo al momento del tasto (lo store), senza
+    // passare nodes/edges dal render dell'editor.
+    getCanvas = null,
   } = options;
 
   // Pre-fix (P2 frontend-hooks): `handleKeyDown` aveva `[nodes,
@@ -56,6 +59,9 @@ export function useCanvasKeyboard(options) {
   const edgesRef = useRef(edges);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
+  const getCanvasRef = useRef(getCanvas);
+  getCanvasRef.current = getCanvas;
+  const readCanvas = () => (getCanvasRef.current ? getCanvasRef.current() : { nodes: nodesRef.current, edges: edgesRef.current });
 
   // Cancellazione: conferma con il dialog del progetto (utils/canvasDeletion).
   const confirm = useOptionalConfirm();
@@ -94,8 +100,9 @@ export function useCanvasKeyboard(options) {
       // Regola unica (utils/canvasDeletion): in sola lettura niente conferma
       // e niente cancellazione.
       if (!canDeleteFromCanvas()) return;
-      const selectedNodes = nodesRef.current.filter(n => n.selected);
-      const selectedEdges = edgesRef.current.filter(e => e.selected);
+      const graph = readCanvas();
+      const selectedNodes = (graph.nodes || []).filter(n => n.selected);
+      const selectedEdges = (graph.edges || []).filter(e => e.selected);
       if ((selectedNodes.length === 0 && selectedEdges.length === 0) || deletingRef.current) return;
       event.preventDefault();
       deletingRef.current = true;
@@ -109,7 +116,7 @@ export function useCanvasKeyboard(options) {
           onBeforeDelete?.();
           if (onDeleteNode) selectedNodes.forEach(node => onDeleteNode(node.id));
           // Gli archi selezionati non gia' tolti con i loro nodi.
-          const alive = new Set(edgesRef.current.map(e => e.id));
+          const alive = new Set((readCanvas().edges || []).map(e => e.id));
           const ids = selectedEdges.map(e => e.id).filter(id => alive.has(id));
           if (ids.length && onDeleteEdges) onDeleteEdges(ids);
         },

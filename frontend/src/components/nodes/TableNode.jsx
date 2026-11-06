@@ -20,6 +20,7 @@ import { pressable } from '../../utils/pressable';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 import SearchField, { SearchEmpty } from '../common/SearchField';
 import { useSearch } from '../../hooks/useSearch';
+import VirtualList from '../common/VirtualList';
 
 /**
  * Componente nodo tabella personalizzato
@@ -204,9 +205,12 @@ const TableNode = memo(({ data, id }) => {
         ) : displayColumns.length === 0 ? (
           <div className="table-node__empty-message">Nessuna colonna</div>
         ) : (
-          displayColumns.map((column) => (
+          // Tabelle larghe: oltre la soglia solo le righe visibili (UI-2, V9).
+          <VirtualList
+            items={displayColumns} itemKey={column => column._origIndex}
+            estimatedItemHeight={26} maxHeight={420} label="Colonne della tabella"
+            renderItem={(column) => (
             <div
-              key={column._origIndex}
               className={`table-node__column ${!isColumnVisible(column) ? 'table-node__column--hidden' : ''}`}
             >
               {/* Checkbox visibilità */}
@@ -273,7 +277,8 @@ const TableNode = memo(({ data, id }) => {
                 </span>
               )}
             </div>
-          ))
+            )}
+          />
         )}
 
         {/* Bottone espandi/collassa */}

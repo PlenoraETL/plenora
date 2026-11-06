@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { revisionsFor } from '../../src/store/graphRevisions';
 
 const { previewProjectMock, saveMock, state, listeners } = vi.hoisted(() => ({
   previewProjectMock: vi.fn(),
@@ -8,10 +9,11 @@ const { previewProjectMock, saveMock, state, listeners } = vi.hoisted(() => ({
   state: { nodes: [], edges: [], isDirty: false, pendingSync: false, isReadOnly: false },
   listeners: new Set(),
 }));
-// Cambia lo stato del canvas finto e avvisa gli iscritti (come zustand).
+// Cambia lo stato del canvas finto e avvisa gli iscritti (come zustand),
+// con i contatori delle modifiche che tiene lo store vero (graphRevisions).
 const changeCanvas = (patch) => {
   const prev = { ...state };
-  Object.assign(state, patch);
+  Object.assign(state, patch, revisionsFor(prev, patch) || {});
   listeners.forEach(fn => fn({ ...state }, prev));
 };
 

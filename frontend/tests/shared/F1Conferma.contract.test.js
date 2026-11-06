@@ -24,6 +24,7 @@ describe('giro di conferma F1/G', () => {
 
   it('la cancellazione nativa di React Flow e\' spenta: si cancella solo dal nostro gestore o da "Elimina passo"', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../src/components/editor/EditorShell.jsx'), 'utf-8');
-    expect(src).toMatch(/deleteKeyCode=\{null\}/);
+    // Prop di React Flow (UI-2: raccolte in flowProps di FlowCanvas).
+    expect(src).toMatch(/deleteKeyCode(=\{null\}|: null)/);
   });
 });

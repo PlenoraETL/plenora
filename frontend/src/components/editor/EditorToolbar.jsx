@@ -17,6 +17,7 @@ import { ColumnSyncBadge } from '../common/ColumnStatusNote';
 import { term } from '../../utils/glossary';
 import { isShortcutBlocked } from '../../utils/dialogStack';
 import './EditorToolbar.css';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 const MODE_LABEL = { estrai: 'ESTRAI', manipola: 'MANIPOLA', arricchisci: 'ARRICCHISCI' };
 
@@ -112,11 +113,12 @@ export default function EditorToolbar({
   const runState = useCanvasStore(s => s.runState);
   // Esegui solo con l'Output montato (e' lui il percorso unico di esecuzione).
   const runReady = useCanvasStore(s => s.runReady);
-  const hasOutput = useCanvasStore(s => s.nodes.some(n => n.type === 'result' || n.type === 'resultNode'));
-  const selectedId = useCanvasStore(s => {
+  // UI-2 (V5): riletti solo quando cambiano struttura o selezione.
+  const hasOutput = useCanvasDerived(s => s.nodes.some(n => n.type === 'result' || n.type === 'resultNode'), { on: 'structure' });
+  const selectedId = useCanvasDerived(s => {
     const sel = s.nodes.filter(n => n.selected);
     return sel.length === 1 ? sel[0].id : null;
-  });
+  }, { on: 'selection' });
   const busy = runState === 'starting' || runState === 'running' || executing;
   // Gli errori del percorso di esecuzione sono mostrati da ResultNode
   // (finestra di validazione): qui non resta nessuna promessa rifiutata.

@@ -92,9 +92,48 @@ class SchemaInferenceService:
         call._sql_providers = {}
         return call
 
-    def infer_schemas_response(self, project_id: str, canvas: Optional[CanvasState] = None) -> JsonObject:
-        """Colonne e stati provengono dalla medesima chiamata isolata."""
-        call = self._new_call()
+    def begin_call(self) -> "SchemaInferenceService":
+        """Una chiamata isolata da condividere fra i passi di UNA richiesta.
+
+        UI-2 (06/11/2026, C15): POST /schemas preparava il canvas (colonne
+        dell'Output via compute_result_columns) e poi rifaceva da capo
+        l'inferenza di tutto il grafo. Con la stessa chiamata il secondo
+        passo riusa gli schemi gia' calcolati dei nodi che la preparazione
+        non ha toccato (``forget_downstream``).
+        """
+        return self._new_call()
+
+    def forget_downstream(self, canvas: Any, node_ids: set[str]) -> None:
+        """Toglie dalle cache i nodi indicati e tutti quelli a valle.
+
+        Regola: uno schema in cache resta valido solo se ne' il nodo ne'
+        nessun suo antenato e' cambiato dopo il calcolo. Chi modifica un
+        nodo (la preparazione scrive ``result.columns``) dichiara quale.
+        """
+        downstream: Dict[str, List[str]] = {}
+        for edge in getattr(canvas, "edges", []) or []:
+            downstream.setdefault(edge.source, []).append(edge.target)
+        stale, frontier = set(), list(node_ids)
+        while frontier:
+            node_id = frontier.pop()
+            if node_id in stale:
+                continue
+            stale.add(node_id)
+            frontier.extend(downstream.get(node_id, []))
+        for cache in (self._schema_cache, self._status_cache, self._types_status_cache, self._order_status_cache):
+            for node_id in stale:
+                cache.pop(node_id, None)
+        self._independent_outputs -= stale
+
+    def infer_schemas_response(
+        self, project_id: str, canvas: Optional[CanvasState] = None, *, call: "SchemaInferenceService | None" = None,
+    ) -> JsonObject:
+        """Colonne e stati provengono dalla medesima chiamata isolata.
+
+        ``call`` (da ``begin_call``): la chiamata gia' usata dalla
+        preparazione della stessa richiesta, con le cache dei nodi validi.
+        """
+        call = call if call is not None else self._new_call()
         schemas = call._infer_all_schemas(project_id, canvas)
         states = {}
         for node_id, columns in schemas.items():

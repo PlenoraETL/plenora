@@ -7,7 +7,6 @@
  * data (>, <, BETWEEN con datepicker), geometry (ST_IsValid...).
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { columnTypeFamily, getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -18,6 +17,7 @@ import {
 } from '../../utils/runtimeBindingEdges';
 import './FilterModal.css';
 import { termName } from '../../utils/glossary';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 /**
  * Modal per configurare filtri WHERE su una tabella
@@ -34,9 +34,9 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
   const editEdges = useCanvasStore(state => state.editEdges);
   // Solo gli input scalari (id e dati), non tutti i nodi con le posizioni:
   // un trascinamento non ridisegna la finestra (R9-U N6).
-  const scalarFlat = useCanvasStore(useShallow(state => (state.nodes || [])
+  const scalarFlat = useCanvasDerived(state => (state.nodes || [])
     .filter(isScalarProjectInputNode)
-    .flatMap(node => [node.id, node.data])));
+    .flatMap(node => [node.id, node.data]));
   const scalarInputs = useMemo(() => {
     const out = [];
     for (let i = 0; i < scalarFlat.length; i += 2) out.push({ id: scalarFlat[i], type: 'project_input', data: scalarFlat[i + 1] });

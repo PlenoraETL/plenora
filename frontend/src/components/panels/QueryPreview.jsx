@@ -10,22 +10,25 @@
  * Qui non si ricostruisce niente: si mostra la risposta.
  *
  * La richiesta parte dopo una pausa nelle modifiche, sull'impronta del
- * contenuto (utils/canvasContentKey: spostare i nodi non la rifa'); l'id di
- * richiesta di useResource fa vincere l'ultima.
+ * contenuto (utils/canvasContentKey: spostare i nodi non la rifa'); la
+ * richiesta superata si annulla (segnale di useResource) e vince l'ultima.
  */
 import React, { useMemo, useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import useCanvasStore from '../../store/useCanvasStore';
 import { previewProjectQuery } from '../../api';
 import { useResource } from '../../hooks/useResource';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { canvasContentKey } from '../../utils/canvasContentKey';
+import { currentCanvasContentKey } from '../../hooks/usePreviewStale';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 import { serializeCanvas } from '../../utils/canvasSerializer';
 import { ResourceError } from '../common/ListState';
 import '../common/ListState.css';
 import './QueryPreview.css';
 import { term } from '../../utils/glossary';
 import { pressable } from '../../utils/pressable';
+
+// Pausa dopo l'ultima modifica prima di chiedere la query.
+const QUERY_PREVIEW_DELAY_MS = 400;
 
 const formatValue = (value) => {
   if (value === null || value === undefined) return 'NULL';
@@ -46,24 +49,25 @@ function QueryPreview() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
-  // Solo id, tipo e dati dei nodi (non le posizioni): un trascinamento non
-  // ricalcola l'impronta.
-  const flat = useCanvasStore(useShallow(s => (s.nodes || []).flatMap(n => [n.id, n.type, n.data])));
-  const edges = useCanvasStore(s => s.edges);
-  const contentKey = useMemo(() => {
-    const nodes = [];
-    for (let i = 0; i < flat.length; i += 3) nodes.push({ id: flat[i], type: flat[i + 1], data: flat[i + 2] });
-    return canvasContentKey(nodes, edges);
-  }, [flat, edges]);
-  const { value: settledKey } = useDebouncedValue(contentKey, 400);
-  const hasNodes = useCanvasStore(s => (s.nodes || []).some(n => n.type !== 'comment'));
+  const graphLoaded = useCanvasStore(s => s.graphLoaded);
+  // UI-2 (V7, C14): si aspetta la pausa sul CONTATORE del contenuto (store/
+  // graphRevisions, un numero), poi si legge l'impronta una volta sola: la
+  // stessa, memorizzata, della mappa delle colonne (utils/canvasContentKey).
+  // Niente serializzazione a ogni tasto ne' a ogni fotogramma.
+  const contentRev = useCanvasStore(s => s.contentRev);
+  const { value: settledRev } = useDebouncedValue(contentRev, QUERY_PREVIEW_DELAY_MS);
+  // Anche all'apertura (graphLoaded): la prima richiesta porta gia' la
+  // firma del canvas caricato, e la pausa dopo non la ripete.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const settledKey = useMemo(() => currentCanvasContentKey(), [settledRev, projectId, graphLoaded]);
+  const hasNodes = useCanvasDerived(s => (s.nodes || []).some(n => n.type !== 'comment'), { on: 'structure' });
 
   const query = useResource(({ signal }) => {
     const st = useCanvasStore.getState();
     return previewProjectQuery(st.projectId, serializeCanvas(st.nodes, st.edges), { signal });
   }, {
     key: ['estrai-query-preview', projectId, settledKey],
-    enabled: Boolean(projectId) && hasNodes,
+    enabled: Boolean(projectId) && graphLoaded && hasNodes,
     keepPreviousData: true,
   });
   const result = query.data || null;
@@ -86,7 +90,7 @@ function QueryPreview() {
   }, [hasNodes, result, query.initialLoading]);
   const highlighted = useMemo(() => (sql ? highlightSQL(sql) : null), [sql]);
 
-  const resultInfo = useCanvasStore(s => {
+  const resultInfo = useCanvasDerived(s => {
     const out = (s.nodes || []).find(n => n.type === 'resultNode');
     return out ? `${out.data?.fileName || 'output'}.${out.data?.format || 'csv'}` : null;
   });

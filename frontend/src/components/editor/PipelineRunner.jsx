@@ -59,21 +59,47 @@ import { nodeTitle } from '../canvas/nodeDescriptors';
 import useCanvasStore from '../../store/useCanvasStore';
 import { requestErrorMessage, backendMessage } from '../../utils/errorMessages';
 import { restMigrationIssues } from '../../utils/restSecrets';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 const OUTPUT_TYPES = new Set(['result', 'resultNode']);
 const outputId = (nodes) => (nodes || []).find(n => OUTPUT_TYPES.has(n.type))?.id || null;
 
+// Riuso di una validazione riuscita (UI-2, C18): stessa versione salvata
+// (token canvas_version del server, Blocco A regola 8) entro questo tempo.
+const VALIDATION_REUSE_MS = 60_000;
+
+/** La validazione riuscita di questa versione salvata, se ancora recente. */
+function reusableValidation() {
+  const st = useCanvasStore.getState();
+  const last = st.lastValidation;
+  if (!last || !st.canvasVersion || last.projectId !== st.projectId || last.canvasVersion !== st.canvasVersion) return null;
+  return Date.now() - last.at <= VALIDATION_REUSE_MS ? last.result : null;
+}
+
 // Il backend valida il canvas SALVATO; `before` decide come ci si arriva.
-// null = l'utente ha annullato.
-async function validateViaBackend(before) {
+// null = l'utente ha annullato. `reuse` (Esegui, Anteprima): una
+// validazione RIUSCITA della stessa versione salvata, fatta da poco, vale
+// ancora (niente seconda richiesta per «Anteprima» e poi «Esegui»); il
+// server ricontrolla comunque all'avvio. «Valida» chiede sempre.
+async function validateViaBackend(before, { reuse = false } = {}) {
   try {
     if ((await before()) === false) return null;
   } catch (e) {
     console.error('Salvataggio prima della validazione fallito:', e);
     return saveFailedResult(e);
   }
+  if (reuse) {
+    const reused = reusableValidation();
+    if (reused) return reused;
+  }
   try {
-    return backendReportToResult(await validateProjectCanvas(useCanvasStore.getState().projectId));
+    const { projectId, canvasVersion } = useCanvasStore.getState();
+    const result = backendReportToResult(await validateProjectCanvas(projectId));
+    const st = useCanvasStore.getState();
+    if (st.projectId === projectId && st.canvasVersion === canvasVersion) {
+      st.setLastValidation?.(result.isValid && canvasVersion ? { projectId, canvasVersion, at: Date.now(), result } : null);
+    }
+    return result;
   } catch (e) {
     console.error('Validazione backend fallita:', e);
     return validationRequestFailedResult();
@@ -145,7 +171,8 @@ export default function PipelineRunner({ user = null }) {
   const [shown, setShown] = useState(null);
   // Finestra «Prima di avviare»: null = chiusa.
   const [request, setRequest] = useState(null);
-  const inputsSignature = useCanvasStore(inputNodesKey);
+  // Ricalcolata solo quando cambia il contenuto (UI-2: prima a ogni fotogramma).
+  const inputsSignature = useCanvasDerived(inputNodesKey);
   const inputNodes = useMemo(
     () => JSON.parse(inputsSignature).map(([id, data]) => ({ id, type: 'project_input', data })),
     [inputsSignature],
@@ -239,7 +266,7 @@ export default function PipelineRunner({ user = null }) {
     // 'starting' finche' l'utente avvia o annulla.
     let windowOpen = false;
     try {
-      const result = await validateViaBackend(saveForRun);
+      const result = await validateViaBackend(saveForRun, { reuse: true });
       if (!result) return;
       broadcastHighlights(result);
       if (!result.isValid) { setShown(result); return; }
@@ -292,7 +319,7 @@ export default function PipelineRunner({ user = null }) {
   }, [request]);
 
   const preview = useCallback((id) => oneRead(async () => {
-    const result = await validateViaBackend(() => saveBeforeServerRead("L'anteprima"));
+    const result = await validateViaBackend(() => saveBeforeServerRead("L'anteprima"), { reuse: true });
     if (!result) return;
     broadcastHighlights(result);
     if (!result.isValid) { setShown(result); return; }

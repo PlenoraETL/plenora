@@ -18,7 +18,7 @@ const { updateCanvasMock } = vi.hoisted(() => ({ updateCanvasMock: vi.fn() }));
 vi.mock('../../src/api', () => ({ updateCanvas: updateCanvasMock, inferProjectSchemas: vi.fn() }));
 
 import useCanvasStore from '../../src/store/useCanvasStore';
-import useColumnStore, { SAVE_COLUMNS_TIMEOUT_MS, startColumnSync } from '../../src/store/useColumnStore';
+import useColumnStore, { SAVE_COLUMNS_TIMEOUT_MS, clearColumnCache, startColumnSync } from '../../src/store/useColumnStore';
 import { columnSignature } from '../../src/utils/columnSource';
 
 const NODES = [
@@ -63,6 +63,9 @@ beforeEach(() => {
   updateCanvasMock.mockReset();
   updateCanvasMock.mockResolvedValue({ updated_at: 'now' });
   useCanvasStore.getState().reset();
+  // Ogni test e' una sessione nuova: la cache delle mappe per firma (UI-2,
+  // C12) non passa da un test all'altro.
+  clearColumnCache();
 });
 afterEach(() => {
   stop?.();

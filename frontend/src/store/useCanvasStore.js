@@ -29,6 +29,7 @@ import { requestErrorMessage } from '../utils/errorMessages';
 import { registerSessionReset } from '../utils/session';
 import { FRONTEND_ENV } from '../config/runtimeEnv';
 import { currentTypingKey, onEndTyping } from './typingAction';
+import { graphRevisions, INITIAL_REVISIONS } from './graphRevisions';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
@@ -63,7 +64,9 @@ function patchScope(scope, nodeId, updates) {
  */
 export const createCanvasStore = () => create(
   devtools(
-    (set, get) => {
+    // Contatori delle modifiche del grafo (store/graphRevisions): ogni
+    // scrittura di nodes/edges, anche da setState, li aggiorna.
+    graphRevisions((set, get) => {
       // Azione in corso (turno sincrono) e chiave dell'ultima digitazione.
       let turnOpen = false;
       let turnGroup = null;
@@ -286,6 +289,8 @@ export const createCanvasStore = () => create(
 
       nodes:     [],
       edges:     [],
+      // structureRev / contentRev / layoutRev / selectionRev (graphRevisions).
+      ...INITIAL_REVISIONS,
       // true dopo loadGraph: il canvas nello store e' quello del progetto
       // (anche vuoto) e non va sostituito da quello salvato.
       graphLoaded: false,
@@ -425,6 +430,12 @@ export const createCanvasStore = () => create(
       saveConflict: null,
       // Ultimo grafo noto del server (caricato o salvato da questa scheda).
       savedGraph: null,
+      // Ultima validazione RIUSCITA (UI-2, C18): { projectId, canvasVersion, at }.
+      // La versione salvata identica, entro pochi secondi, non si rivalida
+      // prima di Esegui/Anteprima (editor/PipelineRunner); «Valida» chiede
+      // sempre al server. Si azzera a ogni apertura (reset, loadGraph).
+      lastValidation: null,
+      setLastValidation: (lastValidation) => set({ lastValidation }, false, 'setLastValidation'),
       setRunState: (runState) => set({ runState }, false, 'setRunState'),
 
       canvasView: 'canvas',
@@ -439,7 +450,7 @@ export const createCanvasStore = () => create(
         get().editorActionsRef.current = {};
         // NOTA: non resettiamo isReadOnly perché viene impostato subito dopo da
         // useCanvasCore (dipende dal ruolo utente, non dal progetto).
-        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null, canvasView: 'canvas', focusNodeId: null, saveStatus: 'idle', saveError: null, lastSavedAt: null, lastSavedServerAt: null, canvasVersion: null, saveConflict: null, savedGraph: null, runState: 'idle', runOptions: { force_recalculate: false }, runReady: false, graphLoaded: false }, false, 'reset');
+        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null, canvasView: 'canvas', focusNodeId: null, saveStatus: 'idle', saveError: null, lastSavedAt: null, lastSavedServerAt: null, canvasVersion: null, saveConflict: null, savedGraph: null, runState: 'idle', runOptions: { force_recalculate: false }, runReady: false, graphLoaded: false, lastValidation: null }, false, 'reset');
       },
 
       // ── Undo/Redo (#24) ───────────────────────────────────────────────
@@ -620,7 +631,7 @@ export const createCanvasStore = () => create(
         // correzione parte col prossimo salvataggio (pendingSync).
         const unique = uniqueDataEdges(edges);
         set(
-          { nodes, edges: unique, savedGraph: { nodes, edges: unique }, graphLoaded: true, isDirty: false, pendingSync: unique !== edges, past: [], future: [], validationHighlights: [], lastValidationSummary: null, canvasVersion: canvasVersion || null, lastSavedServerAt: updatedAt || null, saveConflict: null },
+          { nodes, edges: unique, savedGraph: { nodes, edges: unique }, graphLoaded: true, isDirty: false, pendingSync: unique !== edges, past: [], future: [], validationHighlights: [], lastValidationSummary: null, canvasVersion: canvasVersion || null, lastSavedServerAt: updatedAt || null, saveConflict: null, lastValidation: null },
           false,
           'loadGraph',
         );
@@ -1119,7 +1130,7 @@ export const createCanvasStore = () => create(
       getCanvas: () => ({ nodes: get().nodes, edges: get().edges }),
 
     };
-    },
+    }),
     // Devtools solo in sviluppo: in produzione lo stato (grafo, connessioni)
     // non si espone all'estensione del browser (audit R10.8).
     { name: 'UrbyETL-Canvas', enabled: FRONTEND_ENV.isDev }

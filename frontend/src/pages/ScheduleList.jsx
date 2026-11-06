@@ -27,6 +27,7 @@ import { toastApiError } from '../utils/toastApiError';
 import '../styles/ScheduleList.css';
 import { requestErrorMessage, backendMessage } from '../utils/errorMessages';
 import { formatDateTime as formatDate, formatBytes as formatSize, formatElapsed as getElapsed } from '../utils/format';
+import VirtualList from '../components/common/VirtualList';
 const formatCron = (cron) => {
   if (!cron) return '';
   const map = {
@@ -340,9 +341,10 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
           ) : (
             <div className="sl__list">
               <div className="sl__list-count">{filteredSchedules.length} schedule{activeFilter !== 'all' ? ' '+filterConfigs[activeFilter]?.label?.toLowerCase() : ''}</div>
-              {filteredSchedules.map(s => (
+              {/* Oltre la soglia solo le righe visibili, altezze misurate: log ed
+                  esecuzioni aperte non si tagliano (UI-2, V9: common/VirtualList). */}
+              <VirtualList label="Schedulazioni" items={filteredSchedules} itemKey={s => s.id} estimatedItemHeight={120} gap={10} maxHeight={720} renderItem={s => (
                 <ScheduleCard
-                  key={s.id}
                   schedule={s}
                   canManage={can.manageSchedule(user, s)}
                   isRunning={s.runtime?.status === 'running' || (!!runningManual[s.id] && s.runtime?.status !== 'queued')}
@@ -362,7 +364,7 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
                   formatCron={formatCron}
                   getElapsed={getElapsed}
                 />
-              ))}
+              )} />
             </div>
           )}
         </div>

@@ -14,24 +14,20 @@
  * avviso di uscita, copia di sicurezza, anteprime, versioni e il ciclo di
  * salvataggio dello store (che non risalva un canvas identico).
  */
-import { savedCanvasSignature } from '../utils/canvasContentKey';
+import { canvasSignatures, samePositions } from '../utils/canvasContentKey';
 
-// Firma per coppia (nodes, edges): calcolata una volta per stato, i
-// selettori la rileggono senza costo.
-const cache = new WeakMap();
-function signatureOf(nodes, edges) {
-  if (!nodes || !edges) return savedCanvasSignature(nodes, edges);
-  let byEdges = cache.get(nodes);
-  if (!byEdges) { byEdges = new WeakMap(); cache.set(nodes, byEdges); }
-  if (!byEdges.has(edges)) byEdges.set(edges, savedCanvasSignature(nodes, edges));
-  return byEdges.get(edges);
-}
-
-/** Il canvas dello stato è uguale all'ultimo salvato? */
+/**
+ * Il canvas dello stato è uguale all'ultimo salvato? Stessa firma di ciò che
+ * si salva (utils/canvasContentKey: memorizzata, mai ricalcolata per un
+ * cambio di sola posizione) e stesse posizioni, confrontate nodo per nodo:
+ * a ogni fotogramma di un trascinamento costa un confronto per nodo, non una
+ * serializzazione (UI-2, V3).
+ */
 export function matchesSavedGraph(s) {
   if (!s.savedGraph) return false;
   if (s.nodes === s.savedGraph.nodes && s.edges === s.savedGraph.edges) return true;
-  return signatureOf(s.nodes, s.edges) === signatureOf(s.savedGraph.nodes, s.savedGraph.edges);
+  if (!samePositions(s.nodes, s.savedGraph.nodes)) return false;
+  return canvasSignatures(s.nodes, s.edges).saved === canvasSignatures(s.savedGraph.nodes, s.savedGraph.edges).saved;
 }
 
 export const hasUnsavedChanges = (s) => Boolean(s.isDirty) && !s.isReadOnly && !matchesSavedGraph(s);

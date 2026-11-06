@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import useCanvasStore from '../store/useCanvasStore';
 import useColumnStore, { startColumnSync } from '../store/useColumnStore';
+import { useCanvasDerived } from './useCanvasDerived';
 import { columnsOf, createColumnsMemo } from '../utils/columnSource';
 
 export function useColumnSync(projectId) {
@@ -47,10 +48,11 @@ export function useColumnsOf(nodeId, { side = null, source = null } = {}) {
  */
 export function useNodesInfo(ids) {
   const key = ids.join('\u0000');
-  const flat = useCanvasStore(useShallow(s => ids.flatMap((nodeId) => {
+  // Ricalcolo solo quando cambia il contenuto (hooks/useCanvasDerived).
+  const flat = useCanvasDerived(s => ids.flatMap((nodeId) => {
     const node = (s.nodes || []).find(n => n.id === nodeId);
     return node ? [node.type, node.data] : [null, null];
-  })));
+  }), { deps: [key] });
   return useMemo(
     () => (key ? key.split('\u0000') : []).map((nodeId, i) => (flat[2 * i] == null ? null
       : { id: nodeId, type: flat[2 * i], data: flat[2 * i + 1] || {} })),
@@ -66,7 +68,7 @@ export function useNodesInfo(ids) {
  * `useCanvasStore(s => s.nodes)` fuori dal canvas.
  */
 export function useNodesContent() {
-  const flat = useCanvasStore(useShallow(s => (s.nodes || []).flatMap(n => [n.id, n.type, n.data, Boolean(n.selected)])));
+  const flat = useCanvasDerived(s => (s.nodes || []).flatMap(n => [n.id, n.type, n.data, Boolean(n.selected)]), { on: ['content', 'selection'] });
   return useMemo(() => {
     const out = [];
     for (let i = 0; i < flat.length; i += 4) out.push({ id: flat[i], type: flat[i + 1], data: flat[i + 2] || {}, selected: flat[i + 3] });

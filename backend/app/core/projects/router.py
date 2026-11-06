@@ -708,7 +708,7 @@ def _assert_canvas_refs_visible_for_owner(
 
 def _prepare_canvas_for_owner(
     project_id: str, canvas: CanvasState, metadata: Any, current_user: CurrentUser,
-    *, for_save: bool,
+    *, for_save: bool, schema_call: Any = None,
 ) -> CanvasState:
     """Prepara e verifica il canvas senza persistere modifiche al progetto.
 
@@ -717,6 +717,11 @@ def _prepare_canvas_for_owner(
     gruppi e sincronizzazione con i contratti. Il rifiuto dei nodi orfani e'
     una regola del SALVATAGGIO (for_save): mentre l'utente ricollega i nodi
     gli schemi del resto del canvas devono continuare ad aggiornarsi.
+
+    ``schema_call`` (UI-2, C15: SchemaInferenceService.begin_call): le
+    colonne dell'Output si calcolano con la chiamata di inferenza che la
+    richiesta riusera' subito dopo (POST /schemas); i nodi che la
+    preparazione modifica (l'Output e quelli a valle) escono dalle sue cache.
     """
     # I campi scritti solo dalla risoluzione degli input runtime non arrivano
     # mai dal client (shared.execution.runtime_bound_fields).
@@ -754,6 +759,7 @@ def _prepare_canvas_for_owner(
         )
 
     # Ricalcola le colonne senza modificare il contratto del risultato materializzato.
+    result_node = None
     try:
         result_node = canvas_columns_module.find_result_node(canvas)
         if result_node is not None:
@@ -763,12 +769,18 @@ def _prepare_canvas_for_owner(
                 project_id=project_id,
                 project_service=_project_service,
                 schema_inference_service_factory=(
-                    schema_inference_module.SchemaInferenceService
+                    (lambda _service: schema_call) if schema_call is not None
+                    else schema_inference_module.SchemaInferenceService
                 ),
             )
             if computed:
                 result_node.columns = [Column(**c) for c in computed]
+        if schema_call is not None and result_node is not None:
+            # L'Output ha colonne nuove: lui e i nodi a valle si ricalcolano.
+            schema_call.forget_downstream(canvas, {result_node.id})
     except Exception as _ccerr:
+        if schema_call is not None:
+            schema_call.forget_downstream(canvas, {n.id for n in canvas.nodes})
         # Il ricalcolo diagnostico non blocca la normale validazione del canvas.
         logger.warning(
             f"C9 compute_result_columns fallito (non bloccante): {_ccerr}",
@@ -908,9 +920,15 @@ def _infer_project_schemas(
         )
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+    # UI-2 (C15): una sola chiamata di inferenza per la preparazione e la
+    # mappa (prima: il grafo si inferiva da capo due volte per richiesta).
+    shared = canvas is not None and isinstance(_schema_service, schema_inference_module.SchemaInferenceService)
+    call = _schema_service.begin_call() if shared else None
     if canvas is not None:
-        canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False)
+        canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False, schema_call=call)
     try:
+        if call is not None:
+            return _schema_service.infer_schemas_response(project_id, canvas=canvas, call=call)
         return _schema_service.infer_schemas_response(project_id, canvas=canvas)
     except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

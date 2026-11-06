@@ -11,7 +11,7 @@
  * - Espone dataNodes e getViewportCenter come helpers
  */
 
-import { useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import useCanvasStore from '../store/useCanvasStore';
 import { useCanvasKeyboard } from './useCanvasKeyboard';
 import { useAuth } from '../context/AuthContext';
@@ -24,8 +24,10 @@ import { can } from '../utils/permissions';
  */
 export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
 
-  const nodes          = useCanvasStore(s => s.nodes);
-  const edges          = useCanvasStore(s => s.edges);
+  // UI-2 (V4): l'editor NON e' iscritto a nodes/edges (si ridisegnerebbe a
+  // ogni fotogramma di un trascinamento). Il canvas lo disegna EditorShell
+  // (FlowCanvas); le azioni leggono lo store al momento (nodesRef/edgesRef);
+  // i valori calcolati passano da hooks/useCanvasDerived.
   // Canali di mutazione espliciti (audit R1): load / utente / derivato.
   const loadGraph         = useCanvasStore(s => s.loadGraph);
   const addNodes          = useCanvasStore(s => s.addNodes);
@@ -97,18 +99,15 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     init(projectId, mode);
   }, [projectId, mode, init, reset]);
 
-  const nodesRef = useRef(nodes);
-  const edgesRef = useRef(edges);
-
-  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
-  useEffect(() => { edgesRef.current = edges; }, [edges]);
+  // Riferimenti "vivi": `.current` e' sempre il grafo attuale dello store.
+  const nodesRef = useMemo(() => ({ get current() { return useCanvasStore.getState().nodes; } }), []);
+  const edgesRef = useMemo(() => ({ get current() { return useCanvasStore.getState().edges; } }), []);
 
   // Cancellazione: decide la regola unica (utils/canvasDeletion, sola
   // lettura = nessuna conferma e nessuna cancellazione). Undo/redo: lo store
   // in sola lettura non fa nulla.
   useCanvasKeyboard({
-    nodes,
-    edges,
+    getCanvas: () => useCanvasStore.getState(),
     onDeleteNode: deleteNode,
     onDeleteEdges: removeEdges,
     onUndo: undo,
@@ -117,15 +116,6 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
   });
 
 
-  /** Nodi escludendo annotazioni — per validation e query preview.
-   *
-   * useMemo + dep `nodes`: identita' stabile finche' `nodes` non cambia
-   * (chi lo usa come dipendenza non si riesegue a ogni render).
-   */
-  const dataNodes = useMemo(
-    () => nodes.filter(n => n.type !== 'comment'),
-    [nodes],
-  );
 
   /**
    * Centro del viewport in coordinate canvas.
@@ -160,9 +150,7 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
   }, []);
 
   return {
-    // Stato ReactFlow
-    nodes,
-    edges,
+    // Stato ReactFlow (il grafo lo legge EditorShell dallo store)
     onNodesChange,
     onEdgesChange,
 
@@ -199,7 +187,6 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     readOnlyProps,
 
     // Helpers
-    dataNodes,
     getViewportCenter,
   };
 }

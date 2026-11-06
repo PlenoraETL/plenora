@@ -20,6 +20,8 @@ import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/re
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import EditorShell from '../components/editor/EditorShell';
+import { useCanvasDerived } from '../hooks/useCanvasDerived';
+import { sinkFlags } from '../utils/canvasGraph';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import ProjectSourceNode from '../components/nodes/ProjectSourceNode';
 import FileSourceNode from '../components/nodes/FileSourceNode';
@@ -111,7 +113,7 @@ const ManipolaEditorContent = () => {
   useHexCanvas(hexCanvasRef);
 
   const {
-    nodes, edges, onNodesChange, onEdgesChange,
+    onNodesChange, onEdgesChange,
     loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
     insertBetween, addSubgraph,
     nodesRef, edgesRef,
@@ -456,11 +458,11 @@ const ManipolaEditorContent = () => {
   // Uscite: chiede il guard unico (NavigationGuard + useBlocker).
   useUnsavedChangesGuard();
   const handleBack = () => navigate('/');
-  const hasResultNode  = nodes.some(n => n.type === 'result');
-  const hasCaricanNode = nodes.some(n => n.type === 'carica');
+  // UI-2 (V4): ricalcolati solo quando cambia il contenuto del canvas.
+  const { hasResultNode, hasCaricanNode } = useCanvasDerived(sinkFlags);
 
   // beforeCanvas slot: banner accessibilita' nodi cross-tenant.
-  const accessDeniedBanner = <AccessDeniedBanner nodes={nodes} />;
+  const accessDeniedBanner = <AccessDeniedBanner />;
 
   // topbar slot
   // Barra unica (Fase 4, M7): le azioni dell'editor nel menu "⋯", i passi
@@ -533,8 +535,6 @@ const ManipolaEditorContent = () => {
       project={project}
       reload={reloadData}
       onBack={handleBack}
-      nodes={nodes}
-      edges={edges}
       hexCanvasRef={hexCanvasRef}
       canvasConfig={{
         nodeTypes,

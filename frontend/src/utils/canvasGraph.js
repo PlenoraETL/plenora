@@ -43,6 +43,16 @@ export function nodeRole(node) {
 
 const inFlow = (n) => nodeRole(n) !== 'off';
 
+/** Output e caricamenti presenti nel canvas (per le barre degli editor). */
+export function sinkFlags(s) {
+  const nodes = s?.nodes || [];
+  return {
+    hasResultNode: nodes.some(n => n.type === 'result' || n.type === 'resultNode'),
+    hasCaricanNode: nodes.some(n => n.type === 'carica'),
+    hasCaricanArcGISNode: nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis'),
+  };
+}
+
 /** Firma della STRUTTURA (nodi, ruoli, collegamenti): cambia poco, non a ogni drag. */
 export function structureKey(nodes, edges) {
   const ns = (nodes || []).map(n => `${n.id}:${nodeRole(n)}`).join('|');

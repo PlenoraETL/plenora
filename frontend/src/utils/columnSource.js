@@ -306,14 +306,25 @@ function sameValue(a, b) {
  */
 export function createColumnsMemo() {
   let last = null;
+  // Stesso grafo per il risultato: stessi array, oppure (store del canvas,
+  // UI-2 V5) stesso contatore del contenuto e, se ci sono lati senza
+  // maniglia, stesso contatore delle posizioni (store/graphRevisions): un
+  // trascinamento non ricalcola nulla.
+  const sameGraph = (canvas) => (last.nodes === canvas.nodes && last.edges === canvas.edges)
+    || (canvas.contentRev !== undefined && last.contentRev === canvas.contentRev
+      && (!last.loose || last.layoutRev === canvas.layoutRev));
   return (columns, canvas, nodeId, { side = null, source = null } = {}) => {
-    if (last && last.columns === columns && last.nodes === canvas.nodes && last.edges === canvas.edges
+    if (last && last.columns === columns && sameGraph(canvas)
       && last.mode === canvas.mode && last.nodeId === nodeId && last.side === side && last.source === source) {
       return last.result;
     }
     const next = columnsOf({ ...columns, nodes: canvas.nodes, edges: canvas.edges, mode: canvas.mode }, nodeId, { side, source });
     const result = last && sameValue(last.result, next) ? last.result : next;
-    last = { columns, nodes: canvas.nodes, edges: canvas.edges, mode: canvas.mode, nodeId, side, source, result };
+    last = {
+      columns, nodes: canvas.nodes, edges: canvas.edges, mode: canvas.mode, nodeId, side, source, result,
+      contentRev: canvas.contentRev, layoutRev: canvas.layoutRev,
+      loose: canvas.contentRev !== undefined && handlelessOrderKey(canvas.nodes, canvas.edges) !== '',
+    };
     return result;
   };
 }
@@ -343,16 +354,28 @@ export function columnOrigin(snapshot, nodeId, columnId) {
 
 
 /**
+ * ORDINE dei lati senza maniglia: per ogni nodo, le sorgenti dei suoi
+ * collegamenti senza maniglia nell'ordine del backend (posizione verticale,
+ * poi id: inputOrderKey). Conta l'ordine, non la coordinata (UI-2, C13):
+ * spostare in verticale una sorgente senza scavalcarne un'altra non cambia
+ * nulla. Vuoto (il caso normale) quando ogni collegamento ha la maniglia.
+ */
+export function handlelessOrderKey(nodes, edges) {
+  const loose = dataFlowEdges(edges).filter(e => !targetHandle(e));
+  if (loose.length === 0) return '';
+  const byId = new Map((nodes || []).map(n => [n.id, n]));
+  const targets = [...new Set(loose.map(e => e.target))].sort();
+  return JSON.stringify(targets.map(target => [target, sortedInputEdges(target, nodes, edges)
+    .filter(e => !targetHandle(e) && byId.has(e.source)).map(e => e.source)]));
+}
+
+/**
  * Firma di cio' che decide le colonne: la serializzazione che il backend
- * legge (senza posizioni ne' note, canvasContentKey) piu' la posizione
- * verticale delle sorgenti dei collegamenti senza maniglia, che ne decide
- * l'ordine dei lati.
+ * legge (senza posizioni ne' note, canvasContentKey) piu' l'ordine dei lati
+ * senza maniglia (handlelessOrderKey).
  */
 export function columnSignature(nodes, edges) {
-  const byId = new Map((nodes || []).map(n => [n.id, n]));
-  const order = dataFlowEdges(edges).filter(e => !targetHandle(e))
-    .map(e => [e.source, byId.get(e.source)?.position?.y ?? null]);
-  return `${canvasContentKey(nodes, edges)}|${JSON.stringify(order)}`;
+  return `${canvasContentKey(nodes, edges)}|${handlelessOrderKey(nodes, edges)}`;
 }
 
 /** Aspetti incerti di uno stato, in parole: per gli avvisi sobri. */

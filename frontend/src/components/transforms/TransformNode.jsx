@@ -26,6 +26,7 @@ import { ResourceError } from '../common/ListState';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import { term } from '../../utils/glossary';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 
 const TransformNode = memo(({ data, id }) => {
@@ -111,7 +112,7 @@ const TransformNode = memo(({ data, id }) => {
   // Input runtime collegati a un parametro singolo -> resta il form
   // generico (i pannelli usano le liste).
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
-  const bindingCount = useCanvasStore(s => (s.edges || []).filter(e => e.target === id && isParameterBindingEdge(e)).length);
+  const bindingCount = useCanvasDerived(s => (s.edges || []).filter(e => e.target === id && isParameterBindingEdge(e)).length, { deps: [id] });
   const hasParameterBindings = bindingCount > 0;
   const editGraph = useCanvasStore(s => s.editGraph);
   const confirm = useConfirmOrDeny();

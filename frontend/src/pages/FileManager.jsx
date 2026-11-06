@@ -44,6 +44,7 @@ import PreviewModal from './FileManager/PreviewModal';
 import { pressable } from '../utils/pressable';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
+import VirtualList from '../components/common/VirtualList';
 
 // SRID dal convertitore unico (R8.23): "4326", "EPSG:4326" -> 4326.
 const SRID = sridCodec({ optional: true });
@@ -479,17 +480,19 @@ const resetUploadModal = () => {
 
           {/* Files grid */}
           {filteredFiles.length > 0 && (
-            <div className="fm__grid">
-              {filteredFiles.map(file => (
+            // Oltre la soglia solo le righe visibili (UI-2, V9: common/VirtualList).
+            <VirtualList
+              className="fm__grid" minColumnWidth={300} gap={12} estimatedItemHeight={170}
+              label="File caricati" items={filteredFiles} itemKey={file => file.id}
+              renderItem={file => (
                 <FileCard
-                  key={file.id}
                   file={file}
                   onPreview={() => handlePreview(file)}
                   onDelete={can.editFile(user, file) ? () => handleDelete(file.id, file.name) : null}
                   onShare={can.shareResources(user) ? () => setSharingFile(file) : null}
                 />
-              ))}
-            </div>
+              )}
+            />
           )}
         </div>
 {showUploadModal && (

@@ -13,6 +13,7 @@ import useCanvasStore from '../../store/useCanvasStore';
 import { LIST_SUPERSEDES, isParameterBindingEdge } from '../../utils/runtimeBindingEdges';
 import { collectExpressionRefs, rewriteExpressionRefs } from '../../utils/expressionRefs';
 import './DynamicConfig.css';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 const DynamicConfig = ({
   transformId,
@@ -92,10 +93,10 @@ const DynamicConfigBody = ({
   // Filtra parametri visibili (gestisce depends_on)
   // Parametri collegati a un input runtime (stringa stabile: niente
   // re-render a ogni cambio del canvas).
-  const boundKey = useCanvasStore(s => (s.edges || [])
+  const boundKey = useCanvasDerived(s => (s.edges || [])
     .filter(e => e.target === targetNodeId && isParameterBindingEdge(e))
     .map(e => e.data?.target_parameter || String(e.targetHandle || '').replace(/^parameter:/, ''))
-    .sort().join(','));
+    .sort().join(','), { deps: [targetNodeId] });
   // Con un parametro singolo collegato, la lista che lo sostituirebbe non si
   // mostra: aggiungerla annullerebbe il collegamento (runtimeBindingEdges).
   const hiddenList = useMemo(() => {

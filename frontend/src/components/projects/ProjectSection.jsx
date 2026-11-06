@@ -3,9 +3,10 @@ import EmptyState from '../common/EmptyState';
 
 /**
  * Sezione di gruppo della dashboard progetti (Estrai / Manipola /
- * Arricchisci). Header con chip etichetta + bottone "+ Nuovo" + griglia dei
- * children (cards). Vuota: una riga compatta (DB6, G2), col testo del
- * filtro quando la lista è vuota per un filtro (P18).
+ * Arricchisci). Header con chip etichetta + bottone "+ Nuovo" + la griglia
+ * delle card nei children (VirtualList con `pl__cards-grid`, UI-2 V9).
+ * Vuota: una riga compatta (DB6, G2), col testo del filtro quando la lista
+ * è vuota per un filtro (P18).
  */
 function ProjectSection({
   id,
@@ -35,7 +36,7 @@ function ProjectSection({
       {empty ? (
         <EmptyState compact icon={emptyIcon} title={emptyTitle} text={emptyText} />
       ) : (
-        <div className="pl__cards-grid">{children}</div>
+        children
       )}
     </section>
   );

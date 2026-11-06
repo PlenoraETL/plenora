@@ -59,6 +59,29 @@ describe('QueryPreview', () => {
     expect(previewMock).toHaveBeenCalledTimes(1);
   });
 
+  // UI-2 (V7, C14): la firma si legge dopo la pausa, una volta; all'apertura
+  // una sola richiesta; la richiesta superata riceve il segnale di annullo.
+  it('piu\' modifiche nella pausa: una richiesta, col canvas dell\'ultima', async () => {
+    previewMock.mockResolvedValue({ kind: 'sql', sql: 'SELECT 1', params: [], tables_used: [], feature_service: null, error: null, notes: [] });
+    loadCanvas();
+    render(<QueryPreview />);
+    await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
+    for (const alias of ['a', 'ab', 'abc']) act(() => useCanvasStore.getState().updateNodeData('c', { alias }));
+    await act(async () => { await new Promise(r => setTimeout(r, 700)); });
+    expect(previewMock).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(previewMock.mock.calls[1][1])).toContain('"alias":"abc"');
+    expect(previewMock.mock.calls[1][2].signal).toBeTruthy();
+  });
+
+  it('montata prima del caricamento: all\'apertura una sola richiesta', async () => {
+    previewMock.mockResolvedValue({ kind: 'sql', sql: 'SELECT 1', params: [], tables_used: [], feature_service: null, error: null, notes: [] });
+    useCanvasStore.getState().init('p1', 'estrai');
+    render(<QueryPreview />);
+    act(() => loadCanvas());
+    await act(async () => { await new Promise(r => setTimeout(r, 700)); });
+    expect(previewMock).toHaveBeenCalledTimes(1);
+  });
+
   it('valore di un parametro senza input', () => {
     expect(paramLabel({ value: 0 })).toBe('0');
     expect(paramLabel({ value: 'x' })).toBe("'x'");

@@ -15,6 +15,7 @@
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 import { hasUnsavedChanges } from '../../store/saveState';
 import { saveBeforeServerRead } from '../../utils/serverActions';
 import { useInlinePreview } from '../../hooks/useInlinePreview';
@@ -41,8 +42,13 @@ const selectSelectedId = (s) => {
 };
 
 export default function StepPreview({ projectId }) {
-  const nodeId = useCanvasStore(selectSelectedId);
-  const node = useCanvasStore(s => (nodeId ? (s.nodes || []).find(n => n.id === nodeId) : null));
+  // UI-2 (V6): solo id, tipo e dati del passo, riletti quando cambiano
+  // selezione o contenuto: spostarlo non ridisegna l'anteprima.
+  const nodeId = useCanvasDerived(selectSelectedId, { on: 'selection' });
+  const node = useCanvasDerived((s) => {
+    const n = nodeId ? (s.nodes || []).find(x => x.id === nodeId) : null;
+    return n ? { id: n.id, type: n.type, data: n.data } : null;
+  }, { deps: [nodeId] });
   const unsaved = useCanvasStore(hasUnsavedChanges);
   const { status, data, error, run, clear } = useInlinePreview(projectId);
   const [shownFor, setShownFor] = useState(null);

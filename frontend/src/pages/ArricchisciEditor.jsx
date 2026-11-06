@@ -19,6 +19,8 @@ import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/re
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import EditorShell from '../components/editor/EditorShell';
+import { useCanvasDerived } from '../hooks/useCanvasDerived';
+import { sinkFlags } from '../utils/canvasGraph';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import { executeEnrichmentAsync } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -112,7 +114,7 @@ const ArricchisciEditorContent = () => {
   const toast = useToast();
 
   const {
-    nodes, edges, onNodesChange, onEdgesChange,
+    onNodesChange, onEdgesChange,
     loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData,
     getViewportCenter,
@@ -381,12 +383,11 @@ const ArricchisciEditorContent = () => {
   // Uscite: chiede il guard unico (NavigationGuard + useBlocker).
   useUnsavedChangesGuard();
   const handleBack     = () => navigate('/');
-  const hasResultNode  = nodes.some(n => n.type === 'result');
-  const hasCaricanNode = nodes.some(n => n.type === 'carica');
-  const hasCaricanArcGISNode = nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis');
+  // UI-2 (V4): ricalcolati solo quando cambia il contenuto del canvas.
+  const { hasResultNode, hasCaricanNode, hasCaricanArcGISNode } = useCanvasDerived(sinkFlags);
 
   // beforeCanvas slot
-  const accessDeniedBanner = <AccessDeniedBanner nodes={nodes} />;
+  const accessDeniedBanner = <AccessDeniedBanner />;
 
   // topbar slot
   // Barra unica (Fase 4, M7): le fonti di arricchimento e le altre azioni
@@ -441,6 +442,7 @@ const ArricchisciEditorContent = () => {
   // Le colonne del canvas si leggono quando arriva la risposta.
   const previewData = useMemo(() => {
           if (!preview.data?.columns) return preview.data;
+          const { nodes } = useCanvasStore.getState();
           const resultNode = nodes.find(n => n.type === 'result');
           const nodeLabelMap  = buildNodeLabelMap(nodes);
           // Mappa name → nodo da cui la colonna entra nel flusso (sorgente o
@@ -502,8 +504,6 @@ const ArricchisciEditorContent = () => {
       project={project}
       reload={reloadData}
       onBack={handleBack}
-      nodes={nodes}
-      edges={edges}
       hexCanvasRef={hexCanvasRef}
       canvasConfig={{
         nodeTypes,

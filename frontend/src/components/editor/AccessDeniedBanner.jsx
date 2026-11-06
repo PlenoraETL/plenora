@@ -8,15 +8,19 @@
  */
 
 import React from 'react';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 import {
   hasAccessDeniedNodes,
   getAccessDeniedNodes,
 } from '../../utils/canvasAccessControl';
 
-function AccessDeniedBanner({ nodes }) {
-  if (!hasAccessDeniedNodes(nodes)) return null;
-  const count = getAccessDeniedNodes(nodes).length;
+// Senza `nodes` legge il canvas dello store, ricalcolando solo quando cambia
+// il contenuto (UI-2, V4: l'editor non passa piu' i nodi a ogni render).
+function AccessDeniedBanner({ nodes = null }) {
+  const live = useCanvasDerived(s => getAccessDeniedNodes(s.nodes || []).length);
+  const count = nodes ? (hasAccessDeniedNodes(nodes) ? getAccessDeniedNodes(nodes).length : 0) : live;
+  if (!count) return null;
   return (
     <div
       role="alert"

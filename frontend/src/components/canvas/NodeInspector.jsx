@@ -33,6 +33,7 @@ import BranchSection from './BranchSection';
 import './NodeInspector.css';
 import { term } from '../../utils/glossary';
 import { useNodesContent } from '../../hooks/useColumns';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 import { useReadOnlyLock } from '../common/readOnlySafe';
 
 // Id del nodo da ispezionare: esattamente un nodo selezionato, note escluse.
@@ -56,6 +57,13 @@ const selectInspectedEdgeId = (s) => {
     found = e.id;
   }
   return found;
+};
+
+// Il nodo ispezionato SENZA posizione ne' stato di trascinamento (UI-2, V6):
+// spostare il nodo selezionato non ridisegna il pannello ne' il form.
+const inspectedNode = (nodeId) => (s) => {
+  const n = nodeId ? (s.nodes || []).find(x => x.id === nodeId) : null;
+  return n ? { id: n.id, type: n.type, data: n.data } : null;
 };
 
 /** Guscio comune a nodi e archi: intestazione, chiusura, corpo, eliminazione. */
@@ -107,7 +115,7 @@ function ReadOnlyForm({ readOnly, children }) {
 /** Archi di un nodo (es. i join di una tabella), ognuno apribile nel pannello. */
 function EdgeLinks({ nodeId, edgeInspector }) {
   const nodes = useNodesContent();
-  const edges = useCanvasStore(s => s.edges);
+  const edges = useCanvasDerived(s => s.edges);
   const selectEdge = useCanvasStore(s => s.selectEdge);
   const byId = new Map(nodes.map(n => [n.id, n]));
   const entries = edges
@@ -210,9 +218,11 @@ function InspectorTitle({ node, disabled }) {
 }
 
 export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branchActions, edgeInspector = null }) {
-  const nodeId = useCanvasStore(selectInspectedId);
-  const edgeId = useCanvasStore(selectInspectedEdgeId);
-  const node = useCanvasStore(useCallback(s => (nodeId ? (s.nodes || []).find(n => n.id === nodeId) : null), [nodeId]));
+  // Selezione e nodo si rileggono solo quando cambiano selezione o contenuto
+  // (hooks/useCanvasDerived), mai per una posizione.
+  const nodeId = useCanvasDerived(selectInspectedId, { on: 'selection' });
+  const edgeId = useCanvasDerived(selectInspectedEdgeId, { on: 'selection' });
+  const node = useCanvasDerived(inspectedNode(nodeId), { deps: [nodeId] });
   const onNodesChange = useCanvasStore(s => s.onNodesChange);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const canvasView = useCanvasStore(s => s.canvasView);
@@ -231,7 +241,7 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
   // L'unica eliminazione del pannello, per ogni tipo (Output compreso).
   const deleteStep = () => requestCanvasDeletion({
     confirm,
-    nodes: [node],
+    nodes: [useCanvasStore.getState().getNodeById(node.id) || node],
     dialog: {
       title: term('delete_step').name,
       message: `Eliminare «${nodeTitle(node.type, node.data)}»? I collegamenti del passo vengono rimossi.`,

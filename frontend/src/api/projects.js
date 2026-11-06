@@ -302,8 +302,9 @@ export const downloadProjectFile = async (projectId, filename) => {
  * salvato, senza salvarlo. L'unico chiamante e' la fonte unica delle colonne
  * (store/useColumnStore, Blocco A regola 4).
  */
-export const inferProjectSchemas = async (projectId, canvas) => {
-  const response = await http.post(`/projects/${projectId}/schemas`, { canvas });
+export const inferProjectSchemas = async (projectId, canvas, { signal } = {}) => {
+  // `signal`: una richiesta superata da una firma nuova si annulla (UI-2, C12).
+  const response = await http.post(`/projects/${projectId}/schemas`, { canvas }, { signal });
   return response.data;
 };
 

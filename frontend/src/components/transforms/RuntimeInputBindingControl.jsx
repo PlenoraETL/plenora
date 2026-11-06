@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import NodeHandle from '../canvas/NodeHandle';
@@ -11,6 +10,7 @@ import {
   suggestedInputKind,
 } from '../../utils/runtimeBindingEdges';
 import { newProjectInputData } from '../../utils/uniqueName';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 
 export default function RuntimeInputBindingControl({
@@ -21,10 +21,10 @@ export default function RuntimeInputBindingControl({
   // Solo gli input runtime (id e dati), non tutti i nodi con le posizioni:
   // un trascinamento non ridisegna il controllo (R9-U N6). I calcoli al clic
   // leggono lo store corrente.
-  const inputFlat = useCanvasStore(useShallow(state => (state.nodes || [])
+  const inputFlat = useCanvasDerived(state => (state.nodes || [])
     .filter(isScalarProjectInputNode)
-    .flatMap(node => [node.id, node.data])));
-  const edges = useCanvasStore(state => state.edges);
+    .flatMap(node => [node.id, node.data]));
+  const edges = useCanvasDerived(state => state.edges);
   const addNodes = useCanvasStore(state => state.addNodes);
   const editEdges = useCanvasStore(state => state.editEdges);
   const isReadOnly = useCanvasStore(state => state.isReadOnly);

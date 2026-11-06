@@ -18,7 +18,6 @@
  */
 import React, { useEffect, useRef, memo, useMemo } from 'react';
 import { Position } from '@xyflow/react';
-import { useShallow } from 'zustand/react/shallow';
 import { saveFailedResult } from '../../utils/backendValidationResult';
 import { saveBeforeServerRead } from '../../utils/serverActions';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -29,6 +28,7 @@ import { useColumnsOf } from '../../hooks/useColumns';
 import { estraiSourceLabel } from '../../utils/columnSource';
 import './ResultNode.css';
 import NodeHandle from '../canvas/NodeHandle';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 // #5: righe caricate nell'anteprima inline auto post-run (la modale completa
 // resta a 100). Volutamente piccolo: gira su cache subito dopo l'esecuzione.
@@ -87,8 +87,8 @@ const ResultNode = memo(({ data, id }) => {
   const mode = useCanvasStore(s => s.mode);
   // Estrai: il nome di ogni tabella o layer in ingresso (selettore per nodo:
   // solo i nomi, non le posizioni; un trascinamento non ridisegna).
-  const inputLabels = useCanvasStore(useShallow(s => (mode !== 'estrai' ? NO_LABELS
-    : input.inputs.map(i => estraiSourceLabel((s.nodes || []).find(n => n.id === i.nodeId)) || null))));
+  const inputLabels = useCanvasDerived(s => (mode !== 'estrai' ? NO_LABELS
+    : input.inputs.map(i => estraiSourceLabel((s.nodes || []).find(n => n.id === i.nodeId)) || null)), { deps: [mode, input] });
   const upstreamColumns = useMemo(() => {
     if (mode !== 'estrai') return input.columns;
     // Estrai: ogni colonna sa da quale tabella o layer viene (tabella.colonna).

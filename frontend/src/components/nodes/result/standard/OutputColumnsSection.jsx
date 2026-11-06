@@ -19,13 +19,13 @@
  *    nella tabella.
  */
 import React, { useMemo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import useCanvasStore from '../../../../store/useCanvasStore';
 import { estraiSourceLabel, outputColumnsAsRead, outputResolvesById, upstreamSourceNodes } from '../../../../utils/columnSource';
 import { isColumnVisible } from '../../../../utils/columnUtils';
 import { outputReferencesPatch } from '../../../../utils/columnPlans';
 import ColumnsGrid from '../../../transforms/panels/ColumnsGrid';
 import { gridConfig, gridRows, savedSelectionError } from '../../../transforms/panels/panelConfig';
+import { useCanvasDerived } from '../../../../hooks/useCanvasDerived';
 
 export function PipelineOutputColumns({ id, data, mode = 'manipola', upstreamColumns, disabled }) {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
@@ -67,8 +67,8 @@ export function EstraiOutputColumns({ id, disabled }) {
   // Le stesse tabelle e layer che la fonte unica da' in ingresso all'Output.
   // Selettore per nodo: id, tipo e dati delle sorgenti (non le posizioni),
   // quindi trascinare un nodo non ridisegna la griglia.
-  const flat = useCanvasStore(useShallow(s => upstreamSourceNodes(s.nodes || NONE, s.edges || NONE, id)
-    .flatMap(n => [n.id, n.type, n.data])));
+  const flat = useCanvasDerived(s => upstreamSourceNodes(s.nodes || NONE, s.edges || NONE, id)
+    .flatMap(n => [n.id, n.type, n.data]), { deps: [id] });
   const sources = useMemo(() => {
     const out = [];
     for (let i = 0; i < flat.length; i += 3) out.push({ id: flat[i], type: flat[i + 1], data: flat[i + 2] || {} });

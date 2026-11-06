@@ -62,6 +62,22 @@ import { renderNodeType } from '../utils/nodeTypeRegistry';
 import { pressable } from '../utils/pressable';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch, useSearchPage } from '../hooks/useSearch';
+import { useCanvasDerived } from '../hooks/useCanvasDerived';
+
+// Quello che l'editor di Estrai legge del canvas (UI-2, V4): valori semplici
+// e liste di nomi, confrontati in modo superficiale da useCanvasDerived.
+function estraiCanvasInfo(s) {
+  const nodes = s.nodes || [];
+  return {
+    nodeCount: nodes.length,
+    edgeCount: (s.edges || []).length,
+    tableNames: nodes.filter(n => n.type === 'tableNode' || n.type === 'source').map(n => n.data?.table_name).filter(Boolean).join('\u0000'),
+    layerUrls: nodes.filter(n => n.type === 'featureLayerNode').map(n => n.data?.layer_url).filter(Boolean).join('\u0000'),
+    hasResultNode: nodes.some(n => n.type === 'resultNode'),
+    hasCaricanNode: nodes.some(n => n.type === 'carica'),
+    hasCaricanArcGISNode: nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis'),
+  };
+}
 
 const nodeTypes = {
   tableNode: TableNode, resultNode: ResultNode, staticValues: StaticValuesNode,
@@ -86,10 +102,10 @@ function EstraiEditor() {
 
   useHexCanvas(hexCanvasRef);
   const {
-    nodes, edges, onNodesChange, onEdgesChange,
+    onNodesChange, onEdgesChange,
     loadGraph, addNodes, addEdges, insertNode, applyDerivedNodes,
     nodesRef,
-    dataNodes, getViewportCenter,
+    getViewportCenter,
     isReadOnly, readOnlyProps
   } = useCanvasCore(projectId, { mode: 'estrai' });
   const {
@@ -121,8 +137,6 @@ function EstraiEditor() {
   // in-memory è stata rimossa: la validazione è on-demand (pulsante → backend).
   useValidationHighlights(applyDerivedNodes);
   const edgeHandlers = useEdgeHandlers({ resultNodeType: 'resultNode' });
-  // Aspetto dei join dal loro stato (da completare, colonna non trovata).
-  const shownEdges = useMemo(() => presentJoinEdges(edges, nodes), [edges, nodes]);
   useEffect(() => {
     // H-9 (2026-05-26): early-return su loading PRIMA del check
     // canvas.nodes. Pre-fix: `if (!project?.canvas?.nodes || loading) return`
@@ -374,27 +388,25 @@ function EstraiEditor() {
   useUnsavedChangesGuard();
   const signOut = useSignOut();
   const handleBack              = () => navigate('/');
-  const filteredTables          = tableSearch.filter(Object.keys(catalog), t => t);
-  const sourceNodes             = nodes.filter(n => n.type === 'tableNode' || n.type === 'source');
-  const tablesInCanvas          = new Set(sourceNodes.map(n => n.data.table_name).filter(Boolean));
-  const availableTables         = filteredTables.filter(t => !tablesInCanvas.has(t));
-  const viewNames               = Object.keys(views);
+  const filteredTables          = useMemo(() => tableSearch.filter(Object.keys(catalog), t => t), [catalog, tableSearch.filter]);
+  // UI-2 (V4): quello che serve del canvas, ricalcolato solo quando cambia
+  // il contenuto (hooks/useCanvasDerived), mai a ogni fotogramma.
+  const canvasInfo              = useCanvasDerived(estraiCanvasInfo);
+  const tablesInCanvas          = useMemo(() => new Set(canvasInfo.tableNames ? canvasInfo.tableNames.split('\u0000') : []), [canvasInfo.tableNames]);
+  const availableTables         = useMemo(() => filteredTables.filter(t => !tablesInCanvas.has(t)), [filteredTables, tablesInCanvas]);
+  const viewNames               = useMemo(() => Object.keys(views), [views]);
   const filteredViews           = viewSearch.filter(viewNames, v => v);
-  const viewsInCanvas           = new Set(sourceNodes.map(n => n.data.table_name).filter(Boolean));
-  const availableViews          = filteredViews.filter(v => !viewsInCanvas.has(v));
+  const availableViews          = useMemo(() => filteredViews.filter(v => !tablesInCanvas.has(v)), [filteredViews, tablesInCanvas]);
   const tableCount              = Object.keys(catalog).length;
-  const hasResultNode           = nodes.some(n => n.type === 'resultNode');
-  const hasCaricanNode          = nodes.some(n => n.type === 'carica');
-  const hasCaricanArcGISNode    = nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis');
-  const featureNodes            = nodes.filter(n => n.type === 'featureLayerNode');
-  const featureLayersInCanvas   = new Set(featureNodes.map(n => n.data.layer_url).filter(Boolean));
+  const { hasResultNode, hasCaricanNode, hasCaricanArcGISNode } = canvasInfo;
+  const featureLayersInCanvas   = useMemo(() => new Set(canvasInfo.layerUrls ? canvasInfo.layerUrls.split('\u0000') : []), [canvasInfo.layerUrls]);
 
   // Guard branches (isValidProjectId redirect, loading, loadError, !project)
   // gestiti da EditorShell via le props guards. Il page conserva
   // solo l'orchestration degli hook e il JSX dei singoli slot.
 
   // beforeCanvas slot: banner accessibilita' nodi cross-tenant.
-  const accessDeniedBanner = <AccessDeniedBanner nodes={nodes} />;
+  const accessDeniedBanner = <AccessDeniedBanner />;
 
   // topbar slot
   // Barra unica (Fase 4, M7): connessione accanto al titolo, azioni nel
@@ -408,7 +420,7 @@ function EstraiEditor() {
     ...executionToolbarProps(execution),
     theme,
     setTheme: toggleTheme,
-    statusExtra: <span className="etb__stats">{nodes.length} nodi · {edges.length} collegamenti</span>,
+    statusExtra: <span className="etb__stats">{canvasInfo.nodeCount} nodi · {canvasInfo.edgeCount} collegamenti</span>,
     leftExtra: projectConnection ? (
       <span className="etb__conn" title={projectConnection.name}>
         <i aria-hidden="true" />{projectConnection.name}
@@ -606,6 +618,7 @@ function EstraiEditor() {
           // Arricchisce le colonne della preview con source_table dal resultNode,
           // così PreviewModal può raggruppare per vera sorgente invece di indovinare dal prefisso.
           if (!preview.data?.columns) return preview.data;
+          const { nodes } = useCanvasStore.getState();
           const resultNode = nodes.find(n => n.type === 'resultNode');
           // Mappa name → tabella o layer: l'ingresso dell'Output nella fonte unica.
           const labels = new Map(nodes.map(n => [n.id, estraiSourceLabel(n)]));
@@ -669,8 +682,6 @@ function EstraiEditor() {
         project={project}
         reload={reloadData}
         onBack={handleBack}
-        nodes={nodes}
-        edges={shownEdges}
         hexCanvasRef={hexCanvasRef}
         canvasConfig={{
           nodeTypes,
@@ -685,6 +696,9 @@ function EstraiEditor() {
           palette,
           branchActions,
           edgeInspector,
+          // Aspetto dei join dal loro stato (da completare, colonna non
+          // trovata): applicato da EditorShell al cambio del contenuto.
+          presentEdges: presentJoinEdges,
         }}
         canvasHandlers={{
           onNodesChange,

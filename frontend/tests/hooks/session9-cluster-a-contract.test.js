@@ -4,7 +4,7 @@
  * Bug coperti:
  * - useExecution.startCaricaPolling: mountedRef guard pre-scheduling
  * - useImdfBundles.handleDeleteBundle: mountedRef guard post-await
- * - useCanvasCore.dataNodes: useMemo(filter, [nodes])
+ * - useCanvasCore: nessuna iscrizione a nodes/edges (UI-2, V4)
  */
 
 import { describe, it, expect } from 'vitest';
@@ -34,13 +34,12 @@ describe('Sessione 9 cluster A hooks unmount safety', () => {
     expect(src).toMatch(/caricaStops\.current\.forEach\(stop => stop\(\)\)/);
   });
 
-  it('useCanvasCore dataNodes usa useMemo con dep [nodes]', () => {
+  // UI-2 (V4): l'editor non e' piu' iscritto a nodes/edges (si ridisegnava a
+  // ogni fotogramma di trascinamento); `dataNodes` (un derivato di `nodes`
+  // per render) non esiste piu'. Il grafo lo disegna FlowCanvas.
+  it('useCanvasCore non si iscrive a nodes/edges e non espone dataNodes', () => {
     const src = readSrc('hooks/useCanvasCore.js');
-    const idx = src.indexOf('const dataNodes =');
-    expect(idx).toBeGreaterThan(-1);
-    const window = src.slice(idx, idx + 500);
-    expect(window).toContain('useMemo');
-    // dep array [nodes] presente
-    expect(window).toMatch(/\[nodes\]/);
+    expect(src).not.toContain('const dataNodes =');
+    expect(src).not.toMatch(/useCanvasStore\(s => s\.(nodes|edges)\)/);
   });
 });

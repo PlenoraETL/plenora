@@ -31,6 +31,7 @@ import AutoRunNote from './carica/autoRunNote';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 import { formatNumber } from '../../utils/format';
 import { pressable } from '../../utils/pressable';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
 const CaricanArcGISNode = memo(({ data, id }) => {
   const [showMapping, setShowMapping] = useState(false);
@@ -58,7 +59,8 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   // chiavi di match e renderer arrivano dal bundle, quindi i campi mono-layer
   // (layer url / match column / nome layer) non servono. Il backend rileva il
   // bundle dai bytes; qui adattiamo solo la UX.
-  const isMultiLayerUpstream = useCanvasStore((state) => {
+  // Visita a monte solo quando cambia il contenuto (UI-2, V5).
+  const isMultiLayerUpstream = useCanvasDerived((state) => {
     const edges = dataFlowEdges(state.edges);
     const nodes = state.nodes || [];
     const byId = new Map(nodes.map(n => [n.id, n]));
@@ -76,7 +78,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
       frontier = next;
     }
     return false;
-  });
+  }, { deps: [id] });
 
   // RB.7.C: backend (RB.7.B) marca data.access_denied=true quando la
   // connessione ArcGIS riferita dal canvas non e' visibile al gruppo del

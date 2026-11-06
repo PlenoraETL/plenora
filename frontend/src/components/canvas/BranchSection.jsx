@@ -10,6 +10,7 @@
  */
 import React, { useContext, useMemo, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 import { branchSteps, nodeRole } from '../../utils/canvasGraph';
 import { CanvasGraphContext } from './CanvasGraphContext';
 import { nodeTitle } from './nodeDescriptors';
@@ -26,7 +27,8 @@ export default function BranchSection({ node, branchActions = {} }) {
   const end = graph.isEnd(node.id);
   const lane = graph.laneOf.get(node.id);
   // Titoli dei nodi: le etichette seguono anche le rinomine (non solo la struttura).
-  const titlesKey = useCanvasStore(s => s.nodes.map(n => `${n.id}:${titleOf(n)}`).join('|'));
+  // Ricalcolati solo quando cambia il contenuto (hooks/useCanvasDerived).
+  const titlesKey = useCanvasDerived(s => s.nodes.map(n => `${n.id}:${titleOf(n)}`).join('|'));
 
   // Calcoli sul grafo solo quando cambia la struttura (graph.key), non a ogni drag.
   const derived = useMemo(() => {

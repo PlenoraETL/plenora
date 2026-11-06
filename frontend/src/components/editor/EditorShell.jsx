@@ -29,14 +29,19 @@
  * API semantica:
  *
  *   Top-level (8): projectId, prefix, loading, loadError, project,
- *                  reload, onBack, hexCanvasRef, nodes, edges
+ *                  reload, onBack, hexCanvasRef. Il grafo NON passa dalle
+ *                  props (UI-2, V4): lo legge FlowCanvas dallo store, cosi'
+ *                  un trascinamento ridisegna solo il canvas, non l'editor
+ *                  ne' il guscio.
  *
  *   `canvasConfig` (oggetto) — configurazione/stato del canvas, statica
  *   per render. Contiene: nodeTypes, edgeTypes, defaultEdgeOptions,
  *   fitView, fitViewOptions, minZoom, maxZoom, backgroundProps,
  *   showMiniMap, miniMapProps, isReadOnly, readOnlyProps, palette,
  *   branchActions, edgeInspector (archi configurabili nel pannello
- *   laterale e nella vista Passi: in Estrai i join, vedi NodeInspector).
+ *   laterale e nella vista Passi: in Estrai i join, vedi NodeInspector),
+ *   presentEdges(edges, nodes) (aspetto degli archi dal contenuto: in
+ *   Estrai lo stato dei join; ricalcolato solo quando il contenuto cambia).
  *
  *   `canvasHandlers` (oggetto) — callback canvas, bindabili runtime.
  *   Contiene: onNodesChange, onEdgesChange, onConnect, onEdgeClick,
@@ -64,7 +69,7 @@
  * Behavior preservato byte-per-byte rispetto al pattern legacy.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ReactFlow, Background, Controls, ControlButton, MiniMap, useReactFlow } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -84,6 +89,7 @@ import PipelineRunner from './PipelineRunner';
 import SaveConflictNotice from './SaveConflictNotice';
 import useLocalDraft, { DRAFT_ORIGIN_LABEL } from '../../hooks/useLocalDraft';
 import { useColumnSync } from '../../hooks/useColumns';
+import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 import { useOptionalConfirm } from '../../context/ConfirmContext';
 import { CanvasGraphContext } from '../canvas/CanvasGraphContext';
 import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
@@ -94,6 +100,30 @@ import { formatDateTime } from '../../utils/format';
 import './EditorShell.css';
 
 const EMPTY_OBJ = {};
+const NO_EDGES = [];
+
+/**
+ * FlowCanvas — l'UNICO componente iscritto a `nodes`/`edges` interi (UI-2,
+ * V4; test tests/shared/canvasRender.contract): disegna React Flow e si
+ * ridisegna a ogni fotogramma di un trascinamento, da solo. Gli archi
+ * mostrati (etichette del glossario, aspetto dei join) si ricalcolano solo
+ * quando cambiano gli archi o il contenuto, non quando si sposta un nodo.
+ */
+const FlowCanvas = memo(function FlowCanvas({ presentEdges, flowProps, children }) {
+  const nodes = useCanvasStore(s => s.nodes);
+  const edges = useCanvasStore(s => s.edges);
+  const contentRev = useCanvasStore(s => s.contentRev);
+  const shownEdges = useMemo(() => {
+    const presented = presentEdges ? presentEdges(edges || NO_EDGES, useCanvasStore.getState().nodes) : edges;
+    return withFlowEdgeLabels(presented);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edges, contentRev, presentEdges]);
+  return (
+    <ReactFlow nodes={nodes} edges={shownEdges} {...flowProps}>
+      {children}
+    </ReactFlow>
+  );
+});
 
 /**
  * Banner errore con semantica accessibile: `role="alert"` + `aria-live`
@@ -134,8 +164,6 @@ projectId,
   project,
   reload,
   onBack,
-nodes = [],
-  edges = [],
   hexCanvasRef,
 canvasConfig = EMPTY_OBJ,
   canvasHandlers = EMPTY_OBJ,
@@ -167,6 +195,7 @@ canvasConfig = EMPTY_OBJ,
     // Blocco A, raccolta b: { kind, icon, matches, entry, Panel } degli archi
     // che si configurano nel pannello laterale (Estrai: i join).
     edgeInspector = null,
+    presentEdges = null,
   } = canvasConfig;
 
   const {
@@ -196,7 +225,11 @@ canvasConfig = EMPTY_OBJ,
   // così spostamenti e nuovi edge sono annullabili con Ctrl+Z. takeSnapshot
   // è no-op in sola lettura e dedup-safe.
   const takeSnapshot = useCanvasStore(s => s.takeSnapshot);
-  const handleConnect = (conn) => { takeSnapshot(); onConnect?.(conn); };
+  // Callback stabili per React Flow (UI-2, V8): l'ultima onConnect via ref.
+  const onConnectRef = useRef(onConnect);
+  onConnectRef.current = onConnect;
+  const handleConnect = useCallback((conn) => { takeSnapshot(); onConnectRef.current?.(conn); }, [takeSnapshot]);
+  const handleNodeDragStart = useCallback(() => takeSnapshot(), [takeSnapshot]);
 
   // ── Nuova interfaccia (Fase 4, M2) ────────────────────────────────────
   const editNodes = useCanvasStore(s => s.editNodes);
@@ -296,29 +329,30 @@ canvasConfig = EMPTY_OBJ,
   // Riordina: layout automatico come azione utente (annullabile, salvata).
   const handleAutoLayout = useCallback(() => {
     if (isReadOnly) return;
-    editNodes(current => autoLayout(current, edges));
+    editNodes(current => autoLayout(current, useCanvasStore.getState().edges));
     requestAnimationFrame(() => reactFlow.fitView({ padding: 0.15, duration: 300 }));
-  }, [isReadOnly, editNodes, edges, reactFlow]);
+  }, [isReadOnly, editNodes, reactFlow]);
 
-  const paletteAfterNode = paletteAfter ? nodes.find(n => n.id === paletteAfter) : null;
+  // Titolo del passo da cui si apre la palette (ricalcolato col contenuto).
+  const paletteContext = useCanvasDerived((s) => {
+    const n = paletteAfter ? (s.nodes || []).find(x => x.id === paletteAfter) : null;
+    return n ? nodeTitle(n.type, n.data) : null;
+  }, { deps: [paletteAfter] });
 
   // Fase 4, M6: vista Passi e rami scollegati (utils/canvasGraph).
   const canvasView = useCanvasStore(s => s.canvasView);
   const setCanvasView = useCanvasStore(s => s.setCanvasView);
   const focusNodeId = useCanvasStore(s => s.focusNodeId);
-  // Analisi del flusso solo quando cambia la struttura (non a ogni drag).
-  // Etichette degli archi verso Output e caricamenti dal glossario, anche
-  // per gli archi salvati con un nome vecchio (regola 10 del Blocco A).
-  const shownEdges = useMemo(() => withFlowEdgeLabels(edges), [edges]);
-  const graphKey = useCanvasStore(s => structureKey(s.nodes, s.edges));
+  // Analisi del flusso solo quando cambia la struttura (non a ogni drag):
+  // la firma si rilegge solo quando sale il contatore del contenuto
+  // (hooks/useCanvasDerived), l'analisi solo se la firma cambia.
+  // Le etichette degli archi verso Output e caricamenti (glossario, regola
+  // 10 del Blocco A) le applica FlowCanvas.
+  const graphKey = useCanvasDerived(s => structureKey(s.nodes, s.edges));
   const graph = useMemo(() => {
     const st = useCanvasStore.getState();
     return { key: graphKey, ...analyzeCanvas(st.nodes, st.edges) };
   }, [graphKey]);
-  const selectedId = useCanvasStore(s => {
-    const sel = s.nodes.filter(n => n.selected);
-    return sel.length === 1 ? sel[0].id : null;
-  });
   // "Vedi nel canvas": centra il passo scelto (con margine, sopra
   // l'anteprima); l'evidenziazione si spegne da sola.
   useEffect(() => {
@@ -374,6 +408,28 @@ canvasConfig = EMPTY_OBJ,
   }
 
   const canvasClassName = `editor-shell__canvas ${prefix}-canvas${isReadOnly ? ' canvas-readonly' : ''}`;
+  const flowProps = {
+    onNodesChange,
+    onEdgesChange,
+    onConnect: handleConnect,
+    onNodeDragStart: handleNodeDragStart,
+    onEdgeClick,
+    onEdgeContextMenu: onEdgeContextMenu ? handleEdgeContextMenu : undefined,
+    onInit,
+    nodeTypes: compactNodeTypes(nodeTypes),
+    edgeTypes,
+    defaultEdgeOptions,
+    fitView,
+    fitViewOptions,
+    minZoom,
+    maxZoom,
+    // Cancellazione SOLO dal nostro useCanvasKeyboard (fuoco sul canvas,
+    // annullabile) e da "Elimina passo" (con conferma): la scorciatoia
+    // nativa di React Flow cancellava anche con il fuoco su un pulsante del
+    // pannello (giro di conferma Blocco A F1).
+    deleteKeyCode: null,
+    ...(readOnlyProps || {}),
+  };
 
   return (
     <div className={`editor-shell ${prefix}-editor`}>
@@ -428,30 +484,7 @@ canvasConfig = EMPTY_OBJ,
                 className="editor-shell__hex"
               />
             )}
-            <ReactFlow
-              nodes={nodes}
-              edges={shownEdges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={handleConnect}
-              onNodeDragStart={() => takeSnapshot()}
-              onEdgeClick={onEdgeClick}
-              onEdgeContextMenu={onEdgeContextMenu ? handleEdgeContextMenu : undefined}
-              onInit={onInit}
-              nodeTypes={compactNodeTypes(nodeTypes)}
-              edgeTypes={edgeTypes}
-              defaultEdgeOptions={defaultEdgeOptions}
-              fitView={fitView}
-              fitViewOptions={fitViewOptions}
-              minZoom={minZoom}
-              maxZoom={maxZoom}
-              // Cancellazione SOLO dal nostro useCanvasKeyboard (fuoco sul
-              // canvas, annullabile) e da "Elimina passo" (con conferma): la
-              // scorciatoia nativa di React Flow cancellava anche con il fuoco
-              // su un pulsante del pannello (giro di conferma Blocco A F1).
-              deleteKeyCode={null}
-              {...(readOnlyProps || {})}
-            >
+            <FlowCanvas presentEdges={presentEdges} flowProps={flowProps}>
               <Background {...backgroundProps} />
               <Controls>
                 {palette && !isReadOnly && (
@@ -466,7 +499,7 @@ canvasConfig = EMPTY_OBJ,
                 )}
               </Controls>
               {showMiniMap && <MiniMap {...miniMapProps} />}
-            </ReactFlow>
+            </FlowCanvas>
             {canvasView === 'steps' && <StepsView onAddAfter={palette && !isReadOnly ? openPalette : null} edgeInspector={edgeInspector} />}
             {afterCanvas}
             {children}
@@ -484,7 +517,7 @@ canvasConfig = EMPTY_OBJ,
       {palette && (
         <NodePalette
           open={Boolean(paletteState)}
-          context={paletteAfterNode ? nodeTitle(paletteAfterNode.type, paletteAfterNode.data) : null}
+          context={paletteContext}
           groups={palette.groups}
           notice={palette.notice || null}
           onPick={(item) => palette.onPick(item, paletteAfter)}
@@ -495,4 +528,6 @@ canvasConfig = EMPTY_OBJ,
   );
 }
 
-export default EditorShell;
+// UI-2 (V4): il guscio non dipende dal grafo; si ridisegna con l'editor o
+// con le sue iscrizioni (struttura, vista), mai per una posizione.
+export default memo(EditorShell);
