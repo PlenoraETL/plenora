@@ -34,6 +34,26 @@ _SUPPORTED_SCHEMA = "plenora"
 _PG_UNDEFINED_TABLE = "42P01"
 _PG_INVALID_SCHEMA = "3F000"
 
+# Migration fuori transazione (conferma UI A-K11, 06/11/2026): un indice su
+# una tabella grande e scritta di continuo (log_runs) si crea con
+# CREATE INDEX CONCURRENTLY, che non blocca le scritture ma non puo' girare
+# dentro una transazione. Il file lo dichiara nella PRIMA riga; ogni
+# istruzione gira da sola in autocommit e puo' essere solo
+# CREATE INDEX CONCURRENTLY IF NOT EXISTS / DROP INDEX CONCURRENTLY IF EXISTS
+# (rieseguibili). Il tracking si scrive dopo l'ultima: un'installazione
+# interrotta riesegue il file. Un indice rimasto INVALID da un'interruzione
+# si toglie prima di ricrearlo (IF NOT EXISTS lo salterebbe).
+NO_TRANSACTION_DIRECTIVE = "-- plenora:migration no-transaction"
+_NO_TRANSACTION_STATEMENT = re.compile(
+    r"^(CREATE\s+(UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+IF\s+NOT\s+EXISTS"
+    r"|DROP\s+INDEX\s+CONCURRENTLY\s+IF\s+EXISTS)\s",
+    re.IGNORECASE,
+)
+_CREATE_INDEX_NAME = re.compile(
+    r"^CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+IF\s+NOT\s+EXISTS\s+([A-Za-z_][A-Za-z0-9_]*)\s",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class MigrationStatus:
@@ -254,6 +274,63 @@ def _migration_notice_logger(filename: str) -> Callable[[Any], None]:
     return _log
 
 
+def is_no_transaction_migration(sql: str) -> bool:
+    """True se la prima riga del file dichiara la migration fuori transazione."""
+    first = sql.lstrip("\ufeff").splitlines()[0].strip() if sql.strip() else ""
+    return first == NO_TRANSACTION_DIRECTIVE
+
+
+def no_transaction_statements(sql: str) -> List[str]:
+    """Le istruzioni di una migration fuori transazione (commenti tolti).
+
+    Solo istruzioni ammesse (``_NO_TRANSACTION_STATEMENT``): altrimenti
+    ``RuntimeError`` prima di eseguire qualunque cosa.
+    """
+    code = re.sub(r"--[^\n]*", "", sql)
+    statements = [" ".join(part.split()) for part in code.split(";")]
+    statements = [stmt for stmt in statements if stmt]
+    for stmt in statements:
+        if not _NO_TRANSACTION_STATEMENT.match(stmt):
+            raise RuntimeError(
+                "[MIGRATIONS] istruzione non ammessa fuori transazione "
+                f"(solo CREATE/DROP INDEX CONCURRENTLY IF [NOT] EXISTS): {stmt[:120]}"
+            )
+    return statements
+
+
+def _apply_no_transaction_migration(conn: Any, sql: str, schema: str, filename: str) -> None:
+    """Esegue ogni istruzione da sola in autocommit, poi il tracking."""
+    statements = no_transaction_statements(sql)
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        for stmt in statements:
+            index = _CREATE_INDEX_NAME.match(stmt)
+            if index:
+                # Un CONCURRENTLY interrotto lascia l'indice INVALID: si
+                # toglie, poi si ricrea.
+                cur.execute(
+                    "SELECT count(*) AS invalid FROM pg_index i "
+                    "WHERE i.indexrelid = to_regclass(%s) AND NOT i.indisvalid",
+                    (index.group(1),),
+                )
+                row = cur.fetchone()
+                invalid = row.get("invalid") if hasattr(row, "get") else (row[0] if row else 0)
+                if invalid:
+                    cur.execute(
+                        _sql.SQL("DROP INDEX CONCURRENTLY IF EXISTS {}").format(
+                            _sql.Identifier(index.group(1))
+                        )
+                    )
+            cur.execute(stmt)
+        cur.execute(
+            _sql.SQL(
+                "INSERT INTO {} (filename) VALUES (%s) "
+                "ON CONFLICT (filename) DO NOTHING"
+            ).format(_schema_migrations_table(schema)),
+            (filename,),
+        )
+
+
 def apply_pending_migrations() -> List[str]:
     """Applica e registra tutte le migration pending. Return l'elenco
     dei file applicati in questa chiamata.
@@ -305,18 +382,21 @@ def apply_pending_migrations() -> List[str]:
         conn = pg_connection_module.get_connection()
         notice_handler = _migration_notice_logger(filename)
         try:
-            conn.autocommit = False
             conn.add_notice_handler(notice_handler)
-            with conn.cursor() as cur:
-                cur.execute(sql)
-                cur.execute(
-                    _sql.SQL(
-                        "INSERT INTO {} (filename) VALUES (%s) "
-                        "ON CONFLICT (filename) DO NOTHING"
-                    ).format(_schema_migrations_table(schema)),
-                    (filename,),
-                )
-            conn.commit()
+            if is_no_transaction_migration(sql):
+                _apply_no_transaction_migration(conn, sql, schema, filename)
+            else:
+                conn.autocommit = False
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+                    cur.execute(
+                        _sql.SQL(
+                            "INSERT INTO {} (filename) VALUES (%s) "
+                            "ON CONFLICT (filename) DO NOTHING"
+                        ).format(_schema_migrations_table(schema)),
+                        (filename,),
+                    )
+                conn.commit()
             applied_now.append(filename)
             logger.info(f"[MIGRATIONS] OK: {filename}")
         except Exception as e:

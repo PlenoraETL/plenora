@@ -21,6 +21,7 @@ from app.core.auth.ownership import (
 )
 from app.core.auth.visibility import visible_resource_ids
 from app.core.files.service import FileSourceService, file_source_service
+from app.core.files.source_metadata import decode_file_cursor
 from app.observability.audit_action import audit_action
 from app.shared import error_codes
 from app.shared.contracts.auth import CurrentUser
@@ -327,6 +328,7 @@ def upload_multi_layer(
 def list_files(
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
+    cursor: Annotated[Optional[str], Query(max_length=512)] = None,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """Lista file visibili: owned dal proprio gruppo + condivisi via allowed_groups.
@@ -338,6 +340,14 @@ def list_files(
     dell'eseguibile, non contenuto utente.
     """
     is_super = current_user.role == "superadmin"
+    # Pagine a cursore (conferma UI A-K10): `cursor` = next_cursor della
+    # pagina prima; con il cursore `offset` non conta.
+    after = None
+    if cursor:
+        try:
+            after = decode_file_cursor(cursor)
+        except ValueError:
+            raise_typed_http(error_codes.VALIDATION_ERROR, status_code=422, message="Cursore della lista dei file non valido")
 
     # Carica TUTTI i file (senza filter) — il superadmin vede tutto
     all_files = None
@@ -345,7 +355,7 @@ def list_files(
     # Filtro file_source temporanei degli eseguibili (sempre, anche per superadmin
     if is_super:
         all_files = file_source_service.list_file_sources(
-            group_id=None, limit=limit, offset=offset,
+            group_id=None, limit=limit, offset=offset, after=after,
         )
     else:
         visible_ids = visible_resource_ids(
@@ -358,6 +368,7 @@ def list_files(
             resource_ids=visible_ids,
             limit=limit,
             offset=offset,
+            after=after,
         )
 
     # Inietta can_edit per ogni record
@@ -369,7 +380,8 @@ def list_files(
     # UI-1 (C26): nella lista niente colonne, solo quante sono e i primi
     # nomi; il client chiede le pagine successive con limit/offset (C5).
     return FileSourceSummaryList(
-        files=[FileSourceSummary.from_file_source(f) for f in files_iter]
+        files=[FileSourceSummary.from_file_source(f) for f in files_iter],
+        next_cursor=getattr(all_files, "next_cursor", None),
     )
 
 

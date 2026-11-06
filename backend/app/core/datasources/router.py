@@ -126,30 +126,34 @@ def list_datasources(
 ):
     """Lista Data Source visibili: owned dal gruppo + condivisi via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
-    is_super = current_user.role == "superadmin"
-
-    if is_super:
-        all_resources = _svc().list_datasources(
-            group_id=None, limit=limit, offset=offset,
-        )
-    else:
-        visible_ids = visible_resource_ids(
-            'datasources',
-            current_user.group_id,
-            is_superadmin=False,
-        )
-        all_resources = _svc().list_datasources(
-            group_id=None,
-            resource_ids=visible_ids,
-            limit=limit,
-            offset=offset,
-        )
+    all_resources = visible_datasources(current_user, limit=limit, offset=offset)
 
     # Calcola can_edit per ogni record
     for ds in all_resources.datasources:
         ds.can_edit = compute_can_edit(ds, current_user)
 
     return all_resources
+
+
+def visible_datasources(current_user: CurrentUser, *, limit: int = 200, offset: int = 0) -> DataSourceList:
+    """I Data Source che l'utente vede (una pagina), SENZA `can_edit`.
+
+    Fonte unica della visibilita' per la lista e per i conteggi della
+    dashboard (GET /dashboard/counts, conferma UI C-K10).
+    """
+    if current_user.role == "superadmin":
+        return _svc().list_datasources(group_id=None, limit=limit, offset=offset)
+    visible_ids = visible_resource_ids(
+        'datasources',
+        current_user.group_id,
+        is_superadmin=False,
+    )
+    return _svc().list_datasources(
+        group_id=None,
+        resource_ids=visible_ids,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{ds_id}", response_model=DataSource)

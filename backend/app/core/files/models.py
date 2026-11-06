@@ -56,6 +56,8 @@ class FileSourceUpdate(BaseModel):
 class FileSourceList(BaseModel):
     """Wrapper per la lista di file sorgente."""
     files: List[FileSource]
+    # Cursore della pagina dopo (None = ultima pagina), conferma UI A-K10.
+    next_cursor: Optional[str] = None
 
 
 # Nomi di colonna mostrati nella card della lista (FileManager/FileCard).
@@ -99,8 +101,16 @@ class FileSourceSummary(BaseModel):
 
 
 class FileSourceSummaryList(BaseModel):
-    """Una pagina della lista dei file (limit/offset): `files` senza colonne."""
+    """Una pagina della lista dei file: `files` senza colonne.
+
+    `next_cursor` (conferma UI A-K10): la pagina dopo si chiede con
+    `?cursor=<next_cursor>`; None = ultima pagina. Calcolato dalle righe del
+    DB, quindi una riga saltata non accorcia la pagina, e a cursore (non a
+    offset), quindi un caricamento durante la lettura non salta ne' ripete
+    un file.
+    """
     files: List[FileSourceSummary]
+    next_cursor: Optional[str] = None
 
 
 class FileSourceLayersResponse(BaseModel):

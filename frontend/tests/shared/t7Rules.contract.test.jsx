@@ -239,7 +239,6 @@ describe('codice morto', () => {
     'utils/glossary.js:NODE_TYPE_TERMS': 'tipo di nodo -> entità del glossario: letta dal test del glossario',
     'utils/permissions.js:CAPABILITY_BACKEND': 'capability -> regola del backend: letta dal test dei permessi',
     'utils/session.js:registeredSessionResets': 'sonda del registro delle cache di sessione',
-    'utils/sharedInvalidations.js:SHARED_LIST_NAMES': 'liste condivise invalidabili: il test le confronta con SHARED_RESOURCES (UI-1)',
     'utils/taskOutcome.js:TASK_PHASES': 'fasi dei task: enumerate dal test dell\'esito',
     'components/common/VirtualList.jsx:LONG_LISTS': 'liste lunghe dichiarate (UI-2): enumerate dal test delle liste virtualizzate',
     'utils/canvasChange.js:GRAPH_CHANGE_TABLE': 'tabella dei livelli di modifica (UI-2): enumerata dal test delle firme',

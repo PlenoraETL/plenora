@@ -23,7 +23,7 @@ import { isShortcutBlocked } from '../../utils/dialogStack';
 import { visibleNavItems } from '../../utils/navItems';
 import { matchesShortcut, openShortcutsHelp, SHORTCUTS } from '../../utils/shortcuts';
 import { ICON } from '../../utils/icons';
-import { knownProjects } from '../../utils/knownProjects';
+import { peekShared } from '../../utils/sharedResources';
 import { projectType } from '../../utils/projectTypes';
 import { projectEditorPath } from '../../utils/projectRoutes';
 import { prefetchProjectEditor } from '../../utils/editorChunks';
@@ -46,9 +46,16 @@ function commandsFor(user) {
 }
 
 /*
- * Progetti: dalla lista gia' scaricata in questa sessione
- * (utils/knownProjects), nessuna richiesta in piu'. Solo con una ricerca.
+ * Progetti: dalla lista gia' scaricata nella cache condivisa (risorsa
+ * `projects`), nessuna richiesta in piu'. Solo con una ricerca. La cache e'
+ * della sessione (una risposta arrivata dopo il logout non la riempie) ed e'
+ * invalidata da ogni rinomina o eliminazione (conferma C-K5): mai i
+ * progetti di un altro utente o nomi superati.
  */
+const knownProjects = () => (peekShared('projects')?.data?.projects || [])
+  .filter(p => p && p.id != null)
+  .map(p => ({ id: p.id, name: String(p.name || ''), project_type: p.project_type }));
+
 function projectCommands(q) {
   if (!q) return [];
   return knownProjects()

@@ -648,7 +648,14 @@ class TaskService:
                     f"connection_id: '{carica_node_data.get('connection_id', 'MANCANTE')}', "
                     f"dest_type: '{carica_node_data.get('dest_type', 'MANCANTE')}')"
                 )
-                tasks.append({"task_id": task_info.task_id, "node_id": node_id})
+                # connection_id della destinazione: alla fine del task il
+                # client invalida il catalogo tabelle di quella connessione
+                # (TASK_INVALIDATIONS, conferma UI A-K2).
+                tasks.append({
+                    "task_id": task_info.task_id,
+                    "node_id": node_id,
+                    "connection_id": carica_node_data.get("connection_id") or None,
+                })
             except Exception as exc:
                 if not resilient:
                     raise

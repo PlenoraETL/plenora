@@ -639,7 +639,15 @@ class ProjectRepository:
         `project_source` e `file_source`: nessun canvas viaggia verso
         l'applicazione. Un canvas non leggibile come JSON (pg_input_is_valid,
         PostgreSQL 16+) e' segnato `corrupted` invece di far fallire la
-        query.
+        query (un JSON che non e' un oggetto non ha nodi: nessuna sorgente,
+        come nel percorso di riserva).
+
+        La colonna `canvas` e' `jsonb` nelle migration (0000_bootstrap) e
+        `TEXT` nello schema storico (`app/db/config_schema.sql`): la query
+        passa SEMPRE da `canvas::text`, cosi' vale per entrambe
+        (`pg_input_is_valid(jsonb, ...)` non esiste: conferma UI A-K1,
+        verificata su PostgreSQL vero, test
+        `test_manipola_source_refs_on_real_postgres`).
         """
         if not project_ids:
             return []
@@ -649,8 +657,8 @@ class ProjectRepository:
             f"""
             WITH p AS (
                 SELECT id,
-                       CASE WHEN pg_input_is_valid(canvas, 'jsonb')
-                            THEN canvas::jsonb END AS doc
+                       CASE WHEN pg_input_is_valid(canvas::text, 'jsonb')
+                            THEN canvas::text::jsonb END AS doc
                 FROM projects
                 WHERE project_type = 'manipola' AND id IN ({placeholders})
             ), n AS (

@@ -9,7 +9,9 @@
  *  - error: messaggio dell'ultima richiesta fallita. Le colonne restano le
  *    ultime note: un errore non svuota i pannelli.
  *  - key: FIRMA del canvas (columnSignature) da cui la mappa e' stata
- *    calcolata.
+ *    calcolata; sources: VERSIONE DELLE SORGENTI a monte con cui e' stata
+ *    calcolata (utils/sharedResources schemaSourcesVersion, conferma A-K7);
+ *    at: quando.
  *
  * Regola unica della firma (vale per la sottoscrizione e per il
  * salvataggio):
@@ -18,14 +20,20 @@
  *     maniglia; niente posizioni, niente stato di interfaccia);
  *  2. una risposta entra nello store solo se la sua firma e' quella del
  *     canvas CORRENTE; ogni risposta entra comunque nella CACHE DELLE MAPPE
- *     della sua firma (UI-2, C12: piu' mappe per progetto, cosi' Annulla,
- *     «scrivi e cancella» e la riapertura dell'editor non richiedono). Una
- *     mappa in cache si usa subito; se ha piu' di SCHEMA_FRESH_MS si chiede
- *     anche in sottofondo (le sorgenti a monte possono cambiare);
+ *     della sua firma e della versione delle sorgenti (UI-2, C12: piu' mappe
+ *     per progetto, cosi' Annulla, «scrivi e cancella» e la riapertura
+ *     dell'editor non richiedono). Una mappa in cache si usa subito; se ha
+ *     piu' di SCHEMA_FRESH_MS si chiede anche in sottofondo. Una sorgente a
+ *     monte cambiata (progetto sorgente salvato o rieseguito, file
+ *     modificato, tabelle della connessione, connettori: ogni invalidazione
+ *     di una risorsa `schemaSource` della cache condivisa) cambia la
+ *     versione: le mappe di prima non valgono piu' e la mappa corrente si
+ *     richiede subito (A-K7);
  *  3. il salvataggio allega le colonne derivate solo per la firma del canvas
- *     che salva: se la mappa e' di un'altra firma (o manca) la chiede subito
- *     e la attende (con tetto); se non arriva, non allega niente (il backend
- *     le ricalcola). Mai colonne di una firma diversa;
+ *     che salva E per la versione delle sorgenti attuale, e solo se la mappa
+ *     ha al piu' SCHEMA_FRESH_MS: altrimenti la chiede subito e la attende
+ *     (con tetto); se non arriva, non allega niente (il backend le
+ *     ricalcola). Mai colonne di una firma diversa o vecchie (A-K7);
  *  4. una richiesta superata da una firma nuova si ANNULLA (AbortController),
  *     salvo che un salvataggio la stia aspettando.
  * La cache vale per la sessione e per progetto: non si azzera cambiando
@@ -37,9 +45,11 @@ import { serializeCanvas } from '../utils/canvasSerializer';
 import { columnSignature, handlelessOrderKey, normalizeSchemasResponse } from '../utils/columnSource';
 import { humanizeError } from '../utils/errorMessages';
 import { registerSessionReset } from '../utils/session';
+import { SCHEMA_SOURCE_RESOURCES, schemaSourcesVersion } from '../utils/sharedResources';
+import { subscribeShared } from '../utils/sharedCache';
 
 const NO_ENSURE = null;
-const INITIAL = { projectId: null, schemas: {}, states: {}, status: 'idle', error: null, key: null };
+const INITIAL = { projectId: null, schemas: {}, states: {}, status: 'idle', error: null, key: null, sources: null, at: 0 };
 
 export const createColumnStore = () => create(() => ({ ...INITIAL, refresh: () => {}, ensure: NO_ENSURE }));
 
@@ -49,7 +59,7 @@ const useColumnStore = createColumnStore();
 const SCHEMA_CACHE_PER_PROJECT = 16;
 const SCHEMA_CACHE_PROJECTS = 4;
 // Oltre questa eta' una mappa in cache si usa e si richiede in sottofondo.
-const SCHEMA_FRESH_MS = 120_000;
+export const SCHEMA_FRESH_MS = 120_000;
 const caches = new WeakMap();
 
 function cacheOf(columnStore, projectId) {
@@ -97,6 +107,7 @@ export function startColumnSync({
   fetchSchemas = inferProjectSchemas,
   delay = COLUMN_SYNC_DELAY_MS,
   now = () => Date.now(),
+  sourcesVersion = () => schemaSourcesVersion(projectId),
 }) {
   let timer = null;
   let stopped = false;
@@ -113,16 +124,21 @@ export function startColumnSync({
     return columnSignature(st.nodes, st.edges);
   };
 
-  const remember = (key, result) => {
-    cache.delete(key);
-    cache.set(key, { schemas: result.schemas, states: result.states, at: now() });
+  // Voce della cache: firma del canvas + versione delle sorgenti (A-K7).
+  const cacheKey = (key, sources) => `${sources}|${key}`;
+
+  const remember = (key, sources, result, at) => {
+    const ck = cacheKey(key, sources);
+    cache.delete(ck);
+    cache.set(ck, { schemas: result.schemas, states: result.states, at });
     while (cache.size > SCHEMA_CACHE_PER_PROJECT) cache.delete(cache.keys().next().value);
   };
 
-  // Regola 2: nello store entra solo la risposta della firma corrente.
-  const accept = (key, result) => {
-    if (stopped || currentKey() !== key) return;
-    columnStore.setState({ schemas: result.schemas, states: result.states, status: 'ok', error: null, key });
+  // Regola 2: nello store entra solo la risposta della firma corrente e
+  // delle sorgenti attuali.
+  const accept = (key, sources, result, at) => {
+    if (stopped || currentKey() !== key || sourcesVersion() !== sources) return;
+    columnStore.setState({ schemas: result.schemas, states: result.states, status: 'ok', error: null, key, sources, at });
   };
   const reject = (key, err) => {
     if (stopped || isAbort(err) || currentKey() !== key) return;
@@ -139,18 +155,20 @@ export function startColumnSync({
     }
   };
 
-  /** Mappa di un canvas preciso: { key, schemas, states } (una richiesta per firma). */
+  /** Mappa di un canvas preciso: { key, sources, at, schemas, states } (una richiesta per firma e versione). */
   const fetchFor = (canvas, key, { wait = false, background = false } = {}) => {
-    abortOthers(key);
-    const running = inflight.get(key);
+    const sources = sourcesVersion();
+    const ik = cacheKey(key, sources);
+    abortOthers(ik);
+    const running = inflight.get(ik);
     if (running) {
       if (wait) running.waiters += 1;
       return running.promise;
     }
     if (!background && currentKey() === key) columnStore.setState({ status: 'loading' });
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const entry = { key, controller, waiters: wait ? 1 : 0 };
-    const done = () => { if (inflight.get(key) === entry) inflight.delete(key); };
+    const entry = { key: ik, controller, waiters: wait ? 1 : 0 };
+    const done = () => { if (inflight.get(ik) === entry) inflight.delete(ik); };
     const payload = serializeCanvas(canvas.nodes, canvas.edges, { mode: canvas.mode });
     entry.promise = Promise.resolve()
       .then(() => (controller ? fetchSchemas(projectId, payload, { signal: controller.signal }) : fetchSchemas(projectId, payload)))
@@ -158,13 +176,14 @@ export function startColumnSync({
         (data) => {
           done();
           const result = normalizeSchemasResponse(data);
-          if (!stopped) remember(key, result);
-          accept(key, result);
-          return { key, ...result };
+          const at = now();
+          if (!stopped) remember(key, sources, result, at);
+          accept(key, sources, result, at);
+          return { key, sources, at, ...result };
         },
         (err) => { done(); reject(key, err); throw err; },
       );
-    inflight.set(key, entry);
+    inflight.set(ik, entry);
     return entry.promise;
   };
 
@@ -173,24 +192,27 @@ export function startColumnSync({
     if (stopped) return;
     const key = currentKey();
     if (key == null) return;
+    const sources = sourcesVersion();
     const st = columnStore.getState();
-    if (!force && st.key === key) {
-      // La mappa e' gia' quella di questa firma.
+    if (!force && st.key === key && st.sources === sources) {
+      // La mappa e' gia' quella di questa firma e di queste sorgenti.
       if (st.status !== 'ok') columnStore.setState({ status: 'ok', error: null });
       return;
     }
     const canvas = canvasStore.getState();
     const snapshot = { nodes: canvas.nodes, edges: canvas.edges, mode: canvas.mode };
-    const cached = force ? null : cache.get(key);
+    const cached = force ? null : cache.get(cacheKey(key, sources));
     force = false;
     if (cached) {
       // Regola 2: la mappa gia' nota di questa firma, subito.
-      columnStore.setState({ schemas: cached.schemas, states: cached.states, status: 'ok', error: null, key });
-      abortOthers(key);
+      columnStore.setState({ schemas: cached.schemas, states: cached.states, status: 'ok', error: null, key, sources, at: cached.at });
+      abortOthers(cacheKey(key, sources));
       if (now() - cached.at > SCHEMA_FRESH_MS) fetchFor(snapshot, key, { background: true }).catch(() => {});
       return;
     }
-    fetchFor(snapshot, key).catch(() => {});
+    // Stessa firma con sorgenti cambiate: le colonne di prima restano a
+    // video (un'attesa non svuota i pannelli), la nuova mappa in sottofondo.
+    fetchFor(snapshot, key, { background: st.key === key }).catch(() => {});
   };
 
   const schedule = (wait = delay) => {
@@ -201,23 +223,40 @@ export function startColumnSync({
 
   const refresh = () => { force = true; schedule(0); };
 
-  /** Regola 3: la mappa per la firma di `canvas`, chiesta subito. */
+  /**
+   * Regola 3: la mappa per la firma di `canvas` e le sorgenti attuali, non
+   * piu' vecchia di SCHEMA_FRESH_MS; altrimenti chiesta subito.
+   */
   const ensure = (canvas) => {
     if (stopped) return Promise.reject(new Error('sincronizzazione ferma'));
     const key = columnSignature(canvas.nodes, canvas.edges);
-    const st = columnStore.getState();
-    if (st.key === key) return Promise.resolve({ key, schemas: st.schemas, states: st.states });
-    const cached = cache.get(key);
-    if (cached) return Promise.resolve({ key, schemas: cached.schemas, states: cached.states });
-    const promise = fetchFor(canvas, key, { wait: true });
+    const sources = sourcesVersion();
+    const cached = cache.get(cacheKey(key, sources));
+    if (cached && now() - cached.at <= SCHEMA_FRESH_MS) {
+      return Promise.resolve({ key, sources, at: cached.at, schemas: cached.schemas, states: cached.states });
+    }
+    const promise = fetchFor(canvas, key, { wait: true, background: true });
     const release = () => {
-      const entry = inflight.get(key);
+      const entry = inflight.get(cacheKey(key, sources));
       if (entry && entry.waiters > 0) entry.waiters -= 1;
     };
     promise.then(release, release);
     return promise;
   };
-  columnStore.setState({ refresh, ensure });
+  // La mappa a video vale per il salvataggio solo se recente e delle
+  // sorgenti attuali (derivedColumnsForSave).
+  const usable = (st, key) => st.key === key && st.sources === sourcesVersion() && now() - st.at <= SCHEMA_FRESH_MS;
+  columnStore.setState({ refresh, ensure, usable });
+
+  // Sorgenti a monte cambiate (cache condivisa): la versione e' cambiata,
+  // la mappa corrente si richiede subito (A-K7).
+  let seenSources = sourcesVersion();
+  const unsubscribeSources = subscribeShared(SCHEMA_SOURCE_RESOURCES, () => {
+    const next = sourcesVersion();
+    if (next === seenSources) return;
+    seenSources = next;
+    schedule(0);
+  });
 
   // Lati senza maniglia: solo allora una posizione puo' cambiare la firma.
   const initial = canvasStore.getState();
@@ -237,9 +276,10 @@ export function startColumnSync({
     stopped = true;
     clearTimeout(timer);
     unsubscribe();
+    unsubscribeSources();
     for (const entry of inflight.values()) if (entry.waiters === 0) entry.controller?.abort();
     inflight.clear();
-    columnStore.setState({ ...INITIAL, refresh: () => {}, ensure: NO_ENSURE });
+    columnStore.setState({ ...INITIAL, refresh: () => {}, ensure: NO_ENSURE, usable: null });
   };
 }
 
@@ -257,8 +297,10 @@ export function derivedColumnsForSave(projectId, canvas, {
   const st = columnStore.getState();
   if (!projectId || st.projectId !== projectId || !canvas) return null;
   const key = columnSignature(canvas.nodes, canvas.edges);
-  if (st.key === key) return st.schemas;
-  if (typeof st.ensure !== 'function') return null;
+  if (typeof st.ensure !== 'function') return st.key === key ? st.schemas : null;
+  // La mappa a video: solo della stessa firma, delle sorgenti attuali e
+  // recente (A-K7); altrimenti ensure() la chiede.
+  if (typeof st.usable === 'function' ? st.usable(st, key) : st.key === key) return st.schemas;
   let timer = null;
   const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(null), timeoutMs); });
   const wanted = st.ensure(canvas)

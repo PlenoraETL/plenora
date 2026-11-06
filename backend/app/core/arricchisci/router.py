@@ -463,26 +463,10 @@ def list_api_connections(
     """Lista API connections visibili: owned dal gruppo + condivise via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
     try:
-        is_super = current_user.role == "superadmin"
-        if is_super:
-            all_conns = _api_connection_service.list_api_connections(
-                category=category, connection_type=connection_type, group_id=None,
-                limit=limit, offset=offset,
-            )
-        else:
-            visible_ids = visible_resource_ids(
-                'api_connections',
-                current_user.group_id,
-                is_superadmin=False,
-            )
-            all_conns = _api_connection_service.list_api_connections(
-                category=category,
-                connection_type=connection_type,
-                group_id=None,
-                resource_ids=visible_ids,
-                limit=limit,
-                offset=offset,
-            )
+        all_conns = visible_api_connections(
+            current_user, category=category, connection_type=connection_type,
+            limit=limit, offset=offset,
+        )
 
         for c in all_conns:
             c["can_edit"] = compute_can_edit(c, current_user)
@@ -491,6 +475,39 @@ def list_api_connections(
     except Exception as e:
         logger.error(f"[CRASH] Errore lista API connections: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
+
+
+def visible_api_connections(
+    current_user: CurrentUser,
+    *,
+    category: str | None = None,
+    connection_type: str | None = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> list:
+    """Le API connection che l'utente vede (una pagina), SENZA `can_edit`.
+
+    Fonte unica della visibilita' per la lista e per i conteggi della
+    dashboard (GET /dashboard/counts, conferma UI C-K10).
+    """
+    if current_user.role == "superadmin":
+        return _api_connection_service.list_api_connections(
+            category=category, connection_type=connection_type, group_id=None,
+            limit=limit, offset=offset,
+        )
+    visible_ids = visible_resource_ids(
+        'api_connections',
+        current_user.group_id,
+        is_superadmin=False,
+    )
+    return _api_connection_service.list_api_connections(
+        category=category,
+        connection_type=connection_type,
+        group_id=None,
+        resource_ids=visible_ids,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @api_connections_router.get("/api-connections/{api_id}")

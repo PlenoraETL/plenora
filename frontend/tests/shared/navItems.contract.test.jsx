@@ -6,8 +6,10 @@
  *     stesse pagine con lo stesso nome e la stessa icona: quelle della
  *     tabella che il ruolo vede. Nessuna delle due ha una lista propria.
  *  2. Ogni destinazione della tabella e' una rotta di App.jsx.
- *  3. Ctrl+K cerca anche i progetti gia' scaricati (utils/knownProjects),
- *     senza richieste, e apre l'editor giusto.
+ *  3. Ctrl+K cerca anche i progetti gia' scaricati (cache condivisa,
+ *     risorsa `projects`), senza richieste, e apre l'editor giusto; una
+ *     risposta arrivata dopo il logout non li mostra al login seguente e una
+ *     rinomina o eliminazione li toglie (conferma C-K5).
  *  4. La barra si chiude a sole icone e lo ricorda (anche senza
  *     localStorage funzionante).
  */
@@ -30,7 +32,8 @@ vi.mock('../../src/api/http', () => ({ default: http }));
 import AppSidebar from '../../src/components/AppSidebar';
 import CommandPalette from '../../src/components/common/CommandPalette';
 import { NAV_ITEMS, visibleNavItems } from '../../src/utils/navItems';
-import { rememberProjects } from '../../src/utils/knownProjects';
+import { SHARED_RESOURCES } from '../../src/utils/sharedResources';
+import { defineSharedResources, readShared, invalidateAfterWrite } from '../../src/utils/sharedCache';
 import { resetSession } from '../../src/utils/session';
 import { LAYOUT_KEYS } from '../../src/hooks/useStoredState';
 import { SRC, stripComments } from '../helpers/sourceScan.js';
@@ -56,7 +59,19 @@ const openPalette = async () => {
 };
 
 beforeEach(() => { localStorage.clear(); });
-afterEach(() => { cleanup(); resetSession(); vi.restoreAllMocks(); });
+afterEach(() => {
+  cleanup(); resetSession(); vi.restoreAllMocks();
+  defineSharedResources({ projects: SHARED_RESOURCES.projects });
+});
+
+// La lista dei progetti come la scarica la dashboard: nella cache condivisa.
+let projectsLoad = null;
+const useProjectsLoad = () => defineSharedResources({ projects: { load: () => projectsLoad(), freshMs: 30_000 } });
+async function rememberProjects(projects) {
+  projectsLoad = () => Promise.resolve({ projects });
+  useProjectsLoad();
+  await readShared('projects');
+}
 
 describe('barra laterale e palette: la stessa tabella', () => {
   it.each(ROLES)('%s: la barra mostra esattamente le voci della tabella che il ruolo vede', async (r) => {
@@ -106,7 +121,7 @@ describe('barra laterale e palette: la stessa tabella', () => {
 describe('palette: ricerca dei progetti', () => {
   it('trova i progetti gia\' scaricati senza richieste e apre l\'editor del tipo', async () => {
     auth.user = { user_id: 1, username: 'u', role: 'editor' };
-    rememberProjects([
+    await rememberProjects([
       { id: 'p1', name: 'Catasto Campania', project_type: 'manipola', canvas: { big: true } },
       { id: 'p2', name: 'Ticket aperti', project_type: 'estrai' },
     ]);
@@ -122,7 +137,7 @@ describe('palette: ricerca dei progetti', () => {
 
   it('senza ricerca nessun progetto; a fine sessione la lista si svuota', async () => {
     auth.user = { user_id: 1, username: 'u', role: 'editor' };
-    rememberProjects([{ id: 'p1', name: 'Catasto', project_type: 'estrai' }]);
+    await rememberProjects([{ id: 'p1', name: 'Catasto', project_type: 'estrai' }]);
     mount(<CommandPalette />);
     let dialog = await openPalette();
     expect(within(dialog).queryByText('Catasto')).toBeNull();
@@ -133,6 +148,45 @@ describe('palette: ricerca dei progetti', () => {
     dialog = await openPalette();
     fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'catasto' } });
     expect(within(dialog).queryByText('Catasto')).toBeNull();
+  });
+});
+
+describe('palette: progetti di un\'altra sessione o superati (conferma C-K5)', () => {
+  it('una risposta arrivata dopo il logout non mostra i progetti di A a B', async () => {
+    auth.user = { user_id: 2, username: 'b', role: 'editor' };
+    let release;
+    projectsLoad = () => new Promise((res) => { release = () => res({ projects: [{ id: 'pa', name: 'Segreto di A', project_type: 'estrai' }] }); });
+    useProjectsLoad();
+    const pending = readShared('projects');
+    resetSession();
+    release();
+    await pending;
+    mount(<CommandPalette />);
+    const dialog = await openPalette();
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'segreto' } });
+    expect(within(dialog).queryByText('Segreto di A')).toBeNull();
+  });
+
+  it('rinomina ed eliminazione: il nome di prima non resta nella palette', async () => {
+    auth.user = { user_id: 1, username: 'u', role: 'editor' };
+    await rememberProjects([{ id: 'p1', name: 'Vecchio nome', project_type: 'estrai' }]);
+    invalidateAfterWrite('put', '/projects/p1');
+    mount(<CommandPalette />);
+    let dialog = await openPalette();
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'vecchio' } });
+    expect(within(dialog).queryByText('Vecchio nome')).toBeNull();
+    await act(async () => { fireEvent.keyDown(document, { key: 'Escape' }); });
+    await rememberProjects([{ id: 'p2', name: 'Da eliminare', project_type: 'estrai' }]);
+    invalidateAfterWrite('delete', '/projects/p2');
+    dialog = await openPalette();
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'eliminare' } });
+    expect(within(dialog).queryByText('Da eliminare')).toBeNull();
+  });
+
+  it('nessun modulo tiene una copia propria dei progetti per la palette', () => {
+    expect(fs.existsSync(path.join(SRC, 'utils/knownProjects.js'))).toBe(false);
+    const palette = stripComments(fs.readFileSync(path.join(SRC, 'components/common/CommandPalette.jsx'), 'utf-8'));
+    expect(palette).toMatch(/peekShared\('projects'\)/);
   });
 });
 

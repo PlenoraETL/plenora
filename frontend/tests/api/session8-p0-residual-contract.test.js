@@ -66,8 +66,8 @@ describe('Sessione 8 P0 residui', () => {
     httpMock.get.mockResolvedValueOnce({ data: { files: [] } });
     const { getFiles } = await import('../../src/api/files');
     await getFiles();
-    // UI-1 (C5): a pagine (limit/offset), sempre su `/files`.
-    expect(httpMock.get).toHaveBeenCalledWith('/files', expect.objectContaining({ params: expect.objectContaining({ offset: 0 }) }));
+    // UI-1 (C5), conferma A-K10: a pagine (limit + cursore), sempre su `/files`.
+    expect(httpMock.get).toHaveBeenCalledWith('/files', expect.objectContaining({ params: expect.objectContaining({ limit: 200 }) }));
     // Anti-regression: niente trailing slash
     expect(httpMock.get).not.toHaveBeenCalledWith('/files/');
   });

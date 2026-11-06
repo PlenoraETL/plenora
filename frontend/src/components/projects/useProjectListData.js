@@ -16,30 +16,38 @@
  */
 
 import { useCallback, useMemo, useRef } from 'react';
-import { getLatestRunByProject } from '../../api/logRuns';
 import { useResource } from '../../hooks/useResource';
 import { readShared } from '../../utils/sharedResources';
 
 const SERVICES = ['progetti', 'connessioni', 'conteggi', 'file', 'ArcGIS', 'eseguibili', 'stato delle esecuzioni'];
+// Conteggi non disponibili (GET /dashboard/counts `unavailable`, C-K10): ognuno
+// e' indipendente, uno che manca non toglie gli altri.
+const COUNT_LABELS = Object.freeze({
+  api_connections: 'conteggio delle API esterne',
+  datasources: 'conteggio dei Data Source',
+  schedules: 'conteggio delle pianificazioni',
+});
 const UNAVAILABLE = Object.freeze({ status: 'unavailable' });
 const NO_COUNTS = Object.freeze({ api_connections: 0, datasources: 0, schedules_active: 0, schedules_by_project: {} });
 
 // UI-1 (C4, C27): le liste dalla cache condivisa (utils/sharedResources: la
 // stessa risposta di gestori, editor e nodi, aggiornata quando una
 // scrittura la invalida); API, data source e schedule solo come conteggi
-// (GET /dashboard/counts), non tre liste intere.
-const DASHBOARD_SHARED = Object.freeze(['projects', 'connections', 'dashboardCounts', 'files', 'arcgisConnections', 'eseguibili']);
+// (GET /dashboard/counts), non tre liste intere. Anche lo stato dell'ultima
+// esecuzione e' nella cache (conferma A-K3): l'arrivo di una lista rilegge
+// il caricatore, ma le altre risposte vengono dalla cache, non dal server.
+const DASHBOARD_SHARED = Object.freeze(['projects', 'connections', 'dashboardCounts', 'files', 'arcgisConnections', 'eseguibili', 'latestRunByProject']);
 
 async function loadDashboard({ force = false } = {}) {
-  const results = await Promise.allSettled([
-    ...DASHBOARD_SHARED.map((name) => readShared(name, [], { force })),
-    getLatestRunByProject(),
-  ]);
+  const results = await Promise.allSettled(DASHBOARD_SHARED.map((name) => readShared(name, [], { force })));
   // Senza progetti la dashboard non ha senso: e' un errore, non "vuota".
   if (results[0].status === 'rejected') throw results[0].reason;
   const value = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
   const projectsList = value(0, {}).projects || [];
-  const counts = { ...NO_COUNTS, ...(value(2, null) || {}) };
+  const rawCounts = value(2, null) || {};
+  // Un conteggio non disponibile vale 0 nei calcoli e si dice tra i dati non caricati.
+  const counts = Object.fromEntries(Object.entries(NO_COUNTS).map(([k, zero]) => [k, rawCounts[k] ?? zero]));
+  const countFailures = (Array.isArray(rawCounts.unavailable) ? rawCounts.unavailable : []).map((k) => COUNT_LABELS[k] || k);
   const arcgisData = value(4, { connections: [] });
   const eseguibiliData = value(5, []);
   const sourcesMap = {};
@@ -58,7 +66,7 @@ async function loadDashboard({ force = false } = {}) {
     arcgisConnections: arcgisData.connections || arcgisData || [],
     eseguibili: Array.isArray(eseguibiliData) ? eseguibiliData : (eseguibiliData?.items || []),
     runStatusByProject: results[6].status === 'fulfilled' ? (results[6].value?.statuses || {}) : null,
-    failures: results.map((r, i) => (r.status === 'rejected' ? SERVICES[i] : null)).filter(Boolean),
+    failures: [...results.map((r, i) => (r.status === 'rejected' ? SERVICES[i] : null)).filter(Boolean), ...countFailures],
     projectSources: sourcesMap,
     projectFileSources: fileSourcesMap,
   };

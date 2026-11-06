@@ -24,10 +24,18 @@
  *  - `refreshInterval`: aggiornamento periodico con un profilo di
  *    utils/poller (nome di POLL_PROFILES): un poll alla volta, fermo con la
  *    scheda nascosta (riparte subito quando torna visibile), backoff quando
- *    i dati non cambiano, durata massima (UI-1, C19-C23);
+ *    i dati non cambiano, durata massima (UI-1, C19-C23); scaduta la durata
+ *    massima `paused` e' true finche' l'utente non torna sulla scheda o non
+ *    usa la pagina (conferma A-K5b);
  *  - `shared`: le risorse condivise (utils/sharedResources) che il
  *    caricatore legge: quando una viene invalidata (scrittura) o arriva
- *    nuova da un'altra richiesta, i dati si ricaricano in background;
+ *    nuova da un'altra richiesta, i dati si ricaricano in background. Un
+ *    avviso che arriva mentre una richiesta di questo hook e' in corso (di
+ *    solito causato da lei stessa) non la supera: si ricarica UNA volta
+ *    dopo, dalla cache (conferma A-K5c: il poll conserva il suo esito e il
+ *    backoff funziona). L'aggiornamento in background di una risorsa che
+ *    fallisce e' un errore di questo hook: i dati restano, `stale`
+ *    («non aggiornati», conferma A-K9);
  *  - il caricatore riceve `{ signal, force }`: `force` e' true per reload(),
  *    Riprova e i poll (la cache condivisa non basta, serve il server);
  *  - `revalidate` con `initialData`: si parte dai dati iniziali (es. cache
@@ -99,6 +107,11 @@ export function useResource(loader, {
   revalidateRef.current = revalidate;
   const dataRef = useRef(state.data);
   dataRef.current = state.data;
+  // Richiesta di questo hook in corso, e avviso condiviso arrivato intanto.
+  const inFlightRef = useRef(false);
+  const dirtyRef = useRef(false);
+  const sharedErrorRef = useRef(null);
+  const [paused, setPaused] = useState(false);
 
   // background: aggiornamento periodico (l'errore mostrato resta finche'
   // non arriva una risposta); altrimenti Riprova/reload (l'errore si toglie
@@ -117,16 +130,35 @@ export function useResource(loader, {
     // La richiesta parte subito (nello stesso giro), un errore sincrono del
     // caricatore e' un errore della richiesta.
     let pending;
+    inFlightRef.current = true;
+    sharedErrorRef.current = null;
     try {
       pending = Promise.resolve(loader({ signal: controller?.signal, force }));
     } catch (err) {
       pending = Promise.reject(err);
     }
+    // Ultima richiesta conclusa (DOPO aver scritto il suo esito): un avviso
+    // condiviso arrivato intanto vale UNA ricarica, dalla cache (A-K5c).
+    const settle = () => {
+      if (id !== reqRef.current) return;
+      inFlightRef.current = false;
+      if (dirtyRef.current && mountedRef.current) {
+        dirtyRef.current = false;
+        requestRef.current(true, false);
+      }
+    };
     return pending
       .then(
         (data) => {
           if (!mountedRef.current || id !== reqRef.current) return undefined;
-          setState({ key: forKey, dataKey: forKey, data, error: null, rawError: null, loading: false });
+          // Un aggiornamento in background della risorsa condivisa fallito
+          // mentre questa richiesta rispondeva dalla cache: i dati sono
+          // quelli di prima, «non aggiornati» (A-K9).
+          const sharedErr = sharedErrorRef.current;
+          sharedErrorRef.current = null;
+          setState(sharedErr
+            ? { key: forKey, dataKey: forKey, data, error: errorMessageRef.current(sharedErr), rawError: sharedErr, loading: false }
+            : { key: forKey, dataKey: forKey, data, error: null, rawError: null, loading: false });
           return data;
         },
         (err) => {
@@ -144,8 +176,11 @@ export function useResource(loader, {
           }));
           return undefined;
         },
-      );
+      )
+      .finally(settle);
   }, []);
+  const requestRef = useRef(request);
+  requestRef.current = request;
   // Primo caricamento di una chiave: la cache condivisa vale (force false).
   const firstLoad = useCallback(() => request(false, false), [request]);
   // reload/Riprova: dal server.
@@ -184,13 +219,16 @@ export function useResource(loader, {
   const profile = useMemo(() => pollProfile(refreshInterval), [refreshInterval]);
   useEffect(() => {
     if (!enabled || !profile || !settledOnce) return undefined;
-    return startPoller(() => {
+    setPaused(false);
+    const stop = startPoller(() => {
+      setPaused(false);
       // Una richiesta gia' in corso (reload dell'utente) vale come giro.
       if (loadingRef.current) return { changed: true };
       const before = JSON.stringify(dataRef.current ?? null);
       // Nessun dato (errore, risposta superata) = nessuna novita': backoff.
       return poll().then((data) => ({ changed: data !== undefined && JSON.stringify(data) !== before }));
-    }, { ...profile, pauseWhenHidden, resumeOnVisible: true });
+    }, { ...profile, pauseWhenHidden, resumeOnVisible: true, onExpire: () => { if (mountedRef.current) setPaused(true); } });
+    return () => { stop(); setPaused(false); };
   }, [enabled, profile, pauseWhenHidden, settledOnce, poll]);
 
   // Risorse condivise: invalidate (scrittura) o arrivate nuove da un'altra
@@ -198,7 +236,25 @@ export function useResource(loader, {
   const sharedKey = shared ? JSON.stringify(shared) : null;
   useEffect(() => {
     if (!enabled || !sharedKey) return undefined;
-    return subscribeShared(JSON.parse(sharedKey), () => { if (mountedRef.current) request(true, false); });
+    return subscribeShared(JSON.parse(sharedKey), (_name, event) => {
+      if (!mountedRef.current) return;
+      if (event?.kind === 'error') {
+        // Richiesta di questo hook in corso: l'errore vale per il suo esito
+        // (se risponde con i dati di prima, restano «non aggiornati»).
+        if (inFlightRef.current) { sharedErrorRef.current = event.error; return; }
+        // Aggiornamento in background non riuscito: i dati di questa chiave
+        // restano, con l'errore (stale).
+        const err = event.error;
+        setState(s => (s.dataKey === keyRef.current
+          ? { ...s, error: errorMessageRef.current(err), rawError: err, loading: false }
+          : s));
+        return;
+      }
+      // Arrivata o invalidata mentre una richiesta di questo hook e' in
+      // corso: dopo di lei, una volta (A-K5c).
+      if (inFlightRef.current) { dirtyRef.current = true; return; }
+      request(true, false);
+    });
   }, [enabled, sharedKey, request]);
 
   // Dati scritti da chi li conosce (azione riuscita, altra copia caricata):
@@ -231,10 +287,11 @@ export function useResource(loader, {
     refreshing: loading && hasData,
     stale: Boolean(error) && hasData,
     hasData,
+    paused: enabled && paused,
     reload: load,
     retry: load,
     setData,
-  }), [status, data, error, sameKey, state.rawError, loading, hasData, load, setData]);
+  }), [status, data, error, sameKey, state.rawError, loading, hasData, enabled, paused, load, setData]);
 }
 
 export default useResource;

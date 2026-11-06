@@ -33,7 +33,11 @@ const catalogOf = (d) => ({ tables: d?.tables || {}, views: d?.views || {} });
 
 // UI-1 (C6-C8, M-Estrai): tutto dalla cache condivisa (utils/sharedResources).
 //  - Il progetto: la risposta appena letta da OpenProjectPage vale (5 s),
-//    Riprova/reload la chiede al server (force).
+//    Riprova/reload la chiede al server (force). MAI una copia scaduta
+//    (allowStale: false, conferma A-K4): il canvas aperto e' la base dei
+//    salvataggi (canvas_version) e delle migrazioni a monte
+//    (applied_migrations); una copia vecchia darebbe un canvas superato e un
+//    409 al primo salvataggio.
 //  - Le connessioni servono intere (selettori dei nodi, store del canvas):
 //    la stessa lista di dashboard e gestori, non un'altra richiesta; la
 //    connessione del progetto si cerca li' e, se e' ArcGIS, nella lista
@@ -42,7 +46,7 @@ const catalogOf = (d) => ({ tables: d?.tables || {}, views: d?.views || {} });
 //    ogni apertura dell'editor); «Riprova» lo chiede al server.
 async function loadBoot(projectId, withCatalog, force) {
   const [projectData, connectionsRes] = await Promise.all([
-    readShared('project', [projectId], { force }),
+    readShared('project', [projectId], { force, allowStale: false }),
     readShared('connections', [], { force }).then(d => ({ ok: d.connections || [] }), err => ({ err })),
   ]);
   const allConnections = connectionsRes.ok || [];

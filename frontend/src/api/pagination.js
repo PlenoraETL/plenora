@@ -38,3 +38,30 @@ export async function fetchAllOffsetPages(
   }
   throw new Error(`Pagination limit exceeded for ${url}`);
 }
+
+/**
+ * Tutte le pagine di una lista a CURSORE (`next_cursor` nella risposta,
+ * `cursor` nella richiesta dopo; conferma UI A-K10): una dopo l'altra, la
+ * fine e' `next_cursor` assente (mai «pagina corta»), quindi una riga
+ * saltata dal server non tronca la lista e un caricamento durante la
+ * lettura non fa saltare ne' ripetere un elemento.
+ */
+export async function fetchAllCursorPages(
+  url,
+  {
+    params = {},
+    pageSize = DEFAULT_PAGE_SIZE,
+    extractItems = data => data,
+    mergeItems = items => items,
+  } = {},
+) {
+  const allItems = [];
+  let cursor = null;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const response = await http.get(url, { params: { ...params, limit: pageSize, ...(cursor ? { cursor } : {}) } });
+    allItems.push(...(extractItems(response.data) || []));
+    cursor = response.data?.next_cursor || null;
+    if (!cursor) return mergeItems(allItems, response.data);
+  }
+  throw new Error(`Pagination limit exceeded for ${url}`);
+}

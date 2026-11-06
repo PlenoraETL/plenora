@@ -338,7 +338,7 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
               <div className="sl__list-count">{filteredSchedules.length === 1 ? '1 pianificazione' : `${filteredSchedules.length} pianificazioni`}{activeFilter !== 'all' ? ' '+filterConfigs[activeFilter]?.label?.toLowerCase() : ''}</div>
               {/* Oltre la soglia solo le righe visibili, altezze misurate: log ed
                   esecuzioni aperte non si tagliano (UI-2, V9: common/VirtualList). */}
-              <VirtualList label="Pianificazioni" items={filteredSchedules} itemKey={s => s.id} estimatedItemHeight={120} gap={10} maxHeight={720} renderItem={s => (
+              <VirtualList label="Pianificazioni" items={filteredSchedules} itemKey={s => s.id} estimatedItemHeight={120} gap={10} renderItem={s => (
                 <ScheduleCard
                   schedule={s}
                   canManage={can.manageSchedule(user, s)}

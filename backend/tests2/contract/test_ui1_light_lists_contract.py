@@ -146,7 +146,8 @@ def test_files_list_route_declares_summary_model():
 
 def test_frontend_reads_files_list_in_pages():
     src = (BACKEND_ROOT.parent / "frontend" / "src" / "api" / "files.js").read_text(encoding="utf-8")
-    assert re.search(r"getFiles\s*=\s*async\s*\(\)\s*=>\s*fetchAllOffsetPages\('/files'", src)
+    # Conferma A-K10: a cursore (next_cursor), non a offset.
+    assert re.search(r"getFiles\s*=\s*async\s*\(\)\s*=>\s*fetchAllCursorPages\('/files'", src)
 
 
 def test_dashboard_counts_use_the_list_routes(monkeypatch, current_user):
@@ -157,13 +158,13 @@ def test_dashboard_counts_use_the_list_routes(monkeypatch, current_user):
 
     calls = []
 
-    def fake_api(**kw):
+    def fake_api(_cu, **kw):
         calls.append(("api", kw["offset"]))
         # Due pagine: la prima piena.
         n = 500 if kw["offset"] == 0 else 3
         return {"api_connections": [{}] * n}
 
-    def fake_ds(**kw):
+    def fake_ds(_cu, **kw):
         calls.append(("ds", kw["offset"]))
         return SimpleNamespace(datasources=[object(), object()])
 
@@ -172,8 +173,9 @@ def test_dashboard_counts_use_the_list_routes(monkeypatch, current_user):
         mk = lambda pid, en: SimpleNamespace(pipeline=SimpleNamespace(project_id=pid), schedule=SimpleNamespace(enabled=en))
         return SimpleNamespace(schedules=[mk("p1", True), mk("p1", False), mk("p2", True)])
 
-    monkeypatch.setattr(api_routes, "list_api_connections", fake_api)
-    monkeypatch.setattr(ds_routes, "list_datasources", fake_ds)
+    # Conferma C-K10: le funzioni di visibilita' delle liste, senza can_edit.
+    monkeypatch.setattr(api_routes, "visible_api_connections", fake_api)
+    monkeypatch.setattr(ds_routes, "visible_datasources", fake_ds)
     monkeypatch.setattr(sched_routes, "list_schedules", fake_sched)
 
     app = FastAPI()
@@ -185,6 +187,7 @@ def test_dashboard_counts_use_the_list_routes(monkeypatch, current_user):
         "datasources": 2,
         "schedules_active": 2,
         "schedules_by_project": {"p1": 2, "p2": 1},
+        "unavailable": [],
     }
     assert ("api", 500) in calls
 
@@ -242,6 +245,6 @@ def test_log_runs_latest_by_project_index_migration():
     assert "ON log_runs (project_id, ts_start DESC)" in code
     assert "ON log_runs (group_id, project_id, ts_start DESC)" in code
     for stmt in [s for s in code.split(";") if s.strip()]:
-        assert re.match(r"\s*CREATE INDEX IF NOT EXISTS", stmt), stmt
+        assert re.match(r"\s*CREATE INDEX CONCURRENTLY IF NOT EXISTS", stmt), stmt
     assert not re.search(r"\b(DROP|DELETE|UPDATE|TRUNCATE|ALTER)\b", code, re.I)
     assert statements

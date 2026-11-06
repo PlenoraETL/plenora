@@ -1,3 +1,6 @@
-/* VirtualList (UI-2, V9): il riquadro che scorre da solo oltre la soglia. */
+/* VirtualList (UI-2, V9; conferma A-K6): nella pagina la lista e' nel flusso
+   del documento (scorre la pagina, i menu delle schede non vengono tagliati);
+   solo nei nodi del canvas ha il suo riquadro che scorre. */
 .vlist { width: 100%; min-width: 0; }
-.vlist > div { overscroll-behavior: contain; }
+.vlist--box { overflow-y: auto; overscroll-behavior: contain; }
+.vlist__spacer { width: 100%; pointer-events: none; }

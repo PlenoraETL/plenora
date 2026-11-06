@@ -16,7 +16,7 @@
  * Auth, error handling e logout 401 sono già gestiti dagli interceptor di http.js.
  */
 import http from './http';
-import { fetchAllOffsetPages } from './pagination';
+import { fetchAllCursorPages } from './pagination';
 import { assertFileSize, throwIfUploadTooLarge } from './uploadGuards';
 import { uploadProgress } from '../utils/transferProgress';
 
@@ -77,7 +77,7 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
  *
  * @returns {Promise<{files: Array}>}
  */
-export const getFiles = async () => fetchAllOffsetPages('/files', {
+export const getFiles = async () => fetchAllCursorPages('/files', {
   extractItems: data => data.files,
   mergeItems: (items, lastPage) => ({ ...lastPage, files: items }),
 });

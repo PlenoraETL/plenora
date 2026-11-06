@@ -23,7 +23,7 @@ import {
   readShared, peekShared, invalidateShared, invalidateAfterWrite, subscribeShared,
   defineSharedResources, resetSharedCache, STALE_LIMIT_MS,
 } from '../../src/utils/sharedCache';
-import { WRITE_INVALIDATIONS, writeRule, invalidationsForWrite, SHARED_LIST_NAMES } from '../../src/utils/sharedInvalidations';
+import { WRITE_INVALIDATIONS, TASK_INVALIDATIONS, writeRule, invalidationsForWrite, SHARED_LIST_NAMES } from '../../src/utils/sharedInvalidations';
 import { POLL_PROFILES, startPoller, BACKOFF_FACTOR } from '../../src/utils/poller';
 import { pollTasks } from '../../src/utils/taskPoller';
 import { resetSession } from '../../src/utils/session';
@@ -52,6 +52,8 @@ const SHARED_API = [
   'listProjects', 'listConnections', 'listFeatureConnections', 'listApiConnections', 'getFiles',
   'listDataSources', 'listEseguibili', 'listConnectionSets', 'getDashboardCounts', 'getProject',
   'getFile', 'getConnectionTables', 'getTicketsCounts', 'getTicketsMeta', 'getBackupStatus',
+  // Conferma A-K3: lo stato dell'ultima esecuzione e' anche lui nella cache.
+  'getLatestRunByProject',
 ];
 
 // Chi puo' chiamarle direttamente, col motivo (lista viva).
@@ -141,8 +143,9 @@ describe('UI-1 — scritture e invalidazione (tabella WRITE_INVALIDATIONS)', () 
     expect(WRITE_INVALIDATIONS.every((r) => typeof r.why === 'string' && r.why.length > 5)).toBe(true);
   });
 
-  it('ogni risorsa condivisa (tranne le statiche) e\' invalidata da almeno una scrittura', () => {
-    const names = new Set(calls.flatMap((c) => invalidationsForWrite(c.method, c.url)).map((n) => (Array.isArray(n) ? n[0] : n)));
+  it('ogni risorsa condivisa (tranne le statiche) e\' invalidata da almeno una scrittura o dalla fine di un task', () => {
+    const taskNames = TASK_INVALIDATIONS.flatMap((r) => (typeof r.invalidates === 'function' ? r.invalidates(['', 'x1']) : r.invalidates));
+    const names = new Set([...calls.flatMap((c) => invalidationsForWrite(c.method, c.url)), ...taskNames].map((n) => (Array.isArray(n) ? n[0] : n)));
     expect([...SHARED_LIST_NAMES].filter((n) => !names.has(n))).toEqual([]);
     for (const n of names) expect(Object.keys(SHARED_RESOURCES)).toContain(n);
   });

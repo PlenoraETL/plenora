@@ -85,6 +85,7 @@ describe('i tasti fanno quello che dice la guida', () => {
     paste: [[k('v', { ctrlKey: true }), true], [k('v'), false]],
     duplicate: [[k('d', { ctrlKey: true }), true], [k('d'), false]],
     search_canvas: [[k('f', { ctrlKey: true }), true], [k('f'), false]],
+    find_in_page: [[k('f', { ctrlKey: true }), true], [k('f', { metaKey: true }), true], [k('f'), false], [k('f', { ctrlKey: true, shiftKey: true }), false]],
     connect: [[k('c'), true], [k('C'), true], [k('C', { shiftKey: true }), true], [k('c', { ctrlKey: true }), false], [k('c', { ctrlKey: true, altKey: true }), false]],
     editor_guide: [[k('F1'), true], [k('1'), false]],
   };

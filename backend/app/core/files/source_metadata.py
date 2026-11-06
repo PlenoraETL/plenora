@@ -7,6 +7,7 @@ orchestration. Side effects stay explicit through injected collaborators so
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any, Callable, Optional
 
@@ -90,33 +91,61 @@ def list_file_sources(
     resource_ids: set[str] | None = None,
     limit: int | None = None,
     offset: int = 0,
+    after: tuple[object, str] | None = None,
     db_list_file_sources: DbListFileSources,
     get_file_source_by_id: GetFileSource,
     file_source_list_model: Any = None,
     use_app_models: bool,
     logger: Any,
 ) -> Any:
-    """List file sources, preserving ``group_id=None`` as unfiltered."""
+    """List file sources, preserving ``group_id=None`` as unfiltered.
+
+    Regole della pagina (conferma UI A-K10):
+      - ``next_cursor`` viene dalle righe del DB, non dai file restituiti:
+        una riga senza metadati leggibili e' saltata (con il log) ma non
+        accorcia la pagina, quindi il client non scambia una pagina corta
+        per l'ultima e non tronca la lista;
+      - un errore del DB PROPAGA (la route risponde 500 e il client lo
+        mostra): mai ``files=[]`` come se non ci fossero file.
+    """
+    kwargs: dict[str, object] = {"resource_ids": resource_ids, "limit": limit, "offset": offset}
+    if after is not None:
+        kwargs["after"] = after
+    rows = db_list_file_sources(group_id, **kwargs)
+    files = []
+    for row in rows:
+        fs = get_file_source_by_id(row["id"])
+        if fs:
+            files.append(fs)
+        else:
+            logger.warning(f"[GESTITO] list_file_sources: file {row['id']} senza metadati leggibili, saltato")
+    next_cursor = None
+    if limit is not None and rows and len(rows) >= limit:
+        last = rows[-1]
+        next_cursor = encode_file_cursor(last.get("created_at"), str(last["id"]))
+    if use_app_models and file_source_list_model is not None:
+        out = file_source_list_model(files=files)
+        out.next_cursor = next_cursor
+        return out
+    return files
+
+
+def encode_file_cursor(created_at: object, file_id: str) -> str:
+    """Cursore opaco della lista dei file: (created_at, id) dell'ultima riga."""
+    stamp = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at or "")
+    raw = json.dumps([stamp, file_id], separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii")
+
+
+def decode_file_cursor(cursor: str) -> tuple[str, str]:
+    """Il contrario di encode_file_cursor; ``ValueError`` se non valido."""
     try:
-        rows = db_list_file_sources(
-            group_id,
-            resource_ids=resource_ids,
-            limit=limit,
-            offset=offset,
-        )
-        files = []
-        for row in rows:
-            fs = get_file_source_by_id(row["id"])
-            if fs:
-                files.append(fs)
-        if use_app_models and file_source_list_model is not None:
-            return file_source_list_model(files=files)
-        return files
-    except Exception as e:
-        logger.error(f"[GESTITO] Errore list_file_sources: {e}")
-        if use_app_models and file_source_list_model is not None:
-            return file_source_list_model(files=[])
-        return []
+        stamp, file_id = json.loads(base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8"))
+    except (ValueError, TypeError) as exc:  # base64, UTF-8 e JSON non validi sono ValueError
+        raise ValueError("cursore non valido") from exc
+    if not isinstance(stamp, str) or not isinstance(file_id, str) or not stamp or not file_id:
+        raise ValueError("cursore non valido")
+    return stamp, file_id
 
 
 def update_file_source(

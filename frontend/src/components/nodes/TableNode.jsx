@@ -211,7 +211,7 @@ const TableNode = memo(({ data, id }) => {
           <div className="table-node__columns nowheel nodrag">
           <VirtualList
             items={displayColumns} itemKey={column => column._origIndex}
-            estimatedItemHeight={26} maxHeight={420} label="Colonne della tabella"
+            estimatedItemHeight={26} maxHeight={420} inCanvasNode label="Colonne della tabella"
             renderItem={(column) => (
             <div
               className={`table-node__column ${!isColumnVisible(column) ? 'table-node__column--hidden' : ''}`}

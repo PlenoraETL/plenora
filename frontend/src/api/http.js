@@ -20,6 +20,7 @@ import { authBus } from '../utils/authBus';
 import { requestErrorMessage } from '../utils/errorMessages';
 import { registerSessionReset } from '../utils/session';
 import { invalidateAfterWrite } from '../utils/sharedCache';
+import { registerTaskLaunch } from '../utils/taskRegistry';
 
 const TOKEN_KEY = 'urby_token';
 
@@ -100,9 +101,17 @@ const afterWrite = (config) => {
   }
 };
 
+// Task avviati (conferma A-K2): ogni risposta `{async, task_id}` registra il
+// task con la sua riga di TASK_INVALIDATIONS; la sua fine (utils/taskPoller)
+// invalida quello che cambia. Un solo punto, come per le scritture.
+const afterTaskLaunch = (response) => {
+  try { registerTaskLaunch(response?.config?.method, response?.config?.url, response?.data); } catch (err) { console.warn('[http] registrazione del task non riuscita:', err); }
+};
+
 http.interceptors.response.use(
   (response) => {
     afterWrite(response.config);
+    afterTaskLaunch(response);
     const observed = response.headers?.['x-api-version'];
     if (observed && observed !== EXPECTED_API_VERSION && !_versionMismatchLogged) {
       _versionMismatchLogged = true;

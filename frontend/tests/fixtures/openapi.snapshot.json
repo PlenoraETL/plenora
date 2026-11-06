@@ -2161,30 +2161,64 @@
         "type": "object"
       },
       "DashboardCounts": {
-        "description": "Numeri della dashboard visibili all'utente.",
+        "description": "Numeri della dashboard visibili all'utente (`null` = non disponibile).",
         "properties": {
           "api_connections": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "default": 0,
-            "title": "Api Connections",
-            "type": "integer"
+            "title": "Api Connections"
           },
           "datasources": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "default": 0,
-            "title": "Datasources",
-            "type": "integer"
+            "title": "Datasources"
           },
           "schedules_active": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "default": 0,
-            "title": "Schedules Active",
-            "type": "integer"
+            "title": "Schedules Active"
           },
           "schedules_by_project": {
-            "additionalProperties": {
-              "type": "integer"
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedules By Project"
+          },
+          "unavailable": {
+            "items": {
+              "type": "string"
             },
-            "default": {},
-            "title": "Schedules By Project",
-            "type": "object"
+            "title": "Unavailable",
+            "type": "array"
           }
         },
         "title": "DashboardCounts",
@@ -4841,7 +4875,7 @@
         "type": "object"
       },
       "FileSourceSummaryList": {
-        "description": "Una pagina della lista dei file (limit/offset): `files` senza colonne.",
+        "description": "Una pagina della lista dei file: `files` senza colonne.\n\n`next_cursor` (conferma UI A-K10): la pagina dopo si chiede con\n`?cursor=<next_cursor>`; None = ultima pagina. Calcolato dalle righe del\nDB, quindi una riga saltata non accorcia la pagina, e a cursore (non a\noffset), quindi un caricamento durante la lettura non salta ne' ripete\nun file.",
         "properties": {
           "files": {
             "items": {
@@ -4849,6 +4883,17 @@
             },
             "title": "Files",
             "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
           }
         },
         "required": [
@@ -15110,6 +15155,23 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
             }
           }
         ],

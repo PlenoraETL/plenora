@@ -14,7 +14,10 @@
  *    hooks/useResource): avviso «Dati non aggiornati» con «Riprova» sopra i
  *    dati;
  *  - vuoto: il messaggio `empty`;
- *  - pronto: i figli (funzione dei dati o nodo).
+ *  - pronto: i figli (funzione dei dati o nodo);
+ *  - aggiornamento automatico fermo per la durata massima (`paused`,
+ *    utils/poller: conferma A-K5b): una nota lo dice, sopra i dati, finche'
+ *    l'utente non torna sulla scheda o non usa la pagina.
  *
  * Chi non usa ListState mostra l'errore con <ResourceError resource={res} />
  * (stesse due forme, nulla senza errore). Il test
@@ -26,6 +29,13 @@ import { READ_ONLY_SAFE } from './readOnlySafe';
 
 export const STALE_TITLE = 'Dati non aggiornati';
 const STALE_NOTE = "Sono mostrati i dati dell'ultimo caricamento riuscito.";
+const POLL_PAUSED_NOTE = 'Aggiornamento automatico in pausa: riprende con un clic, un tasto o tornando su questa scheda.';
+
+/** Nota dell'aggiornamento automatico fermo (nulla se la risorsa si aggiorna). */
+export function PollPausedNote({ resource }) {
+  if (!resource?.paused) return null;
+  return <p className="list-state__paused" role="status">{POLL_PAUSED_NOTE}</p>;
+}
 
 /**
  * Errore di una risorsa. Due usi:
@@ -37,7 +47,7 @@ const STALE_NOTE = "Sono mostrati i dati dell'ultimo caricamento riuscito.";
 export function ResourceError({ resource = null, title = 'Caricamento non riuscito', message, onRetry, compact = false }) {
   let stale = false;
   if (resource) {
-    if (resource.status !== 'error') return null;
+    if (resource.status !== 'error') return <PollPausedNote resource={resource} />;
     stale = Boolean(resource.stale);
     message = message ?? resource.error;
     onRetry = onRetry ?? resource.reload;
@@ -97,5 +107,10 @@ export default function ListState({
       </div>
     );
   }
-  return render();
+  return (
+    <>
+      <PollPausedNote resource={resource} />
+      {render()}
+    </>
+  );
 }

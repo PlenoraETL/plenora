@@ -143,8 +143,15 @@ def list_file_sources(
     limit: int | None = None,
     offset: int = 0,
     include_temp: bool = False,
+    after: tuple[object, str] | None = None,
 ) -> list[FileSourcePublicRow]:
-    """Lista file_sources. group_id=None → no filter (usato da superadmin)."""
+    """Lista file_sources. group_id=None → no filter (usato da superadmin).
+
+    Ordine stabile ``created_at DESC, id DESC``. ``after`` = (created_at, id)
+    dell'ultima riga della pagina prima (cursore, conferma UI A-K10): le
+    righe DOPO di lei, senza offset, quindi un file caricato o eliminato
+    mentre il client legge le pagine non ne fa saltare ne' ripetere uno.
+    """
     columns = (
         "id, group_id, name, original_filename, format, size_bytes, "
         "created_at, created_by"
@@ -162,14 +169,21 @@ def list_file_sources(
         ordered_ids = sorted(resource_ids)
         predicates.append("id IN (" + ", ".join(["%s"] * len(ordered_ids)) + ")")
         params.extend(ordered_ids)
+    if after is not None:
+        predicates.append("(created_at, id) < (%s::timestamptz, %s)")
+        params.extend(after)
     where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
     paging = ""
     if limit is not None:
-        paging = " LIMIT %s OFFSET %s"
-        params.extend((limit, offset))
+        if after is not None:
+            paging = " LIMIT %s"
+            params.append(limit)
+        else:
+            paging = " LIMIT %s OFFSET %s"
+            params.extend((limit, offset))
     return _fetchall(
         f"SELECT {columns} FROM file_sources{where} "
-        f"ORDER BY created_at DESC, id{paging}",
+        f"ORDER BY created_at DESC, id DESC{paging}",
         tuple(params),
     )
 

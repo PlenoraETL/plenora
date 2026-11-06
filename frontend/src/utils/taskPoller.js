@@ -17,7 +17,13 @@
  *  - altri errori (rete, 5xx, 503 task_store_unavailable, risposta vuota):
  *    si riprova; dopo `errorLimit` errori di fila l'esito e' `lost` con il
  *    testo unico di utils/errorMessages;
- *  - durata massima del profilo superata: esito `lost` (task_poll_expired);
+ *  - durata massima del profilo superata (tempo di polling attivo, dopo
+ *    un'ultima lettura: utils/poller): esito `lost` (task_poll_expired). Il
+ *    profilo e' quello della richiesta che ha avviato il task
+ *    (TASK_INVALIDATIONS via utils/taskRegistry: `enrichTask` per
+ *    Arricchisci), o `task`;
+ *  - fine del task (qualunque esito): utils/taskRegistry.taskEnded invalida
+ *    le risorse che il task ha cambiato (conferma A-K2);
  *  - stop() (smontaggio, cambio progetto, nuovo avvio) ferma tutto: nessuna
  *    risposta arrivata dopo scrive piu' niente.
  */
@@ -25,6 +31,7 @@ import { getTaskStatus } from '../api';
 import { requestErrorMessage } from './errorMessages';
 import { taskOutcome } from './taskOutcome';
 import { POLL_PROFILES, startPoller } from './poller';
+import { taskEnded, taskProfileName } from './taskRegistry';
 
 const TASK_POLL_DEFAULTS = Object.freeze({ notFoundLimit: 15, errorLimit: 5 });
 
@@ -50,6 +57,8 @@ function trackTask(taskId, { onUpdate, onDone, notFoundLimit, errorLimit, outcom
   const finish = (outcome) => {
     if (finished) return;
     finished = true;
+    // Prima le risorse (A-K2): chi reagisce all'esito rilegge dati nuovi.
+    try { taskEnded(taskId, outcome); } catch (err) { console.warn('[taskPoller] invalidazione a fine task non riuscita:', err); }
     onDone?.(outcome);
   };
   const result = (changed) => ({ changed, done: finished });
@@ -102,8 +111,12 @@ function trackTask(taskId, { onUpdate, onDone, notFoundLimit, errorLimit, outcom
   };
 }
 
-const profileOpts = ({ interval, maxInterval, maxDurationMs }) => {
-  const base = POLL_PROFILES.task;
+// Il profilo piu' lungo tra quelli dei task seguiti (registrati all'avvio).
+const profileOf = (taskIds) => taskIds
+  .map((id) => POLL_PROFILES[taskProfileName(id)] || POLL_PROFILES.task)
+  .reduce((a, b) => (b.maxDurationMs > a.maxDurationMs ? b : a), POLL_PROFILES.task);
+
+const profileOpts = ({ interval, maxInterval, maxDurationMs }, base = POLL_PROFILES.task) => {
   const iv = interval ?? base.interval;
   return {
     interval: iv,
@@ -169,7 +182,7 @@ export function pollTasks(taskIds, {
     if (stopped) return { done: true };
     return { changed: steps.some((s) => s.changed), done: open().length === 0 };
   }, {
-    ...profileOpts({ interval, maxInterval, maxDurationMs }),
+    ...profileOpts({ interval, maxInterval, maxDurationMs }, profileOf(taskIds)),
     immediate,
     onExpire: () => { open().forEach((t) => t.expire()); },
   });

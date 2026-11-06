@@ -1,25 +1,34 @@
 /**
  * sharedCache.js — il motore della cache dati condivisa del client (UI-1,
- * 06/11/2026; audit C1, C2, C8-C11, C17, C27, M-Estrai).
+ * 06/11/2026; audit C1, C2, C8-C11, C17, C27, M-Estrai; conferma A-K4,
+ * A-K7, A-K9).
  *
  * Una risorsa (nome + parametri) = UNA richiesta in volo, riusata da pagine,
  * nodi e componenti. Le risorse e la loro freschezza sono la tabella di
  * utils/sharedResources (SHARED_RESOURCES); le scritture che le invalidano
  * sono la tabella di utils/sharedInvalidations (WRITE_INVALIDATIONS), che
- * api/http applica a OGNI risposta di una scrittura.
+ * api/http applica a OGNI risposta di una scrittura; la fine dei task la
+ * tabella TASK_INVALIDATIONS (stesso modulo, applicata da utils/taskRegistry).
  *
  * Regole (una per caso):
  *  - in volo: chi chiede la stessa risorsa riceve la stessa Promise;
  *  - fresca (eta' < freshMs): risponde la cache, nessuna richiesta;
  *  - scaduta ma entro STALE_LIMIT_MS: risponde SUBITO la cache e parte UNA
  *    richiesta in background (stale-while-revalidate); all'arrivo gli
- *    iscritti (useResource `shared`) ricaricano;
+ *    iscritti ricaricano; se fallisce gli iscritti ricevono l'errore
+ *    (`kind: 'error'`): i dati restano, con «non aggiornati» (A-K9);
+ *  - `allowStale: false`: una copia scaduta non vale, si aspetta il server
+ *    (chi la userebbe come base di una scrittura, es. il canvas all'apertura
+ *    dell'editor, A-K4);
  *  - `force` (reload, Riprova, poll): dal server (una richiesta in volo
  *    partita dopo l'ultima invalidazione vale);
  *  - errore: non resta in cache, la prossima lettura riprova;
- *  - invalidazione (scrittura riuscita o no): le voci della risorsa spariscono,
- *    una risposta in volo partita prima non le riempie (generazione), gli
- *    iscritti ricaricano;
+ *  - invalidazione (scrittura riuscita o no, fine di un task): le voci
+ *    INVALIDATE spariscono e una risposta in volo partita prima non le
+ *    riempie; le altre risorse non sono toccate (la «generazione» e' della
+ *    voce, non globale: A-K9). Ogni invalidazione si conta
+ *    (invalidationCount): chi tiene dati derivati da una risorsa (le mappe
+ *    /schemas, A-K7) usa il conteggio come versione;
  *  - fine sessione (utils/session, resetSession): tutto svuotato.
  */
 import { registerSessionReset } from './session';
@@ -29,11 +38,12 @@ import { invalidationsForWrite } from './sharedInvalidations';
 export const STALE_LIMIT_MS = 10 * 60_000;
 
 const definitions = new Map();
-// chiave -> { name, data, fetchedAt, inFlight, generation }
+// chiave -> { name, data, fetchedAt, inFlight }
 const entries = new Map();
-// nome -> Set(listener)
+// nome -> Set({ listener, keys })
 const listeners = new Map();
-let generation = 0;
+// Invalidazioni contate: per nome (tutte, anche quelle di una voce) e per voce.
+const invalidations = new Map();
 
 const keyOf = (name, params) => JSON.stringify([name, ...params]);
 
@@ -43,36 +53,45 @@ export function defineSharedResources(table) {
 }
 
 // key null = tutte le voci della risorsa.
-function notify(name, key = null) {
+function notify(name, key, kind, error = null) {
+  const event = { name, key, kind, error };
   for (const { listener, keys } of [...(listeners.get(name) || [])]) {
     // Iscritto a voci precise (es. il progetto sorgente X): solo quelle.
     if (key && keys && !keys.has(key)) continue;
-    try { listener(name); } catch (err) { console.warn('[sharedCache] iscritto non riuscito:', err); }
+    try { listener(name, event); } catch (err) { console.warn('[sharedCache] iscritto non riuscito:', err); }
   }
 }
 
 function fetchEntry(name, params, key) {
   const def = definitions.get(name);
   if (!def) return Promise.reject(new Error(`[sharedCache] risorsa sconosciuta: ${name}`));
-  const mine = generation;
   const entry = entries.get(key) || { name, data: undefined, fetchedAt: 0, inFlight: null };
   entries.set(key, entry);
+  // Aggiornamento di una copia gia' mostrata: il suo errore va a chi la mostra.
+  const revalidating = entry.fetchedAt > 0;
   let request;
   try {
     request = Promise.resolve(def.load(...params));
   } catch (err) {
     request = Promise.reject(err);
   }
+  // La voce e' ancora la stessa: non invalidata ne' svuotata a fine sessione.
+  const current = () => entries.get(key) === entry;
   const tracked = request
-    .then((data) => {
-      // Arrivata dopo un'invalidazione o la fine sessione: non riempie.
-      if (mine === generation && entries.get(key) === entry) {
-        entry.data = data;
-        entry.fetchedAt = Date.now();
-        notify(name, key);
-      }
-      return data;
-    })
+    .then(
+      (data) => {
+        if (current()) {
+          entry.data = data;
+          entry.fetchedAt = Date.now();
+          notify(name, key, 'arrived');
+        }
+        return data;
+      },
+      (err) => {
+        if (revalidating && current()) notify(name, key, 'error', err);
+        throw err;
+      },
+    )
     .finally(() => { if (entry.inFlight === tracked) entry.inFlight = null; });
   entry.inFlight = tracked;
   return tracked;
@@ -82,10 +101,10 @@ function fetchEntry(name, params, key) {
  * Legge una risorsa condivisa.
  * @param {string} name     nome in SHARED_RESOURCES
  * @param {Array} [params]  parametri del caricatore (es. id)
- * @param {{force?: boolean, maxAgeMs?: number}} [opts]
+ * @param {{force?: boolean, maxAgeMs?: number, allowStale?: boolean}} [opts]
  * @returns {Promise<any>}
  */
-export function readShared(name, params = [], { force = false, maxAgeMs } = {}) {
+export function readShared(name, params = [], { force = false, maxAgeMs, allowStale = true } = {}) {
   const def = definitions.get(name);
   if (!def) return Promise.reject(new Error(`[sharedCache] risorsa sconosciuta: ${name}`));
   const key = keyOf(name, params);
@@ -94,7 +113,7 @@ export function readShared(name, params = [], { force = false, maxAgeMs } = {}) 
   if (!force && entry && entry.fetchedAt > 0) {
     const age = Date.now() - entry.fetchedAt;
     if (age < (maxAgeMs ?? def.freshMs)) return Promise.resolve(entry.data);
-    if (age < STALE_LIMIT_MS) {
+    if (allowStale && age < STALE_LIMIT_MS) {
       // Scaduta: risponde la cache, il server in background (una volta).
       if (!entry.inFlight) {
         fetchEntry(name, params, key).catch((err) => console.warn(`[sharedCache] aggiornamento di ${name} non riuscito:`, err));
@@ -116,6 +135,21 @@ export function peekShared(name, params = []) {
   return { data: entry.data, fresh: age < def.freshMs };
 }
 
+const bump = (k) => invalidations.set(k, (invalidations.get(k) || 0) + 1);
+
+/**
+ * Quante volte una risorsa e' stata invalidata in questa pagina (anche per
+ * una sola voce), tolte le invalidazioni delle voci `except` (es. il
+ * progetto aperto, che si salva da solo): la «versione» dei dati che ne
+ * derivano.
+ * @param {string} name
+ * @param {{except?: Array<Array>}} [opts]  parametri delle voci da non contare
+ */
+export function invalidationCount(name, { except = [] } = {}) {
+  const own = except.reduce((sum, params) => sum + (invalidations.get(keyOf(name, params)) || 0), 0);
+  return (invalidations.get(name) || 0) - own;
+}
+
 /**
  * Invalida: un nome = tutte le voci della risorsa; [nome, ...parametri] =
  * solo quella voce.
@@ -123,22 +157,24 @@ export function peekShared(name, params = []) {
 export function invalidateShared(names) {
   const list = Array.isArray(names) ? names : [names];
   if (list.length === 0) return;
-  generation += 1;
   const events = [];
   for (const item of list) {
     if (Array.isArray(item)) {
       const [name, ...params] = item;
       const key = keyOf(name, params);
       entries.delete(key);
+      bump(name);
+      bump(key);
       events.push([name, key]);
     } else {
       for (const [key, entry] of entries) {
         if (entry.name === item) entries.delete(key);
       }
+      bump(item);
       events.push([item, null]);
     }
   }
-  events.forEach(([name, key]) => notify(name, key));
+  events.forEach(([name, key]) => notify(name, key, 'invalidated'));
 }
 
 /** Dopo una scrittura (api/http): invalida quello che la tabella dice. */
@@ -147,8 +183,10 @@ export function invalidateAfterWrite(method, url) {
 }
 
 /**
- * Iscrizione: `listener(name)` quando una delle risorse viene invalidata o
- * arriva nuova. `names` = nomi o [nome, ...parametri] (conta il nome).
+ * Iscrizione: `listener(name, { kind, key, error })` quando una delle
+ * risorse viene invalidata (`invalidated`), arriva nuova (`arrived`) o il
+ * suo aggiornamento in background fallisce (`error`).
+ * `names` = nomi o [nome, ...parametri] (solo quelle voci).
  * @returns {() => void}
  */
 export function subscribeShared(names, listener) {
@@ -171,7 +209,6 @@ export function subscribeShared(names, listener) {
 
 /** Svuota la cache (fine sessione; i test). */
 export function resetSharedCache() {
-  generation += 1;
   entries.clear();
 }
 

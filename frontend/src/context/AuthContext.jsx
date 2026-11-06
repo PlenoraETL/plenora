@@ -15,10 +15,14 @@ import { resetSession } from '../utils/session';
 import { loginRedirectState } from '../utils/navigation';
 import { login as apiLogin, logout as apiLogout } from '../api/auth';
 import { getMe } from '../api/users';
+import { invalidateShared } from '../utils/sharedCache';
+import { SHARED_LIST_NAMES } from '../utils/sharedInvalidations';
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = 'urby_token';
 const USER_KEY  = 'urby_user';
+// Campi del profilo da cui dipende che cosa mostrano le liste.
+const VISIBILITY_FIELDS = Object.freeze(['group_id', 'role']);
 // Distanza minima tra due verifiche del profilo (GET /auth/me) al ritorno sulla scheda.
 const ME_REFRESH_GAP_MS = 2000;
 
@@ -132,14 +136,18 @@ export function AuthProvider({ children }) {
         .then((me) => {
           // Risposta di una sessione che non c'e' piu': si ignora.
           if (!me || sessionStorage.getItem(TOKEN_KEY) !== sent) return;
-          setUser((prev) => {
-            if (!prev) return prev;
-            const fields = ['username', 'group_id', 'role'];
-            const next = { ...prev, ...Object.fromEntries(fields.map((k) => [k, me[k] ?? prev[k]])) };
-            if (fields.every((k) => next[k] === prev[k])) return prev;
-            sessionStorage.setItem(USER_KEY, JSON.stringify(next));
-            return next;
-          });
+          let prev = null;
+          try { prev = JSON.parse(sessionStorage.getItem(USER_KEY) || 'null'); } catch { prev = null; }
+          if (!prev) return;
+          const fields = ['username', 'group_id', 'role'];
+          const next = { ...prev, ...Object.fromEntries(fields.map((k) => [k, me[k] ?? prev[k]])) };
+          if (fields.every((k) => next[k] === prev[k])) return;
+          sessionStorage.setItem(USER_KEY, JSON.stringify(next));
+          setUser(next);
+          // Gruppo o ruolo cambiati (conferma A-K8): cambia quello che ogni
+          // lista mostra (visibilita' per gruppo, can_edit per ruolo), come
+          // dopo una condivisione: si invalidano tutte le liste condivise.
+          if (VISIBILITY_FIELDS.some((k) => next[k] !== prev[k])) invalidateShared(SHARED_LIST_NAMES);
         })
         .catch(() => { /* rete o 401: gestiti altrove, il profilo resta */ })
         .finally(() => { inFlight = false; });
