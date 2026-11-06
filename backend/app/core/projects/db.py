@@ -19,6 +19,7 @@ from app.core.projects.canvas_revision import CanvasRevisionConflict, canvas_ver
 logger = get_logger(__name__)
 
 __all__ = [
+    "ManipolaSourceRefs",
     "ProjectCanvasCheckRow",
     "ProjectDetailRow",
     "ProjectDependencyRow",
@@ -31,6 +32,7 @@ __all__ = [
     "get_project_retention_n",
     "get_project_raw_canvas_row",
     "get_project_row",
+    "list_manipola_source_refs",
     "list_project_canvas_check_rows",
     "list_project_dependency_rows_using_connection",
     "list_owned_project_ids",
@@ -293,6 +295,16 @@ class ProjectCanvasCheckRow:
 
 
 @dataclass(frozen=True)
+class ManipolaSourceRefs:
+    """Sorgenti di un progetto Manipola lette dal DB (UI-1, C24)."""
+
+    project_id: str
+    source_project_ids: tuple[str, ...]
+    file_source_ids: tuple[str, ...]
+    corrupted: bool
+
+
+@dataclass(frozen=True)
 class ProjectRawCanvasRow:
     """Typed raw canvas read used by recovery/debug service paths."""
 
@@ -315,6 +327,18 @@ def _project_dependency_rows(
     rows: Iterable[Mapping[str, object]],
 ) -> list[ProjectDependencyRow]:
     return [ProjectDependencyRow.from_mapping(row) for row in rows]
+
+
+def _json_str_list(value: object) -> list[str]:
+    """Una colonna jsonb (lista o testo JSON) come lista di stringhe."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return []
+    if not isinstance(value, list):
+        return []
+    return [str(v) for v in value if v not in (None, "")]
 
 
 def _project_canvas_check_rows(
@@ -604,6 +628,71 @@ class ProjectRepository:
             _fetchall("SELECT id, name, project_type, canvas, group_id FROM projects")
         )
 
+    def list_manipola_source_refs(
+        self,
+        project_ids: set[str],
+    ) -> list[ManipolaSourceRefs]:
+        """Sorgenti dei progetti Manipola, calcolate nel DB (UI-1, C24).
+
+        GET /projects mostrava i progetti sorgente leggendo il canvas intero
+        di ogni progetto visibile. Qui il DB estrae solo gli id dei nodi
+        `project_source` e `file_source`: nessun canvas viaggia verso
+        l'applicazione. Un canvas non leggibile come JSON (pg_input_is_valid,
+        PostgreSQL 16+) e' segnato `corrupted` invece di far fallire la
+        query.
+        """
+        if not project_ids:
+            return []
+        ordered_ids = sorted(project_ids)
+        placeholders = ", ".join(["%s"] * len(ordered_ids))
+        rows = _fetchall(
+            f"""
+            WITH p AS (
+                SELECT id,
+                       CASE WHEN pg_input_is_valid(canvas, 'jsonb')
+                            THEN canvas::jsonb END AS doc
+                FROM projects
+                WHERE project_type = 'manipola' AND id IN ({placeholders})
+            ), n AS (
+                SELECT p.id, node
+                FROM p,
+                     jsonb_array_elements(
+                         CASE WHEN jsonb_typeof(p.doc -> 'nodes') = 'array'
+                              THEN p.doc -> 'nodes' ELSE '[]'::jsonb END
+                     ) AS node
+            )
+            SELECT p.id,
+                   p.doc IS NULL AS corrupted,
+                   COALESCE((
+                       SELECT jsonb_agg(COALESCE(n.node -> 'data' ->> 'source_project_id',
+                                                 n.node ->> 'source_project_id'))
+                       FROM n
+                       WHERE n.id = p.id
+                         AND n.node ->> 'type' = 'project_source'
+                         AND COALESCE(n.node -> 'data' ->> 'source_project_id',
+                                      n.node ->> 'source_project_id', '') <> ''
+                   ), '[]'::jsonb) AS source_project_ids,
+                   COALESCE((
+                       SELECT jsonb_agg(n.node ->> 'file_source_id')
+                       FROM n
+                       WHERE n.id = p.id
+                         AND n.node ->> 'type' = 'file_source'
+                         AND COALESCE(n.node ->> 'file_source_id', '') <> ''
+                   ), '[]'::jsonb) AS file_source_ids
+            FROM p
+            """,
+            tuple(ordered_ids),
+        )
+        return [
+            ManipolaSourceRefs(
+                project_id=str(row["id"]),
+                source_project_ids=tuple(_json_str_list(row.get("source_project_ids"))),
+                file_source_ids=tuple(_json_str_list(row.get("file_source_ids"))),
+                corrupted=bool(row.get("corrupted")),
+            )
+            for row in rows
+        ]
+
     def update_project_canvas_key_atomic(
         self,
         project_id: str,
@@ -802,6 +891,11 @@ def list_project_canvas_check_rows(
     project_ids: set[str] | None = None,
 ) -> list[ProjectCanvasCheckRow]:
     return project_repository.list_project_canvas_check_rows(project_ids)
+
+
+def list_manipola_source_refs(project_ids: set[str]) -> list[ManipolaSourceRefs]:
+    """Id delle sorgenti dei progetti Manipola, estratti dal DB (UI-1, C24)."""
+    return project_repository.list_manipola_source_refs(project_ids)
 
 
 def update_project_canvas_key_atomic(project_id: str, key: str, value: object) -> bool:

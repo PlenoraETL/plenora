@@ -10,12 +10,13 @@ import functools
 import inspect
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from typing import Any, Callable, Optional
 
 from fastapi import HTTPException
 
 from app.shared.contracts.payloads import IntMap, JsonObject
+from app.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -192,8 +193,40 @@ def _write_audit_row(
         _record_metric("write_fail")
 
 
+# Letture campionate (UI-1, 06/11/2026, audit C23): una pagina admin che si
+# aggiorna da sola (es. stato del sistema ogni 30 s) scriveva una riga a ogni
+# poll. Con `sample_reads=True` una lettura riuscita lascia UNA riga per
+# (utente, azione, target) ogni AUDIT_READ_SAMPLE_SECONDS (config.py
+# DEFAULTS): l'accesso resta tracciato (primo accesso della finestra), le
+# letture ripetute no. Gli esiti non riusciti si scrivono sempre. Lo stato
+# e' per processo: con piu' repliche al piu' una riga per replica.
+_read_samples_lock = threading.Lock()
+_read_samples: MutableMapping[tuple[Optional[str], str, Optional[str]], float] = {}
+
+
+def _read_sample_due(user_id: Optional[str], action: str, target: Optional[str]) -> bool:
+    """True se questa lettura riuscita va scritta (prima della finestra)."""
+    window = float(settings.get("AUDIT_READ_SAMPLE_SECONDS", 900) or 0)
+    if window <= 0:
+        return True
+    key = (user_id, action, target)
+    now = time.monotonic()
+    with _read_samples_lock:
+        last = _read_samples.get(key)
+        if last is not None and now - last < window:
+            return False
+        _read_samples[key] = now
+        return True
+
+
+def _reset_read_samples_for_tests() -> None:
+    """Test-only: dimentica le letture campionate."""
+    with _read_samples_lock:
+        _read_samples.clear()
+
+
 def audit_action(
-    action: str, target_param: Optional[str] = None
+    action: str, target_param: Optional[str] = None, *, sample_reads: bool = False
 ) -> Callable[[Callable], Callable]:
     """Decorator per audit trail automatico. Vedi docstring modulo.
 
@@ -202,6 +235,8 @@ def audit_action(
         target_param: nome del kwarg della funzione wrappata da cui leggere
             l'id della risorsa target (str o int). None se l'azione non
             ha un target identificabile.
+        sample_reads: letture ripetute (pagine che si aggiornano da sole):
+            una riga riuscita per finestra AUDIT_READ_SAMPLE_SECONDS.
 
     Ritorna il decorator effettivo, che wrappa sia funzioni sync che async
     preservando la firma originale (via `functools.wraps`).
@@ -223,7 +258,8 @@ def audit_action(
                 target = _extract_target(kwargs, target_param)
                 try:
                     result = await func(*args, **kwargs)
-                    _write_audit_row(user_id, action, target, 200, ip_address, None)
+                    if not sample_reads or _read_sample_due(user_id, action, target):
+                        _write_audit_row(user_id, action, target, 200, ip_address, None)
                     return result
                 except HTTPException as exc:
                     _write_audit_row(
@@ -255,7 +291,8 @@ def audit_action(
             target = _extract_target(kwargs, target_param)
             try:
                 result = func(*args, **kwargs)
-                _write_audit_row(user_id, action, target, 200, ip_address, None)
+                if not sample_reads or _read_sample_due(user_id, action, target):
+                    _write_audit_row(user_id, action, target, 200, ip_address, None)
                 return result
             except HTTPException as exc:
                 _write_audit_row(

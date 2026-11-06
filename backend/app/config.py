@@ -260,6 +260,10 @@ class Settings:
         # Righe per SELECT->upload->DELETE del writer. Cap pratico RAM per batch.
         "LOG_ARCHIVE_BATCH_ROWS": 10_000,
         "AUDIT_RETENTION_DAYS": 365,
+        # Letture admin che si aggiornano da sole (es. stato del sistema):
+        # una riga di audit riuscita per utente e azione ogni N secondi
+        # (observability/audit_action, sample_reads; UI-1 C23). 0 = ogni lettura.
+        "AUDIT_READ_SAMPLE_SECONDS": 900,
         # NB: LOG_ARCHIVE_BUCKET e' intenzionalmente fuori da DEFAULTS —
         # e' required-if-enabled con validazione fail-fast a boot, distinto
         # da BACKUP_BUCKET.

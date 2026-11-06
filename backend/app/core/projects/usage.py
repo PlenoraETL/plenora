@@ -55,3 +55,10 @@ def list_projects_with_canvas_for_datasource_check(
         }
         for row in project_db.list_project_canvas_check_rows(project_ids)
     ]
+
+
+def list_manipola_source_refs(project_ids: set[str]) -> list[project_db.ManipolaSourceRefs]:
+    """Sorgenti (progetti e file) dei progetti Manipola, senza leggere i canvas
+    nell'applicazione (UI-1, C24): una riga tipizzata per progetto
+    (ManipolaSourceRefs)."""
+    return project_db.list_manipola_source_refs(project_ids)

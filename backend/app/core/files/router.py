@@ -33,7 +33,8 @@ from .models import (
     FileSource,
     FileSourceUpdate,
     FileSourceLayersResponse,
-    FileSourceList,
+    FileSourceSummary,
+    FileSourceSummaryList,
     FileSourcePreview,
 )
 
@@ -322,7 +323,7 @@ def upload_multi_layer(
         raise HTTPException(status_code=500, detail="Errore interno durante l'upload")
 
 
-@router.get("", response_model=FileSourceList)
+@router.get("", response_model=FileSourceSummaryList)
 def list_files(
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -365,7 +366,11 @@ def list_files(
         # can_edit = la regola di PUT/DELETE (require_file_owner).
         f.can_edit = owns_or_admin(f, current_user)
 
-    return all_files
+    # UI-1 (C26): nella lista niente colonne, solo quante sono e i primi
+    # nomi; il client chiede le pagine successive con limit/offset (C5).
+    return FileSourceSummaryList(
+        files=[FileSourceSummary.from_file_source(f) for f in files_iter]
+    )
 
 
 @router.get("/{file_id}", response_model=FileSource)

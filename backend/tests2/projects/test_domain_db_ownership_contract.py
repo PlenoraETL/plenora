@@ -40,6 +40,9 @@ def test_projects_domain_db_owns_sql_and_exports_project_contract() -> None:
         "list_project_ids_for_group",
         "list_project_dependency_rows_using_connection",
         "list_project_canvas_check_rows",
+        # UI-1 (C24): sorgenti dei progetti Manipola calcolate nel DB.
+        "ManipolaSourceRefs",
+        "list_manipola_source_refs",
         "update_project_output_contract_row",
         "update_project_canvas_key_atomic",
     }

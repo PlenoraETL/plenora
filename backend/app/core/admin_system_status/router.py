@@ -16,7 +16,7 @@ router = APIRouter(prefix="/admin/system-status", tags=["admin-system-status"])
 
 
 @router.get("", summary="Aggregato stato sistema per dashboard admin")
-@audit_action(action="admin.system_status.read")
+@audit_action(action="admin.system_status.read", sample_reads=True)
 def get_system_status(
     # `@audit_action` legge kwargs["current_user"] per popolare audit.user_id.
     current_user: CurrentUser = Depends(require_superadmin),

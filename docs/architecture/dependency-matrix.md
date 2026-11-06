@@ -42,7 +42,7 @@ PR per consolidare il progresso.
 | Engine orizzontali | `auth`, `connections`, `dataframes`, `orchestrator`, `resources`, `results`, `scheduler` | servizi trasversali consumati dai verticali |
 | Applicativi centrali | `projects`, `files`, `datasources`, `eseguibili`, `artifacts`, `intermediate`, `output_contract`, `query_execution` | modelli e storage condivisi del prodotto |
 | Foundation | `io`, `native_pipeline`, `security`, `task_runtime`, `runtime`, `lifecycle` | infrastruttura pura. `native_pipeline` dipende solo dalla capability tempdir di `io`; `lifecycle` ospita il registry del group cleanup (Epic E), con composizione dei default in `app/runtime/group_cleanup_wiring.py` |
-| Admin & support | `admin_backups`, `admin_object_storage`, `admin_runtime_config`, `admin_system_status`, `logs`, `tickets` | superfici operative |
+| Admin & support | `admin_backups`, `admin_object_storage`, `admin_runtime_config`, `admin_system_status`, `dashboard`, `logs`, `tickets` | superfici operative |
 
 `app.shared.*` non e' un dominio: e' la sede dei contratti strutturali
 (es. `ColumnInfo` in `app.shared.execution.column_info`) ed e' importabile da
@@ -90,6 +90,7 @@ La mappa completa degli shim di compatibilita' (Fase 6) e' in
 | `admin_task_runtime -> auth` / `task_runtime` | endpoint admin protetto espone le lease del runtime task | Intenzionale: adapter operativo read-only sul dominio runtime |
 | `datasources -> security` | upload datasource applica il limite centralizzato | Intenzionale: `security` e' una policy foundation |
 | `io -> resources` | bounded range reader usa l'errore canonico di limite memoria | Spostare l'eccezione in shared quando si separa il ciclo `io/resources` |
+| `dashboard -> arricchisci` / `datasources` / `scheduler` / `auth` | `GET /dashboard/counts` (UI-1, 06/11/2026) conta con le route delle liste di connettori API, Data Source e schedule (visibilita' identica) e l'RBAC di `auth` | Intenzionale: read-model della dashboard; estrarre porte di conteggio nei tre domini se crescono |
 | `projects -> manipola` | schema inference riusa l'ordinamento deterministico degli input transform | Estrarre l'helper di ordering in shared execution per spezzare il ciclo |
 | `eseguibili -> connections` | il servizio eseguibili espone i connection set selezionabili per gli input runtime | Intenzionale nel read model corrente; estrarre una porta shared se il catalogo cresce |
 | `orchestrator -> files` | cleanup fail-closed degli upload runtime rifiutati dal percorso progetto | Intenzionale e lazy: evita file orfani finche' il lifecycle upload non viene portato nel composition root |

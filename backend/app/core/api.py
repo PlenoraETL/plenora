@@ -19,6 +19,7 @@ from app.core.auth.groups_router import groups_router
 from app.core.auth.shares_router import router as shares_router
 from app.core.carica.router import router as carica_router
 from app.core.connections.router import router as connections_router
+from app.core.dashboard.router import router as dashboard_router
 from app.core.datasources.router import router as datasources_router
 from app.core.eseguibili.router import router as eseguibili_router
 from app.core.estrai.router import functions_router
@@ -96,6 +97,9 @@ api_router.include_router(admin_task_runtime_router)
 
 # Admin Runtime Config: superadmin only, read-only.
 api_router.include_router(admin_runtime_config_router)
+
+# Dashboard: conteggi al posto delle liste intere (UI-1).
+api_router.include_router(dashboard_router)
 
 # Tickets: tech debt e user support, RBAC nel router.
 api_router.include_router(tickets_router)

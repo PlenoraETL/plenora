@@ -25,6 +25,7 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.execution.canvas_column import Column
 from app.observability.audit_action import audit_action
+from psycopg import Error as PsycopgError
 from app.core.projects.canvas_models import CanvasState, Node, Edge
 from app.core.projects.canvas_revision import CanvasRevisionConflict, canvas_version
 from app.core.projects.exceptions import (
@@ -44,6 +45,7 @@ from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
 from app.core.projects.usage import (
     list_owned_project_ids,
+    list_manipola_source_refs,
     list_projects_with_canvas_for_datasource_check,
 )
 from app.core.auth import visibility as auth_visibility
@@ -346,30 +348,57 @@ def list_projects(
         group_id=gid, limit=limit, offset=offset,
     )
 
-    # Batch-fetch dei canvas manipola in 1 query invece di N+1 chiamate
-    # a `get_project_canvas`.
+    # UI-1 (C24): le sorgenti dei progetti Manipola le estrae il DB (una
+    # query sugli id dei nodi, nessun canvas verso l'applicazione). Se la
+    # query mirata non e' disponibile (es. PostgreSQL < 16 senza
+    # pg_input_is_valid) si torna al percorso di prima: canvas in batch.
+    manipola_ids = {str(p.id) for p in project_list.projects if p.project_type == 'manipola'}
+    refs_by_id = None
+    try:
+        refs_by_id = {r.project_id: r for r in list_manipola_source_refs(manipola_ids)}
+    except (PsycopgError, RuntimeError) as exc:
+        # Errore del DB (funzione assente, DB non configurato): ripiego.
+        logger.warning(
+            f"list_projects: query mirata delle sorgenti non riuscita, "
+            f"si leggono i canvas: {type(exc).__name__}: {exc}",
+            op="list_projects",
+        )
+
+    # Percorso di riserva: batch-fetch dei canvas manipola in 1 query invece
+    # di N+1 chiamate a `get_project_canvas`.
     # NB: salta `sync_canvas_with_output_contracts` (side-effect del
     # `get_project_canvas` full) — il list endpoint non ne ha bisogno
     # e il sync e' gia' fatto in fase di save/load del canvas detail.
     canvas_by_id: dict = {}
-    try:
-        visible_project_ids = {str(project.id) for project in project_list.projects}
-        for row in list_projects_with_canvas_for_datasource_check(visible_project_ids):
-            if row.get("project_type") == "manipola":
-                canvas_by_id[str(row["id"])] = row.get("canvas")
-    except Exception as exc:
-        # Fallback graceful al pattern N+1 se la batch fallisce.
-        logger.warning(
-            f"list_projects: batch canvas load fallita, fallback "
-            f"N+1: {type(exc).__name__}: {exc}",
-            op="list_projects",
-        )
+    if refs_by_id is None:
+        try:
+            for row in list_projects_with_canvas_for_datasource_check(manipola_ids):
+                if row.get("project_type") == "manipola":
+                    canvas_by_id[str(row["id"])] = row.get("canvas")
+        except Exception as exc:
+            # Fallback graceful al pattern N+1 se la batch fallisce.
+            logger.warning(
+                f"list_projects: batch canvas load fallita, fallback "
+                f"N+1: {type(exc).__name__}: {exc}",
+                op="list_projects",
+            )
 
     enriched_projects = []
     for project in project_list.projects:
         project_dict = project.model_dump()
 
-        if project.project_type == 'manipola':
+        if project.project_type == 'manipola' and refs_by_id is not None:
+            refs = refs_by_id.get(str(project.id))
+            project_dict['source_project_ids'] = list(refs.source_project_ids) if refs else []
+            project_dict['file_source_ids'] = list(refs.file_source_ids) if refs else []
+            if refs and refs.corrupted:
+                logger.error(
+                    f"Canvas corrotto in list_projects per {project.id}: JSON non valido",
+                    op="list_projects",
+                )
+                project_dict['canvas_corrupted'] = True
+                project_dict['canvas_corrupted_reason'] = "JSON malformato"
+        elif project.project_type == 'manipola':
             try:
                 # Fast path: usa il canvas pre-caricato (dict raw).
                 # Slow path (fallback batch fallita): get_project_canvas

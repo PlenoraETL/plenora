@@ -2156,6 +2156,36 @@
         "title": "CreateVersionRequest",
         "type": "object"
       },
+      "DashboardCounts": {
+        "description": "Numeri della dashboard visibili all'utente.",
+        "properties": {
+          "api_connections": {
+            "default": 0,
+            "title": "Api Connections",
+            "type": "integer"
+          },
+          "datasources": {
+            "default": 0,
+            "title": "Datasources",
+            "type": "integer"
+          },
+          "schedules_active": {
+            "default": 0,
+            "title": "Schedules Active",
+            "type": "integer"
+          },
+          "schedules_by_project": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Schedules By Project",
+            "type": "object"
+          }
+        },
+        "title": "DashboardCounts",
+        "type": "object"
+      },
       "DataSource": {
         "description": "Rappresentazione completa di un Data Source (risposta API).",
         "properties": {
@@ -4631,23 +4661,6 @@
         "title": "FileSourceLayersResponse",
         "type": "object"
       },
-      "FileSourceList": {
-        "description": "Wrapper per la lista di file sorgente.",
-        "properties": {
-          "files": {
-            "items": {
-              "$ref": "#/components/schemas/FileSource"
-            },
-            "title": "Files",
-            "type": "array"
-          }
-        },
-        "required": [
-          "files"
-        ],
-        "title": "FileSourceList",
-        "type": "object"
-      },
       "FileSourcePreview": {
         "description": "Anteprima dei dati contenuti in un file sorgente.",
         "properties": {
@@ -4687,6 +4700,152 @@
           "preview_count"
         ],
         "title": "FileSourcePreview",
+        "type": "object"
+      },
+      "FileSourceSummary": {
+        "description": "Un file nella lista (GET /files, UI-1 06/11/2026, audit C26).\n\nSenza `columns`: la lista e' letta da dashboard, gestore file ed editor,\nche usano solo quante sono e i primi nomi. Le colonne intere sono nel\ndettaglio (GET /files/{id}).",
+        "properties": {
+          "can_edit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Edit"
+          },
+          "column_count": {
+            "default": 0,
+            "title": "Column Count",
+            "type": "integer"
+          },
+          "column_names_preview": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Column Names Preview",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "crs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crs"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "file_size": {
+            "default": 0,
+            "title": "File Size",
+            "type": "integer"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "group_id": {
+            "default": "",
+            "title": "Group Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "original_filename": {
+            "title": "Original Filename",
+            "type": "string"
+          },
+          "row_count": {
+            "default": 0,
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "original_filename",
+          "format",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FileSourceSummary",
+        "type": "object"
+      },
+      "FileSourceSummaryList": {
+        "description": "Una pagina della lista dei file (limit/offset): `files` senza colonne.",
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileSourceSummary"
+            },
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "files"
+        ],
+        "title": "FileSourceSummaryList",
         "type": "object"
       },
       "FileSourceUpdate": {
@@ -12799,6 +12958,33 @@
         ]
       }
     },
+    "/api/dashboard/counts": {
+      "get": {
+        "description": "Connessioni API, data source, schedule attivi e schedule per progetto.",
+        "operationId": "get_dashboard_counts_api_dashboard_counts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardCounts"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Dashboard Counts",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
     "/api/datasources": {
       "get": {
         "description": "Lista Data Source visibili: owned dal gruppo + condivisi via allowed_groups.\nOgni record include `can_edit` calcolato per l'utente corrente.",
@@ -14889,7 +15075,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FileSourceList"
+                  "$ref": "#/components/schemas/FileSourceSummaryList"
                 }
               }
             },
