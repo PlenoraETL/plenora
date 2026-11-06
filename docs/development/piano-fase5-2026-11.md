@@ -414,3 +414,5 @@ Voci del giro di conferma `docs/audits/ui-conferma-2026-11-06.md` nel perimetro 
 10. **Termini (U22).** `terms.contract` legge anche `utils/glossary.js` (prima escluso): restano fuori solo il vocabolario delle parole sostituite (`CONCEPTS`, `ALLOWED_ENGLISH`, `formerNames`); «Il file finale del flusso» → «del progetto».
 
 Snapshot OpenAPI rigenerato (`timezone` del healthcheck, `has_manifest`; porta anche campi già nel codice e mancanti nella fotografia).
+
+Verifiche (ribasato su `e4fd5852`, correzione editor e funzioni): frontend eslint pulito, vitest 203 file / 5.927 test passati, build; backend (comando completo delle cartelle tests2) 29.886 test, 0 falliti, 61 saltati; snapshot OpenAPI invariato dopo il ribasamento.
