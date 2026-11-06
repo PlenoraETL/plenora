@@ -514,3 +514,8 @@
   .execution-modal__enrichment-stats-grid { grid-template-columns: repeat(2, 1fr); }
   .execution-modal__stats { flex-direction: column; }
 }
+
+/* U16 (UI-3): passo fallito e azioni dopo un errore. */
+.execution-modal__failed-step { margin: 4px 0; font-size: 13px; }
+.execution-modal__failure-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
+.execution-modal__log-link { align-self: center; font-size: 13px; color: var(--plen-blue, #2563eb); }

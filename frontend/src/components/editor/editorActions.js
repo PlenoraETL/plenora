@@ -18,7 +18,6 @@ export const EDITOR_ACTIONS = Object.freeze({
   onExecute: { registeredBy: ['EstraiEditor', 'ManipolaEditor', 'ArricchisciEditor'], usedBy: ['PipelineRunner', 'ResultNode'] },
   onPreview: { registeredBy: ['EstraiEditor', 'ManipolaEditor', 'ArricchisciEditor'], usedBy: ['PipelineRunner', 'ResultNode'] },
   // Guscio dell'editor.
-  confirmSaveBeforeRead: { registeredBy: ['EditorShell'], usedBy: ['serverActions'] },
   openPalette: { registeredBy: ['EditorShell'], usedBy: ['CompactNode'] },
   // Specifiche di un editor.
   onAddRelatedLayer: { registeredBy: ['EstraiEditor'], usedBy: ['FeatureLayerNode'] },

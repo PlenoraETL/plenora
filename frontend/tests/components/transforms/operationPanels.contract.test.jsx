@@ -40,7 +40,7 @@ describe('FilterPanel', () => {
   it('converts the old single filter; an incomplete row blocks saving, an empty value does not', () => {
     const updateConfig = vi.fn();
     render(<FilterPanel config={{ column: 'ctr_period', operator: '!=', value: 'UNIQUE' }} updateConfig={updateConfig} inputColumns={cols} />);
-    fireEvent.click(screen.getByText(/Aggiungi condizione/));
+    fireEvent.click(screen.getByText(/Aggiungi una condizione/));
     expect(updateConfig).not.toHaveBeenCalled(); // la riga nuova e' vuota: ignorata
     fireEvent.change(screen.getAllByLabelText('Valore')[1], { target: { value: 'MONTH, YEAR' } });
     expect(screen.getByRole('alert').textContent).toMatch(/colonna/); // manca la colonna: non salva
@@ -139,13 +139,13 @@ describe('TransformNode in the side panel', () => {
     render(<TransformNode id="t1" inInspector data={{ transform_op: 'filter', config: {} }} />);
     expect(screen.queryByText('Trasformazione')).toBeNull();
     expect(screen.queryByRole('button', { name: /Spaziale/ })).toBeNull();
-    expect(screen.getByText(/Aggiungi condizione/)).toBeTruthy();
+    expect(screen.getByText(/Aggiungi una condizione/)).toBeTruthy();
   });
 
   it('keeps the generic form when runtime inputs are bound to its parameters', () => {
     storeState.current.edges = [...storeState.current.edges, { id: 'b', source: 'in', target: 't1', targetHandle: 'parameter:value', data: { edge_kind: 'parameter_binding' } }];
     render(<TransformNode id="t1" inInspector data={{ transform_op: 'filter', config: {} }} />);
-    expect(screen.queryByText(/Aggiungi condizione/)).toBeNull();
+    expect(screen.queryByText(/Aggiungi una condizione/)).toBeNull();
     expect(screen.getByText(/input runtime collegati/)).toBeTruthy();
   });
 

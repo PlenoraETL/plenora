@@ -107,3 +107,12 @@ export function useToast() {
   }
   return ctx;
 }
+
+/**
+ * Come useToast, ma senza provider ritorna null (come useOptionalConfirm):
+ * per i pezzi del guscio dell'editor che danno solo un riscontro (UI-3,
+ * comandi del canvas) e che si montano anche da soli.
+ */
+export function useOptionalToast() {
+  return useContext(ToastContext);
+}

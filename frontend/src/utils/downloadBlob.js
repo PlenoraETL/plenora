@@ -59,6 +59,7 @@ export function openBlob(blob, filename = 'download') {
  * @param {AxiosResponse} response
  * @param {string|null}   filename     - Nome suggerito (sovrascritto dal Content-Disposition)
  * @param {string}        fallbackName - Nome se non ce n'e' nessuno
+ * @returns {{ blob: Blob, filename: string }} il file salvato
  */
 export function downloadBlob(response, filename = null, fallbackName = 'download') {
   let downloadFilename = filenameFromDisposition(response.headers?.['content-disposition']) || filename;
@@ -69,5 +70,10 @@ export function downloadBlob(response, filename = null, fallbackName = 'download
     downloadFilename = downloadFilename.replace(/\.[^.]+$/, '') + '.zip';
   }
 
-  saveBlob(new Blob([response.data], { type: contentType }), downloadFilename || fallbackName);
+  const blob = new Blob([response.data], { type: contentType });
+  const name = downloadFilename || fallbackName;
+  saveBlob(blob, name);
+  // UI-3 (U13): chi scarica un file consegnato una volta sola lo tiene per
+  // «Scarica di nuovo» (useEseguibileRun).
+  return { blob, filename: name };
 }

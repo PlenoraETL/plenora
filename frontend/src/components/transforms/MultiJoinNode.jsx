@@ -16,6 +16,7 @@ import { nodeTitle } from '../canvas/nodeDescriptors';
 import NodeHandle from '../canvas/NodeHandle';
 import { term } from '../../utils/glossary';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import { joinTypeOptions, readJoinType } from '../../utils/joinTypes';
 
 const MultiJoinNode = memo(({ data, id }) => {
   
@@ -23,7 +24,7 @@ const MultiJoinNode = memo(({ data, id }) => {
   const config = data.config || {};
   const joinKeys = config.join_keys || [];
   const joinPairs = Array.isArray(config.join_pairs) ? config.join_pairs : [];
-  const joinType = config.join_type || 'inner';
+  const joinType = readJoinType('multi_join', config.join_type);
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
 
@@ -282,9 +283,7 @@ const MultiJoinNode = memo(({ data, id }) => {
               onChange={(e) => updateConfig('join_type', e.target.value)}
               className="multi-join-node__select nodrag"
             >
-              <option value="inner">Inner (solo corrispondenze)</option>
-              <option value="left">Left (tutte da prima sorgente)</option>
-              <option value="outer">Outer (tutte le righe)</option>
+              {joinTypeOptions('multi_join').map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
         )}

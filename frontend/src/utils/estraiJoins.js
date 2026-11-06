@@ -22,13 +22,12 @@ import { isParameterBindingEdge } from './runtimeBindingEdges';
 import { nodeRole } from './canvasGraph';
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
 import { term } from './glossary';
+import { JOIN_TYPES as CATALOG_JOIN_TYPES, newJoinType, readJoinType } from './joinTypes';
 
-export const JOIN_TYPES = [
-  { value: 'inner', label: 'INNER', description: 'Solo le righe con corrispondenza in entrambe' },
-  { value: 'left', label: 'LEFT', description: 'Tutte da sinistra + le corrispondenze da destra' },
-  { value: 'right', label: 'RIGHT', description: 'Tutte da destra + le corrispondenze da sinistra' },
-  { value: 'full', label: 'FULL', description: 'Tutte le righe da entrambe' },
-];
+// Tipi di Join dal catalogo unico dei tre editor (utils/joinTypes, U21).
+export const JOIN_TYPES = CATALOG_JOIN_TYPES
+  .filter(t => t.values.estrai)
+  .map(t => ({ value: t.values.estrai, label: `${t.label} (${t.short})`, description: t.description }));
 
 // Funzioni applicabili alle colonne (condizioni e filtri ON), come il backend.
 export const JOIN_FUNCTIONS = [
@@ -117,7 +116,7 @@ export function joinDraftFromData(data = {}) {
     : [];
   return {
     mode: d.is_spatial ? 'spatial' : 'standard',
-    join_type: d.join_type && !OUTPUT_LIKE_JOIN_TYPES.has(d.join_type) ? d.join_type : 'left',
+    join_type: readJoinType('estrai', d.join_type && !OUTPUT_LIKE_JOIN_TYPES.has(d.join_type) ? d.join_type : null),
     conditions,
     on_filters: onFilters,
     spatial_predicate: d.spatial_predicate || DEFAULT_PREDICATE,
@@ -268,7 +267,7 @@ export function joinStatus(data, sourceNode, targetNode) {
 
 // Nomi mostrati: la clausola SQL ("LEFT JOIN") e il predicato spaziale in
 // italiano ("Interseca"), mai la chiave tecnica.
-const sqlJoinLabel = (joinType) => `${String(joinType || 'left').toUpperCase()} JOIN`;
+const sqlJoinLabel = (joinType) => `${String(readJoinType('estrai', joinType)).toUpperCase()} JOIN`;
 const spatialPredicateLabel = (value) => SPATIAL_PREDICATES.find(p => p.value === value)?.label
   || `${term('join').name} spaziale`;
 
@@ -309,13 +308,29 @@ let edgeSeq = 0;
  * Arco di join nuovo, "da completare": nessuna colonna scelta. `suggestion`
  * (relazione del servizio ArcGIS) resta solo un suggerimento nel pannello.
  */
-export function newJoinEdge({ source, target, join_type = 'left', suggestion = null }) {
+export function newJoinEdge({ source, target, join_type = newJoinType('estrai'), suggestion = null }) {
   edgeSeq += 1;
   const data = {
     ...joinDataFromDraft({ ...joinDraftFromData({}), join_type }),
     ...(suggestion ? { suggestion } : {}),
   };
   return { id: `edge_${Date.now()}_${edgeSeq}`, source, target, data, ...joinEdgeLook(data, 'incomplete') };
+}
+
+/**
+ * P29 (UI-3): alias di una tabella aggiunta di nuovo (Join della tabella con
+ * se stessa): `<tabella>_2`, `_3`, ... il primo libero tra gli alias
+ * effettivi gia' nel canvas (alias o nome). Solo lettere, cifre e `_`: un
+ * nome con lo schema (`dbo.ordini`) usa l'ultima parte. Stessa forma degli
+ * alias che il backend assegna da solo ai canvas senza alias.
+ */
+export function selfJoinAlias(tableName, takenAliases = []) {
+  // Come core/estrai/query_aliases: senza schema, solo \w, `t_` davanti a
+  // una cifra, confronto senza maiuscole.
+  let base = String(tableName || 'tabella').split('.').pop().replace(/[^A-Za-z0-9_]/g, '_') || 'tabella';
+  if (/^\d/.test(base)) base = `t_${base}`;
+  const taken = new Set([base, ...takenAliases].filter(Boolean).map(a => String(a).toLowerCase()));
+  for (let n = 2; ; n += 1) if (!taken.has(`${base}_${n}`.toLowerCase())) return `${base}_${n}`;
 }
 
 /** Palette: la tabella nuova e' la sorgente, quella di partenza il target (come trascinando). */

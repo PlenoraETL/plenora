@@ -9,6 +9,7 @@ from typing import Any, List, Optional
 
 from app.core.projects.canvas_models import Node, Edge
 from app.core.estrai.types import JsonObject
+from app.core.estrai.query_aliases import with_unique_aliases
 from app.core.estrai.query_filters import WhereClauseBuilder
 from app.core.estrai.query_joins import QueryJoinRenderer
 from app.core.estrai.query_projection import QueryProjectionRenderer
@@ -96,13 +97,7 @@ class QueryGenerator:
                 f"({ids}). Usa tabelle database, layer ArcGIS, oppure MANIPOLA."
             )
 
-        # Risali il grafo dal risultato per trovare le tabelle connesse
-        table_nodes = self._trova_tabelle_connesse(nodes, edges, result_node_id)
-        table_nodes.reverse()
-        
-        # Riordina i nodi per rispettare le dipendenze dei JOIN
-        # ogni tabella JOINata deve referenziare solo tabelle già presenti nel FROM
-        table_nodes = self._riordina_per_dipendenze_join(table_nodes, edges)
+        table_nodes = self.query_tables(nodes, edges, result_node_id)
 
         if not table_nodes:
             raise ValueError("Nessuna tabella connessa al nodo risultato")
@@ -133,6 +128,21 @@ class QueryGenerator:
             "tables_used": [self._get_node_table_name(n) for n in table_nodes],
             "columns_count": len(self._get_colonne_visibili(table_nodes))
         }
+
+    def query_tables(self, nodes: List[Node], edges: List[Edge], result_node_id: str) -> List[Node]:
+        """Tabelle della query nell'ordine del FROM, con alias univoci.
+
+        Unica sequenza per il SQL (``generate_sql``) e per le colonne di
+        /schemas (``projects.schema_execution_sources.sql_projection``):
+        risale il grafo dal risultato, riordina per le dipendenze dei JOIN
+        (ogni tabella JOINata referenzia solo tabelle gia' nel FROM) e rende
+        univoci gli alias (``query_aliases.with_unique_aliases``: la stessa
+        tabella piu' volte, self-join) su copie dei nodi.
+        """
+        table_nodes = self._trova_tabelle_connesse(nodes, edges, result_node_id)
+        table_nodes.reverse()
+        table_nodes = self._riordina_per_dipendenze_join(table_nodes, edges)
+        return with_unique_aliases(table_nodes)
 
     def _get_default_schema(self) -> Optional[str]:
         """

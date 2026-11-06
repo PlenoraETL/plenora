@@ -59,6 +59,59 @@ const FILE_OFFSET = integer({ min: 0 });
  *   dest_format     'csv' | 'geojson' | 'xlsx' | 'gpkg'
  */
 const datasourcesOf = (d) => d?.datasources || [];
+/** Percorso della cartella aperta nel navigatore dei file (P24: fuori dal render). */
+function BreadCrumb({ path, onOpen }) {
+  const parts = path.split('/').filter(Boolean);
+  return (
+    <div className="dsn__breadcrumb">
+      <button type="button" onClick={() => onOpen('')}>root</button>
+      {parts.map((seg, i) => {
+        const p = parts.slice(0, i + 1).join('/');
+        return (
+          <React.Fragment key={p}>
+            <span>/</span>
+            <button type="button" onClick={() => onOpen(p)}>{seg}</button>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Scelta del connettore Data Source (P24: fuori dal render). */
+function DsSelector({ resource, loading, datasources, value, onPick }) {
+  return (
+    <div className="dsn__field">
+      <label className="dsn__label">Connettore</label>
+      {loading ? (
+        <div className="dsn__loading-inline">⏳ Caricamento...</div>
+      ) : (
+        <>
+        {/* Errore sempre visibile: senza dati al posto della scelta, con
+            dati come avviso sopra (hooks/useResource). */}
+        {resource.status === 'error' && (
+          <div className="dsn__loading-inline" role="alert">
+            ⚠️ {resource.stale ? 'Connettori non aggiornati' : 'Connettori non caricati'}: {resource.error}{' '}
+            <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => resource.reload()}>Riprova</button>
+          </div>
+        )}
+        {resource.hasData && (
+        <select
+          className="dsn__select"
+          value={value}
+          onChange={e => onPick(e.target.value)}
+        >
+          <option value="">— Seleziona Data Source —</option>
+          {datasources.map(ds => (
+            <option key={ds.id} value={ds.id}>{ds.name} ({ds.type})</option>
+          ))}
+        </select>
+        )}
+        </>
+      )}
+    </div>
+  );
+}
 
 const DataSourceNode = memo(({ id, data }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
@@ -173,59 +226,14 @@ const openBrowser = useCallback((path = '') => {
     upd({ file_path: file.path, format: file.type });
     setShowBrowser(false);
   }, [upd, openBrowser]);
-const BreadCrumb = () => {
-    const parts = browserPath.split('/').filter(Boolean);
-    return (
-      <div className="dsn__breadcrumb">
-        <button type="button" onClick={() => openBrowser('')}>root</button>
-        {parts.map((seg, i) => {
-          const path = parts.slice(0, i + 1).join('/');
-          return (
-            <React.Fragment key={path}>
-              <span>/</span>
-              <button type="button" onClick={() => openBrowser(path)}>{seg}</button>
-            </React.Fragment>
-          );
-        })}
-      </div>
-    );
-  };
-const selectedDs = datasources.find(d => d.id === dsId);
-
-  const DsSelector = () => (
-    <div className="dsn__field">
-      <label className="dsn__label">Connettore</label>
-      {loadingDs ? (
-        <div className="dsn__loading-inline">⏳ Caricamento...</div>
-      ) : (
-        <>
-        {/* Errore sempre visibile: senza dati al posto della scelta, con
-            dati come avviso sopra (hooks/useResource). */}
-        {dsResource.status === 'error' && (
-          <div className="dsn__loading-inline" role="alert">
-            ⚠️ {dsResource.stale ? 'Connettori non aggiornati' : 'Connettori non caricati'}: {dsResource.error}{' '}
-            <button type="button" {...READ_ONLY_SAFE} className="nodrag list-state__retry" onClick={() => dsResource.reload()}>Riprova</button>
-          </div>
-        )}
-        {dsResource.hasData && (
-        <select
-          className="dsn__select"
-          value={dsId}
-          onChange={e => {
-            const ds = datasources.find(d => d.id === e.target.value);
-            upd({ datasource_id: e.target.value, datasource_name: ds?.name || '', file_path: '', columns: [] });
-          }}
-        >
-          <option value="">— Seleziona Data Source —</option>
-          {datasources.map(ds => (
-            <option key={ds.id} value={ds.id}>{ds.name} ({ds.type})</option>
-          ))}
-        </select>
-        )}
-        </>
-      )}
-    </div>
-  );
+  const selectedDs = datasources.find(d => d.id === dsId);
+  // P24 (UI-3): selettore e percorso sono componenti fuori dal render (sotto):
+  // definiti qui dentro si rimontavano a ogni render (select che perde il
+  // fuoco a meta' scelta).
+  const pickDatasource = useCallback((value) => {
+    const ds = datasources.find(d => d.id === value);
+    upd({ datasource_id: value, datasource_name: ds?.name || '', file_path: '', columns: [] });
+  }, [datasources, upd]);
 return (
     <div className={`dsn dsn--${mode}`}>
 
@@ -267,7 +275,7 @@ return (
             </div>
           </div>
 
-          <DsSelector />
+          <DsSelector resource={dsResource} loading={loadingDs} datasources={datasources} value={dsId} onPick={pickDatasource} />
 
           {mode === 'source' && dsId && (
             <>
@@ -499,7 +507,7 @@ return (
           size="lg"
           subtitle={browserPath ? `/${browserPath}` : '/'}
         >
-          {browserPath && <BreadCrumb />}
+          {browserPath && <BreadCrumb path={browserPath} onOpen={openBrowser} />}
           <div className="dsn__browser-body dsn__browser-body--modal">
             {browserLoading && <div className="dsn__browser-status">⏳ Caricamento...</div>}
             {browserError  && <div className="dsn__browser-status dsn__browser-status--err">❌ {browserError}</div>}

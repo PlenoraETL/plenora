@@ -31,6 +31,7 @@ vi.mock('../../src/api', () => ({
   cancelTask: cancelTaskMock,
 }));
 
+import { ConfirmProvider } from '../../src/context/ConfirmContext';
 import ExecutableDynamicRunForm, { filePayloads, filesComplete, scalarDefinitions } from '../../src/components/eseguibili/ExecutableDynamicRunForm';
 
 const fileInput = {
@@ -133,10 +134,33 @@ describe('ExecutableDynamicRunForm — la finestra unica «Prima di avviare»', 
       output_name: undefined,
     }));
     expect(await screen.findByText('Esecuzione completata!')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /scarica file/i }));
-    await waitFor(() => expect(downloadMock).toHaveBeenCalledWith('exe-1', 'task-9', 'Pulizia indirizzi.csv'));
+    fireEvent.click(screen.getByRole('button', { name: /scarica il file/i }));
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledWith('exe-1', 'task-9', 'Pulizia indirizzi.csv', expect.objectContaining({ onProgress: expect.any(Function) })));
+    // UI-3 (U13): scaricare non chiude; la pulizia parte alla chiusura.
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole('button', { name: /^chiudi$/i }).at(-1));
     await waitFor(() => expect(onAfterDownload).toHaveBeenCalledWith('task-9'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('U13 (UI-3): chiudere con un risultato NON scaricato chiede; «Resta qui» non elimina, «Chiudi ed elimina» pulisce', async () => {
+    const onClose = vi.fn();
+    const onAfterDownload = vi.fn().mockResolvedValue(undefined);
+    render(<ConfirmProvider><ExecutableDynamicRunForm eseguibile={eseguibileOf()} onClose={onClose} onAfterDownload={onAfterDownload} /></ConfirmProvider>);
+    await chooseAndAnalyze('a.csv', 'up-a');
+    fireEvent.click(screen.getByRole('button', { name: /avvia l'esecuzione/i }));
+    expect(await screen.findByText('Esecuzione completata!')).toBeInTheDocument();
+    expect(screen.getByText(/se la chiudi senza scaricarlo ti viene chiesto/)).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /^chiudi$/i }).at(-1));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resta qui' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Resta qui' })).toBeNull());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onAfterDownload).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole('button', { name: /^chiudi$/i }).at(-1));
+    fireEvent.click(await screen.findByRole('button', { name: 'Chiudi ed elimina' }));
+    await waitFor(() => expect(onAfterDownload).toHaveBeenCalledWith('task-9'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(downloadMock).not.toHaveBeenCalled();
   });
 
   it('permessi revocati durante l\'esecuzione: banner, nessun "completata" ne\' download (R9.2)', async () => {

@@ -42,7 +42,8 @@ const ENTRIES = [
 const SAME_MEANING = {
   join: ['glossario:multi_join', 'glossario:join'], // unione su chiavi, a due o piu' tabelle
   datasource: ['glossario:datasource', 'glossario:datasource_write', 'navigazione:datasources'],
-  file: ['glossario:file_source', 'navigazione:files'],
+  // UI-3 (U30): «Carica un file» è lo stesso significato (un file).
+  file: ['glossario:file_source', 'glossario:upload_file', 'navigazione:files'],
   api: ['glossario:api_enrich', 'navigazione:apis'],
   connection: ['glossario:connections', 'navigazione:connections'],
   schedule: ['glossario:schedule', 'navigazione:schedules'],

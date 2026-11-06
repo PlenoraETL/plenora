@@ -1,0 +1,41 @@
+.transfer-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.transfer-progress__bar {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--plen-surface-3);
+  overflow: hidden;
+}
+
+.transfer-progress__fill {
+  display: block;
+  height: 100%;
+  background: var(--plen-blue);
+  transition: width 0.2s ease;
+}
+
+/* Dimensione ignota: una striscia che scorre, senza percentuale. */
+.transfer-progress__fill--unknown {
+  width: 30%;
+  animation: transfer-progress-slide 1.2s linear infinite;
+}
+
+@keyframes transfer-progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transfer-progress__fill--unknown { animation: none; width: 100%; opacity: 0.5; }
+}
+
+.transfer-progress__text {
+  font-size: 12px;
+  color: var(--plen-text-sub);
+}

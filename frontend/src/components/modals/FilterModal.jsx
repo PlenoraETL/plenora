@@ -18,6 +18,9 @@ import {
 import './FilterModal.css';
 import { termName } from '../../utils/glossary';
 import { useCanvasDerived } from '../../hooks/useCanvasDerived';
+import {
+  addConditionGroup, addConditionToGroup, conditionGroups, describeConditionGroups, normalizeConditionGroups, operatorsFor,
+} from '../../utils/filterConditions';
 
 /**
  * Modal per configurare filtri WHERE su una tabella
@@ -82,22 +85,11 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
 
   // RIMOSSO: useEffect per ESC - ModalWrapper lo gestisce automaticamente
 
-  // Definizione operatori con tipi supportati
-  const allOperators = [
-    { value: '=', label: '=', description: 'Uguale a', types: ['all'] },
-    { value: '!=', label: '!=', description: 'Diverso da', types: ['all'] },
-    { value: '>', label: '>', description: 'Maggiore di', types: ['int', 'real', 'date'] },
-    { value: '<', label: '<', description: 'Minore di', types: ['int', 'real', 'date'] },
-    { value: '>=', label: '>=', description: 'Maggiore o uguale', types: ['int', 'real', 'date'] },
-    { value: '<=', label: '<=', description: 'Minore o uguale', types: ['int', 'real', 'date'] },
-    { value: 'LIKE', label: 'LIKE', description: 'Contiene testo', types: ['str'] },
-    { value: 'NOT LIKE', label: 'NOT LIKE', description: 'Non contiene', types: ['str'] },
-    { value: 'IN', label: 'IN', description: 'In lista valori', types: ['all'] },
-    { value: 'NOT IN', label: 'NOT IN', description: 'Non in lista', types: ['all'] },
-    { value: 'IS NULL', label: 'IS NULL', description: 'È nullo', types: ['all'] },
-    { value: 'IS NOT NULL', label: 'IS NOT NULL', description: 'Non è nullo', types: ['all'] },
-    { value: 'BETWEEN', label: 'BETWEEN', description: 'Tra due valori', types: ['int', 'real', 'date'] }
-  ];
+  // Operatori dal catalogo unico dei filtri (utils/filterConditions, U20):
+  // stesso nome che in Manipola, il codice SQL accanto.
+  const allOperators = operatorsFor('estrai').map(o => ({
+    value: o.value, label: o.label, description: o.value, types: o.estraiTypes || ['all'],
+  }));
 
   // Fase 5 T5 (R8.18): gli operatori dipendono dalla FAMIGLIA del tipo
   // (utils/columnUtils.columnTypeFamily): integer, float, varchar,
@@ -151,9 +143,20 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
     return columnTypeFamily(columnType) === 'date' ? 'date' : 'text';
   };
 
-  const addFilter = () => {
-    setLocalFilters([...localFilters, { column: '', operator: '=', value: '' }]);
+  // Gruppi E/O (U20): una condizione in un gruppo (E) o un gruppo nuovo (O).
+  const EMPTY_ROW = { column: '', operator: '=', value: '' };
+  const addFilter = (group = 0) => {
+    const next = addConditionToGroup(localFilters, group, EMPTY_ROW);
+    setLocalFilters(next);
+    // Le condizioni dopo quella nuova scalano di uno: anche i loro input runtime.
+    const insertedAt = next.findIndex((r, i) => r !== localFilters[i]);
+    setBindingSelections(current => Object.fromEntries(Object.entries(current)
+      .map(([key, value]) => [Number(key) >= insertedAt ? Number(key) + 1 : Number(key), value])));
   };
+  const addGroup = () => setLocalFilters(addConditionGroup(localFilters, EMPTY_ROW));
+
+  // Gruppi mostrati: ordine di prima apparizione (utils/filterConditions).
+  const groups = conditionGroups(localFilters);
 
   const removeFilter = (index) => {
     if (localFilters.length > 1) {
@@ -184,10 +187,14 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
   };
 
   const handleSave = () => {
-    const validRows = localFilters
+    const kept = localFilters
       .map((filter, index) => ({ filter, inputNodeId: bindingSelections[index] }))
       .filter(item => item.filter.column);
-    const validFilters = validRows.map(item => item.filter);
+    // Gruppi rinumerati e condizioni di un gruppo vicine; con un solo
+    // gruppo il formato e' quello di prima (utils/filterConditions).
+    const { list: validFilters, moved } = normalizeConditionGroups(kept.map(item => item.filter));
+    const validRows = new Array(validFilters.length);
+    kept.forEach((item, i) => { validRows[moved[i]] = { filter: validFilters[moved[i]], inputNodeId: item.inputNodeId }; });
     onSave(validFilters);
     if (nodeId) {
       editEdges(current => {
@@ -241,13 +248,17 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
         </span>
       </div>
 
-      {/* Lista filtri */}
+      {/* Lista filtri a gruppi (U20): E dentro il gruppo, O tra i gruppi. */}
       <div className="filter-modal__filters-list">
-        {localFilters.map((filter, index) => {
+        {groups.map((g, gi) => (
+          <div key={g.group} className="filter-modal__group" role="group" aria-label={`Gruppo ${gi + 1}: tutte le condizioni vere (E)`}>
+            {gi > 0 && <div className="filter-modal__or" aria-hidden="true">oppure (O)</div>}
+            {groups.length > 1 && <div className="filter-modal__group-title">Gruppo {gi + 1} · tutte vere (E)</div>}
+        {g.items.map(({ row: filter, index }) => {
           const colType = getColumnType(filter.column);
           const availableOperators = getOperatorsForType(colType);
           const needsValue = !['IS NULL', 'IS NOT NULL'].includes(filter.operator);
-          
+
           return (
             <div key={index} className="filter-modal__filter-item">
               {/* Colonna con icona tipo */}
@@ -282,7 +293,7 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
                 >
                   {availableOperators.map(op => (
                     <option key={op.value} value={op.value}>
-                      {op.label} - {op.description}
+                      {op.label} ({op.description})
                     </option>
                   ))}
                 </select>
@@ -345,61 +356,50 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
                   className="filter-modal__remove-btn"
                   onClick={() => removeFilter(index)}
                 >
-                  🗑️ Rimuovi filtro
+                  🗑️ Rimuovi condizione
                 </button>
               )}
             </div>
           );
         })}
+            <button type="button" className="filter-modal__add-btn" onClick={() => addFilter(g.group)}>
+              ＋ Aggiungi una condizione (E)
+            </button>
+          </div>
+        ))}
       </div>
 
-      {/* Bottone aggiungi filtro */}
-      <button type="button" className="filter-modal__add-btn" onClick={addFilter}>
-        + Aggiungi filtro (AND)
+      {/* U20: un gruppo nuovo, in alternativa ai precedenti. */}
+      <button type="button" className="filter-modal__add-btn filter-modal__add-btn--or" onClick={addGroup}>
+        ＋ Aggiungi un gruppo O
       </button>
 
-      {/* Preview SQL */}
+      {/* Preview SQL: la stessa regola dei gruppi del backend. */}
       {localFilters.some(f => f.column) && (
         <div className="filter-modal__preview">
-          <div className="filter-modal__preview-label">{termName('preview')} SQL:</div>
+          <div className="filter-modal__preview-label">SQL generato:</div>
           <div className="filter-modal__preview-sql">
             <span className="filter-modal__sql-keyword">WHERE </span>
-            {localFilters
-              .filter(f => f.column)
-              .map((f, idx) => {
-                const needsValue = !['IS NULL', 'IS NOT NULL'].includes(f.operator);
-                const colType = getColumnType(f.column);
-                const isNumeric = ['int', 'real'].includes(colType);
-                
-                let valueDisplay = '';
-                if (needsValue) {
-                  if (f.operator === 'IN' || f.operator === 'NOT IN') {
-                    const values = f.value ? f.value.split(',').map(v => 
-                      isNumeric ? v.trim() : `'${v.trim()}'`
-                    ).join(', ') : '?';
-                    valueDisplay = `(${values})`;
-                  } else if (f.operator === 'BETWEEN') {
-                    valueDisplay = f.value || '? AND ?';
-                  } else {
-                    const inputNode = scalarInputs.find(node => node.id === bindingSelections[idx]);
-                    valueDisplay = inputNode
-                      ? `{{${inputNode.data?.input_key || 'input'}}}`
-                      : f.value
-                      ? (isNumeric ? f.value : `'${f.value}'`)
-                      : '?';
-                  }
+            {describeConditionGroups(localFilters, (f, index) => {
+              if (!f.column) return null;
+              const needsValue = !['IS NULL', 'IS NOT NULL'].includes(f.operator);
+              const isNumeric = ['int', 'real'].includes(columnTypeFamily(getColumnType(f.column)));
+              let valueDisplay = '';
+              if (needsValue) {
+                if (f.operator === 'IN' || f.operator === 'NOT IN') {
+                  const values = f.value ? String(f.value).split(',').map(v => (isNumeric ? v.trim() : `'${v.trim()}'`)).join(', ') : '?';
+                  valueDisplay = `(${values})`;
+                } else if (f.operator === 'BETWEEN') {
+                  valueDisplay = f.value || '? AND ?';
+                } else {
+                  const inputNode = scalarInputs.find(node => node.id === bindingSelections[index]);
+                  valueDisplay = inputNode
+                    ? `{{${inputNode.data?.input_key || 'input'}}}`
+                    : (f.value ? (isNumeric ? f.value : `'${f.value}'`) : '?');
                 }
-                
-                return (
-                  <span key={idx}>
-                    {idx > 0 && <span className="filter-modal__sql-keyword"> AND </span>}
-                    {tableName}.{f.column}
-                    <span className="filter-modal__sql-operator"> {f.operator} </span>
-                    {valueDisplay}
-                  </span>
-                );
-              })
-            }
+              }
+              return `${tableName}.${f.column} ${f.operator}${needsValue ? ` ${valueDisplay}` : ''}`;
+            }, { and: ' AND ', or: ' OR ' })}
           </div>
         </div>
       )}

@@ -14,7 +14,6 @@
  * Route: /arricchisci/:projectId
  */
 import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { newProjectInputData } from '../utils/uniqueName';
 import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -24,6 +23,7 @@ import { sinkFlags } from '../utils/canvasGraph';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import { executeEnrichmentAsync } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { can } from '../utils/permissions';
 import { useEditorData } from '../hooks/useEditorData';
 import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
@@ -49,6 +49,8 @@ import CaricanNode from '../components/nodes/CaricanNode';
 import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
+import AnnotationNode from '../components/nodes/AnnotationNode';
+import '../components/nodes/AnnotationNode.css';
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
 
 // Modali lazy-loaded
@@ -65,9 +67,11 @@ import '../components/arricchisci/ConnectionSelectorModal.css';
 import '../components/nodes/StaticValuesNode.css';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
-import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term, termName } from '../utils/glossary';
+import { menuEntry, paletteEntry, term } from '../utils/glossary';
 import useEditorActions from '../components/editor/useEditorActions';
-import { renderNodeType } from '../utils/nodeTypeRegistry';
+import useCatalogAdd, { useResolvedSourceNames } from '../components/editor/useCatalogAdd';
+import { catalogConstraintNodes, catalogMenuItems, isCanvasEmpty, catalogPaletteItems, readSourceDrop, sourcePaletteGroups } from '../components/editor/editorNodeCatalog';
+import EditorFileUploadModal from '../components/editor/EditorFileUploadModal';
 
 /**
  * Costruisce una mappa nodeId → titolo per il raggruppamento colonne in
@@ -92,6 +96,8 @@ const nodeTypes = {
   project_input: ProjectInputNode,
   api_enrich: ApiEnrichNode, result: ResultNode,
   staticValues: StaticValuesNode, carica: CaricanNode, carica_arcgis: CaricanArcGISNode, caricaArcgis: CaricanArcGISNode,
+  // UI-3 (P30): la Nota c'e' anche in Arricchisci, come negli altri editor.
+  comment: AnnotationNode,
 };
 
 const defaultEdgeOptions = {
@@ -115,7 +121,7 @@ const ArricchisciEditorContent = () => {
 
   const {
     onNodesChange, onEdgesChange,
-    loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
+    loadGraph, addNodes, editEdges, insertNode, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData,
     getViewportCenter,
     isReadOnly, readOnlyProps
@@ -227,8 +233,8 @@ const ArricchisciEditorContent = () => {
     const newNode = ({ id: newNodeId,
       type: category === 'datasource' ? 'project_source' : 'api_enrich',
       // Posizionamento deterministico al centro del viewport corrente,
-      // allineato al pattern degli altri `handleAdd*Node` di questo file
-      // (vedi `handleAddResultNode` etc.) che usano `getPos()`. Pre-fix
+      // allineato agli altri nodi nuovi dell'editor (catalogo unico,
+      // components/editor/useCatalogAdd) che nascono al centro della vista. Pre-fix
       // `Math.random()` produceva posizioni non riproducibili e potenzialmente
       // fuori dal viewport visibile su zoom alto.
       // Pre-fix (P2 frontend-pages): `getPos` veniva letta dalla
@@ -260,89 +266,42 @@ const ArricchisciEditorContent = () => {
     if (category === 'datasource') modals.close('datasource');
   }, [placeAfter, screenToFlowPosition, modals]);
 
-  const handleAddStaticValuesNode = useCallback(() => {
-    addNodes({ id: `static_${Date.now()}`, type: 'staticValues',
-      position: { x: 100, y: 200 },
-      data: { label: termName('static_values'), fields: [] } });
-  }, [addNodes]);
+  // Catalogo unico dei nodi (UI-3, P30): Valori statici, Input runtime,
+  // Nota, Output e caricamenti nascono nella vista visibile (prima a
+  // posizioni fisse, spesso fuori vista); l'Output dalla palette entra nel
+  // flusso dopo il nodo di partenza.
+  const { addNode, addSource } = useCatalogAdd('arricchisci', getPos, {
+    insertAfter: (node, afterId) => placeAfter(node, afterId, false),
+  });
+  const [showUpload, setShowUpload] = useState(false);
+  // U30: caricare un file dall'editor, con lo stesso permesso della pagina File.
+  const canUpload = can.uploadFile(user);
+  // U9: nome delle sorgenti salvate col solo id (campo transitorio).
+  useResolvedSourceNames(applyDerivedNodes, availableSources, availableFiles);
 
-  const handleAddProjectInputNode = useCallback(() => {
-    // Chiave e ordine unici e stabili (utils/uniqueName, R8.19).
-    const data = newProjectInputData(nodesRef.current, { kind: 'file' });
-    addNodes({ id: `project_input_${Date.now()}`, type: 'project_input',
-      position: { x: 100, y: 180 + data.order * 80 },
-      data });
-  }, [addNodes, nodesRef]);
-
-  const handleAddResultNode = useCallback(() => {
-    if (nodesRef.current.some(n => n.type === 'result')) { toast.warning(onlyOneMessage('output')); return; }
-    addNodes({ id: `result_${Date.now()}`, type: 'result',
-      position: { x: 600, y: 200 },
-      data: { isArricchisci: true, fileName: 'output', format: 'csv',
-        order_by_enabled: false, order_by_columns: [],
-        having_enabled: false, having_conditions: [] } });
-  }, [addNodes]);
-
-  const handleAddCaricanNode = useCallback(() => {
-    const currentNodes = nodesRef.current;
-    if (!currentNodes.some(n => n.type === 'result')) { toast.warning(addFirstMessage('output')); return; }
-    if (currentNodes.some(n => n.type === 'carica'))  { toast.warning(onlyOneMessage('load_db')); return; }
-    const resultNode = currentNodes.find(n => n.type === 'result');
-    const newNode = { id: `carica_${Date.now()}`, type: 'carica',
-      position: { x: resultNode.position.x + 400, y: resultNode.position.y },
-      data: { connection_id: '', schema_name: '', table_name: '', write_mode: 'create',
-        column_mappings: [], match_columns: [], batch_size: 1000,
-        transaction_mode: 'all_or_nothing', create_spatial_index: true, conflict_policy: 'abort' } };
-    addNodes(newNode);
-    addEdges({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      type: 'smoothstep', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 },
-      markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: '#7c3aed' }, data: {} });
-  }, [addNodes, addEdges]);
-
-  const handleAddCaricanArcGISNode = useCallback(() => {
-    const currentNodes = nodesRef.current;
-    if (!currentNodes.some(n => n.type === 'result')) { toast.warning(addFirstMessage('output')); return; }
-    if (currentNodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning(onlyOneMessage('load_arcgis')); return; }
-    const resultNode = currentNodes.find(n => n.type === 'result');
-    const newNode = {
-      id: `carica_arcgis_${Date.now()}`, type: renderNodeType('carica_arcgis'),
-      position: { x: resultNode.position.x + 400, y: resultNode.position.y + 200 },
-      data: { arcgis_connection_id: '', arcgis_service_url: '', arcgis_layer_url: '',
-        arcgis_operation: 'add', arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',
-        column_mappings: [] }
-    };
-    addNodes(newNode);
-    addEdges({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      label: flowEdgeLabel('carica_arcgis'), animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } });
-  }, [addNodes, addEdges]);
-
-  const palette = useMemo(() => ({
-    groups: [
+  const canvasEmpty = useCanvasDerived(isCanvasEmpty, { on: 'structure' });
+  const palette = useMemo(() => {
+    const sources = sourcePaletteGroups({ projects: availableSources, files: availableFiles });
+    const own = [
       { label: 'Arricchisci', items: [
         // Nomi, icone e descrizioni dal glossario; `id` e' la finestra da aprire.
         paletteEntry('connector_manual', { id: 'manual', kind: 'connector' }),
         paletteEntry('connector_openapi', { id: 'openapi', kind: 'connector' }),
         paletteEntry('connector_rest_file', { id: 'rest_file', kind: 'connector' }),
       ] },
-      { label: 'Uscite', items: [
-        paletteEntry('output', { id: 'result', kind: 'result' }),
-        paletteEntry('load_db', { id: 'carica', kind: 'carica' }),
-        paletteEntry('load_arcgis', { id: 'carica_arcgis', kind: 'carica_arcgis' }),
-      ] },
-    ],
-    onPick: (item, afterId) => {
-      if (item.kind === 'connector') { paletteAfterRef.current = afterId; modals.open(item.id); return; }
-      if (item.kind === 'carica') { handleAddCaricanNode(); return; }
-      if (item.kind === 'carica_arcgis') { handleAddCaricanArcGISNode(); return; }
-      if (nodesRef.current.some(n => n.type === 'result')) { toast.warning(onlyOneMessage('output')); return; }
-      placeAfter({ id: `result_${Date.now()}`, type: 'result',
-        position: { x: 600, y: 200 },
-        data: { isArricchisci: true, fileName: 'output', format: 'csv',
-          order_by_enabled: false, order_by_columns: [],
-          having_enabled: false, having_conditions: [] } }, afterId, false);
-    },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [modals, handleAddCaricanNode, handleAddCaricanArcGISNode, placeAfter, toast]);
+      { label: 'Uscite', items: catalogPaletteItems('arricchisci', ['output', 'load_db', 'load_arcgis']) },
+      { label: 'Strumenti', items: catalogPaletteItems('arricchisci', ['runtime_input', 'static_values', 'note']) },
+    ];
+    return {
+      // U11: sorgenti nella palette, per prime a canvas vuoto.
+      groups: canvasEmpty ? [...sources, ...own] : [...own, ...sources],
+      onPick: (item, afterId) => {
+        if (item.kind === 'connector') { paletteAfterRef.current = afterId; modals.open(item.id); return; }
+        if (item.kind === 'source') { addSource(item.sourceKind, item.source); return; }
+        addNode(item.catalogKey, { afterId });
+      },
+    };
+  }, [modals, addNode, addSource, availableSources, availableFiles, canvasEmpty]);
 
   const onConnect = useCallback((params) => {
     // Normalizza handles: undefined → 'input'/'output'
@@ -359,32 +318,27 @@ const ArricchisciEditorContent = () => {
     editEdges(eds => addEdge(edge, eds));
   }, [editEdges]);
   const onEdgeContextMenu  = useCallback((event, edge) => { event.preventDefault(); editEdges(eds => eds.filter(e => e.id !== edge.id)); }, [editEdges]);
-  const onDragStart        = (event, nodeType, nodeData = {}) => { event.dataTransfer.setData('application/reactflow', nodeType); event.dataTransfer.setData('nodeData', JSON.stringify(nodeData)); event.dataTransfer.effectAllowed = 'move'; };
   const onDragOver         = useCallback((event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }, []);
 
+  // Sorgente trascinata dalla barra laterale: stesso costruttore del clic
+  // (editorNodeCatalog, con il nome), alla posizione del rilascio.
   const onDrop = useCallback((event) => {
     event.preventDefault();
-    const nodeType    = event.dataTransfer.getData('application/reactflow');
-    const nodeDataStr = event.dataTransfer.getData('nodeData');
-    if (!nodeType) return;
-    const nodeData = nodeDataStr ? JSON.parse(nodeDataStr) : {};
-    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    const newNodeId = `${nodeType}_${Date.now()}`;
-    let newNode;
+    const dropped = readSourceDrop(event);
+    if (!dropped) return;
+    addSource(dropped.kind, dropped.item, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+  }, [screenToFlowPosition, addSource]);
 
-    if (nodeType === 'project_source') newNode = { id: newNodeId, type: 'project_source', position,
-      data: { source_project_id: nodeData.source_project_id || nodeData.id, columns: [] } };
-    else if (nodeType === 'file_source') newNode = { id: newNodeId, type: 'file_source', position,
-      data: { file_source_id: nodeData.file_source_id || nodeData.id, columns: [] } };
-
-    if (newNode) addNodes(newNode);
-  }, [screenToFlowPosition, addNodes]);
+  // U30: file caricato dall'editor -> nell'elenco delle sorgenti e nel canvas.
+  const onUploaded = useCallback(async (file) => {
+    await reloadSources?.();
+    if (file?.id) addSource('file_source', file);
+    toast.success(`File «${file?.name || ''}» caricato e aggiunto al canvas.`);
+  }, [reloadSources, addSource, toast]);
 
   // Uscite: chiede il guard unico (NavigationGuard + useBlocker).
   useUnsavedChangesGuard();
   const handleBack     = () => navigate('/');
-  // UI-2 (V4): ricalcolati solo quando cambia il contenuto del canvas.
-  const { hasResultNode, hasCaricanNode, hasCaricanArcGISNode } = useCanvasDerived(sinkFlags);
 
   // beforeCanvas slot
   const accessDeniedBanner = <AccessDeniedBanner />;
@@ -392,6 +346,9 @@ const ArricchisciEditorContent = () => {
   // topbar slot
   // Barra unica (Fase 4, M7): le fonti di arricchimento e le altre azioni
   // nel menu "⋯", un solo "▶ Esegui".
+  // Vincoli del catalogo (Output e caricamenti) dal grafo, senza iscriversi
+  // ai nodi (UI-2, hooks/useCanvasDerived).
+  const catalogNodes = useCanvasDerived(catalogConstraintNodes);
   const toolbar = {
     mode: 'arricchisci',
     title: project?.metadata?.name,
@@ -411,13 +368,10 @@ const ArricchisciEditorContent = () => {
       menuEntry('connector_rest_file', { onClick: () => modals.open('rest_file') }),
       menuEntry('datasource', { onClick: () => modals.open('datasource') }),
       { key: 'div1', divider: true },
-      menuEntry('runtime_input', { onClick: handleAddProjectInputNode }),
-      menuEntry('static_values', { onClick: handleAddStaticValuesNode }),
-      { key: 'div2', divider: true },
-      menuEntry('output', { onClick: handleAddResultNode, disabled: hasResultNode }),
-      menuEntry('load_db', { onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode }),
-      menuEntry('load_arcgis', { onClick: handleAddCaricanArcGISNode, disabled: !hasResultNode || hasCaricanArcGISNode }),
-      { key: 'div3', divider: true },
+      // Voci dal catalogo unico (UI-3, P30), spente con il motivo (E3).
+      ...catalogMenuItems('arricchisci', catalogNodes, addNode),
+      { key: 'div-file', divider: true },
+      ...(canUpload ? [menuEntry('upload_file', { onClick: () => setShowUpload(true) })] : []),
       menuEntry('versions', { onClick: () => setShowVersions(true) }),
     ],
   };
@@ -425,12 +379,13 @@ const ArricchisciEditorContent = () => {
   // sidebar slot
   const sidebar = !isReadOnly ? (
     <EditorSidebar
-      variant="arricchisci" projects={availableSources} files={availableFiles} onDragStart={onDragStart}
+      variant="arricchisci" projects={availableSources} files={availableFiles}
+      onPick={(kind, item) => addSource(kind, item)} onUpload={canUpload ? () => setShowUpload(true) : null}
       sourcesLoading={sourcesLoading} sourcesError={sourcesError} onRetrySources={reloadSources}
-      projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto nel canvas',
+      projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Clic o trascina un progetto nel canvas',
         emptyMessage: 'Nessun progetto disponibile.', emptyHint: 'Crea prima un progetto Estrai, Manipola o Arricchisci.',
         filterTypes: ['estrai', 'manipola', 'arricchisci'], showSearch: true }}
-      filesConfig={{ title: '📁 File Esterni', subtitle: 'Trascina un file nel canvas',
+      filesConfig={{ title: '📁 File Esterni', subtitle: 'Clic o trascina un file nel canvas',
         emptyMessage: 'Nessun file disponibile.', uploadLink: '/files', uploadLinkText: 'Carica file esterni' }}
     />
   ) : null;
@@ -477,7 +432,8 @@ const ArricchisciEditorContent = () => {
       {showVersions && (
         <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
       )}
-      <ExecutionModal {...executionModalProps(execution)} title={`${term('run').icon} Esecuzione dell'arricchimento`} projectType="arricchisci" />
+      <EditorFileUploadModal isOpen={showUpload} onClose={() => setShowUpload(false)} onUploaded={onUploaded} variant="arricchisci" />
+      <ExecutionModal {...executionModalProps(execution)} projectId={projectId} projectName={project?.metadata?.name} title={`${term('run').icon} Esecuzione dell'arricchimento`} projectType="arricchisci" />
       {preview.showModal && (
       <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
         data={previewData}

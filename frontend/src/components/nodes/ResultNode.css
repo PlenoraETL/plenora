@@ -754,3 +754,7 @@
 
 /* P27 (Fase 5 T7): anteprima calcolata prima di una modifica del canvas. */
 .result-node__preview-inline-stale { font-size: 11px; color: var(--plen-warn); }
+
+/* UI-3 (U18): aggiornamento delle sorgenti sotto «Usa i risultati salvati». */
+.source-freshness { margin: 4px 0 0; padding-left: 16px; font-size: 11.5px; color: var(--plen-text-sub, #5b6478); }
+.source-freshness__row--stale { color: var(--plen-warn, #b45309); }

@@ -14,12 +14,19 @@ import useCanvasStore from '../../store/useCanvasStore';
 import { hasUnsavedChanges } from '../../store/saveState';
 import PlenoraLogo from '../common/PlenoraLogo';
 import { ColumnSyncBadge } from '../common/ColumnStatusNote';
-import { term } from '../../utils/glossary';
+import { addFirstMessage, term } from '../../utils/glossary';
+import { serverActionLabel } from '../../utils/serverActions';
+import { useOptionalToast } from '../../context/ToastContext';
+import { sourceFreshnessRows } from './SourceFreshnessNote';
+import { commandById, commandMenuItems, runCanvasCommand } from './canvasCommands';
 import { isShortcutBlocked } from '../../utils/dialogStack';
 import { matchesShortcut } from '../../utils/shortcuts';
 import ShortcutsButton from '../common/ShortcutsButton';
 import './EditorToolbar.css';
 import { useCanvasDerived } from '../../hooks/useCanvasDerived';
+
+// U18: c'e' un progetto sorgente (dal grafo solo con useCanvasDerived, UI-2).
+const hasProjectSourceNodes = (s) => (s.nodes || []).some(n => n.type === 'project_source' && n.data?.source_project_id);
 
 const MODE_LABEL = { estrai: 'ESTRAI', manipola: 'MANIPOLA', arricchisci: 'ARRICCHISCI' };
 
@@ -76,7 +83,9 @@ function OverflowMenu({ items }) {
     e.preventDefault();
     all[(go + all.length) % all.length].focus();
   };
-  const visible = items.filter(i => i && !i.hidden);
+  // `items` puo' essere una funzione: le voci si calcolano all'apertura
+  // (comandi del canvas: dipendono dalla selezione e dagli appunti).
+  const visible = (typeof items === 'function' ? items() : items).filter(i => i && !i.hidden);
   if (!visible.length) return null;
   return (
     <div className="etb-menu" ref={ref}>
@@ -88,9 +97,14 @@ function OverflowMenu({ items }) {
             ? <div key={item.key} className="etb-menu__divider" role="separator" />
             : (
               <button key={item.key} type="button" role="menuitem" className="etb-menu__item"
-                disabled={item.disabled} title={item.title}
+                disabled={item.disabled} title={(item.disabled && item.reason) || item.title}
                 onClick={() => { close(); item.onClick?.(); }}>
-                <span aria-hidden="true">{item.icon}</span>{item.label}
+                <span aria-hidden="true">{item.icon}</span>
+                <span className="etb-menu__text">
+                  {item.label}
+                  {/* E3: una voce spenta dice perche', scritto (non solo nel tooltip). */}
+                  {item.disabled && item.reason && <small className="etb-menu__reason">{item.reason}</small>}
+                </span>
               </button>
             )))}
         </div>
@@ -108,6 +122,7 @@ export default function EditorToolbar({
   menuItems = [], theme, setTheme,
 }) {
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
+  const toast = useOptionalToast();
   const canvasView = useCanvasStore(s => s.canvasView);
   const canUndo = useCanvasStore(s => (s.past?.length ?? 0) > 0);
   const canRedo = useCanvasStore(s => (s.future?.length ?? 0) > 0);
@@ -122,6 +137,25 @@ export default function EditorToolbar({
     return sel.length === 1 ? sel[0].id : null;
   }, { on: 'selection' });
   const busy = runState === 'starting' || runState === 'running' || executing;
+  const unsaved = useCanvasStore(hasUnsavedChanges);
+  const recalc = useCanvasStore(s => Boolean(s.runOptions?.force_recalculate));
+  const hasProjectSources = useCanvasDerived(hasProjectSourceNodes);
+  const freshnessText = hasProjectSources
+    ? sourceFreshnessRows(useCanvasStore.getState().nodes).map(r => `${r.name}: ${r.text}`).join('\n')
+    : '';
+  // Comandi del canvas (UI-3, U27) e guida (U30) nel menu: calcolati
+  // all'apertura, con i nomi e i tasti della tabella unica.
+  const commandItems = () => {
+    const onRun = (id) => {
+      const res = runCanvasCommand(id);
+      if (res.message && toast) (res.ok ? toast.success : toast.warning)(res.message);
+    };
+    return [
+      { key: 'cmd-div', divider: true },
+      ...commandMenuItems(useCanvasStore.getState(), onRun),
+      { key: 'help', icon: '📘', label: `${commandById('help').name} (F1)`, title: 'Guida, aperta sul nodo selezionato', onClick: () => onRun('help') },
+    ];
+  };
   // Gli errori del percorso di esecuzione sono mostrati da ResultNode
   // (finestra di validazione): qui non resta nessuna promessa rifiutata.
   const run = () => Promise.resolve(useCanvasStore.getState().getEditorAction('runPipeline')?.()).catch(err => {
@@ -171,14 +205,26 @@ export default function EditorToolbar({
         {/* Stato della fonte unica delle colonne: uguale nei tre editor. */}
         <ColumnSyncBadge />
         {statusExtra}
+        {/* U18 (UI-3): da dove l'esecuzione prende i dati delle sorgenti,
+            visibile e cambiabile qui (prima solo nel pannello dell'Output). */}
+        {hasProjectSources && mode !== 'estrai' && !isReadOnly && (
+          <button type="button" className="etb-btn etb-btn--ghost" aria-pressed={recalc}
+            title={`${recalc ? 'Ricalcola anche i progetti sorgente' : 'Usa l\'ultimo risultato salvato di ogni sorgente'}. Clic per cambiare.\n${freshnessText}`}
+            onClick={() => useCanvasStore.getState().setRunOptions?.({ force_recalculate: !recalc })}>
+            {recalc ? '🔄 Ricalcola tutto' : '⚡ Risultati salvati'}
+          </button>
+        )}
+        {/* U12 (UI-3): perche' Esegui e' spento, scritto accanto. */}
+        {!hasOutput && <span className="etb__run-hint">{addFirstMessage('output')} per eseguire</span>}
         <button
           type="button"
           className="etb-btn etb-btn--primary"
           onClick={run}
           disabled={!hasOutput || !runReady || busy}
-          title={hasOutput ? term('run').description : `Aggiungi un ${term('output').name} per poter eseguire`}
+          title={hasOutput ? term('run').description : `${addFirstMessage('output')} per poter eseguire`}
         >
-          <span aria-hidden="true">{busy ? '⏳ ' : `${term('run').icon} `}</span>{busy ? term('run').busyName : term('run').name}
+          {/* Regola unica (U15): con modifiche non salvate «Salva ed esegui». */}
+          <span aria-hidden="true">{busy ? '⏳ ' : `${term('run').icon} `}</span>{busy ? term('run').busyName : serverActionLabel('run', unsaved)}
         </button>
         {onShowExecution && (
           <button type="button" className="etb-btn" onClick={() => onShowExecution()}>
@@ -190,7 +236,7 @@ export default function EditorToolbar({
             {saving ? term('save').busyName : <><span aria-hidden="true">{term('save').icon} </span>{term('save').name}</>}
           </button>
         )}
-        <OverflowMenu items={[...menuItems, ...themeItems]} />
+        <OverflowMenu items={() => [...menuItems, ...commandItems(), ...themeItems]} />
         <ShortcutsButton className="etb-btn etb-btn--icon" />
       </div>
     </header>

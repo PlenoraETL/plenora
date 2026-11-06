@@ -5,16 +5,23 @@
  * e, a completamento, le opzioni di download dell'output nei formati disponibili.
  * Usato da tutti e tre gli editor dopo il click su "Esegui".
  */
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { downloadProjectFile } from '../../api/projects';
+import { getTicketsMeta } from '../../api/tickets';
+import { useAuth } from '../../context/AuthContext';
+import useCanvasStore from '../../store/useCanvasStore';
+import TicketCreateModal from '../TicketCreateModal';
+import TransferProgress from '../common/TransferProgress';
+import { failedStepOf, failureTicketDraft, runLogPath } from '../../utils/runFailure';
 import { useDownload } from '../../hooks/useDownload';
+import { useResource } from '../../hooks/useResource';
 import { saveBlob } from '../../utils/downloadBlob';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { humanizeError, ERROR_MESSAGES } from '../../utils/errorMessages';
 import { useSmoothProgress } from '../../hooks/useSmoothProgress';
 import './ExecutionModal.css';
-import { formatNumber } from '../../utils/format';
+import { formatNumber, formatSeconds } from '../../utils/format';
 
 // Etichette umane per i bare status token dei task carica (quando il backend
 // non fornisce né un codice né un error_message più specifico).
@@ -49,6 +56,16 @@ function caricaTaskErrorText(t) {
  * ("Continua in secondo piano", ×, Esc) e la barra la riapre; download del
  * risultato e del rapporto errori con l'errore mostrato qui.
  */
+/**
+ * «Segnala il problema» (U16): il ticket precompilato, montato solo quando
+ * si apre (categorie e gravita' lette allora; utente dalla sessione).
+ */
+function FailureReport({ draft, onClose }) {
+  const { user } = useAuth();
+  const meta = useResource(getTicketsMeta, { key: 'tickets-meta' }).data || null;
+  return <TicketCreateModal meta={meta} user={user} initial={draft} onClose={onClose} onCreated={onClose} />;
+}
+
 function ExecutionModal({
   isOpen,
   onClose,
@@ -70,8 +87,31 @@ function ExecutionModal({
   // false = la finestra non va in secondo piano (Eseguibili: niente barra
   // da cui riaprirla): durante l'esecuzione resta aperta, con Annulla.
   backgroundable = true,
+  // UI-3 (U16): progetto dell'esecuzione, per il registro e «Segnala».
+  projectId = null,
+  projectName = '',
+  // UI-3 (U13, U17): avanzamento dello scaricamento; file gia' scaricato
+  // (riscaricabile dalla finestra); pulizia esplicita del risultato.
+  downloadProgress = null,
+  downloaded = false,
+  downloadNote = null,
+  onDiscard = null,
 }) {
   const reportDownload = useDownload();
+  const [reporting, setReporting] = useState(false);
+  // Il passo fallito tra i nodi dell'editor aperto (fuori dall'editor: nessuno).
+  const failedStep = useMemo(
+    () => (result && !result.success ? failedStepOf(result, useCanvasStore.getState().nodes) : null),
+    [result],
+  );
+  const goToStep = (nodeId) => {
+    const st = useCanvasStore.getState();
+    onClose();
+    const changes = st.nodes.filter(n => Boolean(n.selected) !== (n.id === nodeId)).map(n => ({ id: n.id, type: 'select', selected: n.id === nodeId }));
+    if (changes.length) st.onNodesChange?.(changes);
+    st.setCanvasView?.(st.canvasView, nodeId);
+  };
+  const logHref = runLogPath({ projectId: projectId || result?.project_id || null });
   // Progress percepita fluida (Epic C): se il backend resta a 0% la barra
   // striscia comunque verso un tetto, così non sembra bloccata.
   const smoothProgress = useSmoothProgress(progress, isExecuting);
@@ -237,7 +277,8 @@ function ExecutionModal({
                 {result.elapsed_time && (
                   <div className="execution-modal__stat">
                     <div className="execution-modal__stat-label">Tempo esecuzione</div>
-                    <div className="execution-modal__stat-value">{result.elapsed_time}s</div>
+                    {/* U17 (UI-3): durate da utils/format, mai secondi grezzi. */}
+                    <div className="execution-modal__stat-value">{formatSeconds(result.elapsed_time)}</div>
                   </div>
                 )}
               </div>
@@ -328,8 +369,15 @@ function ExecutionModal({
                   onClick={() => onDownload()}
                   disabled={downloading}
                 >
-                  {downloading ? 'Scaricamento…' : '⬇️ Scarica File'}
+                  {downloading ? 'Scaricamento…' : (downloaded ? '⬇️ Scarica di nuovo' : '⬇️ Scarica il file')}
                 </button>
+              )}
+              <TransferProgress progress={downloadProgress} verb="Scaricamento" />
+              {downloadNote && <p className="execution-modal__hint">{downloadNote}</p>}
+              {onDiscard && (
+                <ModalButton variant="secondary" onClick={() => onDiscard()} disabled={downloading}>
+                  🗑 Elimina il risultato
+                </ModalButton>
               )}
               {downloadError && (
                 <p className="execution-modal__error-message" role="alert">{downloadError}</p>
@@ -394,14 +442,34 @@ function ExecutionModal({
               <h4 className="execution-modal__error-title">
                 {taskStatus === 'revoked' ? 'Esecuzione annullata' : "Errore nell'esecuzione"}
               </h4>
+              {/* U16 (UI-3): il passo che ha fallito, quando si sa. */}
+              {failedStep && taskStatus !== 'revoked' && (
+                <p className="execution-modal__failed-step">Passo fallito: <strong>{failedStep.title}</strong></p>
+              )}
               <p className="execution-modal__error-message">
                 {taskStatus === 'revoked'
                   ? (result.message || 'Esecuzione annullata')
                   : humanizeError(result).message}
               </p>
+              {taskStatus !== 'revoked' && (
+                <div className="execution-modal__failure-actions">
+                  {failedStep && (
+                    <ModalButton variant="secondary" onClick={() => goToStep(failedStep.id)}>Vai al passo</ModalButton>
+                  )}
+                  {/* In un'altra scheda: l'editor (o la finestra dell'Eseguibile) resta com'e'. */}
+                  <a className="execution-modal__log-link" href={logHref} target="_blank" rel="noreferrer">Apri il registro</a>
+                  <ModalButton variant="secondary" onClick={() => setReporting(true)}>Segnala il problema</ModalButton>
+                </div>
+              )}
             </div>
           )}
         </div>
+      )}
+      {reporting && result && (
+        <FailureReport
+          draft={failureTicketDraft({ projectName, projectId: projectId || result?.project_id || null, projectType, result, step: failedStep })}
+          onClose={() => setReporting(false)}
+        />
       )}
     </ModalWrapper>
   );

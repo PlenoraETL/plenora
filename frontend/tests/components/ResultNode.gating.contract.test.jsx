@@ -288,25 +288,13 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     expect(handleSaveQuietMock).not.toHaveBeenCalled();
   });
 
-  it('handleValidate con modifiche non salvate: chiede, "Salva e continua" salva poi valida', async () => {
-    const ask = vi.fn().mockResolvedValue(true);
-    setCanvasState(buildCanvasState({ isDirty: true, extraActions: { confirmSaveBeforeRead: ask } }));
+  it('handleValidate con modifiche non salvate: il pulsante dice «Salva e valida», salva poi valida (UI-3, U15)', async () => {
+    setCanvasState(buildCanvasState({ isDirty: true }));
     const user = userEvent.setup();
     renderResultNode();
-    await user.click(screen.getByRole('button', { name: /valida/i }));
+    await user.click(screen.getByRole('button', { name: /Salva e valida/ }));
     await waitFor(() => expect(validateProjectCanvasMock).toHaveBeenCalledWith('proj-1'));
-    expect(ask).toHaveBeenCalledWith('La validazione');
     expect(handleSaveQuietMock.mock.invocationCallOrder[0]).toBeLessThan(validateProjectCanvasMock.mock.invocationCallOrder[0]);
-  });
-
-  it('handleValidate: "Annulla" non salva e non valida', async () => {
-    setCanvasState(buildCanvasState({ isDirty: true, extraActions: { confirmSaveBeforeRead: vi.fn().mockResolvedValue(false) } }));
-    const user = userEvent.setup();
-    renderResultNode();
-    await user.click(screen.getByRole('button', { name: /valida/i }));
-    await new Promise(r => setTimeout(r, 20));
-    expect(handleSaveQuietMock).not.toHaveBeenCalled();
-    expect(validateProjectCanvasMock).not.toHaveBeenCalled();
   });
 
   it('Esegui con risorse non accessibili: bloccato PRIMA di salvare, nodi evidenziati', async () => {

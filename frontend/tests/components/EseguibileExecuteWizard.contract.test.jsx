@@ -155,14 +155,22 @@ describe('EseguibileExecuteWizard contract', () => {
     expect(await screen.findByText(/esecuzione completata/i)).toBeInTheDocument();
     expect(screen.getByText(/enriched_addresses\.xlsx/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /scarica risultato/i }));
+    await user.click(screen.getByRole('button', { name: /scarica il risultato/i }));
 
+    // UI-3 (U13): scaricare non chiude e non pulisce; l'avanzamento passa da onProgress.
     await waitFor(() => {
       expect(downloadEseguibileOutputMock).toHaveBeenCalledWith(
         'exe-1',
         'task-1',
         'custom_export.xlsx',
+        expect.objectContaining({ onProgress: expect.any(Function) }),
       );
+    });
+    expect(onAfterDownload).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    // Chiudere dopo lo scaricamento: pulizia dell'esecutore, nessuna domanda.
+    await user.click(screen.getAllByRole('button', { name: /^chiudi$/i }).at(-1));
+    await waitFor(() => {
       expect(onAfterDownload).toHaveBeenCalledWith('task-1');
       expect(onClose).toHaveBeenCalledTimes(1);
     });
@@ -338,7 +346,7 @@ describe('EseguibileExecuteWizard contract', () => {
       expect(screen.getByText(/processor timeout/i)).toBeInTheDocument();
     });
 
-    expect(screen.queryByRole('button', { name: /scarica risultato/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /scarica il risultato/i })).not.toBeInTheDocument();
     expect(toastMock.success).not.toHaveBeenCalled();
   });
 });

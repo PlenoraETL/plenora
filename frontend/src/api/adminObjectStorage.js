@@ -1,5 +1,6 @@
 import http from './http';
 import { filenameFromDisposition, saveBlob } from '../utils/downloadBlob';
+import { downloadProgress } from '../utils/transferProgress';
 
 export async function listObjectStorage(params = {}) {
   const response = await http.get('/admin/object-storage', { params });
@@ -26,10 +27,11 @@ export async function cleanupOrphanStorage(projectIds) {
   return response.data;
 }
 
-export async function downloadStorageObject(key) {
+export async function downloadStorageObject(key, { onProgress = null } = {}) {
   const response = await http.get('/admin/object-storage/download', {
     params: { key },
     responseType: 'blob',
+    ...downloadProgress(onProgress),
   });
   const filename = filenameFromDisposition(response.headers?.['content-disposition'])
     || key.split('/').pop() || 'object.bin';

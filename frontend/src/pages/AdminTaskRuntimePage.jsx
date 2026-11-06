@@ -9,16 +9,12 @@ import { useResource } from '../hooks/useResource';
 import { ResourceError } from '../components/common/ListState';
 import { useBusy } from '../hooks/useBusy';
 import '../styles/AdminTaskRuntimePage.css';
-import { formatDateTime } from '../utils/format';
+import { formatDateTime, formatSeconds } from '../utils/format';
 
 
 
-function duration(seconds) {
-  const value = Math.max(0, Number(seconds || 0));
-  if (value < 60) return `${value}s`;
-  if (value < 3600) return `${Math.floor(value / 60)}m ${value % 60}s`;
-  return `${Math.floor(value / 3600)}h ${Math.floor((value % 3600) / 60)}m`;
-}
+// Durate da utils/format (UI-3, U17): una sola forma in tutta l'app.
+const duration = (seconds) => formatSeconds(Math.max(0, Number(seconds || 0)));
 
 // Le due risoluzioni di una scrittura CARICA incerta, con le conseguenze
 // spiegate prima di confermare (audit R10.5: niente window.prompt).

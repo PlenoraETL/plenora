@@ -8,7 +8,7 @@
  */
 
 import { displayIcon } from './nodeDescriptors';
-import { paletteEntry } from '../../utils/glossary';
+import { catalogPaletteItems } from '../editor/editorNodeCatalog';
 
 export const PURPOSES = ['Pulisci', 'Filtra', 'Calcola', 'Combina', 'Riorganizza', 'Geometria', 'Privacy'];
 
@@ -60,19 +60,14 @@ export function buildManipolaPaletteGroups(registry) {
 
   const groups = [];
   const top = TOP.filter(op => transforms[op]).map(toItem);
-  if (top.length) groups.push({ label: 'Più usate', items: top, onlyWhenEmpty: true });
+  // `fallback`: lascia il posto ai recenti della persona (NodePalette, U29).
+  if (top.length) groups.push({ label: 'Più usate', items: top, onlyWhenEmpty: true, fallback: true });
   for (const [label, items] of byPurpose) {
     if (items.length) groups.push({ label, items: items.sort((a, b) => a.label.localeCompare(b.label, 'it')) });
   }
-  groups.push({
-    label: 'Unisci e uscite',
-    // Nomi, icone e descrizioni dal glossario; `kind` e' quello che
-    // l'editor riconosce in onPick.
-    items: [
-      paletteEntry('multi_join', { id: 'multi_join', kind: 'multi_join' }),
-      paletteEntry('output', { id: 'result', kind: 'result' }),
-      paletteEntry('load_db', { id: 'carica', kind: 'carica' }),
-    ],
-  });
+  // Voci del catalogo unico dei nodi (UI-3, P30): stessi nomi, vincoli e
+  // costruzione del menu "⋯" (components/editor/editorNodeCatalog).
+  groups.push({ label: 'Unisci e uscite', items: catalogPaletteItems('manipola', ['multi_join', 'output', 'load_db', 'load_arcgis']) });
+  groups.push({ label: 'Strumenti', items: catalogPaletteItems('manipola', ['datasource', 'runtime_input', 'static_values', 'note']) });
   return groups;
 }

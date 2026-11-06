@@ -96,6 +96,7 @@ const T = {
   add_step: { name: 'Passo', icon: ICON.add, description: 'Aggiungi un passo (/ o A)' },
   delete_step: { name: 'Elimina passo', icon: ICON.delete, description: 'Elimina il passo e i suoi collegamenti' },
   schedule: { name: 'Pianificazione', icon: ICON.schedule, description: 'Esecuzioni automatiche programmate' },
+  upload_file: { name: 'Carica un file', icon: ICON.file, description: 'Carica un file e aggiungilo al canvas senza uscire dall\'editor' },
 };
 
 export const TERMS = Object.freeze(T);

@@ -4,11 +4,11 @@
  *   UPDATE_GUIDES=1 npx vitest run tests/shared/userGuides.contract.test.jsx
  * e il test lo confronta col contenuto mostrato nell'app.
  */
-export function guideToMarkdown(guide, sourcePath) {
+export function guideToMarkdown(guide, sourcePath, where = 'dal nodo «Input di progetto» (Guida completa)') {
   const out = [
     `# ${guide.title}`,
     '',
-    `<!-- Generato da ${sourcePath}: è la stessa guida che si apre nell'app dal nodo «Input di progetto» (Guida completa). Modifica quel file e rigenera; non modificare questo a mano. -->`,
+    `<!-- Generato da ${sourcePath}: è la stessa guida che si apre nell'app ${where}. Modifica quel file e rigenera; non modificare questo a mano. -->`,
     '',
   ];
   if (guide.intro) out.push(guide.intro, '');

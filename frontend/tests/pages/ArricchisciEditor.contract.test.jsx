@@ -154,6 +154,8 @@ vi.mock('../../src/store/useCanvasStore', () => {
     setEditorActions: vi.fn(),
     setConnections: vi.fn(),
     updateNodeData: vi.fn(),
+    // UI-3: i nodi nuovi (catalogo unico, sorgenti) entrano come un blocco.
+    addSubgraph: addNodesMock,
     validationHighlights: [],
     nodes: [],
     onNodesChange: vi.fn(),
@@ -226,7 +228,7 @@ describe('ArricchisciEditor', () => {
     render(<ArricchisciEditor />);
 
     expect(await screen.findByText('Arricchisci Orders')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /salva/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^salva$/i }));
 
     await waitFor(() => {
       expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);
@@ -276,11 +278,10 @@ describe('ArricchisciEditor', () => {
 
     const canvas = container.querySelector('.arricchisci-canvas');
     const dataTransfer = {
-      getData: vi.fn((key) => {
-        if (key === 'application/reactflow') return 'project_source';
-        if (key === 'nodeData') return JSON.stringify({ id: 'proj-upstream-1' });
-        return '';
-      }),
+      // Formato unico del trascinamento di una sorgente (UI-3, editorNodeCatalog).
+      getData: vi.fn((key) => (key === 'application/x-plenora-source'
+        ? JSON.stringify({ kind: 'project_source', item: { id: 'proj-upstream-1', name: 'Ordini a monte' } })
+        : '')),
       dropEffect: 'move',
     };
 
@@ -290,19 +291,21 @@ describe('ArricchisciEditor', () => {
       clientY: 180,
     });
 
-    // Azione utente esplicita: addNodes(nodo) (audit R1).
+    // Azione utente esplicita: un blocco con il nodo, selezionato (audit R1).
     expect(addNodesMock).toHaveBeenCalled();
-    const nextNodes = [addNodesMock.mock.calls.at(-1)[0]];
+    const nextNodes = addNodesMock.mock.calls.at(-1)[0].nodes;
     expect(nextNodes).toHaveLength(1);
+    // U9: il nodo porta anche il nome del progetto (mai l'id come titolo).
     expect(nextNodes[0]).toMatchObject({
       type: 'project_source',
       data: {
         source_project_id: 'proj-upstream-1',
+        project_name: 'Ordini a monte',
         columns: [],
       },
     });
 
-    await userEvent.click(screen.getByRole('button', { name: /salva/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^salva$/i }));
 
     await waitFor(() => {
       expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);

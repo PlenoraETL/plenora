@@ -86,6 +86,7 @@ import { nodeTitle } from '../canvas/nodeDescriptors';
 import StepsView from '../canvas/StepsView';
 import EditorToolbar from './EditorToolbar';
 import PipelineRunner from './PipelineRunner';
+import CanvasOverlays from './CanvasOverlays';
 import SaveConflictNotice from './SaveConflictNotice';
 import useLocalDraft, { DRAFT_ORIGIN_LABEL } from '../../hooks/useLocalDraft';
 import { useColumnSync } from '../../hooks/useColumns';
@@ -290,20 +291,9 @@ canvasConfig = EMPTY_OBJ,
     confirm,
   });
 
-  // Letture dal server (Valida, Anteprima, ...) con modifiche non salvate:
-  // l'editor chiede (utils/serverActions.saveBeforeServerRead).
-  useEffect(() => {
-    if (!confirm) return undefined;
-    setEditorActions({
-      confirmSaveBeforeRead: (action) => confirm({
-        title: 'Modifiche non salvate',
-        message: `${action} usa la versione salvata del progetto. Salvo prima le modifiche?`,
-        confirmText: 'Salva e continua',
-        cancelText: 'Annulla',
-      }),
-    });
-    return () => setEditorActions({ confirmSaveBeforeRead: null });
-  }, [confirm, setEditorActions]);
+  // Valida, Anteprima, Esegui con modifiche non salvate: il pulsante dice
+  // «Salva e …» e salva (regola unica, utils/serverActions, UI-3 U15):
+  // nessuna domanda in piu' dal guscio.
 
   // Ctrl+S (Fase 4, M7): salva come il pulsante della barra, solo con
   // l'editor pronto e nessuna finestra aperta (i campi di una finestra non
@@ -510,6 +500,10 @@ canvasConfig = EMPTY_OBJ,
             {afterCanvas}
             {children}
             <StepPreview projectId={projectId} />
+            {/* UI-3: canvas vuoto con guida, comandi da tastiera (copia, incolla,
+                duplica, cerca, collega) e guida dell'editor. */}
+            <CanvasOverlays mode={prefix} onConnect={isReadOnly ? null : handleConnect}
+              onOpenPalette={() => openPalette(null)} canAdd={Boolean(palette) && !isReadOnly} />
           </div>
         </CanvasErrorBoundary>
         {/* Nuova interfaccia (Fase 4, M1): nodi compatti sul canvas, form
@@ -528,6 +522,7 @@ canvasConfig = EMPTY_OBJ,
           groups={palette.groups}
           notice={palette.notice || null}
           onPick={(item) => palette.onPick(item, paletteAfter)}
+          scope={prefix}
           onClose={() => setPaletteState(null)}
         />
       )}

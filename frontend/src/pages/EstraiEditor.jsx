@@ -3,7 +3,6 @@
  * Logica invariata — solo classi CSS aggiornate al design system Plenora
  */
 import { ReactFlowProvider } from '@xyflow/react';
-import { newProjectInputData } from '../utils/uniqueName';
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import '@xyflow/react/dist/style.css';
@@ -17,7 +16,7 @@ import CaricanNode from '../components/nodes/CaricanNode';
 import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
 import JoinEdgePanel from '../components/canvas/JoinEdgePanel';
-import { estraiJoinEdges, paletteJoinEnds, presentJoinEdges, relationJoinEnds } from '../utils/estraiJoins';
+import { estraiJoinEdges, paletteJoinEnds, presentJoinEdges, relationJoinEnds, selfJoinAlias } from '../utils/estraiJoins';
 
 // Modali lazy-loaded — caricati solo quando l'utente li apre
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
@@ -56,9 +55,10 @@ import { useAuth } from '../context/AuthContext';
 import { can } from '../utils/permissions';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
-import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term } from '../utils/glossary';
+import { menuEntry, term } from '../utils/glossary';
 import useEditorActions from '../components/editor/useEditorActions';
-import { renderNodeType } from '../utils/nodeTypeRegistry';
+import useCatalogAdd from '../components/editor/useCatalogAdd';
+import { catalogConstraintNodes, catalogMenuItems, catalogPaletteItems } from '../components/editor/editorNodeCatalog';
 import { pressable } from '../utils/pressable';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch, useSearchPage } from '../hooks/useSearch';
@@ -103,7 +103,7 @@ function EstraiEditor() {
   useHexCanvas(hexCanvasRef);
   const {
     onNodesChange, onEdgesChange,
-    loadGraph, addNodes, addEdges, insertNode, applyDerivedNodes,
+    loadGraph, addNodes, insertNode, applyDerivedNodes,
     nodesRef,
     getViewportCenter,
     isReadOnly, readOnlyProps
@@ -205,89 +205,33 @@ function EstraiEditor() {
   });
 
   useEffect(() => { useCanvasStore.getState().setConnections(connections); }, [connections]);
-  // Pre-fix (P2 frontend-pages): le 3 handleAdd* callback avevano
-  // `nodes` nelle deps — ricreate ad ogni cambio nodi (drag, sel) →
-  // i bottoni toolbar che le ricevevano come prop si re-rendevano.
-  // ManipolaEditor/ArricchisciEditor gia' usavano `nodesRef.current`
-  // per il check di esistenza; allineiamo EstraiEditor.
-  const handleAddResultNode = useCallback(() => {
-    if (nodesRef.current.some(n => n.type === 'resultNode')) { toast.warning(onlyOneMessage('output')); return; }
-    addNodes({
-      id: `result_${Date.now()}`, type: 'resultNode', position: getViewportCenter(reactFlowInstance),
-      data: { fileName: 'output', format: 'csv', distinct: false, limit: null,
-        group_by_enabled: false, group_by_columns: [], aggregations: [],
-        order_by_enabled: false, order_by_columns: [],
-        having_enabled: false, having_conditions: [] }
-    });
-  }, [addNodes, getViewportCenter, reactFlowInstance, toast]);
+  // Output, caricamenti, Input runtime e Nota dal catalogo unico dei nodi
+  // (UI-3, P30): nascono al centro della vista, con il collegamento
+  // all'Output dove serve; Data Source e Valori statici restano fuori
+  // (Estrai accetta solo sorgenti SQL/ArcGIS).
+  const getPos = useCallback(() => getViewportCenter(reactFlowInstance), [getViewportCenter, reactFlowInstance]);
+  const { addNode } = useCatalogAdd('estrai', getPos);
 
-  const handleAddCaricanNode = useCallback(() => {
-    const currentNodes = nodesRef.current;
-    if (!currentNodes.some(n => n.type === 'resultNode')) { toast.warning(addFirstMessage('output')); return; }
-    if (currentNodes.some(n => n.type === 'carica'))      { toast.warning(onlyOneMessage('load_db')); return; }
-    const resultNode = currentNodes.find(n => n.type === 'resultNode');
-    const newNode = {
-      id: `carica_${Date.now()}`, type: 'carica',
-      position: { x: resultNode.position.x + 400, y: resultNode.position.y },
-      data: { connection_id: '', schema_name: '', table_name: '', write_mode: 'create',
-        column_mappings: [], match_columns: [], batch_size: 1000,
-        transaction_mode: 'all_or_nothing', create_spatial_index: true, conflict_policy: 'abort' }
-    };
-    addNodes(newNode);
-    addEdges({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      label: flowEdgeLabel('carica'), animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 }, data: { join_type: 'carica' } });
-  }, [addNodes, addEdges, toast]);
-
-  const handleAddCaricanArcGISNode = useCallback(() => {
-    const currentNodes = nodesRef.current;
-    if (!currentNodes.some(n => n.type === 'resultNode')) { toast.warning(addFirstMessage('output')); return; }
-    if (currentNodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning(onlyOneMessage('load_arcgis')); return; }
-    const resultNode = currentNodes.find(n => n.type === 'resultNode');
-    const newNode = {
-      id: `carica_arcgis_${Date.now()}`, type: renderNodeType('carica_arcgis'),
-      position: { x: resultNode.position.x + 400, y: resultNode.position.y + 200 },
-      data: { arcgis_connection_id: '', arcgis_service_url: '', arcgis_layer_url: '',
-        arcgis_operation: 'add', arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',
-        column_mappings: [] }
-    };
-    addNodes(newNode);
-    addEdges({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      label: flowEdgeLabel('carica_arcgis'), animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } });
-  }, [addNodes, addEdges, toast]);
-
-  // ESTRAI accetta solo sorgenti SQL/ArcGIS; Data Source resta in MANIPOLA.
-
-  // Static values non sono una sorgente SQL ESTRAI.
-
-  const handleAddProjectInputNode = useCallback(() => {
-    // Chiave e ordine unici e stabili (utils/uniqueName, R8.19).
-    addNodes({
-      id: `project_input_${Date.now()}`,
-      type: 'project_input',
-      position: getViewportCenter(reactFlowInstance),
-      data: newProjectInputData(nodesRef.current, { kind: 'text' }),
-    });
-  }, [addNodes, nodesRef, getViewportCenter, reactFlowInstance]);
-
-  const handleAddCommentNode = useCallback(() => {
-    const pos = getViewportCenter(reactFlowInstance);
-    addNodes({ id: `comment_${Date.now()}`, type: 'comment', position: pos, zIndex: -1,
-      style: { width: 250, height: 150 },
-      data: { level: '', label: '', title: '', color: '#fbbf24' } });
-  }, [addNodes, getViewportCenter, reactFlowInstance]);
-  // Costruisce un nodo tabella/vista (condiviso da drop e click-to-add).
+  // Costruisce un nodo tabella/vista (condiviso da drop, clic e palette).
+  // P29 (UI-3): la stessa tabella si aggiunge piu' volte (self-join); ogni
+  // copia dopo la prima riceve un alias libero (tabella_2, ...), lo stesso
+  // che il backend darebbe (core/estrai: alias univoci per costruzione).
   const buildTableNode = useCallback((tableName, isView, position) => {
     const tableColumns = (isView ? views[tableName] : catalog[tableName]) || [];
+    const present = nodesRef.current.filter(n => n.type === 'tableNode');
+    const alias = present.some(n => n.data?.table_name === tableName)
+      ? selfJoinAlias(tableName, present.map(n => n.data?.alias || n.data?.table_name))
+      : null;
     return {
       id: `node_${Date.now()}`, type: 'tableNode', position,
       // Niente `label`: il titolo della tabella e' derivato da alias e nome
       // (nodeDescriptors), non una copia congelata (Blocco A, regola 7).
-      data: { table_name: tableName, alias: null, type: 'source',
+      data: { table_name: tableName, alias, type: 'source',
         columns: tableColumns.map(col => ({ name: typeof col === 'object' ? col.name : col,
           type: typeof col === 'object' ? col.type || 'str' : 'str', alias: null, visible: true })),
         filters: [], calculated_columns: [], db_type: projectConnection?.type || 'postgres' },
     };
-  }, [catalog, views, projectConnection]);
+  }, [catalog, views, projectConnection, nodesRef]);
 
   // ── Palette "Cosa vuoi fare?" (Fase 4, M2) ────────────────────────────
   // Dopo una tabella: un'altra tabella/vista del catalogo, collegata con un
@@ -300,24 +244,23 @@ function EstraiEditor() {
     connectModes: [['join', 'Unisci con (Join)']],
   }), [edgeHandlers.connectBranch]);
 
+  // U19 (UI-3): la ricerca della palette guarda anche le colonne
+  // (`keywords`); oltre il limite la palette dice quante voci restano.
+  // U12/E3: l'Output e' nella palette (gruppo «Uscite»), non solo nel menu.
+  const tableItems = (source, kind) => Object.keys(source || {}).sort().map(t => ({
+    id: `${kind}:${t}`, kind, name: t, label: t, icon: term(kind).icon,
+    desc: `${(source[t] || []).length} col`,
+    keywords: (source[t] || []).map(c => (typeof c === 'object' ? c.name : c)),
+  }));
   const palette = useMemo(() => ({
     groups: [
-      { label: 'Tabelle', items: Object.keys(catalog || {}).sort().map(t => ({
-        id: `table:${t}`, kind: 'table', name: t, label: t, icon: term('table').icon,
-        desc: `${(catalog[t] || []).length} col`,
-      })), limit: 40 },
-      { label: 'Viste', items: Object.keys(views || {}).sort().map(v => ({
-        id: `view:${v}`, kind: 'view', name: v, label: v, icon: term('view').icon,
-        desc: `${(views[v] || []).length} col`,
-      })), limit: 40 },
-      { label: 'Uscite', items: [
-        paletteEntry('load_db', { id: 'carica', kind: 'carica' }),
-        paletteEntry('load_arcgis', { id: 'carica_arcgis', kind: 'carica_arcgis' }),
-      ] },
+      { label: 'Tabelle', items: tableItems(catalog, 'table'), limit: 40 },
+      { label: 'Viste', items: tableItems(views, 'view'), limit: 40 },
+      { label: 'Uscite', items: catalogPaletteItems('estrai', ['output', 'load_db', 'load_arcgis']) },
+      { label: 'Strumenti', items: catalogPaletteItems('estrai', ['runtime_input', 'note']) },
     ],
     onPick: (item, afterId) => {
-      if (item.kind === 'carica') { handleAddCaricanNode(); return; }
-      if (item.kind === 'carica_arcgis') { handleAddCaricanArcGISNode(); return; }
+      if (item.kind === 'catalog') { addNode(item.catalogKey); return; }
       const after = nodesRef.current.find(n => n.id === afterId);
       const position = after ? { x: after.position.x - 290, y: after.position.y + 120 } : getViewportCenter(reactFlowInstance);
       const newNode = buildTableNode(item.name, item.kind === 'view', position);
@@ -332,7 +275,7 @@ function EstraiEditor() {
       insertNode({ node: newNode });
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [catalog, views, buildTableNode, insertNode, handleAddCaricanNode, handleAddCaricanArcGISNode, edgeHandlers.connectJoin]);
+  }), [catalog, views, buildTableNode, insertNode, addNode, edgeHandlers.connectJoin]);
 
   // Click su una tabella/vista del catalogo → la aggiunge al CENTRO del canvas
   // (il drag resta per il posizionamento preciso).
@@ -388,17 +331,19 @@ function EstraiEditor() {
   useUnsavedChangesGuard();
   const signOut = useSignOut();
   const handleBack              = () => navigate('/');
-  const filteredTables          = useMemo(() => tableSearch.filter(Object.keys(catalog), t => t), [catalog, tableSearch.filter]);
+  // U19 (UI-3): la ricerca guarda anche i nomi delle colonne. P29: le
+  // tabelle gia' nel canvas restano nell'elenco (self-join), segnate.
+  const columnNames             = (cols) => (cols || []).map(c => (typeof c === 'object' ? c.name : c));
+  const filteredTables          = useMemo(() => tableSearch.filter(Object.keys(catalog), t => [t, ...columnNames(catalog[t])]), [catalog, tableSearch.filter]); // eslint-disable-line react-hooks/exhaustive-deps
   // UI-2 (V4): quello che serve del canvas, ricalcolato solo quando cambia
   // il contenuto (hooks/useCanvasDerived), mai a ogni fotogramma.
   const canvasInfo              = useCanvasDerived(estraiCanvasInfo);
   const tablesInCanvas          = useMemo(() => new Set(canvasInfo.tableNames ? canvasInfo.tableNames.split('\u0000') : []), [canvasInfo.tableNames]);
-  const availableTables         = useMemo(() => filteredTables.filter(t => !tablesInCanvas.has(t)), [filteredTables, tablesInCanvas]);
+  const availableTables         = filteredTables;
   const viewNames               = useMemo(() => Object.keys(views), [views]);
-  const filteredViews           = viewSearch.filter(viewNames, v => v);
-  const availableViews          = useMemo(() => filteredViews.filter(v => !tablesInCanvas.has(v)), [filteredViews, tablesInCanvas]);
+  const filteredViews           = viewSearch.filter(viewNames, v => [v, ...columnNames(views[v])]);
+  const availableViews          = filteredViews;
   const tableCount              = Object.keys(catalog).length;
-  const { hasResultNode, hasCaricanNode, hasCaricanArcGISNode } = canvasInfo;
   const featureLayersInCanvas   = useMemo(() => new Set(canvasInfo.layerUrls ? canvasInfo.layerUrls.split('\u0000') : []), [canvasInfo.layerUrls]);
 
   // Guard branches (isValidProjectId redirect, loading, loadError, !project)
@@ -411,6 +356,9 @@ function EstraiEditor() {
   // topbar slot
   // Barra unica (Fase 4, M7): connessione accanto al titolo, azioni nel
   // menu "⋯", tabelle dalla palette ("＋ Passo"), un solo "▶ Esegui".
+  // Vincoli del catalogo (Output e caricamenti) dal grafo, senza iscriversi
+  // ai nodi (UI-2, hooks/useCanvasDerived).
+  const catalogNodes = useCanvasDerived(catalogConstraintNodes);
   const toolbar = {
     mode: 'estrai',
     title: project?.metadata?.name,
@@ -432,12 +380,8 @@ function EstraiEditor() {
       menuEntry('connections', { onClick: () => navigate('/connections') }),
       ...(isReadOnly ? [] : [
         { key: 'div0', divider: true },
-        menuEntry('runtime_input', { onClick: handleAddProjectInputNode }),
-        menuEntry('note', { onClick: handleAddCommentNode }),
-        { key: 'div1', divider: true },
-        menuEntry('output', { onClick: handleAddResultNode, disabled: hasResultNode }),
-        menuEntry('load_db', { onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode }),
-        menuEntry('load_arcgis', { onClick: handleAddCaricanArcGISNode, disabled: !hasResultNode || hasCaricanArcGISNode }),
+        // Voci dal catalogo unico (UI-3, P30), spente con il motivo (E3).
+        ...catalogMenuItems('estrai', catalogNodes, addNode),
         { key: 'div2', divider: true },
         menuEntry('versions', { onClick: () => setShowVersions(true) }),
       ]),
@@ -482,7 +426,7 @@ function EstraiEditor() {
                       ? <SearchEmpty search={tableSearch} shown={0} />
                       : availableTables.length === 0
                       ? <div className="estrai-sidebar__empty">
-                          {filteredTables.length === 0 ? 'Nessuna tabella' : 'Tutte nel canvas'}
+                          Nessuna tabella
                         </div>
                       : <>
                           {availableTables.slice(0, visibleTableCount).map(t => (
@@ -498,6 +442,7 @@ function EstraiEditor() {
                               }}
                             >
                               <span className="estrai-sidebar__table-name">📊 {t}</span>
+                              {tablesInCanvas.has(t) && <span className="estrai-sidebar__in-canvas" title="Già nel canvas: aggiungendola di nuovo riceve un alias diverso (Join della tabella con se stessa)">nel canvas</span>}
                               <span className="estrai-sidebar__table-cols">{catalog[t]?.length || 0} col</span>
                             </div>
                           ))}
@@ -540,7 +485,7 @@ function EstraiEditor() {
                           {filteredViews.length === 0 && viewSearch.active
                             ? <SearchEmpty search={viewSearch} shown={0} />
                             : availableViews.length === 0
-                            ? <div className="estrai-sidebar__empty">{filteredViews.length === 0 ? 'Nessuna vista' : 'Tutte nel canvas'}</div>
+                            ? <div className="estrai-sidebar__empty">Nessuna vista</div>
                             : <>
                                 {availableViews.slice(0, visibleViewCount).map(v => (
                                   <div
@@ -556,6 +501,7 @@ function EstraiEditor() {
                                     }}
                                   >
                                     <span className="estrai-sidebar__table-name">👁 {v}</span>
+                                    {tablesInCanvas.has(v) && <span className="estrai-sidebar__in-canvas" title="Già nel canvas: aggiungendola di nuovo riceve un alias diverso">nel canvas</span>}
                                     <span className="estrai-sidebar__table-cols">{views[v]?.length || 0} col</span>
                                   </div>
                                 ))}
@@ -654,7 +600,7 @@ function EstraiEditor() {
           />
         )}
         <ExecutionModal
-          {...executionModalProps(execution)}
+          {...executionModalProps(execution)} projectId={projectId} projectName={project?.metadata?.name}
           title={`${term('run').icon} Esecuzione della query`} projectType="estrai"
         />
         {preview.showModal && (

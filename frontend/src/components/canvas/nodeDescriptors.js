@@ -18,6 +18,8 @@ import { KNOWN_OPERATION_NAMES } from '../../utils/operationNames';
 import { displayIcon } from '../../utils/displayIcon';
 import { TERMS, applyTransformTerms, inputKindLabel, term } from '../../utils/glossary';
 import { projectInputHandle } from '../../utils/runtimeInputKinds';
+import { joinTypeName } from '../../utils/joinTypes';
+import { describeConditionGroups } from '../../utils/filterConditions';
 
 export { displayIcon };
 
@@ -30,8 +32,9 @@ const joinNames = (list, max = 3) => {
   return `${names.slice(0, max).join(', ')} +${names.length - max}`;
 };
 
-// Il tipo di join come clausola SQL ("LEFT JOIN"), non come chiave ("left").
-const sqlJoin = (how) => `${String(how || 'inner').toUpperCase()} JOIN`;
+// Il tipo di Join col nome del catalogo unico ("Left Join"), non come
+// chiave ("left"); assente = quello del backend (utils/joinTypes, U21).
+const sqlJoin = (engine, how) => joinTypeName(engine, how);
 
 const IN = { type: 'target', position: 'left' };
 const OUT = { type: 'source', position: 'right' };
@@ -57,8 +60,9 @@ export function transformSummary(op, config = {}) {
   switch (op) {
     case 'filter': {
       const conds = Array.isArray(c.conditions) ? c.conditions : [c];
-      const texts = conds.map(conditionText).filter(Boolean);
-      return texts.length ? texts.join(' e ') : 'nessuna condizione';
+      // Gruppi E/O (U20): «a e b», oppure «(a e b) o (c)».
+      const text = describeConditionGroups(conds, conditionText, { and: ' e ', or: ' o ' });
+      return text || 'nessuna condizione';
     }
     case 'formula': {
       const items = Array.isArray(c.items) ? c.items : [c];
@@ -73,7 +77,7 @@ export function transformSummary(op, config = {}) {
       return `${plural(cols.length - dropped, 'colonna tenuta', 'colonne tenute')}${dropped ? ` · ${dropped} scartate` : ''}`;
     }
     case 'aggregate': return `per ${joinNames(c.group_by || c.by) || '?'}`;
-    case 'join': return `${sqlJoin(c.how)} su ${joinNames(c.left_keys) || '?'}`;
+    case 'join': return `${sqlJoin('manipola', c.how)} su ${joinNames(c.left_keys) || '?'}`;
     case 'lookup': return `${c.column || '?'} → ${c.output_column || c.column || '?'}`;
     case 'type_cast': return `${c.column || joinNames(c.columns) || '?'} → ${c.target_type || c.dtype || '?'}`;
     case 'sort': return `ordina per ${joinNames(c.columns || c.by) || '?'}`;
@@ -128,13 +132,15 @@ const D = {
   },
   project_source: {
     category: 'source', ...named('project_source'),
-    title: (d) => d.project_name || d.label || d.name || d.source_project_id || term('project_source').name,
+    // U9 (UI-3): il nome del progetto, mai l'id; `_sourceName` (nome attuale
+    // dal catalogo delle sorgenti, transitorio) vince sul nome salvato.
+    title: (d) => d._sourceName || d.project_name || d.label || d.name || d.source_project_id || term('project_source').name,
     summary: (d) => plural(visibleColumns(d.columns), 'colonna', 'colonne'),
     defaultHandles: () => [OUT],
   },
   file_source: {
     category: 'source', ...named('file_source'),
-    title: (d) => d.file_name || d.fileName || d.label || term('file_source').name,
+    title: (d) => d._sourceName || d.file_name || d.fileName || d.label || term('file_source').name,
     summary: (d) => plural(visibleColumns(d.columns), 'colonna', 'colonne'),
     defaultHandles: () => [OUT],
   },
@@ -172,7 +178,7 @@ const D = {
     title: () => term('multi_join').name,
     summary: (d) => {
       const c = d.config || {};
-      return `${sqlJoin(c.join_type || d.multi_join_type)} su ${joinNames(c.join_keys || d.join_keys) || '?'}`;
+      return `${sqlJoin('multi_join', c.join_type || d.multi_join_type)} su ${joinNames(c.join_keys || d.join_keys) || '?'}`;
     },
     // Almeno 2 ingressi; quelli effettivamente collegati arrivano dagli edge.
     defaultHandles: () => [{ ...IN, id: 'input-0' }, { ...IN, id: 'input-1' }, OUT],

@@ -59,7 +59,7 @@ vi.mock('../../src/store/useColumnStore', async (orig) => {
 import useCanvasStore, { createCanvasStore } from '../../src/store/useCanvasStore';
 import { updateCanvas, restoreCanvasVersion, validateProjectCanvas } from '../../src/api/projects';
 import PipelineRunner from '../../src/components/editor/PipelineRunner';
-import { overwriteServer, pageReload, reloadServerVersion, restoreVersion, saveBeforeServerRead } from '../../src/utils/serverActions';
+import { overwriteServer, pageReload, reloadServerVersion, restoreVersion, beforeServerAction } from '../../src/utils/serverActions';
 import { serverVersionOf } from '../../src/utils/canvasVersion';
 import { draftKey, readDraft } from '../../src/utils/localDrafts';
 import SaveConflictNotice from '../../src/components/editor/SaveConflictNotice';
@@ -142,7 +142,8 @@ const CANVAS_VERSION_TRANSITIONS = {
     // server finto, che (come il backend) non cambia canvas_version.
     const A = openTab(useCanvasStore);
     const onPreview = vi.fn();
-    useCanvasStore.getState().setEditorActions({ confirmSaveBeforeRead: async () => true, onPreview });
+    // UI-3 (U15): con modifiche il pulsante dice «Salva e …» e salva, senza domanda.
+    useCanvasStore.getState().setEditorActions({ onPreview });
     render(<PipelineRunner user={{ role: 'user' }} />);
     A.edit('a1');
     await act(async () => { await useCanvasStore.getState().getEditorAction('onValidate')(); });

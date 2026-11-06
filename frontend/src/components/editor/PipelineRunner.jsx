@@ -30,7 +30,7 @@
  * `beginPreparation`; `openWindow` (UNICO punto che apre la finestra) la
  * chiama. Gli errori mostrati (stima, avvio) passano da requestErrorMessage.
  * Valida e Anteprima leggono la versione salvata: con modifiche non salvate
- * chiedono prima "Salva e continua".
+ * il pulsante dice «Salva e …» e salva prima (regola unica, utils/serverActions).
  *
  * «Utente che esegue» nel canvas (regola H del backend): Esegui diventa
  * l'esecuzione di prova. Solo con can.testRunProject (altrimenti il blocco
@@ -50,7 +50,7 @@ import {
 import { describeAccessDeniedNodes } from '../../utils/canvasAccessControl';
 import { serverInputNodes, testRunIdentity, unsupportedInputNodes } from '../../utils/runtimeInputKinds';
 import { can } from '../../utils/permissions';
-import { saveBeforeServerRead, saveForRun } from '../../utils/serverActions';
+import { beforeServerAction, saveForRun } from '../../utils/serverActions';
 import {
   beforeRunReasons, initialInputValues, inputsKey, isPreparationChanged, needsPreflight, runInputs,
 } from '../../utils/beforeRun';
@@ -193,7 +193,7 @@ export default function PipelineRunner({ user = null }) {
   }, []);
 
   // Fase 5 T2 (R9.7): una lettura del server alla volta (Valida, Anteprima):
-  // un secondo clic durante la prima non apre un altro "Salva e continua".
+  // un secondo clic durante la prima non parte una seconda volta.
   const readingRef = useRef(false);
   const oneRead = useCallback(async (fn) => {
     if (readingRef.current) return;
@@ -202,7 +202,7 @@ export default function PipelineRunner({ user = null }) {
   }, []);
 
   const validate = useCallback(() => oneRead(async () => {
-    const result = await validateViaBackend(() => saveBeforeServerRead('La validazione'));
+    const result = await validateViaBackend(() => beforeServerAction('validate'));
     if (result) showResult(result);
   }), [showResult, oneRead]);
 
@@ -319,7 +319,7 @@ export default function PipelineRunner({ user = null }) {
   }, [request]);
 
   const preview = useCallback((id) => oneRead(async () => {
-    const result = await validateViaBackend(() => saveBeforeServerRead("L'anteprima"), { reuse: true });
+    const result = await validateViaBackend(() => beforeServerAction('preview'), { reuse: true });
     if (!result) return;
     broadcastHighlights(result);
     if (!result.isValid) { setShown(result); return; }

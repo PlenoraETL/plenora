@@ -14,7 +14,7 @@ vi.mock('../../src/api/projects', async (orig) => ({
 
 import useCanvasStore, { hasUnsavedChanges } from '../../src/store/useCanvasStore';
 import { updateCanvas } from '../../src/api/projects';
-import { saveBeforeServerRead, saveForRun } from '../../src/utils/serverActions';
+import { SERVER_ACTIONS, beforeServerAction, saveForRun, serverActionLabel } from '../../src/utils/serverActions';
 import EditorToolbar from '../../src/components/editor/EditorToolbar';
 import ExecuteActionsPanel from '../../src/components/nodes/result/standard/ExecuteActionsPanel';
 import PipelineRunner from '../../src/components/editor/PipelineRunner';
@@ -71,33 +71,41 @@ describe('enumeration: who may save, who decides "unsaved"', () => {
   });
 });
 
-describe('server reads ask before saving', () => {
-  it('clean canvas: nothing asked, nothing saved', async () => {
-    const ask = vi.fn();
-    useCanvasStore.getState().setEditorActions({ confirmSaveBeforeRead: ask });
-    expect(await saveBeforeServerRead('La validazione')).toBe(true);
-    expect(ask).not.toHaveBeenCalled();
+describe('one rule before every server action (UI-3, U15): the button says «Salva e …» and saves', () => {
+  it('every server action is declared, with its name and its «Salva e …» label', () => {
+    expect(Object.keys(SERVER_ACTIONS)).toEqual(['validate', 'preview', 'step_data', 'refresh', 'run']);
+    for (const kind of Object.keys(SERVER_ACTIONS)) {
+      expect(serverActionLabel(kind, false)).toBe(SERVER_ACTIONS[kind].name);
+      expect(serverActionLabel(kind, true)).toMatch(/^Salva ed? /);
+    }
+    expect(serverActionLabel('run', true)).toBe('Salva ed esegui');
+    expect(() => serverActionLabel('nope', false)).toThrow();
+  });
+
+  it('nobody asks a second question and nobody saves around the rule', () => {
+    expect(usersOf(/saveBeforeServerRead|confirmSaveBeforeRead/)).toEqual([]);
+    // I pulsanti delle azioni sul server prendono il nome dalla regola.
+    for (const file of ['components/editor/EditorToolbar.jsx', 'components/nodes/result/standard/ExecuteActionsPanel.jsx', 'components/canvas/StepPreview.jsx']) {
+      expect(fs.readFileSync(path.join(SRC, file), 'utf-8'), file).toContain('serverActionLabel(');
+    }
+  });
+
+  it('clean canvas: nothing saved', async () => {
+    for (const kind of Object.keys(SERVER_ACTIONS)) expect(await beforeServerAction(kind)).toBe(true);
     expect(updateCanvas).not.toHaveBeenCalled();
   });
 
-  it('unsaved: "Annulla" saves nothing and stops; "Salva e continua" saves', async () => {
-    useCanvasStore.getState().updateNodeData('s', { label: 'x' });
-    useCanvasStore.getState().setEditorActions({ confirmSaveBeforeRead: vi.fn(async () => false) });
-    expect(await saveBeforeServerRead("L'anteprima")).toBe(false);
-    expect(updateCanvas).not.toHaveBeenCalled();
-    useCanvasStore.getState().setEditorActions({ confirmSaveBeforeRead: vi.fn(async () => true) });
-    expect(await saveBeforeServerRead("L'anteprima")).toBe(true);
-    expect(updateCanvas).toHaveBeenCalledTimes(1);
-    expect(hasUnsavedChanges(useCanvasStore.getState())).toBe(false);
-  });
-
-  it('"Esegui" saves without asking (the button says so)', async () => {
-    useCanvasStore.getState().updateNodeData('s', { label: 'x' });
-    const ask = vi.fn();
-    useCanvasStore.getState().setEditorActions({ confirmSaveBeforeRead: ask });
+  it('unsaved: every action saves first, without asking (Valida, Anteprima, Esegui alike)', async () => {
+    for (const kind of Object.keys(SERVER_ACTIONS)) {
+      useCanvasStore.getState().updateNodeData('s', { label: `x-${kind}` });
+      expect(hasUnsavedChanges(useCanvasStore.getState())).toBe(true);
+      expect(await beforeServerAction(kind)).toBe(true);
+      expect(hasUnsavedChanges(useCanvasStore.getState()), kind).toBe(false);
+    }
+    expect(updateCanvas).toHaveBeenCalledTimes(Object.keys(SERVER_ACTIONS).length);
+    useCanvasStore.getState().updateNodeData('s', { label: 'run' });
     await saveForRun();
-    expect(ask).not.toHaveBeenCalled();
-    expect(updateCanvas).toHaveBeenCalledTimes(1);
+    expect(updateCanvas).toHaveBeenCalledTimes(Object.keys(SERVER_ACTIONS).length + 1);
   });
 
   it('a save of another project does not touch the open one', async () => {
@@ -159,7 +167,8 @@ describe('the run path lives in the editor, not in the Output panel', () => {
     useCanvasStore.getState().setEditorActions({ onExecute });
     useCanvasStore.getState().updateNodeData('s', { label: 'x' });
     render(<ReactFlowProvider><PipelineRunner /><EditorToolbar mode="manipola" title="T" onBack={() => {}} onSave={() => {}} menuItems={[]} /></ReactFlowProvider>);
-    const btn = screen.getByRole('button', { name: /Esegui/ });
+    // Con modifiche non salvate il pulsante dice «Salva ed esegui» (UI-3, U15).
+    const btn = screen.getByRole('button', { name: /Salva ed esegui/ });
     expect(btn.disabled).toBe(false);
     await act(async () => { fireEvent.click(btn); });
     await vi.waitFor(() => expect(onExecute).toHaveBeenCalledWith('o', { force_recalculate: false }));
@@ -190,12 +199,12 @@ describe('editor start-up order', () => {
     const { useCanvasCore } = await import('../../src/hooks/useCanvasCore');
     const store = (await import('../../src/store/useCanvasStore')).default;
     const Child = () => {
-      React.useEffect(() => { store.getState().setEditorActions({ confirmSaveBeforeRead: () => true }); }, []);
+      React.useEffect(() => { store.getState().setEditorActions({ openPalette: () => true }); }, []);
       return null;
     };
     const Page = () => { useCanvasCore('p9', 'manipola'); return <Child />; };
     render(<Page />);
-    expect(typeof store.getState().getEditorAction('confirmSaveBeforeRead')).toBe('function');
+    expect(typeof store.getState().getEditorAction('openPalette')).toBe('function');
     vi.doUnmock('../../src/context/AuthContext');
   });
 });

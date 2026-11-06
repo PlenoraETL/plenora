@@ -1,5 +1,6 @@
 import { nd } from './nodeHelpers';
 import { REST_AUTH_FIELD } from './restSecrets';
+import { MISSING_JOIN_TYPE } from './joinTypes';
 
 // Backend names are canonical; reactFlowType preserves the editors' render keys.
 // Only these data fields are persisted. Runtime data is deliberately absent.
@@ -150,7 +151,8 @@ export const NODE_TYPES = {
     join_pairs: [],
     left_keys: [],
     right_keys: [],
-    multi_join_type: 'inner',
+    // Tipo letto quando manca, come il backend (utils/joinTypes, U21).
+    multi_join_type: MISSING_JOIN_TYPE.multi_join,
   }),
   api_enrich: define('api_enrich', [], 'api_enrich', {
     api_id: '',
@@ -186,7 +188,7 @@ export const NODE_TYPES = {
  * nel test tests/shared/nodeTypeRoundTrip.contract.test.js.
  */
 export const JOIN_EDGE_FIELDS = {
-  join_type:          { default: 'left', keep: 'truthy' },
+  join_type:          { default: MISSING_JOIN_TYPE.estrai, keep: 'truthy' },
   source_column:      { default: '', keep: 'truthy' },
   target_column:      { default: '', keep: 'truthy' },
   join_conditions:    { default: null, keep: 'truthy' },
@@ -245,7 +247,9 @@ export function backendAccessFlags(node) {
 // un campo nuovo scritto da un componente e non registrato qui sparirebbe
 // in silenzio al salvataggio (la classe di bug che R2 chiude): meglio un
 // campo superfluo salvato che un dato perso.
-export const TRANSIENT_DATA_KEYS = new Set(['availableColumns', 'inputColumns', '_advOpen', '_lastUpdate']);
+// `_sourceName` (UI-3, U9): nome di una sorgente salvata col solo id,
+// risolto dal catalogo all'apertura (components/editor/editorNodeCatalog).
+export const TRANSIENT_DATA_KEYS = new Set(['availableColumns', 'inputColumns', '_advOpen', '_lastUpdate', '_sourceName']);
 
 // COPIE DI UNA RISORSA (Fase 5, T6, R2.10, N11): dettagli che appartengono
 // alla risorsa riferita dal nodo (la connessione API di `api_id`) e che il

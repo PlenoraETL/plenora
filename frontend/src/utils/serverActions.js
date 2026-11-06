@@ -5,11 +5,11 @@
  * Quello che gira (Scheduler, Eseguibili) e' l'ultima versione SALVATA,
  * quindi il canvas si salva solo quando l'utente lo chiede:
  *   - saveNow()        "💾 Salva" e Ctrl+S;
- *   - saveForRun()     "▶ Esegui" (il pulsante dice "Salva, controlla ed esegui");
- *   - saveBeforeServerRead(azione)  Valida, Anteprima, "Dati dopo…",
- *                      "Aggiorna": leggono la versione salvata; con modifiche
- *                      non salvate CHIEDONO "Salva e continua" (o lo dice gia'
- *                      il pulsante: { explicit: true }). Annulla = niente.
+ *   - beforeServerAction(azione)  Valida, Anteprima, «Mostra i dati»,
+ *                      «Aggiorna», Esegui: leggono la versione salvata; con
+ *                      modifiche non salvate il pulsante dice «Salva e …»
+ *                      (serverActionLabel) e si salva prima (regola unica,
+ *                      UI-3 U15; saveForRun e beforePreview la usano);
  *   - restoreVersion(id)  ripristino di una versione (finestra Versioni).
  * Ogni scrittura e' condizionata alla versione della scheda (Blocco A,
  * regola 8, utils/canvasVersion): su un conflitto l'utente sceglie
@@ -30,29 +30,57 @@ const save = () => useCanvasStore.getState().handleSaveQuiet();
 
 export const saveNow = () => save();
 
-export const saveForRun = () => save();
+/*
+ * REGOLA UNICA «salva prima di un'azione sul server» (UI-3, U15).
+ *
+ * Prima Esegui salvava senza chiedere, Valida e Anteprima chiedevano
+ * «Salva e continua», l'anteprima del passo diceva «Salva e …» sul
+ * pulsante: tre regole per la stessa cosa. Ora ogni azione che legge il
+ * canvas SALVATO e' in SERVER_ACTIONS e segue una sola regola: con
+ * modifiche non salvate il suo pulsante dice «Salva e <verbo>»
+ * (serverActionLabel) e premendolo si salva e poi si procede
+ * (beforeServerAction); senza modifiche il pulsante ha il suo nome e non
+ * si salva niente. Nessuna domanda in piu': il pulsante ha gia' detto cosa
+ * fa. Il test tests/components/SaveRules.contract.test.jsx enumera le
+ * azioni e i loro pulsanti.
+ */
+export const SERVER_ACTIONS = Object.freeze({
+  validate: { name: 'Valida', verb: 'valida' },
+  preview: { name: 'Anteprima', verb: 'mostra l\'anteprima' },
+  step_data: { name: 'Mostra i dati', verb: 'mostra i dati' },
+  refresh: { name: 'Aggiorna', verb: 'aggiorna' },
+  run: { name: 'Esegui', verb: 'esegui' },
+});
+
+const actionOf = (kind) => {
+  const a = SERVER_ACTIONS[kind];
+  if (!a) throw new Error(`[serverActions] azione sul server non dichiarata: ${kind}`);
+  return a;
+};
+
+/** Nome del pulsante di un'azione: «Salva e <verbo>» con modifiche non salvate. */
+export function serverActionLabel(kind, unsaved) {
+  const a = actionOf(kind);
+  return unsaved ? `Salva ${/^e/i.test(a.verb) ? 'ed' : 'e'} ${a.verb}` : a.name;
+}
 
 /**
- * @param {string} action  es. "La validazione", "L'anteprima"
- * @param {{explicit?: boolean}} [opts] explicit: il pulsante premuto diceva gia' "Salva e …"
- * @returns {Promise<boolean>} false = l'utente ha annullato
+ * Prima di un'azione sul server: salva se ci sono modifiche (il pulsante lo
+ * diceva). Un salvataggio fallito si propaga (chi chiama mostra l'errore).
+ * @returns {Promise<boolean>} true = si puo' procedere
  */
-export async function saveBeforeServerRead(action, { explicit = false } = {}) {
-  const st = useCanvasStore.getState();
-  if (!hasUnsavedChanges(st)) return true;
-  if (!explicit) {
-    const ask = st.getEditorAction?.('confirmSaveBeforeRead');
-    // Senza chi chiede (fuori dall'editor) non si salva di nascosto: si
-    // legge la versione salvata.
-    if (!ask) return true;
-    if (!(await ask(action))) return false;
-  }
+export async function beforeServerAction(kind) {
+  actionOf(kind);
+  if (!hasUnsavedChanges(useCanvasStore.getState())) return true;
   await save();
   return true;
 }
 
+/** Prima di Esegui (useExecution.onBeforeExecute): stessa regola. */
+export const saveForRun = () => beforeServerAction('run');
+
 /** Prima di un'anteprima (usePreview): stessa regola, funzione stabile. */
-export const beforePreview = () => saveBeforeServerRead("L'anteprima");
+export const beforePreview = () => beforeServerAction('preview');
 
 /**
  * Il canvas del server e' stato sostituito da questa scheda (ripristino di

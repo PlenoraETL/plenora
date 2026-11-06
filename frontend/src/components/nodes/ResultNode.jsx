@@ -19,7 +19,7 @@
 import React, { useEffect, useRef, memo, useMemo } from 'react';
 import { Position } from '@xyflow/react';
 import { saveFailedResult } from '../../utils/backendValidationResult';
-import { saveBeforeServerRead } from '../../utils/serverActions';
+import { beforeServerAction } from '../../utils/serverActions';
 import useCanvasStore from '../../store/useCanvasStore';
 import ResultNodeStandardView from './result/ResultNodeStandardView';
 import ResultInlinePreview from './result/ResultInlinePreview';
@@ -112,7 +112,7 @@ const ResultNode = memo(({ data, id }) => {
   // "Aggiorna" dell'anteprima nel nodo: legge la versione salvata come le altre.
   const handleInlineRefresh = async () => {
     try {
-      if (!(await saveBeforeServerRead("L'anteprima"))) return;
+      if (!(await beforeServerAction('refresh'))) return;
     } catch (e) {
       useCanvasStore.getState().getEditorAction('showValidationResult')?.(saveFailedResult(e));
       return;

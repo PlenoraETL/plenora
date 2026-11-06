@@ -3,8 +3,8 @@
  *
  * Usa GET /projects/{id}/preview?node_id= (backend B1/B6): esegue solo il
  * nodo e i suoi antenati. Non parte da sola (esegue query e chiamate API):
- * l'utente preme "Anteprima". Il backend legge il canvas SALVATO: con
- * modifiche in sospeso il pulsante lo dice ("Salva e mostra anteprima").
+ * l'utente preme «Mostra i dati». Il backend legge il canvas SALVATO: con
+ * modifiche in sospeso il pulsante lo dice («Salva e mostra i dati», UI-3 U15).
  * Se cio' che il backend legge cambia dopo il calcolo (canvasContentKey:
  * dati e collegamenti, non le posizioni), i dati mostrati sono segnalati
  * come non aggiornati.
@@ -17,14 +17,13 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 import { hasUnsavedChanges } from '../../store/saveState';
-import { saveBeforeServerRead } from '../../utils/serverActions';
+import { beforeServerAction, serverActionLabel } from '../../utils/serverActions';
 import { useInlinePreview } from '../../hooks/useInlinePreview';
 import { humanizeError } from '../../utils/errorMessages';
 import { PREVIEW_ROW_LIMIT, formatPreviewValue } from '../../utils/previewFormat';
 import { nodeTitle } from './nodeDescriptors';
 import { usePreviewStale, currentCanvasContentKey } from '../../hooks/usePreviewStale';
 import './StepPreview.css';
-import { term } from '../../utils/glossary';
 import { formatNumber } from '../../utils/format';
 
 const HEIGHT_OPEN = 240;
@@ -79,7 +78,7 @@ export default function StepPreview({ projectId }) {
     setSaveError(null);
     try {
       // Il pulsante dice gia' "Salva e …": niente seconda domanda.
-      await saveBeforeServerRead("L'anteprima del passo", { explicit: true });
+      await beforeServerAction('step_data');
     } catch (err) {
       setSaveError(humanizeError(err).message || 'Salvataggio non riuscito');
       return;
@@ -96,10 +95,10 @@ export default function StepPreview({ projectId }) {
   const title = nodeTitle(node.type, node.data);
 
   return (
-    <section ref={ref} className={`step-preview${collapsed ? ' step-preview--collapsed' : ''}`} aria-label="Anteprima dati del passo">
+    <section ref={ref} className={`step-preview${collapsed ? ' step-preview--collapsed' : ''}`} aria-label="Dati del passo">
       <header className="step-preview__head">
         <button type="button" className="step-preview__toggle" onClick={() => setCollapsed(c => !c)}
-          aria-label={collapsed ? 'Espandi anteprima' : 'Comprimi anteprima'}>{collapsed ? '▸' : '▾'}</button>
+          aria-label={collapsed ? 'Espandi i dati del passo' : 'Comprimi i dati del passo'}>{collapsed ? '▸' : '▾'}</button>
         <strong className="step-preview__title">Dati dopo «{title}»</strong>
         {status === 'success' && data && (
           <span className="step-preview__meta">
@@ -114,20 +113,24 @@ export default function StepPreview({ projectId }) {
           className="step-preview__run"
           onClick={start}
           disabled={status === 'loading'}
-          title={unsaved ? "L'anteprima legge il canvas salvato: le modifiche vengono salvate prima" : undefined}
+          title={unsaved ? 'I dati si leggono dal canvas salvato: le modifiche vengono salvate prima' : undefined}
         >
+          {/* UI-3 (U15): «Anteprima» e' solo quella dell'Output; qui i dati
+              del passo, con la regola unica «Salva e …» (utils/serverActions). */}
           {status === 'loading'
             ? 'Caricamento…'
-            : `${unsaved ? 'Salva e ' : ''}${shownFor === node.id ? (unsaved ? 'aggiorna' : '↻ Aggiorna') : (unsaved ? 'mostra anteprima' : `${term('preview').icon} ${term('preview').name}`)}`}
+            : (shownFor === node.id
+              ? `${unsaved ? '' : '↻ '}${serverActionLabel('refresh', unsaved)}`
+              : `${unsaved ? '' : '▤ '}${serverActionLabel('step_data', unsaved)}`)}
         </button>
       </header>
       {!collapsed && (
         <div className="step-preview__body">
           {saveError && <div className="step-preview__msg step-preview__msg--error">{saveError}</div>}
           {!saveError && status === 'idle' && (
-            <div className="step-preview__msg">Premi «{term('preview').name}» per vedere i dati in questo punto del progetto.</div>
+            <div className="step-preview__msg">Premi «{serverActionLabel('step_data', false)}» per vedere i dati in questo punto del progetto.</div>
           )}
-          {status === 'loading' && <div className="step-preview__msg">Calcolo dell&apos;anteprima…</div>}
+          {status === 'loading' && <div className="step-preview__msg">Calcolo dei dati del passo…</div>}
           {status === 'error' && <div className="step-preview__msg step-preview__msg--error">{error}</div>}
           {status === 'empty' && <div className="step-preview__msg">Nessuna riga in questo punto.</div>}
           {status === 'success' && (

@@ -1,0 +1,7439 @@
+{
+ "estrai_canvas": {
+  "mssql/calculated": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "CUSTOMER_ID",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "TOTAL",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "doppio",
+     "source_name": "doppio",
+     "source_node": "a"
+    },
+    {
+     "name": "tre",
+     "source_name": "tre",
+     "source_node": "a"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, o.TOTAL * 2 AS doppio, (TOTAL + 3) AS tre\nFROM dbo.ORDERS o",
+   "tables_used": [
+    "ORDERS"
+   ]
+  },
+  "mssql/cross": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "CUSTOMER_ID",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "TOTAL",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "ID_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "CUSTOMER",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, c.ID, c.NAME AS CUSTOMER\nFROM dbo.ORDERS o\nCROSS JOIN dbo.CUSTOMERS c",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "mssql/cross-noalias": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "CUSTOMER_ID",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "TOTAL",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "ID_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "CUSTOMER",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT ORDERS.ID, ORDERS.CUSTOMER_ID, ORDERS.TOTAL, CUSTOMERS.ID, CUSTOMERS.NAME AS CUSTOMER\nFROM dbo.ORDERS\nCROSS JOIN dbo.CUSTOMERS",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "mssql/groupby-qualified": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "CUSTOMER",
+     "source_name": "CUSTOMER",
+     "source_node": "b"
+    },
+    {
+     "name": "tot",
+     "source_name": "SUM(o.TOTAL)",
+     "source_node": null
+    },
+    {
+     "name": "n",
+     "source_name": "COUNT(*)",
+     "source_node": null
+    }
+   ],
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT c.ID, c.CUSTOMER, SUM(o.TOTAL) AS tot, COUNT(*) AS n\nFROM dbo.ORDERS o\nINNER JOIN dbo.CUSTOMERS c ON o.CUSTOMER_ID = c.ID\nGROUP BY c.ID, c.CUSTOMER\nHAVING SUM(o.TOTAL) > :p_0\nORDER BY c.ID DESC, tot ASC",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "mssql/join-aliased": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "CUSTOMER_ID",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "TOTAL",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "ID_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "CUSTOMER",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {
+    "p_0": "%Ro%"
+   },
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, c.ID, c.NAME AS CUSTOMER\nFROM dbo.ORDERS o\nINNER JOIN dbo.CUSTOMERS c ON o.CUSTOMER_ID = c.ID\nWHERE c.NAME LIKE :p_0",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "mssql/join-noalias-left": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "CUSTOMER_ID",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "TOTAL",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "ID_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "CUSTOMER",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT ORDERS.ID, ORDERS.CUSTOMER_ID, ORDERS.TOTAL, CUSTOMERS.ID, CUSTOMERS.NAME AS CUSTOMER\nFROM dbo.ORDERS\nLEFT JOIN dbo.CUSTOMERS ON ORDERS.CUSTOMER_ID = CUSTOMERS.ID",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "mssql/join-reversed-conditions": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "CUSTOMER",
+     "source_name": "NAME",
+     "source_node": "b"
+    },
+    {
+     "name": "ID_2",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "CUSTOMER_ID",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "TOTAL",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT CUSTOMERS.ID, CUSTOMERS.NAME AS CUSTOMER, o.ID, o.CUSTOMER_ID, o.TOTAL\nFROM dbo.CUSTOMERS\nRIGHT JOIN dbo.ORDERS o ON TRIM(CUSTOMERS.ID) = o.CUSTOMER_ID AND o.TOTAL > '5' AND o.TOTAL IN ('1', '2')",
+   "tables_used": [
+    "CUSTOMERS",
+    "ORDERS"
+   ]
+  },
+  "mssql/single-alias": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "CUSTOMER_ID",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "TOTAL",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT TOP 5 DISTINCT o.ID, o.CUSTOMER_ID, o.TOTAL\nFROM dbo.ORDERS o",
+   "tables_used": [
+    "ORDERS"
+   ]
+  },
+  "mssql/single-noalias": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "CUSTOMER_ID",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "TOTAL",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    }
+   ],
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT ORDERS.ID, ORDERS.CUSTOMER_ID, ORDERS.TOTAL\nFROM dbo.ORDERS\nWHERE ORDERS.ID > :p_0",
+   "tables_used": [
+    "ORDERS"
+   ]
+  },
+  "mssql/spatial": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "geom",
+     "source_name": "geom",
+     "source_node": "a"
+    },
+    {
+     "name": "ID_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "geom_2",
+     "source_name": "geom",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT p.ID, p.geom.STAsText() AS geom, CITIES.ID, CITIES.geom.STAsText() AS geom\nFROM dbo.PARCELS p\nINNER JOIN dbo.CITIES ON p.geom.STWithin(CITIES.geom) = 1",
+   "tables_used": [
+    "PARCELS",
+    "CITIES"
+   ]
+  },
+  "mssql/three-chain": {
+   "columns": [
+    {
+     "name": "ID",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "CUSTOMER_ID",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "TOTAL",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "ID_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "CUSTOMER",
+     "source_name": "NAME",
+     "source_node": "b"
+    },
+    {
+     "name": "ID_3",
+     "source_name": "ID",
+     "source_node": "d"
+    },
+    {
+     "name": "geom",
+     "source_name": "geom",
+     "source_node": "d"
+    }
+   ],
+   "params": {
+    "p_0": 1,
+    "p_1": 2
+   },
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, c.ID, c.NAME AS CUSTOMER, CITIES.ID, CITIES.geom.STAsText() AS geom\nFROM dbo.ORDERS o\nINNER JOIN dbo.CUSTOMERS c ON o.CUSTOMER_ID = c.ID\nLEFT JOIN dbo.CITIES ON c.ID = CITIES.ID\nWHERE CITIES.ID IN (:p_0, :p_1)",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS",
+    "CITIES"
+   ]
+  },
+  "oracle/calculated": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "doppio",
+     "source_name": "doppio",
+     "source_node": "a"
+    },
+    {
+     "name": "tre",
+     "source_name": "tre",
+     "source_node": "a"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, o.TOTAL * 2 AS doppio, (TOTAL + 3) AS tre\nFROM ORDERS o",
+   "tables_used": [
+    "ORDERS"
+   ]
+  },
+  "oracle/cross": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, c.ID, c.NAME AS CUSTOMER\nFROM ORDERS o\nCROSS JOIN CUSTOMERS c",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "oracle/cross-noalias": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT ORDERS.ID, ORDERS.CUSTOMER_ID, ORDERS.TOTAL, CUSTOMERS.ID, CUSTOMERS.NAME AS CUSTOMER\nFROM ORDERS\nCROSS JOIN CUSTOMERS",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "oracle/groupby-qualified": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "CUSTOMER",
+     "source_node": "b"
+    },
+    {
+     "name": "tot",
+     "source_name": "SUM(o.TOTAL)",
+     "source_node": null
+    },
+    {
+     "name": "n",
+     "source_name": "COUNT(*)",
+     "source_node": null
+    }
+   ],
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT c.ID, c.CUSTOMER, SUM(o.TOTAL) AS tot, COUNT(*) AS n\nFROM ORDERS o\nINNER JOIN CUSTOMERS c ON o.CUSTOMER_ID = c.ID\nGROUP BY c.ID, c.CUSTOMER\nHAVING SUM(o.TOTAL) > :p_0\nORDER BY c.ID DESC, tot ASC",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "oracle/join-aliased": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {
+    "p_0": "%Ro%"
+   },
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, c.ID, c.NAME AS CUSTOMER\nFROM ORDERS o\nINNER JOIN CUSTOMERS c ON o.CUSTOMER_ID = c.ID\nWHERE TO_CHAR(c.NAME) LIKE :p_0",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "oracle/join-noalias-left": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT ORDERS.ID, ORDERS.CUSTOMER_ID, ORDERS.TOTAL, CUSTOMERS.ID, CUSTOMERS.NAME AS CUSTOMER\nFROM ORDERS\nLEFT JOIN CUSTOMERS ON ORDERS.CUSTOMER_ID = CUSTOMERS.ID",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "oracle/join-reversed-conditions": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT CUSTOMERS.ID, CUSTOMERS.NAME AS CUSTOMER, o.ID, o.CUSTOMER_ID, o.TOTAL\nFROM CUSTOMERS\nRIGHT JOIN ORDERS o ON TRIM(CUSTOMERS.ID) = o.CUSTOMER_ID AND o.TOTAL > '5' AND o.TOTAL IN ('1', '2')",
+   "tables_used": [
+    "CUSTOMERS",
+    "ORDERS"
+   ]
+  },
+  "oracle/single-alias": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT DISTINCT o.ID, o.CUSTOMER_ID, o.TOTAL\nFROM ORDERS o\nFETCH FIRST 5 ROWS ONLY",
+   "tables_used": [
+    "ORDERS"
+   ]
+  },
+  "oracle/single-noalias": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    }
+   ],
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT ORDERS.ID, ORDERS.CUSTOMER_ID, ORDERS.TOTAL\nFROM ORDERS\nWHERE ORDERS.ID > :p_0",
+   "tables_used": [
+    "ORDERS"
+   ]
+  },
+  "oracle/spatial": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "geom",
+     "source_name": "geom",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "geom_2",
+     "source_name": "geom",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT p.ID, SDO_UTIL.TO_WKTGEOMETRY(p.geom) AS geom, CITIES.ID, SDO_UTIL.TO_WKTGEOMETRY(CITIES.geom) AS geom\nFROM PARCELS p\nINNER JOIN CITIES ON SDO_RELATE(p.geom, CITIES.geom, 'mask=INSIDE') = 'TRUE'",
+   "tables_used": [
+    "PARCELS",
+    "CITIES"
+   ]
+  },
+  "oracle/three-chain": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    },
+    {
+     "name": "id_3",
+     "source_name": "ID",
+     "source_node": "d"
+    },
+    {
+     "name": "geom",
+     "source_name": "geom",
+     "source_node": "d"
+    }
+   ],
+   "params": {
+    "p_0": 1,
+    "p_1": 2
+   },
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, c.ID, c.NAME AS CUSTOMER, CITIES.ID, SDO_UTIL.TO_WKTGEOMETRY(CITIES.geom) AS geom\nFROM ORDERS o\nINNER JOIN CUSTOMERS c ON o.CUSTOMER_ID = c.ID\nLEFT JOIN CITIES ON c.ID = CITIES.ID\nWHERE CITIES.ID IN (:p_0, :p_1)",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS",
+    "CITIES"
+   ]
+  },
+  "postgres/calculated": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "doppio",
+     "source_name": "doppio",
+     "source_node": "a"
+    },
+    {
+     "name": "tre",
+     "source_name": "tre",
+     "source_node": "a"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, o.TOTAL * 2 AS doppio, (TOTAL + 3) AS tre\nFROM ORDERS o",
+   "tables_used": [
+    "ORDERS"
+   ]
+  },
+  "postgres/cross": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, c.ID, c.NAME AS CUSTOMER\nFROM ORDERS o\nCROSS JOIN CUSTOMERS c",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "postgres/cross-noalias": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT ORDERS.ID, ORDERS.CUSTOMER_ID, ORDERS.TOTAL, CUSTOMERS.ID, CUSTOMERS.NAME AS CUSTOMER\nFROM ORDERS\nCROSS JOIN CUSTOMERS",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "postgres/groupby-qualified": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "CUSTOMER",
+     "source_node": "b"
+    },
+    {
+     "name": "tot",
+     "source_name": "SUM(o.TOTAL)",
+     "source_node": null
+    },
+    {
+     "name": "n",
+     "source_name": "COUNT(*)",
+     "source_node": null
+    }
+   ],
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT c.ID, c.CUSTOMER, SUM(o.TOTAL) AS tot, COUNT(*) AS n\nFROM ORDERS o\nINNER JOIN CUSTOMERS c ON o.CUSTOMER_ID = c.ID\nGROUP BY c.ID, c.CUSTOMER\nHAVING SUM(o.TOTAL) > :p_0\nORDER BY c.ID DESC, tot ASC",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "postgres/join-aliased": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {
+    "p_0": "%Ro%"
+   },
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, c.ID, c.NAME AS CUSTOMER\nFROM ORDERS o\nINNER JOIN CUSTOMERS c ON o.CUSTOMER_ID = c.ID\nWHERE c.NAME LIKE :p_0",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "postgres/join-noalias-left": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT ORDERS.ID, ORDERS.CUSTOMER_ID, ORDERS.TOTAL, CUSTOMERS.ID, CUSTOMERS.NAME AS CUSTOMER\nFROM ORDERS\nLEFT JOIN CUSTOMERS ON ORDERS.CUSTOMER_ID = CUSTOMERS.ID",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS"
+   ]
+  },
+  "postgres/join-reversed-conditions": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT CUSTOMERS.ID, CUSTOMERS.NAME AS CUSTOMER, o.ID, o.CUSTOMER_ID, o.TOTAL\nFROM CUSTOMERS\nRIGHT JOIN ORDERS o ON TRIM(CUSTOMERS.ID) = o.CUSTOMER_ID AND o.TOTAL > '5' AND o.TOTAL IN ('1', '2')",
+   "tables_used": [
+    "CUSTOMERS",
+    "ORDERS"
+   ]
+  },
+  "postgres/single-alias": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT DISTINCT o.ID, o.CUSTOMER_ID, o.TOTAL\nFROM ORDERS o\nLIMIT 5",
+   "tables_used": [
+    "ORDERS"
+   ]
+  },
+  "postgres/single-noalias": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    }
+   ],
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT ORDERS.ID, ORDERS.CUSTOMER_ID, ORDERS.TOTAL\nFROM ORDERS\nWHERE ORDERS.ID > :p_0",
+   "tables_used": [
+    "ORDERS"
+   ]
+  },
+  "postgres/spatial": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "geom",
+     "source_name": "geom",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "geom_2",
+     "source_name": "geom",
+     "source_node": "b"
+    }
+   ],
+   "params": {},
+   "sql": "SELECT p.ID, ST_AsText(p.geom) AS geom, CITIES.ID, ST_AsText(CITIES.geom) AS geom\nFROM PARCELS p\nINNER JOIN CITIES ON ST_Within(p.geom, CITIES.geom)",
+   "tables_used": [
+    "PARCELS",
+    "CITIES"
+   ]
+  },
+  "postgres/three-chain": {
+   "columns": [
+    {
+     "name": "id",
+     "source_name": "ID",
+     "source_node": "a"
+    },
+    {
+     "name": "customer_id",
+     "source_name": "CUSTOMER_ID",
+     "source_node": "a"
+    },
+    {
+     "name": "total",
+     "source_name": "TOTAL",
+     "source_node": "a"
+    },
+    {
+     "name": "id_2",
+     "source_name": "ID",
+     "source_node": "b"
+    },
+    {
+     "name": "customer",
+     "source_name": "NAME",
+     "source_node": "b"
+    },
+    {
+     "name": "id_3",
+     "source_name": "ID",
+     "source_node": "d"
+    },
+    {
+     "name": "geom",
+     "source_name": "geom",
+     "source_node": "d"
+    }
+   ],
+   "params": {
+    "p_0": 1,
+    "p_1": 2
+   },
+   "sql": "SELECT o.ID, o.CUSTOMER_ID, o.TOTAL, c.ID, c.NAME AS CUSTOMER, CITIES.ID, ST_AsText(CITIES.geom) AS geom\nFROM ORDERS o\nINNER JOIN CUSTOMERS c ON o.CUSTOMER_ID = c.ID\nLEFT JOIN CITIES ON c.ID = CITIES.ID\nWHERE CITIES.ID IN (:p_0, :p_1)",
+   "tables_used": [
+    "ORDERS",
+    "CUSTOMERS",
+    "CITIES"
+   ]
+  }
+ },
+ "estrai_filters": {
+  "mssql/0/e": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID = :p_0"
+  },
+  "mssql/0/noalias": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID = :p_0"
+  },
+  "mssql/1/e": {
+   "params": {
+    "p_0": "abc"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID = :p_0"
+  },
+  "mssql/1/noalias": {
+   "params": {
+    "p_0": "abc"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID = :p_0"
+  },
+  "mssql/10/e": {
+   "params": {
+    "p_0": "M"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.NAME > :p_0"
+  },
+  "mssql/10/noalias": {
+   "params": {
+    "p_0": "M"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.NAME > :p_0"
+  },
+  "mssql/11/e": {
+   "params": {
+    "p_0": 100
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID < :p_0"
+  },
+  "mssql/11/noalias": {
+   "params": {
+    "p_0": 100
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID < :p_0"
+  },
+  "mssql/12/e": {
+   "params": {
+    "p_0": 9.0
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.AMOUNT < :p_0"
+  },
+  "mssql/12/noalias": {
+   "params": {
+    "p_0": 9.0
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.AMOUNT < :p_0"
+  },
+  "mssql/13/e": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID >= :p_0"
+  },
+  "mssql/13/noalias": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID >= :p_0"
+  },
+  "mssql/14/e": {
+   "params": {
+    "p_0": 0.0
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.AMOUNT >= :p_0"
+  },
+  "mssql/14/noalias": {
+   "params": {
+    "p_0": 0.0
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.AMOUNT >= :p_0"
+  },
+  "mssql/15/e": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID <= :p_0"
+  },
+  "mssql/15/noalias": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID <= :p_0"
+  },
+  "mssql/16/e": {
+   "params": {
+    "p_0": "2024-12-31"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT <= :p_0"
+  },
+  "mssql/16/noalias": {
+   "params": {
+    "p_0": "2024-12-31"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT <= :p_0"
+  },
+  "mssql/17/e": {
+   "params": {
+    "p_0": "%Ada%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.NAME LIKE :p_0"
+  },
+  "mssql/17/noalias": {
+   "params": {
+    "p_0": "%Ada%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.NAME LIKE :p_0"
+  },
+  "mssql/18/e": {
+   "params": {
+    "p_0": "%1%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID LIKE :p_0"
+  },
+  "mssql/18/noalias": {
+   "params": {
+    "p_0": "%1%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID LIKE :p_0"
+  },
+  "mssql/19/e": {
+   "params": {
+    "p_0": "%x%y%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.NAME NOT LIKE :p_0"
+  },
+  "mssql/19/noalias": {
+   "params": {
+    "p_0": "%x%y%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.NAME NOT LIKE :p_0"
+  },
+  "mssql/2/e": {
+   "params": {
+    "p_0": "Ada"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.NAME = :p_0"
+  },
+  "mssql/2/noalias": {
+   "params": {
+    "p_0": "Ada"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.NAME = :p_0"
+  },
+  "mssql/20/e": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID IN (:p_0, :p_1, :p_2)"
+  },
+  "mssql/20/noalias": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID IN (:p_0, :p_1, :p_2)"
+  },
+  "mssql/21/e": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.NAME IN (:p_0, :p_1)"
+  },
+  "mssql/21/noalias": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.NAME IN (:p_0, :p_1)"
+  },
+  "mssql/22/e": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID IN (:p_0)"
+  },
+  "mssql/22/noalias": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID IN (:p_0)"
+  },
+  "mssql/23/e": {
+   "params": {
+    "p_0": "solo"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.NAME IN (:p_0)"
+  },
+  "mssql/23/noalias": {
+   "params": {
+    "p_0": "solo"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.NAME IN (:p_0)"
+  },
+  "mssql/24/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE 1=0"
+  },
+  "mssql/24/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE 1=0"
+  },
+  "mssql/25/e": {
+   "params": {
+    "p_0": ""
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID IN (:p_0)"
+  },
+  "mssql/25/noalias": {
+   "params": {
+    "p_0": ""
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID IN (:p_0)"
+  },
+  "mssql/26/e": {
+   "params": {
+    "p_0": 4,
+    "p_1": 5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID NOT IN (:p_0, :p_1)"
+  },
+  "mssql/26/noalias": {
+   "params": {
+    "p_0": 4,
+    "p_1": 5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID NOT IN (:p_0, :p_1)"
+  },
+  "mssql/27/e": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.NAME NOT IN (:p_0)"
+  },
+  "mssql/27/noalias": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.NAME NOT IN (:p_0)"
+  },
+  "mssql/28/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID IS NULL"
+  },
+  "mssql/28/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID IS NULL"
+  },
+  "mssql/29/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.NAME IS NOT NULL"
+  },
+  "mssql/29/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.NAME IS NOT NULL"
+  },
+  "mssql/3/e": {
+   "params": {
+    "p_0": 2.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.AMOUNT = :p_0"
+  },
+  "mssql/3/noalias": {
+   "params": {
+    "p_0": 2.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.AMOUNT = :p_0"
+  },
+  "mssql/30/e": {
+   "params": {
+    "p_0": 10,
+    "p_1": 20
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID BETWEEN :p_0 AND :p_1"
+  },
+  "mssql/30/noalias": {
+   "params": {
+    "p_0": 10,
+    "p_1": 20
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID BETWEEN :p_0 AND :p_1"
+  },
+  "mssql/31/e": {
+   "params": {
+    "p_0": 1.5,
+    "p_1": 2.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.AMOUNT BETWEEN :p_0 AND :p_1"
+  },
+  "mssql/31/noalias": {
+   "params": {
+    "p_0": 1.5,
+    "p_1": 2.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.AMOUNT BETWEEN :p_0 AND :p_1"
+  },
+  "mssql/32/e": {
+   "params": {
+    "p_0": "2024-01-01",
+    "p_1": "2024-02-01"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT BETWEEN :p_0 AND :p_1"
+  },
+  "mssql/32/noalias": {
+   "params": {
+    "p_0": "2024-01-01",
+    "p_1": "2024-02-01"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT BETWEEN :p_0 AND :p_1"
+  },
+  "mssql/33/e": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID BETWEEN :p_0 AND :p_1"
+  },
+  "mssql/33/noalias": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID BETWEEN :p_0 AND :p_1"
+  },
+  "mssql/34/e": {
+   "error": "ValueError",
+   "message": "BETWEEN richiede due valori separati da 'AND' (es. '10 AND 20')"
+  },
+  "mssql/34/noalias": {
+   "error": "ValueError",
+   "message": "BETWEEN richiede due valori separati da 'AND' (es. '10 AND 20')"
+  },
+  "mssql/35/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e"
+  },
+  "mssql/35/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS"
+  },
+  "mssql/36/e": {
+   "error": "ValueError",
+   "message": "Nome colonna filtro non valido: bad-name;"
+  },
+  "mssql/36/noalias": {
+   "error": "ValueError",
+   "message": "Nome colonna filtro non valido: bad-name;"
+  },
+  "mssql/37/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= GETDATE()"
+  },
+  "mssql/37/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= GETDATE()"
+  },
+  "mssql/38/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < GETDATE()"
+  },
+  "mssql/38/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < GETDATE()"
+  },
+  "mssql/39/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= GETDATE()"
+  },
+  "mssql/39/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= GETDATE()"
+  },
+  "mssql/4/e": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.AMOUNT = :p_0"
+  },
+  "mssql/4/noalias": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.AMOUNT = :p_0"
+  },
+  "mssql/40/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < GETDATE()"
+  },
+  "mssql/40/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < GETDATE()"
+  },
+  "mssql/41/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= GETDATE()"
+  },
+  "mssql/41/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= GETDATE()"
+  },
+  "mssql/42/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < GETDATE()"
+  },
+  "mssql/42/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < GETDATE()"
+  },
+  "mssql/43/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= GETDATE()"
+  },
+  "mssql/43/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= GETDATE()"
+  },
+  "mssql/44/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < GETDATE()"
+  },
+  "mssql/44/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < GETDATE()"
+  },
+  "mssql/45/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= DATEADD(month, 3, GETDATE())"
+  },
+  "mssql/45/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= DATEADD(month, 3, GETDATE())"
+  },
+  "mssql/46/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < DATEADD(month, 3, GETDATE())"
+  },
+  "mssql/46/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < DATEADD(month, 3, GETDATE())"
+  },
+  "mssql/47/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= DATEADD(day, 7, GETDATE())"
+  },
+  "mssql/47/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= DATEADD(day, 7, GETDATE())"
+  },
+  "mssql/48/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < DATEADD(day, 7, GETDATE())"
+  },
+  "mssql/48/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < DATEADD(day, 7, GETDATE())"
+  },
+  "mssql/49/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= DATEADD(month, 2, GETDATE())"
+  },
+  "mssql/49/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= DATEADD(month, 2, GETDATE())"
+  },
+  "mssql/5/e": {
+   "params": {
+    "p_0": "2024-01-01"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT = :p_0"
+  },
+  "mssql/5/noalias": {
+   "params": {
+    "p_0": "2024-01-01"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT = :p_0"
+  },
+  "mssql/50/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < DATEADD(month, 2, GETDATE())"
+  },
+  "mssql/50/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < DATEADD(month, 2, GETDATE())"
+  },
+  "mssql/51/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= DATEADD(month, 4, GETDATE())"
+  },
+  "mssql/51/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= DATEADD(month, 4, GETDATE())"
+  },
+  "mssql/52/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < DATEADD(month, 4, GETDATE())"
+  },
+  "mssql/52/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < DATEADD(month, 4, GETDATE())"
+  },
+  "mssql/53/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= DATEADD(month, 5, GETDATE())"
+  },
+  "mssql/53/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= DATEADD(month, 5, GETDATE())"
+  },
+  "mssql/54/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < DATEADD(month, 5, GETDATE())"
+  },
+  "mssql/54/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < DATEADD(month, 5, GETDATE())"
+  },
+  "mssql/55/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= CAST(GETDATE() AS DATE)"
+  },
+  "mssql/55/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= CAST(GETDATE() AS DATE)"
+  },
+  "mssql/56/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < CAST(GETDATE() AS DATE)"
+  },
+  "mssql/56/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < CAST(GETDATE() AS DATE)"
+  },
+  "mssql/57/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT >= CAST(GETDATE() AS DATE)"
+  },
+  "mssql/57/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT >= CAST(GETDATE() AS DATE)"
+  },
+  "mssql/58/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.CREATED_AT < CAST(GETDATE() AS DATE)"
+  },
+  "mssql/58/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.CREATED_AT < CAST(GETDATE() AS DATE)"
+  },
+  "mssql/59/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/59/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/6/e": {
+   "params": {
+    "p_0": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID != :p_0"
+  },
+  "mssql/6/noalias": {
+   "params": {
+    "p_0": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID != :p_0"
+  },
+  "mssql/60/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/60/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/61/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/61/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/62/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/62/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/63/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/63/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/64/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/64/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'mssql'. Usare una funzione supportata."
+  },
+  "mssql/65/e": {
+   "params": {
+    "p_0": 10,
+    "p_1": "%Ada%",
+    "p_2": 1,
+    "p_3": 2,
+    "p_4": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID >= :p_0 AND e.NAME LIKE :p_1 AND e.ID IN (:p_2, :p_3, :p_4) AND e.CREATED_AT < GETDATE()"
+  },
+  "mssql/65/noalias": {
+   "params": {
+    "p_0": 10,
+    "p_1": "%Ada%",
+    "p_2": 1,
+    "p_3": 2,
+    "p_4": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID >= :p_0 AND EVENTS.NAME LIKE :p_1 AND EVENTS.ID IN (:p_2, :p_3, :p_4) AND EVENTS.CREATED_AT < GETDATE()"
+  },
+  "mssql/66/e": {
+   "params": {
+    "p_0": 1.0,
+    "p_1": 2.0,
+    "p_2": "a",
+    "p_3": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID IS NULL AND e.AMOUNT BETWEEN :p_0 AND :p_1 AND e.NAME NOT IN (:p_2, :p_3)"
+  },
+  "mssql/66/noalias": {
+   "params": {
+    "p_0": 1.0,
+    "p_1": 2.0,
+    "p_2": "a",
+    "p_3": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID IS NULL AND EVENTS.AMOUNT BETWEEN :p_0 AND :p_1 AND EVENTS.NAME NOT IN (:p_2, :p_3)"
+  },
+  "mssql/67/e": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID = :p_0 AND e.ID = :p_1 AND e.ID = :p_2"
+  },
+  "mssql/67/noalias": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID = :p_0 AND EVENTS.ID = :p_1 AND EVENTS.ID = :p_2"
+  },
+  "mssql/7/e": {
+   "params": {
+    "p_0": "Bob"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.NAME != :p_0"
+  },
+  "mssql/7/noalias": {
+   "params": {
+    "p_0": "Bob"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.NAME != :p_0"
+  },
+  "mssql/8/e": {
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.ID > :p_0"
+  },
+  "mssql/8/noalias": {
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.ID > :p_0"
+  },
+  "mssql/9/e": {
+   "params": {
+    "p_0": 1.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM dbo.EVENTS e\nWHERE e.AMOUNT > :p_0"
+  },
+  "mssql/9/noalias": {
+   "params": {
+    "p_0": 1.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM dbo.EVENTS\nWHERE EVENTS.AMOUNT > :p_0"
+  },
+  "mysql/0/e": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0"
+  },
+  "mysql/0/noalias": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0"
+  },
+  "mysql/1/e": {
+   "params": {
+    "p_0": "abc"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0"
+  },
+  "mysql/1/noalias": {
+   "params": {
+    "p_0": "abc"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0"
+  },
+  "mysql/10/e": {
+   "params": {
+    "p_0": "M"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME > :p_0"
+  },
+  "mysql/10/noalias": {
+   "params": {
+    "p_0": "M"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME > :p_0"
+  },
+  "mysql/11/e": {
+   "params": {
+    "p_0": 100
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID < :p_0"
+  },
+  "mysql/11/noalias": {
+   "params": {
+    "p_0": 100
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID < :p_0"
+  },
+  "mysql/12/e": {
+   "params": {
+    "p_0": 9.0
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT < :p_0"
+  },
+  "mysql/12/noalias": {
+   "params": {
+    "p_0": 9.0
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT < :p_0"
+  },
+  "mysql/13/e": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID >= :p_0"
+  },
+  "mysql/13/noalias": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID >= :p_0"
+  },
+  "mysql/14/e": {
+   "params": {
+    "p_0": 0.0
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT >= :p_0"
+  },
+  "mysql/14/noalias": {
+   "params": {
+    "p_0": 0.0
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT >= :p_0"
+  },
+  "mysql/15/e": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID <= :p_0"
+  },
+  "mysql/15/noalias": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID <= :p_0"
+  },
+  "mysql/16/e": {
+   "params": {
+    "p_0": "2024-12-31"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT <= :p_0"
+  },
+  "mysql/16/noalias": {
+   "params": {
+    "p_0": "2024-12-31"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT <= :p_0"
+  },
+  "mysql/17/e": {
+   "params": {
+    "p_0": "%Ada%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME LIKE :p_0"
+  },
+  "mysql/17/noalias": {
+   "params": {
+    "p_0": "%Ada%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME LIKE :p_0"
+  },
+  "mysql/18/e": {
+   "params": {
+    "p_0": "%1%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID LIKE :p_0"
+  },
+  "mysql/18/noalias": {
+   "params": {
+    "p_0": "%1%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID LIKE :p_0"
+  },
+  "mysql/19/e": {
+   "params": {
+    "p_0": "%x%y%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME NOT LIKE :p_0"
+  },
+  "mysql/19/noalias": {
+   "params": {
+    "p_0": "%x%y%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME NOT LIKE :p_0"
+  },
+  "mysql/2/e": {
+   "params": {
+    "p_0": "Ada"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME = :p_0"
+  },
+  "mysql/2/noalias": {
+   "params": {
+    "p_0": "Ada"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME = :p_0"
+  },
+  "mysql/20/e": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0, :p_1, :p_2)"
+  },
+  "mysql/20/noalias": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0, :p_1, :p_2)"
+  },
+  "mysql/21/e": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME IN (:p_0, :p_1)"
+  },
+  "mysql/21/noalias": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME IN (:p_0, :p_1)"
+  },
+  "mysql/22/e": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0)"
+  },
+  "mysql/22/noalias": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0)"
+  },
+  "mysql/23/e": {
+   "params": {
+    "p_0": "solo"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME IN (:p_0)"
+  },
+  "mysql/23/noalias": {
+   "params": {
+    "p_0": "solo"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME IN (:p_0)"
+  },
+  "mysql/24/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE 1=0"
+  },
+  "mysql/24/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE 1=0"
+  },
+  "mysql/25/e": {
+   "params": {
+    "p_0": ""
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0)"
+  },
+  "mysql/25/noalias": {
+   "params": {
+    "p_0": ""
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0)"
+  },
+  "mysql/26/e": {
+   "params": {
+    "p_0": 4,
+    "p_1": 5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID NOT IN (:p_0, :p_1)"
+  },
+  "mysql/26/noalias": {
+   "params": {
+    "p_0": 4,
+    "p_1": 5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID NOT IN (:p_0, :p_1)"
+  },
+  "mysql/27/e": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME NOT IN (:p_0)"
+  },
+  "mysql/27/noalias": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME NOT IN (:p_0)"
+  },
+  "mysql/28/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IS NULL"
+  },
+  "mysql/28/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IS NULL"
+  },
+  "mysql/29/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME IS NOT NULL"
+  },
+  "mysql/29/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME IS NOT NULL"
+  },
+  "mysql/3/e": {
+   "params": {
+    "p_0": 2.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT = :p_0"
+  },
+  "mysql/3/noalias": {
+   "params": {
+    "p_0": 2.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT = :p_0"
+  },
+  "mysql/30/e": {
+   "params": {
+    "p_0": 10,
+    "p_1": 20
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID BETWEEN :p_0 AND :p_1"
+  },
+  "mysql/30/noalias": {
+   "params": {
+    "p_0": 10,
+    "p_1": 20
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID BETWEEN :p_0 AND :p_1"
+  },
+  "mysql/31/e": {
+   "params": {
+    "p_0": 1.5,
+    "p_1": 2.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT BETWEEN :p_0 AND :p_1"
+  },
+  "mysql/31/noalias": {
+   "params": {
+    "p_0": 1.5,
+    "p_1": 2.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT BETWEEN :p_0 AND :p_1"
+  },
+  "mysql/32/e": {
+   "params": {
+    "p_0": "2024-01-01",
+    "p_1": "2024-02-01"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT BETWEEN :p_0 AND :p_1"
+  },
+  "mysql/32/noalias": {
+   "params": {
+    "p_0": "2024-01-01",
+    "p_1": "2024-02-01"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT BETWEEN :p_0 AND :p_1"
+  },
+  "mysql/33/e": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID BETWEEN :p_0 AND :p_1"
+  },
+  "mysql/33/noalias": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID BETWEEN :p_0 AND :p_1"
+  },
+  "mysql/34/e": {
+   "error": "ValueError",
+   "message": "BETWEEN richiede due valori separati da 'AND' (es. '10 AND 20')"
+  },
+  "mysql/34/noalias": {
+   "error": "ValueError",
+   "message": "BETWEEN richiede due valori separati da 'AND' (es. '10 AND 20')"
+  },
+  "mysql/35/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e"
+  },
+  "mysql/35/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS"
+  },
+  "mysql/36/e": {
+   "error": "ValueError",
+   "message": "Nome colonna filtro non valido: bad-name;"
+  },
+  "mysql/36/noalias": {
+   "error": "ValueError",
+   "message": "Nome colonna filtro non valido: bad-name;"
+  },
+  "mysql/37/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW()"
+  },
+  "mysql/37/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW()"
+  },
+  "mysql/38/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW()"
+  },
+  "mysql/38/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW()"
+  },
+  "mysql/39/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW()"
+  },
+  "mysql/39/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW()"
+  },
+  "mysql/4/e": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT = :p_0"
+  },
+  "mysql/4/noalias": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT = :p_0"
+  },
+  "mysql/40/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW()"
+  },
+  "mysql/40/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW()"
+  },
+  "mysql/41/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW()"
+  },
+  "mysql/41/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW()"
+  },
+  "mysql/42/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW()"
+  },
+  "mysql/42/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW()"
+  },
+  "mysql/43/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW()"
+  },
+  "mysql/43/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW()"
+  },
+  "mysql/44/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW()"
+  },
+  "mysql/44/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW()"
+  },
+  "mysql/45/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= DATE_ADD(NOW(), INTERVAL 3 MONTH)"
+  },
+  "mysql/45/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= DATE_ADD(NOW(), INTERVAL 3 MONTH)"
+  },
+  "mysql/46/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < DATE_ADD(NOW(), INTERVAL 3 MONTH)"
+  },
+  "mysql/46/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < DATE_ADD(NOW(), INTERVAL 3 MONTH)"
+  },
+  "mysql/47/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= DATE_ADD(NOW(), INTERVAL 7 DAY)"
+  },
+  "mysql/47/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= DATE_ADD(NOW(), INTERVAL 7 DAY)"
+  },
+  "mysql/48/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < DATE_ADD(NOW(), INTERVAL 7 DAY)"
+  },
+  "mysql/48/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < DATE_ADD(NOW(), INTERVAL 7 DAY)"
+  },
+  "mysql/49/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= DATE_ADD(NOW(), INTERVAL 2 MONTH)"
+  },
+  "mysql/49/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= DATE_ADD(NOW(), INTERVAL 2 MONTH)"
+  },
+  "mysql/5/e": {
+   "params": {
+    "p_0": "2024-01-01"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT = :p_0"
+  },
+  "mysql/5/noalias": {
+   "params": {
+    "p_0": "2024-01-01"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT = :p_0"
+  },
+  "mysql/50/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < DATE_ADD(NOW(), INTERVAL 2 MONTH)"
+  },
+  "mysql/50/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < DATE_ADD(NOW(), INTERVAL 2 MONTH)"
+  },
+  "mysql/51/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= DATE_ADD(NOW(), INTERVAL 4 MONTH)"
+  },
+  "mysql/51/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= DATE_ADD(NOW(), INTERVAL 4 MONTH)"
+  },
+  "mysql/52/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < DATE_ADD(NOW(), INTERVAL 4 MONTH)"
+  },
+  "mysql/52/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < DATE_ADD(NOW(), INTERVAL 4 MONTH)"
+  },
+  "mysql/53/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= DATE_ADD(NOW(), INTERVAL 5 MONTH)"
+  },
+  "mysql/53/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= DATE_ADD(NOW(), INTERVAL 5 MONTH)"
+  },
+  "mysql/54/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < DATE_ADD(NOW(), INTERVAL 5 MONTH)"
+  },
+  "mysql/54/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < DATE_ADD(NOW(), INTERVAL 5 MONTH)"
+  },
+  "mysql/55/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= CURDATE()"
+  },
+  "mysql/55/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= CURDATE()"
+  },
+  "mysql/56/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < CURDATE()"
+  },
+  "mysql/56/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < CURDATE()"
+  },
+  "mysql/57/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= CURDATE()"
+  },
+  "mysql/57/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= CURDATE()"
+  },
+  "mysql/58/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < CURDATE()"
+  },
+  "mysql/58/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < CURDATE()"
+  },
+  "mysql/59/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/59/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/6/e": {
+   "params": {
+    "p_0": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID != :p_0"
+  },
+  "mysql/6/noalias": {
+   "params": {
+    "p_0": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID != :p_0"
+  },
+  "mysql/60/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/60/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/61/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/61/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/62/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/62/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/63/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/63/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/64/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/64/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'mysql'. Usare una funzione supportata."
+  },
+  "mysql/65/e": {
+   "params": {
+    "p_0": 10,
+    "p_1": "%Ada%",
+    "p_2": 1,
+    "p_3": 2,
+    "p_4": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID >= :p_0 AND e.NAME LIKE :p_1 AND e.ID IN (:p_2, :p_3, :p_4) AND e.CREATED_AT < NOW()"
+  },
+  "mysql/65/noalias": {
+   "params": {
+    "p_0": 10,
+    "p_1": "%Ada%",
+    "p_2": 1,
+    "p_3": 2,
+    "p_4": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID >= :p_0 AND EVENTS.NAME LIKE :p_1 AND EVENTS.ID IN (:p_2, :p_3, :p_4) AND EVENTS.CREATED_AT < NOW()"
+  },
+  "mysql/66/e": {
+   "params": {
+    "p_0": 1.0,
+    "p_1": 2.0,
+    "p_2": "a",
+    "p_3": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IS NULL AND e.AMOUNT BETWEEN :p_0 AND :p_1 AND e.NAME NOT IN (:p_2, :p_3)"
+  },
+  "mysql/66/noalias": {
+   "params": {
+    "p_0": 1.0,
+    "p_1": 2.0,
+    "p_2": "a",
+    "p_3": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IS NULL AND EVENTS.AMOUNT BETWEEN :p_0 AND :p_1 AND EVENTS.NAME NOT IN (:p_2, :p_3)"
+  },
+  "mysql/67/e": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0 AND e.ID = :p_1 AND e.ID = :p_2"
+  },
+  "mysql/67/noalias": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0 AND EVENTS.ID = :p_1 AND EVENTS.ID = :p_2"
+  },
+  "mysql/7/e": {
+   "params": {
+    "p_0": "Bob"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME != :p_0"
+  },
+  "mysql/7/noalias": {
+   "params": {
+    "p_0": "Bob"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME != :p_0"
+  },
+  "mysql/8/e": {
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID > :p_0"
+  },
+  "mysql/8/noalias": {
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID > :p_0"
+  },
+  "mysql/9/e": {
+   "params": {
+    "p_0": 1.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT > :p_0"
+  },
+  "mysql/9/noalias": {
+   "params": {
+    "p_0": 1.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT > :p_0"
+  },
+  "oracle/0/e": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0"
+  },
+  "oracle/0/noalias": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0"
+  },
+  "oracle/1/e": {
+   "params": {
+    "p_0": "abc"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0"
+  },
+  "oracle/1/noalias": {
+   "params": {
+    "p_0": "abc"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0"
+  },
+  "oracle/10/e": {
+   "params": {
+    "p_0": "M"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE TO_CHAR(e.NAME) > :p_0"
+  },
+  "oracle/10/noalias": {
+   "params": {
+    "p_0": "M"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE TO_CHAR(EVENTS.NAME) > :p_0"
+  },
+  "oracle/11/e": {
+   "params": {
+    "p_0": 100
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID < :p_0"
+  },
+  "oracle/11/noalias": {
+   "params": {
+    "p_0": 100
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID < :p_0"
+  },
+  "oracle/12/e": {
+   "params": {
+    "p_0": 9.0
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT < :p_0"
+  },
+  "oracle/12/noalias": {
+   "params": {
+    "p_0": 9.0
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT < :p_0"
+  },
+  "oracle/13/e": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID >= :p_0"
+  },
+  "oracle/13/noalias": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID >= :p_0"
+  },
+  "oracle/14/e": {
+   "params": {
+    "p_0": 0.0
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT >= :p_0"
+  },
+  "oracle/14/noalias": {
+   "params": {
+    "p_0": 0.0
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT >= :p_0"
+  },
+  "oracle/15/e": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID <= :p_0"
+  },
+  "oracle/15/noalias": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID <= :p_0"
+  },
+  "oracle/16/e": {
+   "params": {
+    "p_0": "2024-12-31"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT <= :p_0"
+  },
+  "oracle/16/noalias": {
+   "params": {
+    "p_0": "2024-12-31"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT <= :p_0"
+  },
+  "oracle/17/e": {
+   "params": {
+    "p_0": "%Ada%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE TO_CHAR(e.NAME) LIKE :p_0"
+  },
+  "oracle/17/noalias": {
+   "params": {
+    "p_0": "%Ada%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE TO_CHAR(EVENTS.NAME) LIKE :p_0"
+  },
+  "oracle/18/e": {
+   "params": {
+    "p_0": "%1%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID LIKE :p_0"
+  },
+  "oracle/18/noalias": {
+   "params": {
+    "p_0": "%1%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID LIKE :p_0"
+  },
+  "oracle/19/e": {
+   "params": {
+    "p_0": "%x%y%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE TO_CHAR(e.NAME) NOT LIKE :p_0"
+  },
+  "oracle/19/noalias": {
+   "params": {
+    "p_0": "%x%y%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE TO_CHAR(EVENTS.NAME) NOT LIKE :p_0"
+  },
+  "oracle/2/e": {
+   "params": {
+    "p_0": "Ada"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE TO_CHAR(e.NAME) = :p_0"
+  },
+  "oracle/2/noalias": {
+   "params": {
+    "p_0": "Ada"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE TO_CHAR(EVENTS.NAME) = :p_0"
+  },
+  "oracle/20/e": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0, :p_1, :p_2)"
+  },
+  "oracle/20/noalias": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0, :p_1, :p_2)"
+  },
+  "oracle/21/e": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE TO_CHAR(e.NAME) IN (:p_0, :p_1)"
+  },
+  "oracle/21/noalias": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE TO_CHAR(EVENTS.NAME) IN (:p_0, :p_1)"
+  },
+  "oracle/22/e": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0)"
+  },
+  "oracle/22/noalias": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0)"
+  },
+  "oracle/23/e": {
+   "params": {
+    "p_0": "solo"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE TO_CHAR(e.NAME) IN (:p_0)"
+  },
+  "oracle/23/noalias": {
+   "params": {
+    "p_0": "solo"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE TO_CHAR(EVENTS.NAME) IN (:p_0)"
+  },
+  "oracle/24/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE 1=0"
+  },
+  "oracle/24/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE 1=0"
+  },
+  "oracle/25/e": {
+   "params": {
+    "p_0": ""
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0)"
+  },
+  "oracle/25/noalias": {
+   "params": {
+    "p_0": ""
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0)"
+  },
+  "oracle/26/e": {
+   "params": {
+    "p_0": 4,
+    "p_1": 5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID NOT IN (:p_0, :p_1)"
+  },
+  "oracle/26/noalias": {
+   "params": {
+    "p_0": 4,
+    "p_1": 5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID NOT IN (:p_0, :p_1)"
+  },
+  "oracle/27/e": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE TO_CHAR(e.NAME) NOT IN (:p_0)"
+  },
+  "oracle/27/noalias": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE TO_CHAR(EVENTS.NAME) NOT IN (:p_0)"
+  },
+  "oracle/28/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IS NULL"
+  },
+  "oracle/28/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IS NULL"
+  },
+  "oracle/29/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE TO_CHAR(e.NAME) IS NOT NULL"
+  },
+  "oracle/29/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE TO_CHAR(EVENTS.NAME) IS NOT NULL"
+  },
+  "oracle/3/e": {
+   "params": {
+    "p_0": 2.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT = :p_0"
+  },
+  "oracle/3/noalias": {
+   "params": {
+    "p_0": 2.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT = :p_0"
+  },
+  "oracle/30/e": {
+   "params": {
+    "p_0": 10,
+    "p_1": 20
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID BETWEEN :p_0 AND :p_1"
+  },
+  "oracle/30/noalias": {
+   "params": {
+    "p_0": 10,
+    "p_1": 20
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID BETWEEN :p_0 AND :p_1"
+  },
+  "oracle/31/e": {
+   "params": {
+    "p_0": 1.5,
+    "p_1": 2.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT BETWEEN :p_0 AND :p_1"
+  },
+  "oracle/31/noalias": {
+   "params": {
+    "p_0": 1.5,
+    "p_1": 2.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT BETWEEN :p_0 AND :p_1"
+  },
+  "oracle/32/e": {
+   "params": {
+    "p_0": "2024-01-01",
+    "p_1": "2024-02-01"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT BETWEEN :p_0 AND :p_1"
+  },
+  "oracle/32/noalias": {
+   "params": {
+    "p_0": "2024-01-01",
+    "p_1": "2024-02-01"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT BETWEEN :p_0 AND :p_1"
+  },
+  "oracle/33/e": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID BETWEEN :p_0 AND :p_1"
+  },
+  "oracle/33/noalias": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID BETWEEN :p_0 AND :p_1"
+  },
+  "oracle/34/e": {
+   "error": "ValueError",
+   "message": "BETWEEN richiede due valori separati da 'AND' (es. '10 AND 20')"
+  },
+  "oracle/34/noalias": {
+   "error": "ValueError",
+   "message": "BETWEEN richiede due valori separati da 'AND' (es. '10 AND 20')"
+  },
+  "oracle/35/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e"
+  },
+  "oracle/35/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS"
+  },
+  "oracle/36/e": {
+   "error": "ValueError",
+   "message": "Nome colonna filtro non valido: bad-name;"
+  },
+  "oracle/36/noalias": {
+   "error": "ValueError",
+   "message": "Nome colonna filtro non valido: bad-name;"
+  },
+  "oracle/37/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= SYSDATE"
+  },
+  "oracle/37/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= SYSDATE"
+  },
+  "oracle/38/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < SYSDATE"
+  },
+  "oracle/38/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < SYSDATE"
+  },
+  "oracle/39/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= SYSDATE"
+  },
+  "oracle/39/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= SYSDATE"
+  },
+  "oracle/4/e": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT = :p_0"
+  },
+  "oracle/4/noalias": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT = :p_0"
+  },
+  "oracle/40/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < SYSDATE"
+  },
+  "oracle/40/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < SYSDATE"
+  },
+  "oracle/41/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= SYSDATE"
+  },
+  "oracle/41/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= SYSDATE"
+  },
+  "oracle/42/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < SYSDATE"
+  },
+  "oracle/42/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < SYSDATE"
+  },
+  "oracle/43/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= SYSDATE"
+  },
+  "oracle/43/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= SYSDATE"
+  },
+  "oracle/44/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < SYSDATE"
+  },
+  "oracle/44/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < SYSDATE"
+  },
+  "oracle/45/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= ADD_MONTHS(SYSDATE, 3)"
+  },
+  "oracle/45/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= ADD_MONTHS(SYSDATE, 3)"
+  },
+  "oracle/46/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < ADD_MONTHS(SYSDATE, 3)"
+  },
+  "oracle/46/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < ADD_MONTHS(SYSDATE, 3)"
+  },
+  "oracle/47/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= SYSDATE + 7"
+  },
+  "oracle/47/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= SYSDATE + 7"
+  },
+  "oracle/48/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < SYSDATE + 7"
+  },
+  "oracle/48/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < SYSDATE + 7"
+  },
+  "oracle/49/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= ADD_MONTHS(SYSDATE, 2)"
+  },
+  "oracle/49/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= ADD_MONTHS(SYSDATE, 2)"
+  },
+  "oracle/5/e": {
+   "params": {
+    "p_0": "2024-01-01"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT = :p_0"
+  },
+  "oracle/5/noalias": {
+   "params": {
+    "p_0": "2024-01-01"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT = :p_0"
+  },
+  "oracle/50/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < ADD_MONTHS(SYSDATE, 2)"
+  },
+  "oracle/50/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < ADD_MONTHS(SYSDATE, 2)"
+  },
+  "oracle/51/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= ADD_MONTHS(SYSDATE, 4)"
+  },
+  "oracle/51/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= ADD_MONTHS(SYSDATE, 4)"
+  },
+  "oracle/52/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < ADD_MONTHS(SYSDATE, 4)"
+  },
+  "oracle/52/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < ADD_MONTHS(SYSDATE, 4)"
+  },
+  "oracle/53/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= ADD_MONTHS(SYSDATE, 5)"
+  },
+  "oracle/53/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= ADD_MONTHS(SYSDATE, 5)"
+  },
+  "oracle/54/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < ADD_MONTHS(SYSDATE, 5)"
+  },
+  "oracle/54/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < ADD_MONTHS(SYSDATE, 5)"
+  },
+  "oracle/55/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= TRUNC(SYSDATE)"
+  },
+  "oracle/55/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= TRUNC(SYSDATE)"
+  },
+  "oracle/56/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < TRUNC(SYSDATE)"
+  },
+  "oracle/56/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < TRUNC(SYSDATE)"
+  },
+  "oracle/57/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= TRUNC(SYSDATE)"
+  },
+  "oracle/57/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= TRUNC(SYSDATE)"
+  },
+  "oracle/58/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < TRUNC(SYSDATE)"
+  },
+  "oracle/58/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < TRUNC(SYSDATE)"
+  },
+  "oracle/59/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/59/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/6/e": {
+   "params": {
+    "p_0": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID != :p_0"
+  },
+  "oracle/6/noalias": {
+   "params": {
+    "p_0": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID != :p_0"
+  },
+  "oracle/60/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/60/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/61/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/61/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/62/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/62/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/63/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/63/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/64/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/64/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'oracle'. Usare una funzione supportata."
+  },
+  "oracle/65/e": {
+   "params": {
+    "p_0": 10,
+    "p_1": "%Ada%",
+    "p_2": 1,
+    "p_3": 2,
+    "p_4": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID >= :p_0 AND TO_CHAR(e.NAME) LIKE :p_1 AND e.ID IN (:p_2, :p_3, :p_4) AND e.CREATED_AT < SYSDATE"
+  },
+  "oracle/65/noalias": {
+   "params": {
+    "p_0": 10,
+    "p_1": "%Ada%",
+    "p_2": 1,
+    "p_3": 2,
+    "p_4": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID >= :p_0 AND TO_CHAR(EVENTS.NAME) LIKE :p_1 AND EVENTS.ID IN (:p_2, :p_3, :p_4) AND EVENTS.CREATED_AT < SYSDATE"
+  },
+  "oracle/66/e": {
+   "params": {
+    "p_0": 1.0,
+    "p_1": 2.0,
+    "p_2": "a",
+    "p_3": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IS NULL AND e.AMOUNT BETWEEN :p_0 AND :p_1 AND TO_CHAR(e.NAME) NOT IN (:p_2, :p_3)"
+  },
+  "oracle/66/noalias": {
+   "params": {
+    "p_0": 1.0,
+    "p_1": 2.0,
+    "p_2": "a",
+    "p_3": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IS NULL AND EVENTS.AMOUNT BETWEEN :p_0 AND :p_1 AND TO_CHAR(EVENTS.NAME) NOT IN (:p_2, :p_3)"
+  },
+  "oracle/67/e": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0 AND e.ID = :p_1 AND e.ID = :p_2"
+  },
+  "oracle/67/noalias": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0 AND EVENTS.ID = :p_1 AND EVENTS.ID = :p_2"
+  },
+  "oracle/7/e": {
+   "params": {
+    "p_0": "Bob"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE TO_CHAR(e.NAME) != :p_0"
+  },
+  "oracle/7/noalias": {
+   "params": {
+    "p_0": "Bob"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE TO_CHAR(EVENTS.NAME) != :p_0"
+  },
+  "oracle/8/e": {
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID > :p_0"
+  },
+  "oracle/8/noalias": {
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID > :p_0"
+  },
+  "oracle/9/e": {
+   "params": {
+    "p_0": 1.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT > :p_0"
+  },
+  "oracle/9/noalias": {
+   "params": {
+    "p_0": 1.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT > :p_0"
+  },
+  "postgres/0/e": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0"
+  },
+  "postgres/0/noalias": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0"
+  },
+  "postgres/1/e": {
+   "params": {
+    "p_0": "abc"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0"
+  },
+  "postgres/1/noalias": {
+   "params": {
+    "p_0": "abc"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0"
+  },
+  "postgres/10/e": {
+   "params": {
+    "p_0": "M"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME > :p_0"
+  },
+  "postgres/10/noalias": {
+   "params": {
+    "p_0": "M"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME > :p_0"
+  },
+  "postgres/11/e": {
+   "params": {
+    "p_0": 100
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID < :p_0"
+  },
+  "postgres/11/noalias": {
+   "params": {
+    "p_0": 100
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID < :p_0"
+  },
+  "postgres/12/e": {
+   "params": {
+    "p_0": 9.0
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT < :p_0"
+  },
+  "postgres/12/noalias": {
+   "params": {
+    "p_0": 9.0
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT < :p_0"
+  },
+  "postgres/13/e": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID >= :p_0"
+  },
+  "postgres/13/noalias": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID >= :p_0"
+  },
+  "postgres/14/e": {
+   "params": {
+    "p_0": 0.0
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT >= :p_0"
+  },
+  "postgres/14/noalias": {
+   "params": {
+    "p_0": 0.0
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT >= :p_0"
+  },
+  "postgres/15/e": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID <= :p_0"
+  },
+  "postgres/15/noalias": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID <= :p_0"
+  },
+  "postgres/16/e": {
+   "params": {
+    "p_0": "2024-12-31"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT <= :p_0"
+  },
+  "postgres/16/noalias": {
+   "params": {
+    "p_0": "2024-12-31"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT <= :p_0"
+  },
+  "postgres/17/e": {
+   "params": {
+    "p_0": "%Ada%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME LIKE :p_0"
+  },
+  "postgres/17/noalias": {
+   "params": {
+    "p_0": "%Ada%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME LIKE :p_0"
+  },
+  "postgres/18/e": {
+   "params": {
+    "p_0": "%1%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID LIKE :p_0"
+  },
+  "postgres/18/noalias": {
+   "params": {
+    "p_0": "%1%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID LIKE :p_0"
+  },
+  "postgres/19/e": {
+   "params": {
+    "p_0": "%x%y%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME NOT LIKE :p_0"
+  },
+  "postgres/19/noalias": {
+   "params": {
+    "p_0": "%x%y%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME NOT LIKE :p_0"
+  },
+  "postgres/2/e": {
+   "params": {
+    "p_0": "Ada"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME = :p_0"
+  },
+  "postgres/2/noalias": {
+   "params": {
+    "p_0": "Ada"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME = :p_0"
+  },
+  "postgres/20/e": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0, :p_1, :p_2)"
+  },
+  "postgres/20/noalias": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0, :p_1, :p_2)"
+  },
+  "postgres/21/e": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME IN (:p_0, :p_1)"
+  },
+  "postgres/21/noalias": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME IN (:p_0, :p_1)"
+  },
+  "postgres/22/e": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0)"
+  },
+  "postgres/22/noalias": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0)"
+  },
+  "postgres/23/e": {
+   "params": {
+    "p_0": "solo"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME IN (:p_0)"
+  },
+  "postgres/23/noalias": {
+   "params": {
+    "p_0": "solo"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME IN (:p_0)"
+  },
+  "postgres/24/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE 1=0"
+  },
+  "postgres/24/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE 1=0"
+  },
+  "postgres/25/e": {
+   "params": {
+    "p_0": ""
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0)"
+  },
+  "postgres/25/noalias": {
+   "params": {
+    "p_0": ""
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0)"
+  },
+  "postgres/26/e": {
+   "params": {
+    "p_0": 4,
+    "p_1": 5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID NOT IN (:p_0, :p_1)"
+  },
+  "postgres/26/noalias": {
+   "params": {
+    "p_0": 4,
+    "p_1": 5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID NOT IN (:p_0, :p_1)"
+  },
+  "postgres/27/e": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME NOT IN (:p_0)"
+  },
+  "postgres/27/noalias": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME NOT IN (:p_0)"
+  },
+  "postgres/28/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IS NULL"
+  },
+  "postgres/28/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IS NULL"
+  },
+  "postgres/29/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME IS NOT NULL"
+  },
+  "postgres/29/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME IS NOT NULL"
+  },
+  "postgres/3/e": {
+   "params": {
+    "p_0": 2.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT = :p_0"
+  },
+  "postgres/3/noalias": {
+   "params": {
+    "p_0": 2.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT = :p_0"
+  },
+  "postgres/30/e": {
+   "params": {
+    "p_0": 10,
+    "p_1": 20
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID BETWEEN :p_0 AND :p_1"
+  },
+  "postgres/30/noalias": {
+   "params": {
+    "p_0": 10,
+    "p_1": 20
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID BETWEEN :p_0 AND :p_1"
+  },
+  "postgres/31/e": {
+   "params": {
+    "p_0": 1.5,
+    "p_1": 2.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT BETWEEN :p_0 AND :p_1"
+  },
+  "postgres/31/noalias": {
+   "params": {
+    "p_0": 1.5,
+    "p_1": 2.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT BETWEEN :p_0 AND :p_1"
+  },
+  "postgres/32/e": {
+   "params": {
+    "p_0": "2024-01-01",
+    "p_1": "2024-02-01"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT BETWEEN :p_0 AND :p_1"
+  },
+  "postgres/32/noalias": {
+   "params": {
+    "p_0": "2024-01-01",
+    "p_1": "2024-02-01"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT BETWEEN :p_0 AND :p_1"
+  },
+  "postgres/33/e": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID BETWEEN :p_0 AND :p_1"
+  },
+  "postgres/33/noalias": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID BETWEEN :p_0 AND :p_1"
+  },
+  "postgres/34/e": {
+   "error": "ValueError",
+   "message": "BETWEEN richiede due valori separati da 'AND' (es. '10 AND 20')"
+  },
+  "postgres/34/noalias": {
+   "error": "ValueError",
+   "message": "BETWEEN richiede due valori separati da 'AND' (es. '10 AND 20')"
+  },
+  "postgres/35/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e"
+  },
+  "postgres/35/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS"
+  },
+  "postgres/36/e": {
+   "error": "ValueError",
+   "message": "Nome colonna filtro non valido: bad-name;"
+  },
+  "postgres/36/noalias": {
+   "error": "ValueError",
+   "message": "Nome colonna filtro non valido: bad-name;"
+  },
+  "postgres/37/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW()"
+  },
+  "postgres/37/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW()"
+  },
+  "postgres/38/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW()"
+  },
+  "postgres/38/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW()"
+  },
+  "postgres/39/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW()"
+  },
+  "postgres/39/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW()"
+  },
+  "postgres/4/e": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT = :p_0"
+  },
+  "postgres/4/noalias": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT = :p_0"
+  },
+  "postgres/40/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW()"
+  },
+  "postgres/40/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW()"
+  },
+  "postgres/41/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW()"
+  },
+  "postgres/41/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW()"
+  },
+  "postgres/42/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW()"
+  },
+  "postgres/42/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW()"
+  },
+  "postgres/43/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW()"
+  },
+  "postgres/43/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW()"
+  },
+  "postgres/44/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW()"
+  },
+  "postgres/44/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW()"
+  },
+  "postgres/45/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW() + INTERVAL '3 months'"
+  },
+  "postgres/45/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW() + INTERVAL '3 months'"
+  },
+  "postgres/46/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW() + INTERVAL '3 months'"
+  },
+  "postgres/46/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW() + INTERVAL '3 months'"
+  },
+  "postgres/47/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW() + INTERVAL '7 days'"
+  },
+  "postgres/47/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW() + INTERVAL '7 days'"
+  },
+  "postgres/48/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW() + INTERVAL '7 days'"
+  },
+  "postgres/48/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW() + INTERVAL '7 days'"
+  },
+  "postgres/49/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW() + INTERVAL '2 months'"
+  },
+  "postgres/49/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW() + INTERVAL '2 months'"
+  },
+  "postgres/5/e": {
+   "params": {
+    "p_0": "2024-01-01"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT = :p_0"
+  },
+  "postgres/5/noalias": {
+   "params": {
+    "p_0": "2024-01-01"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT = :p_0"
+  },
+  "postgres/50/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW() + INTERVAL '2 months'"
+  },
+  "postgres/50/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW() + INTERVAL '2 months'"
+  },
+  "postgres/51/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW() + INTERVAL '4 months'"
+  },
+  "postgres/51/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW() + INTERVAL '4 months'"
+  },
+  "postgres/52/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW() + INTERVAL '4 months'"
+  },
+  "postgres/52/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW() + INTERVAL '4 months'"
+  },
+  "postgres/53/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= NOW() + INTERVAL '5 months'"
+  },
+  "postgres/53/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= NOW() + INTERVAL '5 months'"
+  },
+  "postgres/54/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < NOW() + INTERVAL '5 months'"
+  },
+  "postgres/54/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < NOW() + INTERVAL '5 months'"
+  },
+  "postgres/55/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= CURRENT_DATE"
+  },
+  "postgres/55/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= CURRENT_DATE"
+  },
+  "postgres/56/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < CURRENT_DATE"
+  },
+  "postgres/56/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < CURRENT_DATE"
+  },
+  "postgres/57/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= CURRENT_DATE"
+  },
+  "postgres/57/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= CURRENT_DATE"
+  },
+  "postgres/58/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < CURRENT_DATE"
+  },
+  "postgres/58/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < CURRENT_DATE"
+  },
+  "postgres/59/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/59/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/6/e": {
+   "params": {
+    "p_0": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID != :p_0"
+  },
+  "postgres/6/noalias": {
+   "params": {
+    "p_0": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID != :p_0"
+  },
+  "postgres/60/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/60/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/61/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/61/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/62/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/62/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/63/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/63/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/64/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/64/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'postgres'. Usare una funzione supportata."
+  },
+  "postgres/65/e": {
+   "params": {
+    "p_0": 10,
+    "p_1": "%Ada%",
+    "p_2": 1,
+    "p_3": 2,
+    "p_4": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID >= :p_0 AND e.NAME LIKE :p_1 AND e.ID IN (:p_2, :p_3, :p_4) AND e.CREATED_AT < NOW()"
+  },
+  "postgres/65/noalias": {
+   "params": {
+    "p_0": 10,
+    "p_1": "%Ada%",
+    "p_2": 1,
+    "p_3": 2,
+    "p_4": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID >= :p_0 AND EVENTS.NAME LIKE :p_1 AND EVENTS.ID IN (:p_2, :p_3, :p_4) AND EVENTS.CREATED_AT < NOW()"
+  },
+  "postgres/66/e": {
+   "params": {
+    "p_0": 1.0,
+    "p_1": 2.0,
+    "p_2": "a",
+    "p_3": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IS NULL AND e.AMOUNT BETWEEN :p_0 AND :p_1 AND e.NAME NOT IN (:p_2, :p_3)"
+  },
+  "postgres/66/noalias": {
+   "params": {
+    "p_0": 1.0,
+    "p_1": 2.0,
+    "p_2": "a",
+    "p_3": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IS NULL AND EVENTS.AMOUNT BETWEEN :p_0 AND :p_1 AND EVENTS.NAME NOT IN (:p_2, :p_3)"
+  },
+  "postgres/67/e": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0 AND e.ID = :p_1 AND e.ID = :p_2"
+  },
+  "postgres/67/noalias": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0 AND EVENTS.ID = :p_1 AND EVENTS.ID = :p_2"
+  },
+  "postgres/7/e": {
+   "params": {
+    "p_0": "Bob"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME != :p_0"
+  },
+  "postgres/7/noalias": {
+   "params": {
+    "p_0": "Bob"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME != :p_0"
+  },
+  "postgres/8/e": {
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID > :p_0"
+  },
+  "postgres/8/noalias": {
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID > :p_0"
+  },
+  "postgres/9/e": {
+   "params": {
+    "p_0": 1.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT > :p_0"
+  },
+  "postgres/9/noalias": {
+   "params": {
+    "p_0": 1.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT > :p_0"
+  },
+  "sqlite/0/e": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0"
+  },
+  "sqlite/0/noalias": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0"
+  },
+  "sqlite/1/e": {
+   "params": {
+    "p_0": "abc"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0"
+  },
+  "sqlite/1/noalias": {
+   "params": {
+    "p_0": "abc"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0"
+  },
+  "sqlite/10/e": {
+   "params": {
+    "p_0": "M"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME > :p_0"
+  },
+  "sqlite/10/noalias": {
+   "params": {
+    "p_0": "M"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME > :p_0"
+  },
+  "sqlite/11/e": {
+   "params": {
+    "p_0": 100
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID < :p_0"
+  },
+  "sqlite/11/noalias": {
+   "params": {
+    "p_0": 100
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID < :p_0"
+  },
+  "sqlite/12/e": {
+   "params": {
+    "p_0": 9.0
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT < :p_0"
+  },
+  "sqlite/12/noalias": {
+   "params": {
+    "p_0": 9.0
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT < :p_0"
+  },
+  "sqlite/13/e": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID >= :p_0"
+  },
+  "sqlite/13/noalias": {
+   "params": {
+    "p_0": 10
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID >= :p_0"
+  },
+  "sqlite/14/e": {
+   "params": {
+    "p_0": 0.0
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT >= :p_0"
+  },
+  "sqlite/14/noalias": {
+   "params": {
+    "p_0": 0.0
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT >= :p_0"
+  },
+  "sqlite/15/e": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID <= :p_0"
+  },
+  "sqlite/15/noalias": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID <= :p_0"
+  },
+  "sqlite/16/e": {
+   "params": {
+    "p_0": "2024-12-31"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT <= :p_0"
+  },
+  "sqlite/16/noalias": {
+   "params": {
+    "p_0": "2024-12-31"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT <= :p_0"
+  },
+  "sqlite/17/e": {
+   "params": {
+    "p_0": "%Ada%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME LIKE :p_0"
+  },
+  "sqlite/17/noalias": {
+   "params": {
+    "p_0": "%Ada%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME LIKE :p_0"
+  },
+  "sqlite/18/e": {
+   "params": {
+    "p_0": "%1%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID LIKE :p_0"
+  },
+  "sqlite/18/noalias": {
+   "params": {
+    "p_0": "%1%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID LIKE :p_0"
+  },
+  "sqlite/19/e": {
+   "params": {
+    "p_0": "%x%y%"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME NOT LIKE :p_0"
+  },
+  "sqlite/19/noalias": {
+   "params": {
+    "p_0": "%x%y%"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME NOT LIKE :p_0"
+  },
+  "sqlite/2/e": {
+   "params": {
+    "p_0": "Ada"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME = :p_0"
+  },
+  "sqlite/2/noalias": {
+   "params": {
+    "p_0": "Ada"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME = :p_0"
+  },
+  "sqlite/20/e": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0, :p_1, :p_2)"
+  },
+  "sqlite/20/noalias": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0, :p_1, :p_2)"
+  },
+  "sqlite/21/e": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME IN (:p_0, :p_1)"
+  },
+  "sqlite/21/noalias": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME IN (:p_0, :p_1)"
+  },
+  "sqlite/22/e": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0)"
+  },
+  "sqlite/22/noalias": {
+   "params": {
+    "p_0": 7
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0)"
+  },
+  "sqlite/23/e": {
+   "params": {
+    "p_0": "solo"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME IN (:p_0)"
+  },
+  "sqlite/23/noalias": {
+   "params": {
+    "p_0": "solo"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME IN (:p_0)"
+  },
+  "sqlite/24/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE 1=0"
+  },
+  "sqlite/24/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE 1=0"
+  },
+  "sqlite/25/e": {
+   "params": {
+    "p_0": ""
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IN (:p_0)"
+  },
+  "sqlite/25/noalias": {
+   "params": {
+    "p_0": ""
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IN (:p_0)"
+  },
+  "sqlite/26/e": {
+   "params": {
+    "p_0": 4,
+    "p_1": 5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID NOT IN (:p_0, :p_1)"
+  },
+  "sqlite/26/noalias": {
+   "params": {
+    "p_0": 4,
+    "p_1": 5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID NOT IN (:p_0, :p_1)"
+  },
+  "sqlite/27/e": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME NOT IN (:p_0)"
+  },
+  "sqlite/27/noalias": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME NOT IN (:p_0)"
+  },
+  "sqlite/28/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IS NULL"
+  },
+  "sqlite/28/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IS NULL"
+  },
+  "sqlite/29/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME IS NOT NULL"
+  },
+  "sqlite/29/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME IS NOT NULL"
+  },
+  "sqlite/3/e": {
+   "params": {
+    "p_0": 2.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT = :p_0"
+  },
+  "sqlite/3/noalias": {
+   "params": {
+    "p_0": 2.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT = :p_0"
+  },
+  "sqlite/30/e": {
+   "params": {
+    "p_0": 10,
+    "p_1": 20
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID BETWEEN :p_0 AND :p_1"
+  },
+  "sqlite/30/noalias": {
+   "params": {
+    "p_0": 10,
+    "p_1": 20
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID BETWEEN :p_0 AND :p_1"
+  },
+  "sqlite/31/e": {
+   "params": {
+    "p_0": 1.5,
+    "p_1": 2.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT BETWEEN :p_0 AND :p_1"
+  },
+  "sqlite/31/noalias": {
+   "params": {
+    "p_0": 1.5,
+    "p_1": 2.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT BETWEEN :p_0 AND :p_1"
+  },
+  "sqlite/32/e": {
+   "params": {
+    "p_0": "2024-01-01",
+    "p_1": "2024-02-01"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT BETWEEN :p_0 AND :p_1"
+  },
+  "sqlite/32/noalias": {
+   "params": {
+    "p_0": "2024-01-01",
+    "p_1": "2024-02-01"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT BETWEEN :p_0 AND :p_1"
+  },
+  "sqlite/33/e": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID BETWEEN :p_0 AND :p_1"
+  },
+  "sqlite/33/noalias": {
+   "params": {
+    "p_0": "a",
+    "p_1": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID BETWEEN :p_0 AND :p_1"
+  },
+  "sqlite/34/e": {
+   "error": "ValueError",
+   "message": "BETWEEN richiede due valori separati da 'AND' (es. '10 AND 20')"
+  },
+  "sqlite/34/noalias": {
+   "error": "ValueError",
+   "message": "BETWEEN richiede due valori separati da 'AND' (es. '10 AND 20')"
+  },
+  "sqlite/35/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e"
+  },
+  "sqlite/35/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS"
+  },
+  "sqlite/36/e": {
+   "error": "ValueError",
+   "message": "Nome colonna filtro non valido: bad-name;"
+  },
+  "sqlite/36/noalias": {
+   "error": "ValueError",
+   "message": "Nome colonna filtro non valido: bad-name;"
+  },
+  "sqlite/37/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= datetime('now')"
+  },
+  "sqlite/37/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= datetime('now')"
+  },
+  "sqlite/38/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < datetime('now')"
+  },
+  "sqlite/38/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < datetime('now')"
+  },
+  "sqlite/39/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= datetime('now')"
+  },
+  "sqlite/39/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= datetime('now')"
+  },
+  "sqlite/4/e": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT = :p_0"
+  },
+  "sqlite/4/noalias": {
+   "params": {
+    "p_0": "x"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT = :p_0"
+  },
+  "sqlite/40/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < datetime('now')"
+  },
+  "sqlite/40/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < datetime('now')"
+  },
+  "sqlite/41/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= datetime('now')"
+  },
+  "sqlite/41/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= datetime('now')"
+  },
+  "sqlite/42/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < datetime('now')"
+  },
+  "sqlite/42/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < datetime('now')"
+  },
+  "sqlite/43/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= datetime('now')"
+  },
+  "sqlite/43/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= datetime('now')"
+  },
+  "sqlite/44/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < datetime('now')"
+  },
+  "sqlite/44/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < datetime('now')"
+  },
+  "sqlite/45/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= datetime('now', '+3 months')"
+  },
+  "sqlite/45/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= datetime('now', '+3 months')"
+  },
+  "sqlite/46/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < datetime('now', '+3 months')"
+  },
+  "sqlite/46/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < datetime('now', '+3 months')"
+  },
+  "sqlite/47/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= datetime('now', '+7 days')"
+  },
+  "sqlite/47/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= datetime('now', '+7 days')"
+  },
+  "sqlite/48/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < datetime('now', '+7 days')"
+  },
+  "sqlite/48/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < datetime('now', '+7 days')"
+  },
+  "sqlite/49/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= datetime('now', '+2 months')"
+  },
+  "sqlite/49/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= datetime('now', '+2 months')"
+  },
+  "sqlite/5/e": {
+   "params": {
+    "p_0": "2024-01-01"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT = :p_0"
+  },
+  "sqlite/5/noalias": {
+   "params": {
+    "p_0": "2024-01-01"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT = :p_0"
+  },
+  "sqlite/50/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < datetime('now', '+2 months')"
+  },
+  "sqlite/50/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < datetime('now', '+2 months')"
+  },
+  "sqlite/51/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= datetime('now', '+4 months')"
+  },
+  "sqlite/51/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= datetime('now', '+4 months')"
+  },
+  "sqlite/52/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < datetime('now', '+4 months')"
+  },
+  "sqlite/52/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < datetime('now', '+4 months')"
+  },
+  "sqlite/53/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= datetime('now', '+5 months')"
+  },
+  "sqlite/53/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= datetime('now', '+5 months')"
+  },
+  "sqlite/54/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < datetime('now', '+5 months')"
+  },
+  "sqlite/54/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < datetime('now', '+5 months')"
+  },
+  "sqlite/55/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= date('now')"
+  },
+  "sqlite/55/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= date('now')"
+  },
+  "sqlite/56/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < date('now')"
+  },
+  "sqlite/56/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < date('now')"
+  },
+  "sqlite/57/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT >= date('now')"
+  },
+  "sqlite/57/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT >= date('now')"
+  },
+  "sqlite/58/e": {
+   "params": {},
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.CREATED_AT < date('now')"
+  },
+  "sqlite/58/noalias": {
+   "params": {},
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.CREATED_AT < date('now')"
+  },
+  "sqlite/59/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/59/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/6/e": {
+   "params": {
+    "p_0": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID != :p_0"
+  },
+  "sqlite/6/noalias": {
+   "params": {
+    "p_0": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID != :p_0"
+  },
+  "sqlite/60/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/60/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'CURRENT_DATE' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/61/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/61/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/62/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/62/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'SYSDATE' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/63/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/63/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/64/e": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/64/noalias": {
+   "error": "ValueError",
+   "message": "Funzione SQL 'EXTRACT(YEAR FROM x)' riconosciuta come funzione ma non traducibile per il dialetto 'sqlite'. Usare una funzione supportata."
+  },
+  "sqlite/65/e": {
+   "params": {
+    "p_0": 10,
+    "p_1": "%Ada%",
+    "p_2": 1,
+    "p_3": 2,
+    "p_4": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID >= :p_0 AND e.NAME LIKE :p_1 AND e.ID IN (:p_2, :p_3, :p_4) AND e.CREATED_AT < datetime('now')"
+  },
+  "sqlite/65/noalias": {
+   "params": {
+    "p_0": 10,
+    "p_1": "%Ada%",
+    "p_2": 1,
+    "p_3": 2,
+    "p_4": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID >= :p_0 AND EVENTS.NAME LIKE :p_1 AND EVENTS.ID IN (:p_2, :p_3, :p_4) AND EVENTS.CREATED_AT < datetime('now')"
+  },
+  "sqlite/66/e": {
+   "params": {
+    "p_0": 1.0,
+    "p_1": 2.0,
+    "p_2": "a",
+    "p_3": "b"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID IS NULL AND e.AMOUNT BETWEEN :p_0 AND :p_1 AND e.NAME NOT IN (:p_2, :p_3)"
+  },
+  "sqlite/66/noalias": {
+   "params": {
+    "p_0": 1.0,
+    "p_1": 2.0,
+    "p_2": "a",
+    "p_3": "b"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID IS NULL AND EVENTS.AMOUNT BETWEEN :p_0 AND :p_1 AND EVENTS.NAME NOT IN (:p_2, :p_3)"
+  },
+  "sqlite/67/e": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID = :p_0 AND e.ID = :p_1 AND e.ID = :p_2"
+  },
+  "sqlite/67/noalias": {
+   "params": {
+    "p_0": 1,
+    "p_1": 2,
+    "p_2": 3
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID = :p_0 AND EVENTS.ID = :p_1 AND EVENTS.ID = :p_2"
+  },
+  "sqlite/7/e": {
+   "params": {
+    "p_0": "Bob"
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.NAME != :p_0"
+  },
+  "sqlite/7/noalias": {
+   "params": {
+    "p_0": "Bob"
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.NAME != :p_0"
+  },
+  "sqlite/8/e": {
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.ID > :p_0"
+  },
+  "sqlite/8/noalias": {
+   "params": {
+    "p_0": 1
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.ID > :p_0"
+  },
+  "sqlite/9/e": {
+   "params": {
+    "p_0": 1.5
+   },
+   "sql": "SELECT e.ID, e.NAME, e.AMOUNT, e.CREATED_AT\nFROM EVENTS e\nWHERE e.AMOUNT > :p_0"
+  },
+  "sqlite/9/noalias": {
+   "params": {
+    "p_0": 1.5
+   },
+   "sql": "SELECT EVENTS.ID, EVENTS.NAME, EVENTS.AMOUNT, EVENTS.CREATED_AT\nFROM EVENTS\nWHERE EVENTS.AMOUNT > :p_0"
+  }
+ },
+ "manipola": {
+  "conditions/0": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions/1": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ]
+   ]
+  },
+  "conditions/2": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ]
+   ]
+  },
+  "conditions/3": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [],
+   "values": []
+  },
+  "conditions/4": {
+   "error": "ValueError",
+   "message": "Filter: operatore '>' non applicabile sulla colonna 'o' con il valore fornito. Verificare tipo e sintassi."
+  },
+  "conditions/5": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ]
+   ]
+  },
+  "conditions/6": {
+   "error": "ValueError",
+   "message": "Filter: colonna 'zz' non trovata. Colonne disponibili: ['n', 'x', 's', 'o']"
+  },
+  "conditions/7": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/0": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ]
+   ]
+  },
+  "conditions1/1": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ]
+   ]
+  },
+  "conditions1/10": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/11": {
+   "error": "ValueError",
+   "message": "Filter: operatore '>' non applicabile sulla colonna 's' con il valore fornito. Verificare tipo e sintassi."
+  },
+  "conditions1/12": {
+   "error": "ValueError",
+   "message": "Filter: operatore '>' non applicabile sulla colonna 'o' con il valore fornito. Verificare tipo e sintassi."
+  },
+  "conditions1/13": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/14": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/15": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ]
+   ]
+  },
+  "conditions1/16": {
+   "error": "ValueError",
+   "message": "Filter: operatore '<' non applicabile sulla colonna 'x' con il valore fornito. Verificare tipo e sintassi."
+  },
+  "conditions1/17": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ]
+   ]
+  },
+  "conditions1/18": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "conditions1/19": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "conditions1/2": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ]
+   ]
+  },
+  "conditions1/20": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ]
+   ]
+  },
+  "conditions1/21": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [],
+   "values": []
+  },
+  "conditions1/22": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "conditions1/23": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [],
+   "values": []
+  },
+  "conditions1/24": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/25": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "conditions1/26": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "conditions1/27": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ]
+   ]
+  },
+  "conditions1/28": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/29": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/3": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [],
+   "values": []
+  },
+  "conditions1/30": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "conditions1/31": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ]
+   ]
+  },
+  "conditions1/32": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "conditions1/33": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ]
+   ]
+  },
+  "conditions1/34": {
+   "error": "ValueError",
+   "message": "Filter: valori non numerici per colonna 'n'."
+  },
+  "conditions1/35": {
+   "error": "ValueError",
+   "message": "Filter: in/not_in richiede una lista o stringa separata da virgole."
+  },
+  "conditions1/36": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/37": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/38": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/39": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/4": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "conditions1/40": {
+   "error": "ValueError",
+   "message": "Filter: colonna 'zz' non trovata. Colonne disponibili: ['n', 'x', 's', 'o']"
+  },
+  "conditions1/41": {
+   "error": "ValueError",
+   "message": "Filter: operatore '~' non supportato."
+  },
+  "conditions1/5": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [],
+   "values": []
+  },
+  "conditions1/6": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/7": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/8": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "conditions1/9": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "malformed/no-operator": {
+   "error": "ValueError",
+   "message": "Filter: ogni condizione richiede column e operator."
+  },
+  "malformed/not-list": {
+   "error": "ValueError",
+   "message": "Filter: conditions deve essere una lista."
+  },
+  "single/0": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ]
+   ]
+  },
+  "single/1": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ]
+   ]
+  },
+  "single/10": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/11": {
+   "error": "ValueError",
+   "message": "Filter: operatore '>' non applicabile sulla colonna 's' con il valore fornito. Verificare tipo e sintassi."
+  },
+  "single/12": {
+   "error": "ValueError",
+   "message": "Filter: operatore '>' non applicabile sulla colonna 'o' con il valore fornito. Verificare tipo e sintassi."
+  },
+  "single/13": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/14": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/15": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ]
+   ]
+  },
+  "single/16": {
+   "error": "ValueError",
+   "message": "Filter: operatore '<' non applicabile sulla colonna 'x' con il valore fornito. Verificare tipo e sintassi."
+  },
+  "single/17": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ]
+   ]
+  },
+  "single/18": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "single/19": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "single/2": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ]
+   ]
+  },
+  "single/20": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ]
+   ]
+  },
+  "single/21": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [],
+   "values": []
+  },
+  "single/22": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "single/23": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [],
+   "values": []
+  },
+  "single/24": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/25": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "single/26": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "single/27": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ]
+   ]
+  },
+  "single/28": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/29": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/3": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [],
+   "values": []
+  },
+  "single/30": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "single/31": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ]
+   ]
+  },
+  "single/32": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "single/33": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ]
+   ]
+  },
+  "single/34": {
+   "error": "ValueError",
+   "message": "Filter: valori non numerici per colonna 'n'."
+  },
+  "single/35": {
+   "error": "ValueError",
+   "message": "Filter: in/not_in richiede una lista o stringa separata da virgole."
+  },
+  "single/36": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/37": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/38": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/39": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/4": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ]
+   ]
+  },
+  "single/40": {
+   "error": "ValueError",
+   "message": "Filter: colonna 'zz' non trovata. Colonne disponibili: ['n', 'x', 's', 'o']"
+  },
+  "single/41": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/5": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [],
+   "values": []
+  },
+  "single/6": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     "a"
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/7": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     2,
+     null,
+     "Beta",
+     1
+    ],
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/8": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     5,
+     null,
+     "alfa",
+     2.5
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  },
+  "single/9": {
+   "columns": [
+    "n",
+    "x",
+    "s",
+    "o"
+   ],
+   "dtypes": [
+    "int64",
+    "float64",
+    "str",
+    "object"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     "b"
+    ],
+    [
+     6,
+     10.0,
+     "delta",
+     "c"
+    ]
+   ]
+  }
+ }
+}

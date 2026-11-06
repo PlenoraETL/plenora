@@ -43,12 +43,12 @@ describe('StepPreview', () => {
     state.nodes = [{ id: 'step-1', type: 'transform', selected: true, data: { title: 'Escludi periodi', transform_op: 'filter' } }];
     previewProjectMock.mockResolvedValueOnce({ success: true, columns: [], rows: [], total_count: 0 });
     render(<StepPreview projectId="p1" />);
-    fireEvent.click(screen.getByRole('button', { name: '👁️ Anteprima' }));
+    fireEvent.click(screen.getByRole('button', { name: '▤ Mostra i dati' }));
     await waitFor(() => expect(previewProjectMock).toHaveBeenCalledWith('p1', 100, 'step-1'));
     expect(saveMock).not.toHaveBeenCalled();
   });
 
-  it('unsaved ("Salva e mostra anteprima"): saves first, then asks the preview for the selected node only', async () => {
+  it('unsaved ("Salva e mostra i dati"): saves first, then asks the preview for the selected node only', async () => {
     state.isDirty = true;
     saveMock.mockClear();
     previewProjectMock.mockClear();
@@ -58,7 +58,7 @@ describe('StepPreview', () => {
     });
     render(<StepPreview projectId="p1" />);
     expect(screen.getByText(/Dati dopo/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Salva e mostra anteprima/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Salva e mostra i dati/ }));
     await waitFor(() => expect(previewProjectMock).toHaveBeenCalledWith('p1', 100, 'step-1'));
     expect(saveMock).toHaveBeenCalled();
     expect(saveMock.mock.invocationCallOrder[0]).toBeLessThan(previewProjectMock.mock.invocationCallOrder[0]);
@@ -70,7 +70,7 @@ describe('StepPreview', () => {
     state.nodes = [{ id: 'step-1', type: 'transform', selected: true, data: { transform_op: 'filter' } }];
     state.isDirty = true;
     render(<StepPreview projectId="p1" />);
-    expect(screen.getByRole('button', { name: /Salva e mostra anteprima/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Salva e mostra i dati/ })).toBeTruthy();
     state.isDirty = false;
   });
 
@@ -80,7 +80,7 @@ describe('StepPreview', () => {
       success: true, columns: [{ name: 'v', type: 'real' }], rows: [{ v: 58.333333333336 }], total_count: 1,
     });
     const { rerender } = render(<StepPreview projectId="p1" />);
-    fireEvent.click(screen.getByRole('button', { name: '👁️ Anteprima' }));
+    fireEvent.click(screen.getByRole('button', { name: '▤ Mostra i dati' }));
     expect(await screen.findByText('58,3333')).toBeTruthy();
     expect(screen.queryByText(/dati non aggiornati/)).toBeNull();
 

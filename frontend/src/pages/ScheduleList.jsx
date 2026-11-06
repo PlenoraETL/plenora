@@ -27,7 +27,7 @@ import { toastApiError } from '../utils/toastApiError';
 import '../styles/ScheduleList.css';
 import { describeCron } from '../utils/cron';
 import { requestErrorMessage, backendMessage } from '../utils/errorMessages';
-import { formatDateTime as formatDate, formatBytes as formatSize, formatElapsed as getElapsed } from '../utils/format';
+import { formatDateTime as formatDate, formatBytes as formatSize, formatDuration, formatElapsed as getElapsed } from '../utils/format';
 import VirtualList from '../components/common/VirtualList';
 // Il cron in parole dalla regola unica (utils/cron, UI-4 U31); un valore
 // che la regola non legge si mostra com'e'.
@@ -485,7 +485,7 @@ function ScheduleCard({ schedule, canManage, isRunning, runStartTime, logs, runs
                     <span className={`sl__log-event${log.event?.includes('FAILED') ? ' sl__log-event--failed' : ''}`}>{log.event}</span>
                     <span className="sl__log-date">{formatDate(log.timestamp)}</span>
                     {log.total_duration_ms && (
-                      <span className={`sl__log-dur${log.event?.includes('FAILED') ? ' sl__log-dur--failed' : ''}`}>{(log.total_duration_ms/1000).toFixed(1)}s</span>
+                      <span className={`sl__log-dur${log.event?.includes('FAILED') ? ' sl__log-dur--failed' : ''}`}>{formatDuration(log.total_duration_ms)}</span>
                     )}
                   </div>
                 ))}
@@ -570,7 +570,7 @@ function StatusBar({ schedule, isRunning, runStartTime, getElapsed }) {
     );
   }
   if (status === 'completed' || status === 'partial') {
-    const duration = lastExec?.total_duration_ms ? (lastExec.total_duration_ms/1000).toFixed(1)+'s' : null;
+    const duration = lastExec?.total_duration_ms ? formatDuration(lastExec.total_duration_ms) : null;
     return (
       <div className={`sl__statusbar sl__statusbar--${status}`}>
         <div className="sl__statusbar-left">

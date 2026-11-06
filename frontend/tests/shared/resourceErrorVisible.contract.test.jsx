@@ -155,10 +155,10 @@ const DECLARED = {
     servicesResource: 'arcgisError', layersResource: 'arcgisError', foldersResource: 'arcgisError', schemaResource: 'arcgisError',
   },
   'components/nodes/DataSourceNode.jsx': {
-    dsResource: 'avviso sopra la scelta (non aggiornati / non caricati) con Riprova',
     browser: 'browserError sempre nel navigatore dei file',
     schemaResource: 'schemaError al posto delle colonne, con Riprova',
   },
+  'components/modals/ExecutionModal.jsx': { meta: 'dato secondario di «Segnala»: senza, il ticket usa categorie e gravità predefinite' },
   'components/nodes/FeatureLayerNode.jsx': { schemaResource: 'avviso sopra i campi (non aggiornati / non caricati) con Riprova' },
   'components/nodes/FileSourceNode.jsx': { resource: '`error &&` sempre' },
   'components/nodes/ProjectSourceNode.jsx': { resource: '`error &&` sempre' },

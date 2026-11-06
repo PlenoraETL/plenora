@@ -8,14 +8,16 @@ import SearchField, { SearchEmpty } from '../common/SearchField';
 import { useSearch, useSearchPage } from '../../hooks/useSearch';
 import { projectType } from '../../utils/projectTypes';
 import { TERMS } from '../../utils/glossary';
+import { pressable } from '../../utils/pressable';
+import { startSourceDrag } from '../editor/editorNodeCatalog';
 
 const PAGE_SIZE = 10;
 
 function ProjectsSidebar({
   projects = [],
-  onDragStart,
+  onPick,
   title = `${TERMS.project_source.icon} Progetti`,
-  subtitle = "Trascina un progetto nel canvas",
+  subtitle = "Clic o trascina un progetto nel canvas",
   emptyMessage = "Nessun progetto disponibile.",
   emptyHint = "Crea prima un progetto di tipo Estrai.",
   filterTypes = ['estrai'],
@@ -38,12 +40,10 @@ function ProjectsSidebar({
   const getProjectIcon = (t) => projectType(t).icon;
   const getProjectBadge = (t) => projectType(t).label;
 
-  const handleDragStart = (event, project) => {
-    if (onDragStart) onDragStart(event, 'project_source', {
-      id: project.id, source_project_id: project.id,
-      name: project.name, project_type: project.project_type
-    });
-  };
+  // UI-3 (U11): un progetto si aggiunge con clic o Invio (al centro della
+  // vista) oppure trascinandolo; stesso formato del trascinamento nei due
+  // editor (editorNodeCatalog.startSourceDrag).
+  const handleDragStart = (event, project) => startSourceDrag(event, 'project_source', project);
 
   const remaining = filteredProjects.length - visibleCount;
   const nextChunk = Math.min(PAGE_SIZE, remaining);
@@ -92,7 +92,9 @@ function ProjectsSidebar({
                   <div
                     key={project.id}
                     className="sources-sidebar__item"
+                    title="Clic o Invio per aggiungere al centro · trascina per posizionare"
                     draggable
+                    {...pressable(() => onPick?.('project_source', project), { disabled: !onPick })}
                     onDragStart={e => handleDragStart(e, project)}
                   >
                     <span className="sources-sidebar__item-icon">{getProjectIcon(project.project_type)}</span>

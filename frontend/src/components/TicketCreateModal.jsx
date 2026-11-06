@@ -17,9 +17,13 @@ import useDialog from '../hooks/useDialog';
 import { toastApiError } from '../utils/toastApiError';
 import { can } from '../utils/permissions';
 import { enumLabel } from '../utils/format';
+// Stili del modulo ticket anche fuori dalla pagina Ticket (finestra di esecuzione).
+import '../styles/TicketsList.css';
 
 
-export default function TicketCreateModal({ meta, user, onClose, onCreated }) {
+// `initial` (UI-3, U16): campi precompilati, es. «Segnala» dopo un'esecuzione
+// fallita (progetto, esecuzione, passo e messaggio: utils/runFailure).
+export default function TicketCreateModal({ meta, user, onClose, onCreated, initial = null }) {
   const toast = useToast();
   // Il tipo 'debito tecnico' e' degli admin (stessa regola della gestione).
   const isAdmin = can.manageTickets(user);
@@ -30,6 +34,7 @@ export default function TicketCreateModal({ meta, user, onClose, onCreated }) {
     description: '',
     severity: 'medium',
     category: 'other',
+    ...(initial || {}),
   });
   const [submitting, setSubmitting] = useState(false);
   // Montato solo quando aperto. Durante l'invio niente ×, Esc o Annulla

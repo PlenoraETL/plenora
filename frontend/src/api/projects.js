@@ -8,6 +8,7 @@ import http from './http';
 import { fetchAllOffsetPages } from './pagination';
 import { API_ENDPOINT } from './config';
 import { downloadBlob } from '../utils/downloadBlob';
+import { downloadProgress } from '../utils/transferProgress';
 import { requestErrorMessage } from '../utils/errorMessages';
 import { rememberProjects } from '../utils/knownProjects';
 
@@ -269,9 +270,10 @@ export const previewProject = async (projectId, limit = 100, nodeId = null) => {
  * @param {string} projectId
  * @param {string} filename  - Nome file opzionale
  */
-export const downloadProjectOutput = async (projectId, filename = null) => {
+export const downloadProjectOutput = async (projectId, filename = null, { onProgress = null } = {}) => {
   const response = await http.get(`/projects/${projectId}/download`, {
     responseType: 'blob',
+    ...downloadProgress(onProgress),
   });
 
   downloadBlob(response, filename, `output_${projectId}`);
@@ -293,10 +295,10 @@ export const downloadProjectOutput = async (projectId, filename = null) => {
  * @param {string} filename - basename del file lato server
  * @returns {Promise<import('axios').AxiosResponse<Blob>>}
  */
-export const downloadProjectFile = async (projectId, filename) => {
+export const downloadProjectFile = async (projectId, filename, { onProgress = null } = {}) => {
   const response = await http.get(
     `/projects/${projectId}/download?file=${filename}`,
-    { responseType: 'blob' },
+    { responseType: 'blob', ...downloadProgress(onProgress) },
   );
   return response;
 };

@@ -11,6 +11,7 @@
  */
 import React, { useId, useMemo } from 'react';
 import { joinColumnPlan, usesJoinColumnPlan } from '../../../utils/columnPlans';
+import { readJoinType } from '../../../utils/joinTypes';
 import useDraftList from './useDraftList';
 import {
   JOIN_TYPES, NAME_CONFLICTS, joinKeysPatch, keptColumnsPatch, readJoinKeys, readKeptColumns, validateJoinKeys,
@@ -91,7 +92,7 @@ export default function JoinPanel({
     <div className="ppanel">
       <div className="ppanel__field">
         <label className="ppanel__label" htmlFor={`${uid}-how`}>Tipo</label>
-        <select id={`${uid}-how`} className="ppanel__input" value={config.how || 'inner'} disabled={disabled}
+        <select id={`${uid}-how`} className="ppanel__input" value={readJoinType('manipola', config.how)} disabled={disabled}
           onChange={e => updateConfig({ ...keysPatch(complete), how: e.target.value })}>
           {JOIN_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>

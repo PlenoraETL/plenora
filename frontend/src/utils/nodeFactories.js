@@ -1,4 +1,5 @@
 import { nd, nodeTopLevelData } from './nodeHelpers';
+import { readJoinType } from './joinTypes';
 import { NODE_TYPES, RESOURCE_COPY_KEYS, TRANSIENT_DATA_KEYS, canonicalNodeType, joinEdgeFields, persistedNodeData } from './nodeTypeRegistry';
 
 export function createEdgeFromData(edge, loadedNodes) {
@@ -20,7 +21,7 @@ export function createEdgeFromData(edge, loadedNodes) {
     label       = `🌐 ${edge.spatial_predicate?.replace('ST_', '') || 'spatial'}`;
     strokeColor = '#E91E63';
   } else {
-    label       = `${edge.join_type || 'left'} join`;
+    label       = `${readJoinType('estrai', edge.join_type)} join`;
     strokeColor = '#2196F3';
   }
 

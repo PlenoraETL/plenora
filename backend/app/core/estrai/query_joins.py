@@ -4,6 +4,7 @@ Rendering delle clausole FROM/JOIN per QueryGenerator.
 
 from typing import Callable, List
 
+from app.core.estrai.query_aliases import effective_alias
 from app.core.projects.canvas_models import Edge, Node
 from app.db.sql_translator import sql_translator
 
@@ -39,12 +40,7 @@ class QueryJoinRenderer:
             raise ValueError("Nessuna tabella selezionata")
 
         first_node = table_nodes[0]
-        raw_name = self._get_node_table_name(first_node)
-        qualified_table_name = self._qualify_table_name(raw_name)
-        from_clause = qualified_table_name
-        if first_node.alias:
-            self._safe_identifier(first_node.alias, "Alias tabella FROM")
-            from_clause += f" {first_node.alias}"
+        from_clause = self.table_reference(first_node, "Alias tabella FROM")
 
         processed_ids = {first_node.id}
 
@@ -96,9 +92,6 @@ class QueryJoinRenderer:
                 )
             )
 
-        raw_name = self._get_node_table_name(node)
-        qualified_table_name = self._qualify_table_name(raw_name)
-
         if not edge:
             raise ValueError(
                 f"Nodo tabella '{self._get_node_table_name(node)}' "
@@ -118,13 +111,9 @@ class QueryJoinRenderer:
             join_type = 'FULL OUTER'
 
         if join_type == 'CROSS':
-            join_str = f"CROSS JOIN {qualified_table_name}"
-            if node.alias:
-                self._safe_identifier(node.alias, "Alias tabella CROSS JOIN")
-                join_str += f" {node.alias}"
-            return join_str
+            return f"CROSS JOIN {self.table_reference(node, 'Alias tabella CROSS JOIN')}"
 
-        table_alias = node.alias or self._get_node_table_name(node)
+        table_alias = effective_alias(node)
 
         if edge.target == node.id:
             other_node_id = edge.source
@@ -134,7 +123,7 @@ class QueryJoinRenderer:
             is_reversed = True
 
         other_node = next((n for n in all_nodes if n.id == other_node_id), None)
-        source_alias = other_node.alias or other_node.table_name if other_node else 'unknown'
+        source_alias = effective_alias(other_node) if other_node else 'unknown'
 
         is_spatial = getattr(edge, 'is_spatial', False)
 
@@ -148,13 +137,21 @@ class QueryJoinRenderer:
                 edge, source_alias, table_alias, node, join_type, is_reversed
             )
 
-        join_str = f"{join_type} JOIN {qualified_table_name}"
-        if node.alias:
-            self._safe_identifier(node.alias, "Alias tabella JOIN")
-            join_str += f" {node.alias}"
-        join_str += f" ON {on_clause}"
+        return f"{join_type} JOIN {self.table_reference(node, 'Alias tabella JOIN')} ON {on_clause}"
 
-        return join_str
+    def table_reference(self, node: Node, context: str) -> str:
+        """``tabella [alias]`` di FROM e JOIN: l'unico punto che li emette.
+
+        L'alias si scrive quando il nodo ne ha uno, scritto dall'utente o
+        automatico (``query_aliases.with_unique_aliases``, self-join); senza
+        alias la tabella si riferisce con il suo nome, che è
+        ``effective_alias`` (stesso SQL di prima).
+        """
+        reference = self._qualify_table_name(self._get_node_table_name(node))
+        if node.alias:
+            self._safe_identifier(node.alias, context)
+            reference += f" {node.alias}"
+        return reference
 
     def generate_on_spatial(self, edge: Edge, source_alias: str, table_alias: str) -> str:
         """

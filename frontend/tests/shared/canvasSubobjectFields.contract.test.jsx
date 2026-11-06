@@ -169,6 +169,22 @@ describe('i pannelli scrivono solo i campi del contratto dei sotto-oggetti', () 
     ]);
   });
 
+  it('Filtri WHERE (FilterModal): un gruppo O scrive `group` (UI-3, U20)', async () => {
+    reset('tableNode', { table_name: 'comuni', columns: COLUMNS, filters: [] });
+    const onSave = (filters) => useCanvasStore.getState().updateNodeData('n1', { filters });
+    render(<FilterModal isOpen onClose={() => {}} nodeId="n1" filters={[]} columns={COLUMNS} tableName="comuni" onSave={onSave} />);
+    const items = () => document.querySelectorAll('.filter-modal__filter-item');
+    await change(items()[0].querySelectorAll('select')[0], 'pop');
+    await click(screen.getByRole('button', { name: /Aggiungi un gruppo O/ }));
+    await change(items()[1].querySelectorAll('select')[0], 'nome');
+    await click(screen.getByRole('button', { name: /Salva filtri/ }));
+    const saved = recordSaved('filtri');
+    expect(saved.filters).toEqual([
+      { column: 'pop', operator: '=', value: '', group: 0 },
+      { column: 'nome', operator: '=', value: '', group: 1 },
+    ]);
+  });
+
   it('colonne in uscita rinominate: le voci seguono senza campi nuovi', () => {
     const data = {
       output_columns: ['pop'],

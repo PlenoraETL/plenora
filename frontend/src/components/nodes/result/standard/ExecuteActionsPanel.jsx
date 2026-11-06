@@ -27,6 +27,9 @@ import RunHistoryModal from '../../../modals/RunHistoryModal';
 import useCanvasStore from '../../../../store/useCanvasStore';
 import { term } from '../../../../utils/glossary';
 import { READ_ONLY_SAFE } from '../../../common/readOnlySafe';
+import { hasUnsavedChanges } from '../../../../store/saveState';
+import { serverActionLabel } from '../../../../utils/serverActions';
+import SourceFreshnessNote from '../../../editor/SourceFreshnessNote';
 
 export default function ExecuteActionsPanel({
   data,
@@ -44,6 +47,8 @@ export default function ExecuteActionsPanel({
   const setRunOptions = useCanvasStore(s => s.setRunOptions);
   const setExecutionMode = (mode) => setRunOptions({ force_recalculate: mode === 'recalculate' });
   const busy = useCanvasStore(s => s.runState === 'starting' || s.runState === 'running');
+  // Regola unica (UI-3, U15): con modifiche non salvate i pulsanti dicono «Salva e …».
+  const unsaved = useCanvasStore(hasUnsavedChanges);
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   // Fase 5 T2 (R9.7): Valida e Anteprima non partono due volte (doppio clic
   // = un solo "Salva e continua", una sola richiesta).
@@ -70,11 +75,13 @@ export default function ExecuteActionsPanel({
             />
             <div className="result-node__execution-content">
               <div className="result-node__execution-title">
-                ⚡ Usa cache esistente
+                ⚡ Usa i risultati salvati delle sorgenti
               </div>
               <div className="result-node__execution-desc">
-                Veloce - carica dati già elaborati (se disponibili)
+                Veloce: usa l&apos;ultimo risultato di ogni sorgente, se c&apos;è
               </div>
+              {/* UI-3 (U18): di quando sono quei risultati. */}
+              <SourceFreshnessNote />
             </div>
           </label>
 
@@ -112,7 +119,7 @@ export default function ExecuteActionsPanel({
           title={term('validate').description}
         >
           <span aria-hidden="true">{term('validate').icon}</span>
-          <span>{term('validate').name}</span>
+          <span>{serverActionLabel('validate', unsaved)}</span>
         </button>
 
         {hasOnPreview && (
@@ -123,7 +130,7 @@ export default function ExecuteActionsPanel({
             {...READ_ONLY_SAFE} className={`result-node__preview-btn result-node__preview-btn--${nodeVariant}`}
           >
             <span className="result-node__preview-icon" aria-hidden="true">{term('preview').icon}</span>
-            <span>{term('preview').name}</span>
+            <span>{serverActionLabel('preview', unsaved)}</span>
           </button>
         )}
 
@@ -134,7 +141,7 @@ export default function ExecuteActionsPanel({
             {...READ_ONLY_SAFE} className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
           >
             <span className="result-node__execute-icon" aria-hidden="true">{busy ? '⏳' : term('run').icon}</span>
-            <span>{busy ? term('run').busyName : term('run').name}</span>
+            <span>{busy ? term('run').busyName : serverActionLabel('run', unsaved)}</span>
           </button>
         )}
       </div>

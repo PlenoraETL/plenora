@@ -10,6 +10,7 @@ import http from './http';
 import { fetchAllOffsetPages } from './pagination';
 import { assertFileSize, throwIfUploadTooLarge } from './uploadGuards';
 import { downloadBlob } from '../utils/downloadBlob';
+import { downloadProgress, uploadProgress } from '../utils/transferProgress';
 
 /**
  * Lista gli eseguibili visibili al gruppo dell'utente.
@@ -65,7 +66,7 @@ export const deleteEseguibile = async (id) => {
  * @param {File} file
  * @returns {Promise<{file_id, detected_columns, row_count, auto_mapping, preview_rows}>}
  */
-export const analyzeUpload = async (eseguibileId, file, inputKey = null) => {
+export const analyzeUpload = async (eseguibileId, file, inputKey = null, { onProgress = null } = {}) => {
   assertFileSize(file);
 
   const fd = new FormData();
@@ -76,6 +77,7 @@ export const analyzeUpload = async (eseguibileId, file, inputKey = null) => {
   try {
     const r = await http.post(`/eseguibili/${eseguibileId}/analyze-upload`, fd, {
       params: inputKey ? { input_key: inputKey } : undefined,
+      ...uploadProgress(onProgress),
     });
     return r.data;
   } catch (err) {
@@ -120,12 +122,13 @@ export const downloadEseguibileOutput = async (
   eseguibileId,
   taskId,
   filename = null,
+  { onProgress = null } = {},
 ) => {
   const response = await http.get(
     `/eseguibili/${encodeURIComponent(eseguibileId)}/download/${encodeURIComponent(taskId)}`,
-    { responseType: 'blob' },
+    { responseType: 'blob', ...downloadProgress(onProgress) },
   );
-  downloadBlob(response, filename, `eseguibile_${taskId}_output`);
+  return downloadBlob(response, filename, `eseguibile_${taskId}_output`);
 };
 
 export const listEseguibileVersions = async (eseguibileId) => {

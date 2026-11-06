@@ -135,6 +135,16 @@ export function formatDuration(ms) {
   return `${Math.floor(v / 3600000)}h ${Math.floor((v % 3600000) / 60000)}m`;
 }
 
+/**
+ * Durata in secondi (il backend la manda spesso cosi': elapsed_time,
+ * elapsed_seconds): stessa forma di formatDuration (UI-3, U17). Il test
+ * tests/shared/durations.contract.test.js vieta i secondi grezzi («12.3s»).
+ */
+export function formatSeconds(seconds) {
+  if (seconds === null || seconds === undefined || seconds === '' || !Number.isFinite(Number(seconds))) return EMPTY;
+  return formatDuration(Number(seconds) * 1000);
+}
+
 /** Tempo trascorso da un istante del server fino a `now` (ms). */
 export function formatElapsed(since, now = Date.now()) {
   const start = serverTimeMs(since);

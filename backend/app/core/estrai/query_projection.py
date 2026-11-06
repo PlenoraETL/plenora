@@ -7,6 +7,7 @@ from typing import Any, Callable, List
 
 from app.db.sql_functions import translate_calculated_column
 from app.db.sql_translator import sql_translator
+from app.core.estrai.query_aliases import effective_alias
 from app.core.estrai.types import JsonObject, StringMap
 from app.core.projects.canvas_models import Node
 from app.utils.logger import get_logger
@@ -74,7 +75,7 @@ class QueryProjectionRenderer:
         if not isinstance(col, str) or "." not in col:
             return None
         for node in table_nodes or []:
-            table_alias = node.alias or self._get_node_table_name(node)
+            table_alias = effective_alias(node)
             if not table_alias or not col.startswith(f"{table_alias}."):
                 continue
             name = col[len(table_alias) + 1:]
@@ -110,7 +111,7 @@ class QueryProjectionRenderer:
         columns = []
 
         for node in table_nodes:
-            table_alias = node.alias or self._get_node_table_name(node)
+            table_alias = effective_alias(node)
 
             for col in node.columns:
                 if not col.visible:
@@ -234,11 +235,11 @@ class QueryProjectionRenderer:
             elif column_metadata is not None:
                 real_name = col_name.split("__", 1)[1] if table_map.get(col_name) and "__" in col_name else col_name
                 source = next((col for node in reversed(table_nodes)
-                               if (node.alias or self._get_node_table_name(node)) == table_map.get(col_name)
+                               if effective_alias(node) == table_map.get(col_name)
                                for col in node.columns if col.name == real_name), None)
                 column_metadata.append({"name": self._output_name(real_name), "type": _declared_column_type(source),
                                         "source_name": real_name, "id": getattr(source, "id", None),
-                                        "source_node": next((node.id for node in table_nodes if (node.alias or self._get_node_table_name(node)) == table_map.get(col_name)), None)})
+                                        "source_node": next((node.id for node in table_nodes if effective_alias(node) == table_map.get(col_name)), None)})
 
         valid_agg_functions = {"COUNT", "SUM", "AVG", "MIN", "MAX", "FIRST", "LAST"}
 
@@ -446,7 +447,7 @@ class QueryProjectionRenderer:
     def _visible_column_table_map(self, table_nodes: List[Node]) -> StringMap:
         table_map = {}
         for node in table_nodes:
-            table_alias = node.alias or self._get_node_table_name(node)
+            table_alias = effective_alias(node)
             for col in (node.columns or []):
                 col_name = col.name if hasattr(col, "name") else col.get("name", "")
                 col_alias = col.alias if hasattr(col, "alias") else col.get("alias", "")

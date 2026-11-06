@@ -20,7 +20,8 @@ import {
 } from '../../api';
 import useDialog from '../../hooks/useDialog';
 import { useResource } from '../../hooks/useResource';
-import { useEseguibileRun } from './useEseguibileRun';
+import { resultKeepNote, useEseguibileRun } from './useEseguibileRun';
+import TransferProgress from '../common/TransferProgress';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { ResourceError } from '../common/ListState';
 import { requestErrorMessage } from '../../utils/errorMessages';
@@ -435,10 +436,14 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                       )}
                     </div>
                     {run.downloadError && <div className="esw-error" role="alert">❌ {run.downloadError}</div>}
+                    {/* U13/U17 (UI-3): avanzamento, riscaricamento e pulizia esplicita. */}
+                    <TransferProgress progress={run.downloadProgress} verb="Scaricamento" />
+                    <p className="esw-hint">{resultKeepNote(run.downloaded)}</p>
                     <div className="esw-actions">
                       <button type="button" className="esw-btn esw-btn--ghost" onClick={close}>Chiudi</button>
+                      <button type="button" className="esw-btn esw-btn--ghost" onClick={() => run.discard()} disabled={run.downloading}>🗑 Elimina il risultato</button>
                       <button type="button" className="esw-btn esw-btn--primary" onClick={handleDownload} disabled={run.downloading}>
-                        {run.downloading ? 'Scaricamento…' : '⬇ Scarica Risultato'}
+                        {run.downloading ? 'Scaricamento…' : (run.downloaded ? '⬇ Scarica di nuovo' : '⬇ Scarica il risultato')}
                       </button>
                     </div>
                   </div>

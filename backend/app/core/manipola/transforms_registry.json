@@ -224,9 +224,9 @@
         {
           "id": "conditions",
           "type": "filter_conditions",
-          "label": "Condizioni AND",
+          "label": "Condizioni",
           "required": false,
-          "description": "Lista {column, operator, value}; se presente sostituisce il filtro singolo. Lista vuota: passthrough."
+          "description": "Lista {column, operator, value, group?}; se presente sostituisce il filtro singolo. Stesso group (intero >= 0, assente = 0) in E, gruppi diversi in O. Lista vuota: passthrough."
         }
       ],
       "output": {

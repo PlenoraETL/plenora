@@ -19,6 +19,8 @@
 
 import { isPythonFloat, readValueMapping } from '../../../utils/lookupMapping';
 import { selectColumnPlan } from '../../../utils/columnPlans';
+import { joinTypeOptions } from '../../../utils/joinTypes';
+import { normalizeConditionGroups, operatorsFor } from '../../../utils/filterConditions';
 
 export { readValueMapping };
 // ── Colonne e riferimenti ────────────────────────────────────────────────
@@ -40,14 +42,8 @@ function resolveName(columns, id, name) {
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
 
 // ── Filtra ───────────────────────────────────────────────────────────────
-export const FILTER_OPERATORS = [
-  ['==', 'è uguale a'], ['!=', 'è diverso da'],
-  ['>', 'è maggiore di'], ['>=', 'è maggiore o uguale a'],
-  ['<', 'è minore di'], ['<=', 'è minore o uguale a'],
-  ['contains', 'contiene'], ['startswith', 'inizia con'], ['endswith', 'finisce con'],
-  ['in', 'è tra'], ['not_in', 'non è tra'],
-  ['isnull', 'è vuoto'], ['notnull', 'non è vuoto'],
-];
+// Nomi dal catalogo unico dei filtri di Estrai e Manipola (utils/filterConditions, U20).
+export const FILTER_OPERATORS = operatorsFor('manipola').map(o => [o.value, o.label]);
 export const NO_VALUE_OPERATORS = ['isnull', 'notnull'];
 export const LIST_OPERATORS = ['in', 'not_in'];
 
@@ -74,11 +70,13 @@ export function validateConditions(rows) {
 }
 
 export function conditionsToSave(rows, columns = []) {
-  return rows.filter(c => !isEmptyCondition(c)).map((c) => {
+  const kept = rows.filter(c => !isEmptyCondition(c)).map((c) => {
     const { value, ...rest } = c;
     const out = { ...rest, column_id: columnId(columns.find(col => col.name === c.column)) || c.column_id || undefined };
     return NO_VALUE_OPERATORS.includes(c.operator) ? out : { ...out, value: value ?? '' };
   });
+  // Gruppi E/O rinumerati; un solo gruppo = formato di prima (U20).
+  return normalizeConditionGroups(kept).list;
 }
 
 export const FILTER_LEGACY_CLEAR = { column: undefined, operator: undefined, value: undefined, column_column_id: undefined };
@@ -105,12 +103,8 @@ export const formulasToSave = (rows) =>
 export const FORMULA_LEGACY_CLEAR = { new_column: undefined, formula: undefined, formula_column_refs: undefined };
 
 // ── Join ─────────────────────────────────────────────────────────────────
-export const JOIN_TYPES = [
-  ['left', 'Tieni tutte le righe di sinistra (Left)'],
-  ['inner', 'Solo righe con corrispondenza (Inner)'],
-  ['right', 'Tieni tutte le righe di destra (Right)'],
-  ['outer', 'Tutte le righe (Outer)'],
-];
+// Dal catalogo unico dei tre editor (utils/joinTypes, U21).
+export const JOIN_TYPES = joinTypeOptions('manipola');
 export const NAME_CONFLICTS = [
   ['keep_left', 'Tieni quella di sinistra'],
   ['keep_right', 'Tieni quella di destra'],

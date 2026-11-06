@@ -1,6 +1,6 @@
 {
   "_doc": "Campi che il frontend scrive negli elementi delle liste del nodo salvate nel canvas (Fase 5, T5+T6, correzione dopo la conferma). Verificato dal frontend (tests/shared/canvasSubobjectFields.contract.test.jsx: i pannelli scrivono solo questi campi) e dal backend (tests2/contracts/test_canvas_subobject_fields.py: ogni campo e' dichiarato nel modello Pydantic o il round-trip lo conserva).",
-  "filters": ["column", "operator", "value"],
+  "filters": ["column", "operator", "value", "group"],
   "aggregations": ["column", "function", "alias", "alias_source"],
   "order_by_columns": ["column", "direction"],
   "having_conditions": ["function", "column", "operator", "value"]

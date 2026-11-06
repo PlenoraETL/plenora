@@ -16,7 +16,7 @@ describe('NodePalette', () => {
     const onClose = vi.fn();
     render(<NodePalette open groups={groups} onPick={onPick} onClose={onClose} context="Pulisci codici" />);
     expect(screen.getByText(/Dopo/)).toBeTruthy();
-    const input = screen.getByRole('textbox', { name: /cerca/i });
+    const input = screen.getByRole('searchbox', { name: /cerca/i });
     fireEvent.change(input, { target: { value: 'rinom' } });
     expect(screen.queryByText('Più usate')).toBeNull();
     expect(screen.queryByText('Campiona')).toBeNull();
@@ -29,7 +29,7 @@ describe('NodePalette', () => {
     const onPick = vi.fn();
     const onClose = vi.fn();
     render(<NodePalette open groups={groups} onPick={onPick} onClose={onClose} />);
-    fireEvent.keyDown(screen.getByRole('textbox', { name: /cerca/i }), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('searchbox', { name: /cerca/i }), { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
     expect(onPick).not.toHaveBeenCalled();
   });

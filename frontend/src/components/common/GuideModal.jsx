@@ -6,7 +6,7 @@
  * Il testo e' reso come elementi React (nessun HTML grezzo); `così` diventa
  * codice.
  */
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import ModalWrapper from './ModalWrapper';
 import './GuideModal.css';
 
@@ -33,17 +33,25 @@ function Block({ block }) {
   );
 }
 
-export default function GuideModal({ guide, isOpen, onClose }) {
+// `section` (UI-3, aiuto contestuale): id della sezione su cui aprire la
+// guida (es. quella del nodo selezionato); evidenziata e portata in vista.
+export default function GuideModal({ guide, isOpen, onClose, section = null }) {
+  const articleRef = useRef(null);
+  useEffect(() => {
+    if (!isOpen || !section) return;
+    articleRef.current?.querySelector(`[data-guide-section="${section}"]`)?.scrollIntoView?.({ block: 'start' });
+  }, [isOpen, section]);
   if (!isOpen || !guide) return null;
   return (
     <ModalWrapper isOpen onClose={onClose} title={`Guida: ${guide.title}`} icon="📘" size="lg">
-      <article className="guide" aria-label={`Guida: ${guide.title}`}>
+      <article ref={articleRef} className="guide" aria-label={`Guida: ${guide.title}`}>
         {guide.intro && <p className="guide__p guide__intro"><InlineText text={guide.intro} /></p>}
-        {guide.sections.map(section => (
-          <section key={section.title} className="guide__section">
+        {guide.sections.map(s => (
+          <section key={s.title} data-guide-section={s.id || undefined}
+            className={`guide__section${section && s.id === section ? ' guide__section--focus' : ''}`}>
             {/* h4: il titolo della finestra (ModalWrapper) e' h3. */}
-            <h4 className="guide__heading">{section.title}</h4>
-            {section.blocks.map(block => (
+            <h4 className="guide__heading">{s.title}</h4>
+            {s.blocks.map(block => (
               <Block key={block.p || block.note || block.code || (block.ul || block.ol || []).join('|')} block={block} />
             ))}
           </section>

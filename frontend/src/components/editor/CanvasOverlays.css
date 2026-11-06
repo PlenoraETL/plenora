@@ -1,0 +1,28 @@
+/* Canvas vuoto (UI-3, U11): la guida sta al centro del canvas, sopra la
+   griglia, senza bloccare il trascinamento sul resto del canvas. */
+.canvas-empty-guide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 4;
+  padding: 16px;
+}
+
+.canvas-empty-guide .plen-empty {
+  pointer-events: auto;
+  max-width: 460px;
+  background: var(--plen-surface);
+  border: 1px solid var(--plen-border);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(16, 24, 40, 0.12);
+}
+
+.canvas-empty-guide .plen-empty__action {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}

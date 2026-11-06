@@ -31,6 +31,7 @@ import {
 } from '../../src/components/canvas/nodeDescriptors';
 import { normalizeRegistry } from '../../src/utils/transformRegistry';
 import { visibleTexts } from '../helpers/visibleText.js';
+import { catalogMenuItems } from '../../src/components/editor/editorNodeCatalog';
 
 // Il registry in cache e' quello vero del backend, normalizzato come in app.
 const { cachedRegistry } = vi.hoisted(() => ({ cachedRegistry: { current: null } }));
@@ -170,8 +171,12 @@ describe('glossario: ogni entita\' ha un nome, un\'icona e una descrizione', () 
     // Niente etichette o icone scritte a mano: solo menuEntry('chiave', ...) e divisori.
     expect(block.match(/\b(label|icon):/g) || []).toEqual([]);
     const keys = [...block.matchAll(/menuEntry\('(\w+)'/g)].map(m => m[1]);
-    expect(keys.length).toBeGreaterThan(3);
-    expect(keys.filter(k => !TERMS[k])).toEqual([]);
+    // UI-3 (P30): le voci dei nodi vengono dal catalogo unico, che usa
+    // menuEntry con le chiavi del glossario (editorNodeCatalog).
+    const mode = (block.match(/catalogMenuItems\('(\w+)'/) || [])[1];
+    const catalog = mode ? catalogMenuItems(mode, [], () => {}).filter(i => !i.divider).map(i => i.key) : [];
+    expect(keys.length + catalog.length).toBeGreaterThan(3);
+    expect([...keys, ...catalog].filter(k => !TERMS[k])).toEqual([]);
   });
 });
 

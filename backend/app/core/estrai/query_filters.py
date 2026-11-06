@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 from typing import Any, Callable, List
 
-from app.core.estrai.types import JsonObject
+from app.core.estrai.query_aliases import effective_alias
+from app.core.estrai.types import JsonObject, StringMap
+from app.shared.execution.condition_groups import condition_groups
 
 
 class WhereClauseBuilder:
@@ -26,10 +28,20 @@ class WhereClauseBuilder:
         self._get_node_table_name = get_node_table_name
 
     def generate_where(self, table_nodes: List[Any], params: JsonObject) -> str:
+        """WHERE dei filtri dei nodi tabella: nodi in AND tra loro.
+
+        Gruppi E/O (``shared.execution.condition_groups``): per ogni nodo le
+        condizioni dello stesso ``group`` sono in AND, gruppi diversi in OR.
+        Un solo gruppo con condizioni (il caso di sempre, senza ``group``):
+        condizioni appese una a una come prima, stessa stringa e stessi
+        parametri nello stesso ordine. Più gruppi: un unico congiunto
+        ``((A AND B) OR (C))`` per il nodo. Un gruppo con tutte le condizioni
+        saltate (colonna o operatore vuoti) non conta.
+        """
         conditions = []
 
         for node in table_nodes:
-            table_alias = node.alias or self._get_node_table_name(node)
+            table_alias = effective_alias(node)
             filters = getattr(node, "filters", []) or []
 
             column_type_map = {}
@@ -43,28 +55,53 @@ class WhereClauseBuilder:
                 if col_name:
                     column_type_map[col_name] = col_type
 
-            for filter_item in filters:
-                column = filter_item.column
-                operator = filter_item.operator
-                value = filter_item.value
+            groups = []
+            for group in condition_groups(filters):
+                rendered = [
+                    condition
+                    for condition in (
+                        self._filter_condition(item, table_alias, column_type_map, params)
+                        for item in group
+                    )
+                    if condition
+                ]
+                if rendered:
+                    groups.append(rendered)
 
-                if not column or not operator:
-                    continue
-                if not self._is_valid_identifier(column):
-                    raise ValueError(f"Nome colonna filtro non valido: {column}")
-
-                column_type = column_type_map.get(column, "str")
-
-                condition = self.create_condition(
-                    table_alias, column, operator, value, params, column_type
+            if len(groups) == 1:
+                conditions.extend(groups[0])
+            elif groups:
+                conditions.append(
+                    "(" + " OR ".join(f"({' AND '.join(group)})" for group in groups) + ")"
                 )
-                if condition:
-                    conditions.append(condition)
 
         if not conditions:
             return ""
 
         return " AND ".join(conditions)
+
+    def _filter_condition(
+        self,
+        filter_item: Any,
+        table_alias: str,
+        column_type_map: StringMap,
+        params: JsonObject,
+    ) -> str:
+        """Una condizione del filtro ("" se saltata: colonna o operatore vuoti)."""
+        column = filter_item.column
+        operator = filter_item.operator
+        value = filter_item.value
+
+        if not column or not operator:
+            return ""
+        if not self._is_valid_identifier(column):
+            raise ValueError(f"Nome colonna filtro non valido: {column}")
+
+        column_type = column_type_map.get(column, "str")
+
+        return self.create_condition(
+            table_alias, column, operator, value, params, column_type
+        )
 
     def create_condition(
         self,

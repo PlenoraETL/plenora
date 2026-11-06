@@ -7,6 +7,9 @@ import React, { useState, useMemo } from 'react';
 import { formatNumber } from '../../utils/format';
 import SearchField, { SearchEmpty } from '../common/SearchField';
 import { useSearch, useSearchPage } from '../../hooks/useSearch';
+import { pressable } from '../../utils/pressable';
+import { termName } from '../../utils/glossary';
+import { startSourceDrag } from '../editor/editorNodeCatalog';
 
 const PAGE_SIZE = 10;
 
@@ -24,7 +27,10 @@ const FILE_BADGE_COLORS = {
 
 function FilesSidebar({
   files = [],
-  onDragStart,
+  onPick,
+  // UI-3 (U30): carica un file senza uscire dall'editor (finestra
+  // dell'editor); senza, resta il collegamento alla gestione file.
+  onUpload = null,
   title = "📁 File Esterni",
   subtitle = "Trascina un file nel canvas",
   emptyMessage = "Nessun file disponibile.",
@@ -50,12 +56,9 @@ function FilesSidebar({
              : { background:'rgba(125,139,168,.1)', border:'1px solid rgba(125,139,168,.2)', color:'#7D8BA8' };
   };
 
-  const handleDragStart = (event, file) => {
-    if (onDragStart) onDragStart(event, 'file_source', {
-      id: file.id, file_source_id: file.id,
-      name: file.name, format: file.format
-    });
-  };
+  // UI-3 (U11): clic o Invio aggiunge il file al centro della vista;
+  // trascinamento nel formato unico (editorNodeCatalog.startSourceDrag).
+  const handleDragStart = (event, file) => startSourceDrag(event, 'file_source', file);
 
   const remaining = filteredFiles.length - visibleCount;
   const nextChunk = Math.min(PAGE_SIZE, remaining);
@@ -77,6 +80,11 @@ function FilesSidebar({
 
       {!collapsed && (
         <>
+          {onUpload && (
+            <button type="button" className="ss-load-more" onClick={() => onUpload()}>
+              ＋ {termName('upload_file')}
+            </button>
+          )}
           {showSearch && (
             <SearchField
               search={search}
@@ -94,7 +102,7 @@ function FilesSidebar({
             ) : filteredFiles.length === 0 ? (
               <div className="sources-sidebar__empty">
                 {emptyMessage}
-                {uploadLink && (
+                {!onUpload && uploadLink && (
                   <><br /><a href={uploadLink} className="sources-sidebar__empty-link" style={{ color: accentColor }}>{uploadLinkText}</a></>
                 )}
               </div>
@@ -104,7 +112,9 @@ function FilesSidebar({
                   <div
                     key={file.id}
                     className="sources-sidebar__item sources-sidebar__item--file"
+                    title="Clic o Invio per aggiungere al centro · trascina per posizionare"
                     draggable
+                    {...pressable(() => onPick?.('file_source', file), { disabled: !onPick })}
                     onDragStart={e => handleDragStart(e, file)}
                   >
                     <span className="sources-sidebar__item-icon">{getIcon(file.format)}</span>

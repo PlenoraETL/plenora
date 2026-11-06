@@ -46,6 +46,7 @@ import { pressable } from '../utils/pressable';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
 import VirtualList from '../components/common/VirtualList';
+import { useTransferProgress } from '../hooks/useTransferProgress';
 
 // SRID dal convertitore unico (R8.23): "4326", "EPSG:4326" -> 4326.
 const SRID = sridCodec({ optional: true });
@@ -88,6 +89,8 @@ const FileManager = () => {
   const [uploadLayer,     setUploadLayer]     = useState('');
   const [uploadSheet,     setUploadSheet]     = useState('');
   const [uploading,       setUploading]       = useState(false);
+  // U17 (UI-3): avanzamento del caricamento nella finestra.
+  const upload = useTransferProgress();
   const [uploadError,     setUploadError]     = useState(null);
   const [dragActive,      setDragActive]      = useState(false);
   const [uploadStep,      setUploadStep]      = useState(1);
@@ -213,7 +216,7 @@ const handleMultiLayerUpload = async () => {
       const sridResult = SRID.parse(userSrid);
       if (sridResult.error) { setUploadError(`SRID: ${sridResult.error}`); return; }
       const srid = sridResult.value;
-      await uploadMultiLayer(uploadFile_, uploadName, uploadDescription, selectedLayers, srid);
+      await uploadMultiLayer(uploadFile_, uploadName, uploadDescription, selectedLayers, srid, { onProgress: upload.onProgress });
       await loadFiles();
       resetUploadModal();
     } catch (err) {
@@ -264,7 +267,7 @@ const handleNextStep = async () => {
         if (binaryExts.includes(ext)) {
           setUploading(true);
           try {
-            await uploadFile(uploadFile_, uploadName, uploadDescription, null, null, null, null);
+            await uploadFile(uploadFile_, uploadName, uploadDescription, null, null, null, null, { onProgress: upload.onProgress });
             await loadFiles(); resetUploadModal();
           } catch (e) { setUploadError(humanizeErrorMessage(e, "Caricamento non riuscito")); } finally { setUploading(false); }
         } else {
@@ -295,7 +298,7 @@ const handleUpload = async () => {
     try {
       const columnsToImport = selectedColumns.length === availableColumns.length ? null : selectedColumns;
       const srid = sridResult.value;
-      const result = await uploadFile(uploadFile_, uploadName, uploadDescription, uploadLayer, uploadSheet, columnsToImport, srid);
+      const result = await uploadFile(uploadFile_, uploadName, uploadDescription, uploadLayer, uploadSheet, columnsToImport, srid, { onProgress: upload.onProgress });
       if (result.format === 'gdb' || result.format === 'gpkg') {
         const info = await getFileLayers(result.id);
         // P4: resetUploadModal azzera i layer: va chiamato PRIMA di impostarli.
@@ -504,6 +507,7 @@ const resetUploadModal = () => {
           uploadName={uploadName}
           uploadDescription={uploadDescription}
           uploading={uploading}
+          uploadProgress={upload.progress}
           uploadError={uploadError}
           dragActive={dragActive}
           availableColumns={availableColumns}

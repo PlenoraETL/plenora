@@ -6,6 +6,7 @@ import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { toastApiError } from '../../utils/toastApiError';
 import { pressable } from '../../utils/pressable';
 import { PROJECT_TYPES, projectTypeChip } from '../../utils/projectTypes';
+import { projectEditorPath } from '../../utils/projectRoutes';
 
 // Nome, icona e descrizione dalla tabella unica dei tipi (UI-4, U24 e U32).
 const TYPE_META = Object.fromEntries(Object.keys(PROJECT_TYPES).map(t => [t, { ...PROJECT_TYPES[t], btn: projectTypeChip(t) }]));
@@ -47,9 +48,13 @@ function NewProjectModal({
     }
     setCreating(true);
     try {
-      await createProject(name, desc, type, connId);
+      const created = await createProject(name.trim(), desc, type, connId);
       onCreated?.();
       onClose?.();
+      // U10 (UI-3): creato il progetto si entra nel suo editor, e lo si dice.
+      const id = created?.metadata?.id;
+      toast.success(`Progetto «${name.trim()}» creato${id ? ': si apre l\'editor' : ''}.`);
+      if (id) navigate(projectEditorPath({ id, project_type: created?.metadata?.project_type || type }));
     } catch (err) {
       toastApiError(toast, err, 'Errore creazione');
     } finally {
@@ -76,6 +81,9 @@ function NewProjectModal({
         </>
       }
     >
+      {/* U10 (UI-3): Invio in un campo crea il progetto, come il pulsante. */}
+      <form onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
+      <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
       <div className="pl__modal-field">
         <label className="pl__modal-label">Tipo</label>
         <div className="pl__modal-type-row">
@@ -154,6 +162,7 @@ function NewProjectModal({
       <div className={`pl__modal-info pl__modal-info--${type}`}>
         💡 {meta.description}
       </div>
+      </form>
     </ModalWrapper>
   );
 }

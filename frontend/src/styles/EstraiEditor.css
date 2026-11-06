@@ -330,3 +330,6 @@
   .estrai-sidebar { display: none; }
   
 }
+
+/* P29 (UI-3): tabella gia' nel canvas, aggiungibile di nuovo con un alias. */
+.estrai-sidebar__in-canvas { flex: none; margin-left: auto; margin-right: 6px; font-size: 11px; padding: 1px 6px; border-radius: 8px; border: 1px solid var(--plen-border); color: var(--plen-text-sub); }

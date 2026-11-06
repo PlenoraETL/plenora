@@ -80,6 +80,13 @@ describe('i tasti fanno quello che dice la guida', () => {
     undo: [[k('z', { ctrlKey: true }), true], [k('z', { ctrlKey: true, shiftKey: true }), false]],
     redo: [[k('z', { ctrlKey: true, shiftKey: true }), true], [k('y', { ctrlKey: true }), true], [k('y'), false]],
     delete: [[k('Delete'), true], [k('Backspace'), true], [k('d'), false]],
+    select_all: [[k('a', { ctrlKey: true }), true], [k('a'), false], [k('a', { ctrlKey: true, shiftKey: true }), false]],
+    copy: [[k('c', { ctrlKey: true }), true], [k('C', { metaKey: true }), true], [k('c'), false]],
+    paste: [[k('v', { ctrlKey: true }), true], [k('v'), false]],
+    duplicate: [[k('d', { ctrlKey: true }), true], [k('d'), false]],
+    search_canvas: [[k('f', { ctrlKey: true }), true], [k('f'), false]],
+    connect: [[k('c'), true], [k('C'), true], [k('c', { ctrlKey: true }), false]],
+    editor_guide: [[k('F1'), true], [k('1'), false]],
   };
 
   it('ogni riga della tabella ha i suoi casi', () => {

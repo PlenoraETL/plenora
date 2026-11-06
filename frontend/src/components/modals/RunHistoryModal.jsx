@@ -19,7 +19,7 @@ import './RunHistoryModal.css';
 import { term } from '../../utils/glossary';
 import { requestErrorMessage, backendMessage } from '../../utils/errorMessages';
 import { errorReason } from '../../api/errors';
-import { formatDateTime as formatTimestamp, formatNumber as formatRows } from '../../utils/format';
+import { formatDateTime as formatTimestamp, formatNumber as formatRows, formatSeconds } from '../../utils/format';
 import { pressable } from '../../utils/pressable';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
 
@@ -48,10 +48,10 @@ export function mapCompareErrorReason(reason, beMessage) {
 }
 
 
+// Durate da utils/format (UI-3, U17); i delta possono essere negativi.
 const formatDuration = (secs) => {
   if (secs == null) return '—';
-  if (secs < 60) return `${secs.toFixed(1)}s`;
-  return `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s`;
+  return Number(secs) < 0 ? `-${formatSeconds(-Number(secs))}` : formatSeconds(secs);
 };
 
 

@@ -22,6 +22,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { executeProjectQuery, executeTestRun, downloadTaskOutput, downloadProjectOutput } from '../api';
 import { useTask } from './useTask';
 import { useDownload } from './useDownload';
+import { useTransferProgress } from './useTransferProgress';
 import useCanvasStore from '../store/useCanvasStore';
 import { pollTasks } from '../utils/taskPoller';
 import { isPreparationChanged } from '../utils/beforeRun';
@@ -41,7 +42,11 @@ export function executionResult(outcome, taskId, launchTestRun = null) {
   if (outcome.phase === 'permission_revoked') {
     return { success: false, permissionRevoked: true, status: 'permission_revoked', message: outcome.error, ...mark };
   }
-  return { success: false, message: outcome.error, code: outcome.code || undefined, ...mark };
+  // U16 (UI-3): il passo fallito (error_node_id) e l'esecuzione restano nell'esito.
+  return {
+    success: false, message: outcome.error, code: outcome.code || undefined, task_id: taskId || undefined,
+    error_node_id: outcome.result?.error_node_id || undefined, ...mark,
+  };
 }
 
 // Stato mostrato dalla finestra (colori, "annullata").
@@ -90,6 +95,7 @@ export function useExecution(projectId, options = {}) {
   const showModalRef = useRef(false);
   showModalRef.current = showModal;
   const dl = useDownload();
+  const transfer = useTransferProgress();
   const { run: runDownload, clearError: clearDownloadError } = dl;
 
   // Task di Carica partiti dopo l'esecuzione.
@@ -233,9 +239,14 @@ export function useExecution(projectId, options = {}) {
       const ext = result?.output_format ? `.${String(result.output_format).replace(/^\.+/, '')}` : '';
       filename = `result_${result.result_id}${ext}`;
     }
-    if (state.taskId) await downloadTaskOutput(state.taskId, filename);
-    else await downloadProjectOutput(projectId, filename);
-  }), [runDownload, result, state.taskId, projectId]);
+    // U17 (UI-3): avanzamento dello scaricamento nella finestra.
+    try {
+      if (state.taskId) await downloadTaskOutput(state.taskId, filename, { onProgress: transfer.onProgress });
+      else await downloadProjectOutput(projectId, filename, { onProgress: transfer.onProgress });
+    } finally {
+      transfer.reset();
+    }
+  }), [runDownload, result, state.taskId, projectId, transfer.onProgress, transfer.reset]);
 
   const isStillWorking = isExecuting || caricaPolling;
 
@@ -247,7 +258,7 @@ export function useExecution(projectId, options = {}) {
     canCancel: isExecuting && Boolean(state.taskId),
     caricaTasks, caricaPolling, isStillWorking,
     unseenResult,
-    downloading: dl.busy, downloadError: dl.error,
+    downloading: dl.busy, downloadError: dl.error, downloadProgress: transfer.progress,
     handleExecute, closeModal, openModal, reset, cancelTask: cancelRunningTask, downloadTaskResult,
     setShowModal, setResult,
   };
@@ -263,6 +274,7 @@ export function executionModalProps(execution) {
     onDownload: execution.downloadTaskResult,
     downloading: execution.downloading,
     downloadError: execution.downloadError,
+    downloadProgress: execution.downloadProgress,
     progress: execution.progress,
     progressMessage: execution.progressMessage,
     taskStatus: execution.taskStatus,

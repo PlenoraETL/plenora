@@ -58,6 +58,43 @@ export const SHORTCUTS = Object.freeze([
     label: 'Elimina il passo o il collegamento selezionato (chiede conferma)',
     match: (e) => e.key === 'Delete' || e.key === 'Backspace',
   },
+  // Comandi del canvas (UI-3, U27: components/editor/canvasCommands), con il
+  // fuoco sul canvas e mai mentre si scrive o con testo selezionato.
+  {
+    id: 'select_all', group: 'Editor', keys: ['⌘/Ctrl', 'A'],
+    label: 'Seleziona tutti i nodi del canvas',
+    match: (e) => mod(e) && !e.shiftKey && !e.altKey && key(e, 'a'),
+  },
+  {
+    id: 'copy', group: 'Editor', keys: ['⌘/Ctrl', 'C'],
+    label: 'Copia i nodi selezionati (con i loro collegamenti)',
+    match: (e) => mod(e) && !e.shiftKey && !e.altKey && key(e, 'c'),
+  },
+  {
+    id: 'paste', group: 'Editor', keys: ['⌘/Ctrl', 'V'],
+    label: 'Incolla i nodi copiati',
+    match: (e) => mod(e) && !e.shiftKey && !e.altKey && key(e, 'v'),
+  },
+  {
+    id: 'duplicate', group: 'Editor', keys: ['⌘/Ctrl', 'D'],
+    label: 'Duplica il passo selezionato con gli stessi ingressi',
+    match: (e) => mod(e) && !e.shiftKey && !e.altKey && key(e, 'd'),
+  },
+  {
+    id: 'search_canvas', group: 'Editor', keys: ['⌘/Ctrl', 'F'],
+    label: 'Cerca un nodo nel canvas e vai lì',
+    match: (e) => mod(e) && !e.shiftKey && !e.altKey && key(e, 'f'),
+  },
+  {
+    id: 'connect', group: 'Editor', keys: ['C'],
+    label: 'Collega il nodo selezionato a un altro (da tastiera)',
+    match: (e) => !mod(e) && !e.altKey && !e.shiftKey && key(e, 'c'),
+  },
+  {
+    id: 'editor_guide', group: 'Editor', keys: ['F1'],
+    label: 'Guida dell’editor, sulla parte del nodo selezionato',
+    match: (e) => e.key === 'F1',
+  },
 ]);
 
 const BY_ID = new Map(SHORTCUTS.map(s => [s.id, s]));

@@ -25,9 +25,7 @@ def sql_projection(nodes: list[Node], edges: list[Edge], result_node: Node,
                    provider: str = "postgres") -> JsonRows:
     """La visita del grafo e il renderer sono gli stessi del generatore SQL."""
     generator = QueryGenerator(provider)
-    tables = generator._trova_tabelle_connesse(nodes, edges, result_node.id)
-    tables.reverse()
-    tables = generator._riordina_per_dipendenze_join(tables, edges)
+    tables = generator.query_tables(nodes, edges, result_node.id)
     metadata = []
     QueryProjectionRenderer(generator).generate_select(
         tables, result_node, generator._estrai_config_group_by(result_node),

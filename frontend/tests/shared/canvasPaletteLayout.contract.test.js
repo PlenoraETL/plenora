@@ -34,7 +34,8 @@ describe('manipola palette', () => {
   });
 
   it('works before the registry is loaded (only joins and outputs)', () => {
-    expect(buildManipolaPaletteGroups(null).map(g => g.label)).toEqual(['Unisci e uscite']);
+    // UI-3 (P30): voci del catalogo unico dei nodi anche senza registry.
+    expect(buildManipolaPaletteGroups(null).map(g => g.label)).toEqual(['Unisci e uscite', 'Strumenti']);
   });
 });
 

@@ -13,6 +13,7 @@
 
 import http from './http';
 import { downloadBlob } from '../utils/downloadBlob';
+import { downloadProgress } from '../utils/transferProgress';
 import { requestErrorMessage } from '../utils/errorMessages';
 
 /**
@@ -46,7 +47,7 @@ export const cancelTask = async (taskId) => {
  * @param {string} [filename] - Nome file suggerito (sovrascrivibile da Content-Disposition)
  * @returns {Promise<void>}
  */
-export const downloadTaskOutput = async (taskId, filename = null) => {
+export const downloadTaskOutput = async (taskId, filename = null, { onProgress = null } = {}) => {
   // Pre-fix (P1 contracts-flows): il 410 Gone (output scaduto/cancellato,
   // tipico dei task con TTL retention) cadeva nell'interceptor http
   // come errore generico. L'utente vedeva "Errore di comunicazione con
@@ -55,6 +56,7 @@ export const downloadTaskOutput = async (taskId, filename = null) => {
   try {
     const response = await http.get(`/tasks/${taskId}/download`, {
       responseType: 'blob',
+      ...downloadProgress(onProgress),
     });
     downloadBlob(response, filename, `task_${taskId}_output`);
   } catch (err) {

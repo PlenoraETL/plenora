@@ -250,7 +250,7 @@ describe('EstraiEditor', () => {
     render(<EstraiEditor />);
 
     expect(await screen.findByText('Estrai Orders')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /salva/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^salva$/i }));
 
     await waitFor(() => {
       expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);
@@ -329,7 +329,7 @@ describe('EstraiEditor', () => {
 
     render(<EstraiEditor />);
     await screen.findByText('Estrai Orders');
-    await userEvent.click(screen.getByRole('button', { name: /salva/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^salva$/i }));
 
     await waitFor(() => {
       expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);
@@ -341,7 +341,7 @@ describe('EstraiEditor', () => {
   it('saves drafts regardless of validation (validazione on-demand, non blocca il save)', async () => {
     render(<EstraiEditor />);
     await screen.findByText('Estrai Orders');
-    await userEvent.click(screen.getByRole('button', { name: /salva/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^salva$/i }));
 
     await waitFor(() => {
       expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);

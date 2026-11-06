@@ -242,7 +242,7 @@ describe('ManipolaEditor', () => {
     render(<ManipolaEditor />);
 
     expect(await screen.findByText('Manipola Orders')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /salva/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^salva$/i }));
 
     await waitFor(() => {
       expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);
@@ -320,7 +320,7 @@ describe('ManipolaEditor', () => {
 
     render(<ManipolaEditor />);
     await screen.findByText('Manipola Orders');
-    await userEvent.click(screen.getByRole('button', { name: /salva/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^salva$/i }));
 
     await waitFor(() => {
       expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);

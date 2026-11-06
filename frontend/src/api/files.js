@@ -18,6 +18,7 @@
 import http from './http';
 import { fetchAllOffsetPages } from './pagination';
 import { assertFileSize, throwIfUploadTooLarge } from './uploadGuards';
+import { uploadProgress } from '../utils/transferProgress';
 
 /**
  * Upload un nuovo file
@@ -30,7 +31,7 @@ import { assertFileSize, throwIfUploadTooLarge } from './uploadGuards';
  * @param {number} srid - SRID per colonne geometriche (null = auto)
  * @returns {Promise<Object>} FileSource creato
  */
-export const uploadFile = async (file, name, description = '', layer = '', sheet = '', selectedColumns = null, srid = null) => {
+export const uploadFile = async (file, name, description = '', layer = '', sheet = '', selectedColumns = null, srid = null, { onProgress = null } = {}) => {
   // Evita il roundtrip per file ovviamente fuori soglia; il backend
   // resta il guard autorevole e risponde 413.
   assertFileSize(file);
@@ -49,7 +50,7 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
   }
 
   try {
-    const response = await http.post('/files/upload', formData);
+    const response = await http.post('/files/upload', formData, uploadProgress(onProgress));
     return response.data;
   } catch (err) {
     // Normalizza 413: i caller possono branchare su
@@ -106,7 +107,7 @@ export const updateFile = async (fileId, data) => {
  * @param {number|null} srid - SRID opzionale
  * @returns {Promise<Array>} Lista di FileSource creati
  */
-export const uploadMultiLayer = async (file, name, description = '', layersConfig = [], srid = null) => {
+export const uploadMultiLayer = async (file, name, description = '', layersConfig = [], srid = null, { onProgress = null } = {}) => {
   assertFileSize(file);
 
   const formData = new FormData();
@@ -117,7 +118,7 @@ export const uploadMultiLayer = async (file, name, description = '', layersConfi
   if (srid) formData.append('srid', String(srid));
 
   try {
-    const response = await http.post('/files/upload-multi-layer', formData);
+    const response = await http.post('/files/upload-multi-layer', formData, uploadProgress(onProgress));
     return response.data;
   } catch (err) {
     throwIfUploadTooLarge(err);
@@ -164,7 +165,7 @@ export const getFilePreview = async (fileId, limit = 100) => {
  * @param {File} file - File da analizzare
  * @returns {Promise<{columns: Array, row_count: number}>}
  */
-export const previewFileTemp = async (file, layer = null, sheet = null) => {
+export const previewFileTemp = async (file, layer = null, sheet = null, { onProgress = null } = {}) => {
   assertFileSize(file);
 
   const formData = new FormData();
@@ -173,7 +174,7 @@ export const previewFileTemp = async (file, layer = null, sheet = null) => {
   if (sheet) formData.append('sheet', sheet);
 
   try {
-    const response = await http.post('/files/preview-temp', formData);
+    const response = await http.post('/files/preview-temp', formData, uploadProgress(onProgress));
     return response.data;
   } catch (err) {
     throwIfUploadTooLarge(err);

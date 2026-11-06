@@ -15,7 +15,6 @@
  * Route: /editor/manipola/:id
  */
 import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { newProjectInputData } from '../utils/uniqueName';
 import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -69,14 +68,18 @@ import '../components/nodes/StaticValuesNode.css';
 import '../components/nodes/AnnotationNode.css';
 import '../components/nodes/DataSourceNode.css';
 import { useAuth } from '../context/AuthContext';
+import { can } from '../utils/permissions';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
-import { addFirstMessage, menuEntry, onlyOneMessage, term, termName } from '../utils/glossary';
+import { menuEntry, term } from '../utils/glossary';
 import { buildManipolaPaletteGroups } from '../components/canvas/manipolaPalette';
 import { isMultiInputOp } from '../utils/transformRegistry';
 import { useTransformRegistry } from '../hooks/useTransformRegistry';
 import useEditorActions from '../components/editor/useEditorActions';
-import { renderNodeType } from '../utils/nodeTypeRegistry';
+import useCatalogAdd, { useResolvedSourceNames } from '../components/editor/useCatalogAdd';
+import { catalogConstraintNodes, catalogMenuItems, isCanvasEmpty, readSourceDrop, sourcePaletteGroups } from '../components/editor/editorNodeCatalog';
+import EditorFileUploadModal from '../components/editor/EditorFileUploadModal';
+import { newJoinType } from '../utils/joinTypes';
 
 // Costante stabile — evita array literal nelle deps di useEditorData
 const MANIPOLA_SOURCE_TYPES = ['estrai', 'manipola', 'arricchisci'];
@@ -114,7 +117,7 @@ const ManipolaEditorContent = () => {
 
   const {
     onNodesChange, onEdgesChange,
-    loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
+    loadGraph, editEdges, insertNode, applyDerivedNodes,
     insertBetween, addSubgraph,
     nodesRef, edgesRef,
     getViewportCenter,
@@ -212,70 +215,35 @@ const ManipolaEditorContent = () => {
     editEdges(eds => eds.filter(e => e.id !== edge.id));
   }, [editEdges]);
 
-  const getPos = () => getViewportCenter({ screenToFlowPosition });
+  // Ogni nodo nuovo nasce al centro della vista visibile (UI-3, P30).
+  const getPos = useCallback(() => getViewportCenter({ screenToFlowPosition }), [getViewportCenter, screenToFlowPosition]);
 
-  const handleAddMultiJoinNode = useCallback(() => {
-    addNodes({ id: `multi_join_${Date.now()}`, type: 'multi_join', position: getPos(),
-      data: { config: { join_keys: [], join_type: 'inner' } } });
-  }, [addNodes]);
-
-  const handleAddStaticValuesNode = useCallback(() => {
-    addNodes({ id: `static_${Date.now()}`, type: 'staticValues', position: getPos(),
-      data: { label: termName('static_values'), fields: [] } });
-  }, [addNodes]);
-
-  const handleAddProjectInputNode = useCallback(() => {
-    // Chiave e ordine unici e stabili (utils/uniqueName, R8.19).
-    addNodes({
-      id: `project_input_${Date.now()}`,
-      type: 'project_input',
-      position: getPos(),
-      data: newProjectInputData(nodesRef.current, { kind: 'file' }),
+  // Un passo che entra nel flusso dopo il nodo di partenza della palette:
+  // se quel nodo ha un solo passo successivo e il nuovo lascia passare i
+  // dati, entra nella catena (store.insertNode).
+  const makeChainEdge = useCallback((params) => ({
+    ...params, ...defaultEdgeOptions,
+    id: `xy-edge__${params.source}${params.sourceHandle || ''}-${params.target}${params.targetHandle || ''}`,
+  }), []);
+  const insertAfter = useCallback((node, afterId) => {
+    const multi = node.type === 'multi_join' || (node.type === 'transform' && isMultiInputOp(node.data?.transform_op));
+    insertNode({
+      node, afterId,
+      passThrough: node.type !== 'result',
+      inHandle: multi ? 'input-0' : (node.type === 'result' ? 'input' : null),
+      makeEdge: makeChainEdge,
     });
-  }, [addNodes, nodesRef]);
+  }, [insertNode, makeChainEdge]);
 
-  const handleAddCommentNode = useCallback(() => {
-    addNodes({ id: `comment_${Date.now()}`, type: 'comment', position: getPos(), zIndex: -1,
-      style: { width: 250, height: 150 },
-      data: { level: '', label: '', title: '', color: '#fbbf24' } });
-  }, [addNodes]);
+  // Catalogo unico dei nodi (UI-3, P30): menu, palette e canvas vuoto.
+  const { addNode, addSource } = useCatalogAdd('manipola', getPos, { insertAfter });
+  const [showUpload, setShowUpload] = useState(false);
+  // U30: caricare un file dall'editor, con lo stesso permesso della pagina File.
+  const canUpload = can.uploadFile(user);
 
-  const handleAddResultNode = useCallback(() => {
-    if (nodesRef.current.some(n => n.type === 'result')) { toast.warning(onlyOneMessage('output')); return; }
-    addNodes({ id: `result_${Date.now()}`, type: 'result', position: getPos(),
-      data: { isManipulate: true, fileName: 'output', format: 'csv',
-        group_by_enabled: false, group_by_columns: [], aggregations: [],
-        order_by_enabled: false, order_by_columns: [],
-        having_enabled: false, having_conditions: [] } });
-  }, [addNodes]);
-
-  const handleAddDataSourceNode = useCallback((mode = 'source') => {
-    const newNodeId = `datasource_${Date.now()}`;
-    addNodes({
-      id: newNodeId, type: renderNodeType('datasource_node'), position: getPos(),
-      data: { mode, datasource_id: '', datasource_name: '', file_mode: 'fixed',
-        file_path: '', folder_path: '', dynamic_rule: 'latest', pattern: '',
-        dest_folder: '', dest_filename: '', dest_format: 'csv', columns: [] }
-    });
-  }, [addNodes]);
-
-  const handleAddCaricanNode = useCallback(() => {
-    const currentNodes = nodesRef.current;
-    if (!currentNodes.some(n => n.type === 'result')) { toast.warning(addFirstMessage('output')); return; }
-    if (currentNodes.some(n => n.type === 'carica'))  { toast.warning(onlyOneMessage('load_db')); return; }
-    const resultNode = currentNodes.find(n => n.type === 'result');
-    const newNode = { id: `carica_${Date.now()}`, type: 'carica',
-      position: { x: resultNode.position.x + 400, y: resultNode.position.y },
-      data: { dest_type: 'db', connection_id: '', schema_name: '', table_name: '', write_mode: 'create',
-        column_mappings: [], match_columns: [], batch_size: 1000, transaction_mode: 'all_or_nothing',
-        create_spatial_index: true, conflict_policy: 'abort',
-        arcgis_connection_id: '', arcgis_service_url: '', arcgis_layer_url: '', arcgis_operation: 'add',
-        arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0' } };
-    addNodes(newNode);
-    addEdges({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      type: 'smoothstep', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 },
-      markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: '#7c3aed' }, data: {} });
-  }, [addNodes, addEdges]);
+  // U9: i nodi sorgente salvati col solo id prendono il nome dal catalogo
+  // delle sorgenti (campo transitorio: il canvas non risulta modificato).
+  useResolvedSourceNames(applyDerivedNodes, availableSources, availableFiles);
 
   // ── Palette "Cosa vuoi fare?" (Fase 4, M2) ────────────────────────────
   // Catalogo condiviso con errore e «Riprova» (hooks/useTransformRegistry,
@@ -284,54 +252,29 @@ const ManipolaEditorContent = () => {
   const transformRegistry = registryResource.data || null;
 
   // Il nuovo passo nasce dopo il nodo di partenza, gia' selezionato
-  // (pannello aperto). Se quel nodo ha un solo passo successivo e il nuovo
-  // lascia passare i dati, entra nella catena (store.insertNode).
+  // (pannello aperto). Sorgenti e voci del catalogo passano dal catalogo.
   const handlePalettePick = useCallback((item, afterId) => {
-    if (item.kind === 'carica') { handleAddCaricanNode(); return; }
-    const current = nodesRef.current;
-    if (item.kind === 'result' && current.some(n => n.type === 'result')) {
-      toast.warning(onlyOneMessage('output'));
-      return;
-    }
-    const position = getPos();
-    const stamp = Date.now();
-    let newNode;
-    if (item.kind === 'multi_join') {
-      newNode = { id: `multi_join_${stamp}`, type: 'multi_join', position,
-        data: { config: { join_keys: [], join_type: 'inner' } } };
-    } else if (item.kind === 'result') {
-      newNode = { id: `result_${stamp}`, type: 'result', position,
-        data: { isManipulate: true, fileName: 'output', format: 'csv',
-          group_by_enabled: false, group_by_columns: [], aggregations: [],
-          order_by_enabled: false, order_by_columns: [],
-          having_enabled: false, having_conditions: [] } };
-    } else {
-      newNode = { id: `transform_${stamp}`, type: 'transform', position,
-        data: { transform_op: item.id, config: {} } };
-    }
-    const inHandle = item.kind === 'multi_join' || isMultiInputOp(item.id)
-      ? 'input-0'
-      : (item.kind === 'result' ? 'input' : null);
-    insertNode({
-      node: newNode,
-      afterId,
-      passThrough: item.kind !== 'result',
-      inHandle,
-      makeEdge: (params) => ({
-        ...params, ...defaultEdgeOptions,
-        id: `xy-edge__${params.source}${params.sourceHandle || ''}-${params.target}${params.targetHandle || ''}`,
-      }),
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [insertNode, handleAddCaricanNode, toast]);
+    if (item.kind === 'source') { addSource(item.sourceKind, item.source); return; }
+    if (item.kind === 'catalog') { addNode(item.catalogKey, { afterId }); return; }
+    const newNode = { id: `transform_${Date.now()}`, type: 'transform', position: getPos(),
+      // U21: un Join nuovo nasce con il tipo predefinito del catalogo unico.
+      data: { transform_op: item.id, config: item.id === 'join' ? { how: newJoinType('manipola') } : {} } };
+    insertAfter(newNode, afterId);
+  }, [addSource, addNode, getPos, insertAfter]);
 
   const registryFailed = registryResource.status === 'error';
   const retryRegistry = registryResource.reload;
-  const palette = useMemo(() => ({
-    groups: buildManipolaPaletteGroups(transformRegistry),
-    onPick: handlePalettePick,
-    notice: registryFailed ? { message: 'Le operazioni non sono state caricate.', onRetry: retryRegistry } : null,
-  }), [transformRegistry, handlePalettePick, registryFailed, retryRegistry]);
+  // U11: le sorgenti sono nella palette; a canvas vuoto vengono per prime.
+  const canvasEmpty = useCanvasDerived(isCanvasEmpty, { on: 'structure' });
+  const palette = useMemo(() => {
+    const ops = buildManipolaPaletteGroups(transformRegistry);
+    const sources = sourcePaletteGroups({ projects: availableSources, files: availableFiles });
+    return {
+      groups: canvasEmpty ? [...sources, ...ops] : [...ops, ...sources],
+      onPick: handlePalettePick,
+      notice: registryFailed ? { message: 'Le operazioni non sono state caricate.', onRetry: retryRegistry } : null,
+    };
+  }, [transformRegistry, availableSources, availableFiles, canvasEmpty, handlePalettePick, registryFailed, retryRegistry]);
 
   // ── Rami (Fase 4, M6) ─────────────────────────────────────────────────
   const branchEdge = useCallback((params) => ({
@@ -356,7 +299,7 @@ const ManipolaEditorContent = () => {
     const rightCols = getColumnsOf(endId).columns;
     const shared = leftCols.find(c => rightCols.some(r => r.name === c.name))?.name;
     const config = op === 'join'
-      ? { how: 'left', name_conflict: 'keep_left', ...joinKeysPatch(shared ? [[shared, shared]] : [], leftCols, rightCols) }
+      ? { how: newJoinType('manipola'), name_conflict: 'keep_left', ...joinKeysPatch(shared ? [[shared, shared]] : [], leftCols, rightCols) }
       : {};
     // Il ramo si chiama come la sua corsia (vista Passi e pannello).
     const headId = analyzeCanvas(current, edgesRef.current).laneOf.get(endId)?.headId;
@@ -425,41 +368,27 @@ const ManipolaEditorContent = () => {
   }), [connectBranch, duplicateBranch]);
 
 
-  const onDragStart = (event, type, data) => {
-    event.dataTransfer.setData('application/reactflow', type);
-    event.dataTransfer.setData('itemData', JSON.stringify(data));
-    event.dataTransfer.effectAllowed = 'move';
-  };
-
   const onDragOver = useCallback((event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }, []);
 
+  // Sorgente trascinata dalla barra laterale: stesso costruttore del clic
+  // (editorNodeCatalog, con il nome), alla posizione del rilascio.
   const onDrop = useCallback((event) => {
     event.preventDefault();
-    const type        = event.dataTransfer.getData('application/reactflow');
-    const itemDataStr = event.dataTransfer.getData('itemData');
-    if (!type || !itemDataStr) return;
-    const itemData = JSON.parse(itemDataStr);
-    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    const dropped = readSourceDrop(event);
+    if (!dropped) return;
+    addSource(dropped.kind, dropped.item, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+  }, [screenToFlowPosition, addSource]);
 
-    let newNode;
-    if (type === 'project_source') {
-      const newNodeId = `source_${Date.now()}`;
-      newNode = { id: newNodeId, type: 'project_source', position,
-        data: { source_project_id: itemData.id, columns: [] } };
-    } else if (type === 'file_source') {
-      const newNodeId = `file_${Date.now()}`;
-      newNode = { id: newNodeId, type: 'file_source', position,
-        data: { file_source_id: itemData.id, columns: [] } };
-    }
-
-    if (newNode) addNodes(newNode);
-  }, [screenToFlowPosition, addNodes]);
+  // U30: file caricato dall'editor -> nell'elenco delle sorgenti e nel canvas.
+  const onUploaded = useCallback(async (file) => {
+    await reloadSources?.();
+    if (file?.id) addSource('file_source', file);
+    toast.success(`File «${file?.name || ''}» caricato e aggiunto al canvas.`);
+  }, [reloadSources, addSource, toast]);
 
   // Uscite: chiede il guard unico (NavigationGuard + useBlocker).
   useUnsavedChangesGuard();
   const handleBack = () => navigate('/');
-  // UI-2 (V4): ricalcolati solo quando cambia il contenuto del canvas.
-  const { hasResultNode, hasCaricanNode } = useCanvasDerived(sinkFlags);
 
   // beforeCanvas slot: banner accessibilita' nodi cross-tenant.
   const accessDeniedBanner = <AccessDeniedBanner />;
@@ -467,6 +396,9 @@ const ManipolaEditorContent = () => {
   // topbar slot
   // Barra unica (Fase 4, M7): le azioni dell'editor nel menu "⋯", i passi
   // dalla palette ("＋ Passo"), un solo "▶ Esegui".
+  // Vincoli del catalogo (Output e caricamenti) dal grafo, senza iscriversi
+  // ai nodi (UI-2, hooks/useCanvasDerived).
+  const catalogNodes = useCanvasDerived(catalogConstraintNodes);
   const toolbar = {
     mode: 'manipola',
     title: project?.metadata?.name,
@@ -479,17 +411,12 @@ const ManipolaEditorContent = () => {
     // Lo stato delle colonne e' nella barra comune (EditorToolbar, ColumnSyncBadge).
     statusExtra: <ValidationStatusBadge />,
     // Sola lettura: nessuna azione che modifica (Versioni crea e ripristina).
+    // Voci dal catalogo unico (UI-3, P30): stessi strumenti dei tre editor,
+    // voci spente con il motivo scritto (E3).
     menuItems: isReadOnly ? [] : [
-      // Nome, icona e descrizione di ogni voce dal glossario (regola 10).
-      menuEntry('runtime_input', { onClick: handleAddProjectInputNode }),
-      menuEntry('static_values', { onClick: handleAddStaticValuesNode }),
-      menuEntry('note', { onClick: handleAddCommentNode }),
-      { key: 'div1', divider: true },
-      menuEntry('output', { onClick: handleAddResultNode, disabled: hasResultNode }),
-      menuEntry('multi_join', { onClick: handleAddMultiJoinNode }),
-      menuEntry('datasource', { onClick: () => handleAddDataSourceNode('source') }),
-      menuEntry('load_db', { onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode }),
-      { key: 'div2', divider: true },
+      ...catalogMenuItems('manipola', catalogNodes, addNode),
+      { key: 'div-file', divider: true },
+      ...(canUpload ? [menuEntry('upload_file', { onClick: () => setShowUpload(true) })] : []),
       menuEntry('versions', { onClick: () => setShowVersions(true) }),
     ],
   };
@@ -497,12 +424,13 @@ const ManipolaEditorContent = () => {
   // sidebar slot
   const sidebar = !isReadOnly ? (
     <EditorSidebar
-      variant="manipola" projects={availableSources} files={availableFiles} onDragStart={onDragStart}
+      variant="manipola" projects={availableSources} files={availableFiles}
+      onPick={(kind, item) => addSource(kind, item)} onUpload={canUpload ? () => setShowUpload(true) : null}
       sourcesLoading={sourcesLoading} sourcesError={sourcesError} onRetrySources={reloadSources}
-      projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto nel canvas: ne legge il risultato',
+      projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Clic o trascina un progetto nel canvas: ne legge il risultato',
         emptyMessage: 'Nessun progetto disponibile.', emptyHint: 'Crea prima un progetto Estrai, Manipola o Arricchisci.',
         filterTypes: ['estrai', 'manipola', 'arricchisci'], showSearch: true }}
-      filesConfig={{ title: '📁 File Esterni', subtitle: 'Trascina un file nel canvas',
+      filesConfig={{ title: '📁 File Esterni', subtitle: 'Clic o trascina un file nel canvas',
         emptyMessage: 'Nessun file disponibile.', uploadLink: '/files', uploadLinkText: 'Carica file esterni' }}
     />
   ) : null;
@@ -514,7 +442,8 @@ const ManipolaEditorContent = () => {
         {showVersions && (
           <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
         )}
-        <ExecutionModal {...executionModalProps(execution)} title={`${term('run').icon} Esecuzione del progetto Manipola`} projectType="manipola" />
+        <EditorFileUploadModal isOpen={showUpload} onClose={() => setShowUpload(false)} onUploaded={onUploaded} variant="manipola" />
+        <ExecutionModal {...executionModalProps(execution)} projectId={projectId} projectName={project?.metadata?.name} title={`${term('run').icon} Esecuzione del progetto Manipola`} projectType="manipola" />
         {preview.showModal && (
 <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
           data={preview.data} loading={preview.loading} error={preview.error}

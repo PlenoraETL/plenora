@@ -80,3 +80,8 @@
 
 /* TransformNode nel pannello laterale */
 .transform-inspector__foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--plen-border, #e3e7f0); }
+
+/* U20 (UI-3): gruppi di condizioni del passo Filtra (E dentro, O tra i gruppi). */
+.ppanel__group { display: flex; flex-direction: column; gap: 6px; padding: 6px; border: 1px dashed var(--plen-border-hi, #cfd6e4); border-radius: 9px; }
+.ppanel__group-title { font-size: 11.5px; font-weight: 600; color: var(--plen-text-sub, #5b6478); }
+.ppanel__or { align-self: center; font-size: 11.5px; font-weight: 700; color: var(--plen-warn, #b45309); }

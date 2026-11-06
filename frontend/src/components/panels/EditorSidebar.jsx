@@ -14,7 +14,9 @@ import { ICON } from '../../utils/icons';
 function EditorSidebar({
   projects = [],
   files = [],
-  onDragStart,
+  // UI-3 (U11, U30): clic/Invio su una sorgente e caricamento di un file.
+  onPick,
+  onUpload = null,
   projectsConfig = {},
   filesConfig = {},
   variant = 'manipola',
@@ -50,7 +52,7 @@ function EditorSidebar({
         {showProjects && (
           <ProjectsSidebar
             projects={projects}
-            onDragStart={onDragStart}
+            onPick={onPick}
             accentColor={colors.project}
             {...projectsConfig}
           />
@@ -58,9 +60,10 @@ function EditorSidebar({
         {showFiles && (
           <FilesSidebar
             files={files}
-            onDragStart={onDragStart}
+            onPick={onPick}
             accentColor={colors.file}
             uploadLink="/files"
+            onUpload={onUpload}
             {...filesConfig}
           />
         )}

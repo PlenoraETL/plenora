@@ -29,7 +29,7 @@ CONTRACT = {k: v for k, v in json.loads(
 
 SAMPLE_VALUES = {
     "column": "pop", "function": "SUM", "alias": "sum_pop", "alias_source": "user",
-    "direction": "DESC", "operator": ">", "value": "3",
+    "direction": "DESC", "operator": ">", "value": "3", "group": 1,
 }
 
 

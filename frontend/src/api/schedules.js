@@ -8,6 +8,7 @@
 import http from './http';
 import { API_ENDPOINT } from './config';
 import { downloadBlob } from '../utils/downloadBlob';
+import { downloadProgress } from '../utils/transferProgress';
 import { fetchAllOffsetPages } from './pagination';
 
 export const listSchedules = async (projectId = null) => {
@@ -80,11 +81,12 @@ export const listScheduleRuns = async (scheduleId) => {
  * @param {string|null} run - timestamp run opzionale
  * @param {string} [filename]
  */
-export const downloadScheduleOutput = async (scheduleId, run = null, filename = null) => {
+export const downloadScheduleOutput = async (scheduleId, run = null, filename = null, { onProgress = null } = {}) => {
   const params = run ? { run } : {};
   const response = await http.get(`/schedules/${scheduleId}/download`, {
     params,
     responseType: 'blob',
+    ...downloadProgress(onProgress),
   });
 
   downloadBlob(response, filename, `schedule_${scheduleId}_output`);

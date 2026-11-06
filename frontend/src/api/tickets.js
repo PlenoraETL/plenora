@@ -17,6 +17,7 @@
 
 import http from './http';
 import { openBlob, saveBlob } from '../utils/downloadBlob';
+import { downloadProgress, uploadProgress } from '../utils/transferProgress';
 import {
   assertFileSize,
   throwIfUploadTooLarge,
@@ -87,7 +88,7 @@ export const addComment = async (ticketId, body) => {
   return res.data;
 };
 
-export const uploadAttachment = async (ticketId, file) => {
+export const uploadAttachment = async (ticketId, file, { onProgress = null } = {}) => {
   // Pre-check size lato client allineato al cap backend specifico per i
   // ticket (10MB). Il default generale di
   // uploadGuards e' 100MB e accetterebbe file che `tickets/router.py`
@@ -99,7 +100,7 @@ export const uploadAttachment = async (ticketId, file) => {
   // Non forzare Content-Type: senza boundary blocca il parsing
   // Starlette/python-multipart. Axios lo costruisce da FormData.
   try {
-    const res = await http.post(`/tickets/${ticketId}/attachments`, form);
+    const res = await http.post(`/tickets/${ticketId}/attachments`, form, uploadProgress(onProgress));
     return res.data;
   } catch (err) {
     throwIfUploadTooLarge(err);
@@ -128,10 +129,10 @@ export const deleteTicket = async (ticketId) => {
  * Le immagini (Content-Disposition: inline) vengono aperte in nuova tab;
  * log/txt (attachment) forzano il download via <a download>.
  */
-export const openAttachment = async (ticketId, attachmentId, filename) => {
+export const openAttachment = async (ticketId, attachmentId, filename, { onProgress = null } = {}) => {
   const res = await http.get(
     `/tickets/${ticketId}/attachments/${attachmentId}/download`,
-    { responseType: 'blob' },
+    { responseType: 'blob', ...downloadProgress(onProgress) },
   );
   const disposition = res.headers['content-disposition'] || '';
   const isInline = disposition.toLowerCase().startsWith('inline');

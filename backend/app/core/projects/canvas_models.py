@@ -1,8 +1,8 @@
 """Pydantic models for project canvas state."""
 
-from typing import Any, Dict, List, Optional, Literal
+from typing import Annotated, Any, Dict, List, Optional, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 from app.shared.execution.canvas_types import (
     ConflictPolicyLiteral,
@@ -64,6 +64,11 @@ class Filter(BaseModel):
         "BETWEEN"
     ]
     value: str = ""
+    # Gruppo E/O (06/11/2026): stesso gruppo in AND, gruppi diversi in OR.
+    # Assente/null = 0; la regola e la validazione sono una sola,
+    # ``app.shared.execution.condition_groups`` (StrictInt: ``true`` o
+    # ``"1"`` non sono un gruppo, come li rifiuta la regola).
+    group: Optional[Annotated[StrictInt, Field(ge=0)]] = None
 
 
 class AggregationConfig(BaseModel):
@@ -165,6 +170,11 @@ class Node(BaseModel):
     source_freshness: Optional[dict] = None
 
     file_source_id: Optional[str] = None
+    # Nomi della sorgente salvati dal frontend insieme all'id (UI-3, U9: il
+    # titolo del nodo e' il nome, mai l'id). Solo visuali: l'esecuzione legge
+    # gli id.
+    project_name: Optional[str] = None
+    file_name: Optional[str] = None
 
     # Input pubblico di progetto. Viene risolto prima del dispatch sia nella
     # normale esecuzione sia nel publisher/runtime degli eseguibili.

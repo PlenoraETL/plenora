@@ -6,6 +6,8 @@ Keeps transformation behavior isolated from orchestration callers.
 
 from typing import Any
 
+import numpy as np
+
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
@@ -16,6 +18,7 @@ from app.core.dataframes.tabular import (
     unique_non_null_column_values,
 )
 from app.core.manipola.types import JsonRows
+from app.shared.execution.condition_groups import condition_groups
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -25,6 +28,20 @@ DataFrame = FrameLike
 
 # FILTRO RIGHE
 # Applica condizioni su colonne con operatori: =, !=, >, <, >=, <=, LIKE, IN, IS NULL
+#
+# Gruppi E/O (06/11/2026, ``shared.execution.condition_groups``): ogni voce di
+# ``conditions`` puo' avere ``group`` (intero >= 0, assente = 0). Dentro un
+# gruppo le condizioni sono in AND e si applicano IN SEQUENZA sulle righe
+# rimaste, come prima dei gruppi (stesse conversioni, stessi errori: una
+# condizione vede solo le righe che hanno passato le precedenti del gruppo).
+# Tra gruppi OR: restano le righe che passano almeno un gruppo, nell'ordine
+# originale, indice azzerato. Un solo gruppo = il risultato di sempre.
+
+FILTER_OPERATORS = frozenset({
+    "==", "!=", ">", ">=", "<", "<=", "contains", "startswith", "endswith",
+    "isnull", "notnull", "in", "not_in",
+})
+
 
 def prepare_filter(df: DataFrame, column: str | None = None, operator: str = "==", value: Any = None, conditions: JsonRows | None = None) -> list | None:
     """Validate filter configuration against columns and dtypes, without filtering."""
@@ -34,9 +51,12 @@ def prepare_filter(df: DataFrame, column: str | None = None, operator: str = "==
         for condition in conditions:
             if not isinstance(condition, dict) or not condition.get("column") or not condition.get("operator"):
                 raise ValueError("Filter: ogni condizione richiede column e operator.")
-            if condition["operator"] not in {"==", "!=", ">", ">=", "<", "<=", "contains", "startswith", "endswith", "isnull", "notnull", "in", "not_in"}:
+            if condition["operator"] not in FILTER_OPERATORS:
                 raise ValueError(f"Filter: operatore '{condition['operator']}' non supportato.")
             prepare_filter(df, condition["column"], condition["operator"], condition.get("value"))
+        # ``group`` di ogni voce: stesso errore in Valida (esecuzione a vuoto)
+        # e in esecuzione.
+        condition_groups(conditions)
         return
 
     if column not in df.columns:
@@ -74,30 +94,74 @@ def op_filter(
     conditions: JsonRows | None = None
 ) -> DataFrame:
     """
-    Filtra righe in base a una condizione.
+    Filtra righe in base a una condizione o a una lista di condizioni.
 
     Args:
         df: DataFrame input
         column: Colonna da filtrare
         operator: Operatore (==, !=, >, >=, <, <=, contains, startswith, endswith, isnull, notnull)
         value: Valore da confrontare
+        conditions: Lista {column, operator, value, group?}; se presente
+            sostituisce il filtro singolo (AND nel gruppo, OR tra gruppi).
+            Lista vuota: passthrough.
 
     Returns:
         DataFrame filtrato
     """
     prepared_values = prepare_filter(df, column, operator, value, conditions)
     if conditions is not None:
-        for condition in conditions:
-            df = op_filter(df, condition["column"], condition["operator"], condition.get("value"))
-        return df
+        groups = condition_groups(conditions)
+        if not groups:
+            return df
+        applied = [_apply_group(df, group) for group in groups]
+        if len(applied) == 1:
+            # Un solo gruppo: lo stesso DataFrame del filtro a catena di sempre.
+            return applied[0][1].reset_index(drop=True)
+        kept = applied[0][0]
+        for positions, _ in applied[1:]:
+            kept = np.union1d(kept, positions)
+        result = df.iloc[kept].reset_index(drop=True)
+        logger.info(f"Filter: {len(df)} -> {len(result)} righe ({len(groups)} gruppi in O)")
+        return result
 
+    selected = _apply_condition(df, column, operator, value, prepared_values)
+    if selected is None:
+        return df
+    return selected[1].reset_index(drop=True)
+
+
+def _apply_group(df: DataFrame, group: JsonRows) -> tuple[Any, DataFrame]:
+    """Condizioni di un gruppo in AND -> (posizioni crescenti in ``df``, righe).
+
+    In sequenza sulle righe rimaste, come il filtro a catena di prima: la
+    preparazione (valori ``in``) e la valutazione di ogni condizione vedono
+    solo le righe che hanno passato le precedenti del gruppo.
+    """
+    positions = np.arange(len(df))
+    frame = df
+    for condition in group:
+        column, operator, value = condition["column"], condition["operator"], condition.get("value")
+        prepared = prepare_filter(frame, column, operator, value)
+        mask, frame = _apply_condition(frame, column, operator, value, prepared)
+        positions = positions[np.asarray(mask, dtype=bool)]
+    return positions, frame
+
+
+def _apply_condition(df: DataFrame, column: str, operator: str, value: Any, prepared_values: list | None) -> tuple[Any, DataFrame] | None:
+    """UNA condizione su ``df`` -> (maschera, righe selezionate con l'indice originale).
+
+    Unica valutazione degli operatori per il filtro singolo e per i gruppi.
+    ``None`` per un operatore ignoto (solo il filtro singolo ci arriva: la
+    lista ``conditions`` lo rifiuta in ``prepare_filter``).
+    """
     # Path read-only puro: niente modifiche column-level, leggi direttamente
     # da `df`.
     col = df[column]
 
     if operator in {"in", "not_in"}:
         mask = col.isin(prepared_values)
-        return df[~mask if operator == "not_in" else mask].reset_index(drop=True)
+        mask = ~mask if operator == "not_in" else mask
+        return mask, df[mask]
 
     # Se la colonna è numerica e il valore è stringa, converti
     if value is not None and is_numeric_series(col):
@@ -140,11 +204,13 @@ def op_filter(
             mask = col.notnull()
         else:
             logger.warning(f"Operatore '{operator}' non supportato")
-            return df
+            return None
 
-        result = df[mask].reset_index(drop=True)
+        # La selezione resta dentro il try come prima: un errore pandas nel
+        # selezionare con la maschera e' lo stesso ValueError.
+        result = df[mask]
         logger.info(f"Filter: {len(df)} -> {len(result)} righe")
-        return result
+        return mask, result
 
     # intent: fail-closed — input utente invalido (operatore/valore
     # incompatibile con tipo colonna, runtime error pandas) solleva

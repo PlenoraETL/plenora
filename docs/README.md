@@ -35,6 +35,9 @@ Le stesse guide si aprono nell'app («Guida completa»); il file si rigenera dal
 contenuto dell'app (`frontend/src/utils/guides/`).
 
 - [Input «Utente che esegue»](guide/input-utente-che-esegue.md)
+- [Editor Estrai](guide/editor-estrai.md)
+- [Editor Manipola](guide/editor-manipola.md)
+- [Editor Arricchisci](guide/editor-arricchisci.md)
 
 ## Architecture
 

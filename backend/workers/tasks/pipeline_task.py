@@ -23,6 +23,7 @@ from app.core.projects import runtime_context as project_runtime_context
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.utils import debug_payload_builder as debug_payload_builder_module
+from app.shared.execution.failed_node import FAILED_NODE_KEYS
 from app.shared.execution.runtime_identity import task_result, trigger_for_test_run
 
 logger = get_logger("workers.pipeline_task")
@@ -615,12 +616,16 @@ def execute_pipeline_task(
                 )
 
             _update_progress(self, 0, message, check_revocation=False)
+            # Passo fallito (shared.execution.failed_node): le stesse chiavi
+            # dell'esito dell'esecutore arrivano nel risultato del task letto
+            # dal frontend (/tasks/{id}: result.error_node_id/_type).
             return _outcome({
                 "success": False,
                 "message": message,
                 "project_id": project_id,
                 "run_id": run_id,
                 "task_id": task_id,
+                **{key: result.get(key) for key in FAILED_NODE_KEYS if result.get(key) is not None},
             })
 
         rows_out = result.rows_count or 0

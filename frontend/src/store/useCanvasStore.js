@@ -724,13 +724,15 @@ export const createCanvasStore = () => create(
        * `selectEdgeId` (arco, es. un join nuovo di Estrai) resta selezionato:
        * il pannello si apre li'. Senza nodi aggiunge solo gli archi.
        */
-      addSubgraph: ({ nodes: added = [], edges: addedEdges = [], selectId = null, selectEdgeId = null }) => {
+      addSubgraph: ({ nodes: added = [], edges: addedEdges = [], selectId = null, selectIds = null, selectEdgeId = null }) => {
         if (get().isReadOnly || (!added.length && !addedEdges.length)) return null;
         const { nodes, edges } = get();
         let dy = 0;
         const clash = (off) => added.some(a => findFreePosition(nodes, { x: a.position.x, y: a.position.y + off }, nodeSize(a)).y !== Math.round(a.position.y + off));
         for (let i = 0; i < 200 && clash(dy); i += 1) dy += 104;
-        const placed = added.map(a => ({ ...a, position: { x: a.position.x, y: a.position.y + dy }, selected: a.id === selectId }));
+        // `selectIds` (UI-3: incolla, duplica): tutto il blocco resta selezionato.
+        const chosen = new Set(selectIds || (selectId ? [selectId] : []));
+        const placed = added.map(a => ({ ...a, position: { x: a.position.x, y: a.position.y + dy }, selected: chosen.has(a.id) }));
         const nextNodes = nodes.map(n => (n.selected ? { ...n, selected: false } : n)).concat(placed);
         const nextEdges = edges.map(e => (e.selected ? { ...e, selected: false } : e))
           .concat(addedEdges.map(e => ({ ...e, selected: e.id === selectEdgeId })));

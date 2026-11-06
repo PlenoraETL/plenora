@@ -29,6 +29,7 @@ from app.config import settings
 from app.core.projects.execution_context import get_project_group_id
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
+from app.shared.execution.failed_node import failed_node_fields, mark_failed_node, node_step
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
 from app.core.results.pipeline_result import save_pipeline_result_outcome
@@ -121,13 +122,17 @@ def _estimate_merge_output_rows_by_keys(
     return estimate_merge_output_rows(left_tmp, right_tmp, left_keys, join_how)
 
 
-def _failure_step(message: str, step_start: float) -> JsonObject:
+def _failure_step(message: str, step_start: float, exc: BaseException | None = None) -> JsonObject:
     """Emette `append_step` di failure manipola + ritorna il dict da
     `return`-are dal chiamante.
 
     Single-source dello shape "step di failure" usato da tutti i branch
     di errore di `execute()`. Concentrare lo shape qui evita branch
     dimenticati e step log incoerenti.
+
+    ``exc`` sollevata dentro un nodo (``shared.execution.failed_node``)
+    aggiunge ``error_node_id``/``error_node_type``, come Arricchisci; senza
+    nodo l'esito resta ``{success, message}``.
     """
     append_step({
         "module":      "manipola",
@@ -136,7 +141,7 @@ def _failure_step(message: str, step_start: float) -> JsonObject:
         "duration_ms": int((_time.time() - step_start) * 1000),
         "error":       message,
     })
-    return {"success": False, "message": message}
+    return {"success": False, "message": message, **failed_node_fields(exc)}
 
 
 def _nf(node: Node, key: str, default: Any = None) -> Any:
@@ -331,10 +336,10 @@ class ManipolaExecutor:
             return _failure_step(
                 f"Memoria insufficiente durante manipolazione "
                 f"(stage={stage}): {mem_err}",
-                _step_start,
+                _step_start, mem_err,
             )
         except ValueError as e:
-            return _failure_step(str(e), _step_start)
+            return _failure_step(str(e), _step_start, e)
         except Exception as e:
             # Catch-all per eccezioni non previste dai plugin transform:
             # log con exc_info e step di failure, cosi' il modulo resta
@@ -346,7 +351,7 @@ class ManipolaExecutor:
             )
             return _failure_step(
                 f"Errore imprevisto trasformazione: {type(e).__name__}",
-                _step_start,
+                _step_start, e,
             )
         if current_df is None:
             # Failure path "trasformazioni hanno prodotto None".
@@ -364,20 +369,21 @@ class ManipolaExecutor:
             return _failure_step("Nodo risultato non trovato", _step_start)
 
         try:
-            current_df = self._applica_group_by(
-                apply_output_columns(current_df, _nf(result_node, "output_columns"), self._result_input_columns(canvas, result_node, project_id)), result_node
-            )
+            with node_step(result_node):
+                current_df = self._applica_group_by(
+                    apply_output_columns(current_df, _nf(result_node, "output_columns"), self._result_input_columns(canvas, result_node, project_id)), result_node
+                )
         except MemoryLimitExceededError as mem_err:
             stage = getattr(mem_err, "stage", "group_by")
             return _failure_step(
                 f"Memoria insufficiente durante GROUP BY (stage={stage}): "
                 f"{mem_err}",
-                _step_start,
+                _step_start, mem_err,
             )
         except ValueError as e:
             # `_applica_group_by` solleva ValueError su config invalide
             # (colonne inesistenti, aggregations vuote).
-            return _failure_step(str(e), _step_start)
+            return _failure_step(str(e), _step_start, e)
 
         if run_id and current_df is not None:
             try:
@@ -562,9 +568,10 @@ class ManipolaExecutor:
 
             result_node = next((n for n in canvas.nodes if n.type == "result"), None)
             if result_node:
-                current_df = self._applica_group_by(
-                    apply_output_columns(current_df, _nf(result_node, "output_columns"), self._result_input_columns(canvas, result_node, project_id)), result_node
-                )
+                with node_step(result_node):
+                    current_df = self._applica_group_by(
+                        apply_output_columns(current_df, _nf(result_node, "output_columns"), self._result_input_columns(canvas, result_node, project_id)), result_node
+                    )
 
             total_count = len(current_df)
             truncated = source_truncated or total_count > limit
@@ -588,7 +595,7 @@ class ManipolaExecutor:
                 f"[GESTITO] Preview MANIPOLA fallita per config: {user_err}",
                 op="preview", project_id=project_id,
             )
-            return {"success": False, "message": str(user_err)}
+            return {"success": False, "message": str(user_err), **failed_node_fields(user_err)}
         except Exception as e:
             # Eccezione non prevista (KeyError, TypeError, bug di codice):
             # log a ERROR con exc_info=True per consentire il triage.
@@ -596,7 +603,7 @@ class ManipolaExecutor:
                 f"[CRASH] Preview MANIPOLA: {e}",
                 op="preview", project_id=project_id, exc_info=True,
             )
-            return {"success": False, "message": str(e)}
+            return {"success": False, "message": str(e), **failed_node_fields(e)}
 
     # CARICAMENTO SORGENTI
 
@@ -849,7 +856,7 @@ class ManipolaExecutor:
                         "fallito o edge mismatch?"
                     )
                     logger.error(f"[CRASH] {msg}", op="execute", project_id=project_id)
-                    raise ValueError(msg)
+                    raise mark_failed_node(ValueError(msg), node.id, node.type)
                 logger.warning(f"Nodo {node.id} senza input, skip")
                 continue
 
@@ -882,56 +889,59 @@ class ManipolaExecutor:
                         f"Risoluzione inputColumns fallita per nodo {node.id}: {exc}"
                     )
             
-            if node.type == "multi_join":
-                # Esegui multi-join
-                current_df = self._esegui_multi_join(node, inputs)
-                logger.info(f"Multi-join: {len(inputs)} input -> {len(current_df)} righe", op="transform")
-            else:
-                # Trasformazione normale
-                transform_op = _nf(node, "transform_op")
-                if transform_op == "join":
-                    from app.core.manipola.join_optimization import (
-                        compact_owned_join_string_columns,
-                        project_columns_dropped_immediately_after_join,
-                    )
-                    from app.core.resources.memory_guard import cleanup_worker_memory
-
-                    inputs = project_columns_dropped_immediately_after_join(
-                        canvas, node, inputs
-                    )
-                    if owns_inputs:
-                        inputs = compact_owned_join_string_columns(inputs, node)
-                    # Pivot/merge precedenti possono avere gia' liberato i
-                    # buffer, lasciandoli pero' residenti nelle arena libc.
-                    # Il guard del join usa l'RSS: trim prima della stima per
-                    # contare dati vivi, non pagine riutilizzabili.
-                    cleanup_stats = cleanup_worker_memory(
-                        run_gc=bool(
-                            settings.get("WORKER_MEMORY_CLEANUP_ENABLED", True)
-                        ),
-                        run_malloc_trim=bool(
-                            settings.get(
-                                "WORKER_MEMORY_MALLOC_TRIM_ENABLED", True
-                            )
-                        ),
-                    )
-                    logger.info(
-                        "[JOIN-PRE-TRIM] node=%s rss=%s -> %s bytes gc=%s trim=%s",
-                        node.id,
-                        cleanup_stats.get("before_rss"),
-                        cleanup_stats.get("after_rss"),
-                        cleanup_stats.get("collected"),
-                        cleanup_stats.get("malloc_trim"),
-                    )
+            # Il lavoro del nodo: un errore porta id e tipo del nodo
+            # nell'esito (shared.execution.failed_node), messaggio invariato.
+            with node_step(node):
+                if node.type == "multi_join":
+                    # Esegui multi-join
+                    current_df = self._esegui_multi_join(node, inputs)
+                    logger.info(f"Multi-join: {len(inputs)} input -> {len(current_df)} righe", op="transform")
                 else:
-                    from app.core.manipola.transform_memory import (
-                        SPECIALIZED_TRANSFORM_MEMORY_OPS,
-                        guard_transform_headroom,
-                    )
+                    # Trasformazione normale
+                    transform_op = _nf(node, "transform_op")
+                    if transform_op == "join":
+                        from app.core.manipola.join_optimization import (
+                            compact_owned_join_string_columns,
+                            project_columns_dropped_immediately_after_join,
+                        )
+                        from app.core.resources.memory_guard import cleanup_worker_memory
 
-                    if transform_op not in SPECIALIZED_TRANSFORM_MEMORY_OPS:
-                        guard_transform_headroom(inputs, node_id=str(node.id))
-                current_df = self._esegui_trasformazione(node, inputs)
+                        inputs = project_columns_dropped_immediately_after_join(
+                            canvas, node, inputs
+                        )
+                        if owns_inputs:
+                            inputs = compact_owned_join_string_columns(inputs, node)
+                        # Pivot/merge precedenti possono avere gia' liberato i
+                        # buffer, lasciandoli pero' residenti nelle arena libc.
+                        # Il guard del join usa l'RSS: trim prima della stima per
+                        # contare dati vivi, non pagine riutilizzabili.
+                        cleanup_stats = cleanup_worker_memory(
+                            run_gc=bool(
+                                settings.get("WORKER_MEMORY_CLEANUP_ENABLED", True)
+                            ),
+                            run_malloc_trim=bool(
+                                settings.get(
+                                    "WORKER_MEMORY_MALLOC_TRIM_ENABLED", True
+                                )
+                            ),
+                        )
+                        logger.info(
+                            "[JOIN-PRE-TRIM] node=%s rss=%s -> %s bytes gc=%s trim=%s",
+                            node.id,
+                            cleanup_stats.get("before_rss"),
+                            cleanup_stats.get("after_rss"),
+                            cleanup_stats.get("collected"),
+                            cleanup_stats.get("malloc_trim"),
+                        )
+                    else:
+                        from app.core.manipola.transform_memory import (
+                            SPECIALIZED_TRANSFORM_MEMORY_OPS,
+                            guard_transform_headroom,
+                        )
+
+                        if transform_op not in SPECIALIZED_TRANSFORM_MEMORY_OPS:
+                            guard_transform_headroom(inputs, node_id=str(node.id))
+                    current_df = self._esegui_trasformazione(node, inputs)
             
             # Salva risultato per nodi successivi
             dataframes[node.id] = current_df

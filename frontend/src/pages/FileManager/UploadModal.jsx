@@ -15,9 +15,10 @@ import { MAX_UPLOAD_SIZE_BYTES } from '../../api/uploadGuards';
 import Wizard from '../../components/common/Wizard';
 import { formatBytes as formatFileSize } from '../../utils/format';
 import { pressable } from '../../utils/pressable';
+import TransferProgress from '../../components/common/TransferProgress';
 
 function UploadModal({
-  step, uploadFile, uploadName, uploadDescription, uploading, uploadError, dragActive,
+  step, uploadFile, uploadName, uploadDescription, uploading, uploadError, dragActive, uploadProgress = null,
   availableColumns, selectedColumns, loadingColumns, detectedSrid, userSrid, hasGeometryColumn,
   isMultiLayerFile, availableLayers, checkedLayers, layerColumns, layerSelectedCols,
   activeLayerTab, loadingLayerCols, fileInputRef,
@@ -137,7 +138,13 @@ function UploadModal({
     </>
   );
 
-  const errorBox = uploadError ? <div className="fm__modal-error">⚠️ {uploadError}</div> : null;
+  // U17 (UI-3): avanzamento del caricamento sopra l'eventuale errore.
+  const errorBox = (
+    <>
+      <TransferProgress progress={uploadProgress} verb="Caricamento" />
+      {uploadError ? <div className="fm__modal-error">⚠️ {uploadError}</div> : null}
+    </>
+  );
 
   const steps = [
     { label: 'File', content: <>{step1Content}{errorBox}</> },

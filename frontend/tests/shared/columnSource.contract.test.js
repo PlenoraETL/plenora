@@ -73,8 +73,9 @@ describe('(a) nessun file scrive colonne derivate nei nodi', () => {
       'components/nodes/ProjectSourceNode.jsx': [4, 'colonne (visibile/alias) del progetto sorgente'],
       'components/nodes/result/standard/OutputColumnsSection.jsx': [1, 'Estrai: visibile/alias delle tabelle a monte (sorgenti)'],
       'pages/EstraiEditor.jsx': [2, 'creazione di tabelle; anteprima (non un nodo)'],
-      'pages/ManipolaEditor.jsx': [3, 'creazione delle sorgenti (progetto, file, Data Source)'],
-      'pages/ArricchisciEditor.jsx': [3, 'creazione delle sorgenti; anteprima (non un nodo)'],
+      // UI-3: le sorgenti nascono dal catalogo unico dei nodi (progetto, file, Data Source).
+      'components/editor/editorNodeCatalog.js': [3, 'creazione delle sorgenti (progetto, file, Data Source)'],
+      'pages/ArricchisciEditor.jsx': [1, 'anteprima (non un nodo)'],
       'components/transforms/panels/SelectColumnsPanel.jsx': [1, 'config.columns di "Seleziona e rinomina"'],
       'components/transforms/ParameterInput.jsx': [1, 'config.columns di un parametro'],
       'components/transforms/MultiJoinNode.jsx': [1, 'vista locale delle sorgenti (non un nodo)'],
