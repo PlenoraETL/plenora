@@ -326,6 +326,7 @@ const TIMER_USES = {
   'utils/hexCanvas.js': 'ridisegno dello sfondo',
   'utils/localDrafts.js': 'battito della scheda per le copie locali (nessuna richiesta)',
   'utils/serverActions.js': 'ricarica della pagina dopo un aggiornamento',
+  'index.jsx': 'caricamento di Sentry quando il browser e\' libero (ripiego di requestIdleCallback)',
 };
 
 describe('UI-1 — timer: polling solo in utils/poller', () => {
