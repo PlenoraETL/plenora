@@ -706,13 +706,18 @@ class PlenoraBeatScheduler:
     # Heartbeat su DB
 
     def _write_heartbeat(self) -> None:
-        """Scrive il timestamp heartbeat nel DB (usato dall'healthcheck)."""
+        """Scrive il timestamp heartbeat nel DB (usato dall'healthcheck).
+
+        Con il battito il beat scrive il SUO fuso (BEAT_TIMEZONE del processo
+        beat): l'healthcheck lo legge da qui, non dalla configurazione del
+        processo API (UI conferma finale G7).
+        """
         try:
             now = datetime.now(timezone.utc).isoformat()
             _pg_execute(
-                "INSERT INTO beat_heartbeat (id, ts) VALUES ('beat', %s) "
-                "ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts",
-                (now,)
+                "INSERT INTO beat_heartbeat (id, ts, timezone) VALUES ('beat', %s, %s) "
+                "ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts, timezone = EXCLUDED.timezone",
+                (now, str(beat_timezone()))
             )
         except Exception as e:
             logger.warning(f"Errore scrittura heartbeat: {e}")

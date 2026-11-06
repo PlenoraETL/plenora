@@ -4,7 +4,8 @@
  * Hook condiviso per il tema dark/light. Garanzie da preservare:
  *   1. default 'dark' quando localStorage e' vuoto;
  *   2. all'init il hook applica `data-theme` su document.documentElement;
- *   3. setTheme('light') aggiorna localStorage['plenora-theme'] e
+ *   3. setTheme('light') aggiorna localStorage['plenora:theme'] (chiave della
+ *      tabella unica utils/browserStorage; la vecchia si sposta) e
  *      l'attributo `data-theme`;
  *   4. due consumer dello stesso hook si sincronizzano: una chiamata a
  *      setTheme da un consumer aggiorna lo state dell'altro.
@@ -17,7 +18,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const STORAGE_KEY = 'plenora-theme';
+const STORAGE_KEY = 'plenora:theme';
 
 const importFreshHook = async () => {
   vi.resetModules();

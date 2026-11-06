@@ -11,9 +11,13 @@
  * record del task): dopo il download, alla chiusura senza download e con
  * un esito fallito o annullato (Fase 5 T2, R9.3: useEseguibileRun), alla
  * scadenza della copia scaricata e chiudendo la scheda o il browser
- * (`releaseTaskOnPageExit`, fetch keepalive; UI conferma B-K4). Cio' che
- * non arriva al server (rete giu', browser chiuso di colpo) lo toglie la
- * scadenza lato server degli output degli Eseguibili (2 ore).
+ * (`releaseTaskOnPageExit`, fetch keepalive; UI conferma B-K4). Una
+ * pulizia che la pagina non ha visto confermare (keepalive non partita,
+ * pagina messa nella cache del browser e mai tornata) riparte alla
+ * prossima apertura di /run (`flushParkedExitCleanups`, conferma finale
+ * G4/G10); l'ordine annulla-poi-pulisci e' del server (F8/G3). Cio' che non
+ * arriva mai al server lo toglie la scadenza lato server degli output degli
+ * Eseguibili (2 ore).
  *
  * Route: /run
  * Accesso: solo utenti con role === 'esecutore'.
@@ -21,8 +25,10 @@
  *
  * Top bar: logo + saluto + cambia password + logout. Niente altro.
  */
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { cleanupTaskCompletely, releaseTaskOnPageExit } from '../api';
+import { flushParkedExitCleanups, parkTaskCleanup } from '../api/tasks';
+import { unparkExitCleanup } from '../utils/exitCleanups';
 import { useAuth } from '../context/AuthContext';
 import { useSignOut } from '../hooks/useSignOut';
 import { useToast } from '../hooks/useToast';
@@ -110,12 +116,16 @@ function EsecutoreHome() {
   // Post-fix: legge `partialCleanup` dal return strutturato e mostra
   // toast all'utente in caso di problemi, per trasparenza.
   // UI conferma B-K4: chiudendo la scheda (`pageExit`) la pulizia parte con
-  // fetch keepalive (stesse route; con `active` prima l'annullamento): non
-  // c'e' una pagina a cui mostrare l'esito.
-  const handleAfterDownload = useCallback(async (taskId, { pageExit = false, active = false } = {}) => {
+  // fetch keepalive (una richiesta: l'ordine annulla-poi-pulisci e' del
+  // server, F8/G3): non c'e' una pagina a cui mostrare l'esito. Pagina messa
+  // nella cache del browser (`persisted`, G4): solo annotata; se torna
+  // (`pageReturn`) l'annotazione si toglie e il risultato resta.
+  const handleAfterDownload = useCallback(async (taskId, { pageExit = false, persisted = false, pageReturn = false } = {}) => {
+    if (pageReturn) return unparkExitCleanup(taskId);
     if (pageExit) {
-      releaseTaskOnPageExit(taskId, { active });
-      return;
+      if (persisted) parkTaskCleanup(taskId);
+      else releaseTaskOnPageExit(taskId);
+      return undefined;
     }
     try {
       const result = await cleanupTaskCompletely(taskId);
@@ -129,13 +139,20 @@ function EsecutoreHome() {
           `dell'amministratore per la rimozione completa.`,
           8000,
         );
+      } else if (result?.deferred) {
+        toast.info("L'esecuzione si sta fermando: il server ne toglierà ogni traccia appena è ferma.", 6000);
       }
     } catch (e) {
       // Catch ridondante: cleanupTaskCompletely non solleva mai
       // (cattura internamente), ma manteniamo per sicurezza.
       console.warn('Cleanup post-download fallito:', e);
     }
+    return undefined;
   }, [toast]);
+
+  // Pulizie rimaste annotate (pagina chiusa senza conferma del server o
+  // messa nella cache del browser e mai tornata): ripartono ora (G4, G10).
+  useEffect(() => { flushParkedExitCleanups().catch(() => {}); }, []);
 
   return (
     <div className="esh">

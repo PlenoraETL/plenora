@@ -77,7 +77,14 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
  *
  * @returns {Promise<{files: Array}>}
  */
+// Pagine del cursore della dimensione massima che il server accetta
+// (GET /files `limit` le=500): con un cursore ogni pagina dipende dalla
+// precedente, quindi le pagine sono in sequenza per costruzione (conferma
+// finale F7, scelta dichiarata); pagine piu' grandi = meno giri.
+export const FILES_PAGE_SIZE = 500;
+
 export const getFiles = async () => fetchAllCursorPages('/files', {
+  pageSize: FILES_PAGE_SIZE,
   extractItems: data => data.files,
   mergeItems: (items, lastPage) => ({ ...lastPage, files: items }),
 });

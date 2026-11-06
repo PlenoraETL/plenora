@@ -418,7 +418,7 @@ def analyze_upload(
     expected_columns_override = None
     input_max_size = None
     if input_key:
-        if not record.manifest:
+        if not eseguibili_db.manifest_present(record.manifest):
             raise HTTPException(status_code=400, detail="Manifest eseguibile assente")
         manifest = ExecutableManifest.model_validate(record.manifest)
         selected_input = next(
@@ -953,8 +953,9 @@ def _to_details(record: eseguibili_db.EseguibileRow) -> Mapping[str, object]:
     """Converte un record DB in EseguibileDetails response."""
     canvas = record.canvas
     is_file_based, inferred_ext = _detect_file_based_output(canvas)
-    raw_manifest = record.manifest
-    if raw_manifest:
+    has_manifest = eseguibili_db.manifest_present(record.manifest)
+    raw_manifest = record.manifest if has_manifest else None
+    if has_manifest:
         try:
             manifest = ExecutableManifest.model_validate(raw_manifest)
             raw_manifest = eseguibili_service.hydrate_manifest_connection_options(
@@ -982,6 +983,7 @@ def _to_details(record: eseguibili_db.EseguibileRow) -> Mapping[str, object]:
         "active_version": record.active_version,
         "active_version_id": record.active_version_id,
         "manifest": raw_manifest,
+        "has_manifest": has_manifest,
         "can_edit": None,
         "binding_warnings": eseguibili_service.binding_warnings(
             (record.manifest or {}).get("bindings"), canvas,

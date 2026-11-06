@@ -3,7 +3,8 @@
  *
  * Comportamento:
  *   - default: 'dark'
- *   - persiste su localStorage['plenora-theme']
+ *   - persiste su localStorage (chiave `theme` di utils/browserStorage;
+ *     la vecchia 'plenora-theme' si sposta alla prima lettura)
  *   - applica `data-theme` su document.documentElement
  *   - mantiene aggiornato lo stato React di TUTTI i consumer:
  *     un cambio di tema fatto da una qualsiasi istanza viene
@@ -14,8 +15,9 @@
  *   const { theme, setTheme, toggleTheme } = useTheme();
  */
 import { useState, useEffect, useCallback } from 'react';
+import { STORAGE_KEYS, migrateLegacy, readRaw, storageKey, writeRaw } from '../utils/browserStorage';
 
-const STORAGE_KEY = 'plenora-theme';
+const STORAGE_KEY = storageKey('theme');
 const DEFAULT_THEME = 'dark';
 
 const subscribers = new Set();
@@ -25,17 +27,12 @@ let currentTheme = DEFAULT_THEME;
 // R5.10: con lo storage bloccato (criteri aziendali, cookie disattivati)
 // getItem/setItem lanciano. Il tema funziona lo stesso, solo non si ricorda.
 const readStoredTheme = () => {
-  try {
-    const v = window.localStorage.getItem(STORAGE_KEY);
-    return v === 'light' || v === 'dark' ? v : null;
-  } catch {
-    return null;
-  }
+  migrateLegacy('theme', STORAGE_KEY, STORAGE_KEYS.theme.legacy);
+  const v = readRaw('theme', STORAGE_KEY);
+  return v === 'light' || v === 'dark' ? v : null;
 };
 
-const storeTheme = (t) => {
-  try { window.localStorage.setItem(STORAGE_KEY, t); } catch { /* non persistito */ }
-};
+const storeTheme = (t) => { writeRaw('theme', STORAGE_KEY, t); };
 
 const applyTheme = (t) => {
   document.documentElement.setAttribute('data-theme', t);

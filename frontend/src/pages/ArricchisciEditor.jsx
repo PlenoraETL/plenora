@@ -13,7 +13,7 @@
  *
  * Route: /arricchisci/:projectId
  */
-import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -53,10 +53,10 @@ import '../components/nodes/AnnotationNode.css';
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
 
 // Modali lazy-loaded
-const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
-const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
-const ConnectionSelectorModal = lazy(() => import('../components/arricchisci/ConnectionSelectorModal'));
-const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
+const ExecutionModal = lazyWindow(() => import('../components/modals/ExecutionModal'), 'Esecuzione');
+const PreviewModal = lazyWindow(() => import('../components/modals/PreviewModal'), term('preview').name);
+const ConnectionSelectorModal = lazyWindow(() => import('../components/arricchisci/ConnectionSelectorModal'), 'Scelta della connessione');
+const CanvasVersionsModal = lazyWindow(() => import('../components/modals/CanvasVersionsModal'), 'Versioni');
 import { executionModalProps, executionToolbarProps } from '../hooks/useExecution';
 import { usePreview, useExecution, useCanvasCore, useMultiModal, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useToast } from '../hooks/useToast';
@@ -64,7 +64,7 @@ import { useTheme } from '../hooks/useTheme';
 import '../styles/ArricchisciEditor.css';
 import '../components/arricchisci/ConnectionSelectorModal.css';
 import '../components/nodes/StaticValuesNode.css';
-import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
+import { lazyWindow } from '../components/common/LazyWindow';
 import { useHexCanvas } from '../utils/hexCanvas';
 import { menuEntry, paletteEntry, term } from '../utils/glossary';
 import useEditorActions from '../components/editor/useEditorActions';
@@ -421,8 +421,7 @@ const ArricchisciEditorContent = () => {
         }, [preview.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const modalsSlot = (
-    <ModalErrorBoundary>
-      <Suspense fallback={null}>
+    <>
       {showVersions && (
         <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
       )}
@@ -440,8 +439,7 @@ const ArricchisciEditorContent = () => {
       <ConnectionSelectorModal isOpen={modals.isOpen('openapi')} onClose={() => modals.close('openapi')} onSelect={conn => handleSelectConnection(conn, 'openapi')} category="openapi" title="Seleziona un'API OpenAPI" icon={term('connector_openapi').icon} emptyMessage="Nessuna API OpenAPI importata" emptyHint="Importa uno schema OpenAPI nella pagina API Esterne" createLink="/external-connectors" />
       <ConnectionSelectorModal isOpen={modals.isOpen('rest_file')} onClose={() => modals.close('rest_file')} onSelect={conn => handleSelectConnection(conn, 'rest_file')} category="rest_file" title="Seleziona un processore file" icon={term('connector_rest_file').icon} emptyMessage="Nessun processore file configurato" emptyHint="Configura un servizio REST che riceve e restituisce file nella pagina API Esterne" createLink="/external-connectors" />
       <ConnectionSelectorModal isOpen={modals.isOpen('datasource')} onClose={() => modals.close('datasource')} onSelect={conn => handleSelectConnection(conn, 'datasource')} category="datasource" title="Seleziona un Data Source" icon={term('datasource').icon} emptyMessage="Nessun Data Source configurato" emptyHint="Configura un Data Source nella pagina Data Source" createLink="/datasources" />
-      </Suspense>
-    </ModalErrorBoundary>
+      </>
   );
 
   return (

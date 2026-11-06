@@ -187,8 +187,14 @@ http.interceptors.response.use(
  * Richiesta che deve partire anche mentre la pagina si chiude (UI conferma
  * B-K4: pulizia dell'esecutore chiudendo la scheda). axios non sopravvive
  * alla chiusura; `fetch` con `keepalive` si', e parte SUBITO, nello stesso
- * gestore di `pagehide` (niente interceptor asincroni). Stessa origine e
- * stesso token di sessione delle altre chiamate (CSP invariata). Non si
+ * gestore di `pagehide` (niente interceptor asincroni). Stesso indirizzo
+ * (API_ENDPOINT) e stesso token di sessione delle altre chiamate (CSP
+ * invariata). Stessa ORIGINE solo se apiBaseUrl e' relativo (il caso
+ * standard dietro il proxy): con un apiBaseUrl assoluto su un'altra origine
+ * l'header Authorization richiede un preflight CORS, e alcuni browser non
+ * fanno partire una keepalive con preflight, senza errore (conferma finale
+ * G10). Per questo chi la usa annota prima la richiesta e la rimanda alla
+ * prossima apertura se non e' confermata (utils/exitCleanups). Non si
  * aspetta la risposta: la pagina non c'e' piu'.
  * @returns {boolean} true se la richiesta e' partita.
  */

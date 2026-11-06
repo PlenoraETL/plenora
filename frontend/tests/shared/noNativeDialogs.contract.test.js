@@ -4,7 +4,7 @@
  * progetto (ConfirmProvider in App.jsx, useConfirm*, useConfirmModal).
  *
  * Unica eccezione (non e' una chiamata): il prompt di `beforeunload` in
- * hooks/useUnsavedChangesGuard.js, perche' alla chiusura/ricarica della
+ * utils/leaveGuard.js (unico per tutta l'app, conferma finale G8), perche' alla chiusura/ricarica della
  * scheda i browser non consentono un dialog proprio.
  */
 import fs from 'node:fs';

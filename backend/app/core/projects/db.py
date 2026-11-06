@@ -648,6 +648,13 @@ class ProjectRepository:
         (`pg_input_is_valid(jsonb, ...)` non esiste: conferma UI A-K1,
         verificata su PostgreSQL vero, test
         `test_manipola_source_refs_on_real_postgres`).
+
+        Costo lineare (UI conferma finale F9): i nodi di OGNI progetto si
+        scorrono una volta sola, in un LATERAL con due aggregati FILTER; prima
+        due sottoquery correlate rileggevano tutti i nodi di tutti i progetti
+        per ognuno (N progetti x M nodi). Il testo del canvas si legge due
+        volte (`pg_input_is_valid` e il cast): e' il prezzo, lineare, del
+        riconoscere un canvas non leggibile senza una funzione plpgsql.
         """
         if not project_ids:
             return []
@@ -661,33 +668,28 @@ class ProjectRepository:
                             THEN canvas::text::jsonb END AS doc
                 FROM projects
                 WHERE project_type = 'manipola' AND id IN ({placeholders})
-            ), n AS (
-                SELECT p.id, node
-                FROM p,
-                     jsonb_array_elements(
-                         CASE WHEN jsonb_typeof(p.doc -> 'nodes') = 'array'
-                              THEN p.doc -> 'nodes' ELSE '[]'::jsonb END
-                     ) AS node
             )
             SELECT p.id,
                    p.doc IS NULL AS corrupted,
-                   COALESCE((
-                       SELECT jsonb_agg(COALESCE(n.node -> 'data' ->> 'source_project_id',
-                                                 n.node ->> 'source_project_id'))
-                       FROM n
-                       WHERE n.id = p.id
-                         AND n.node ->> 'type' = 'project_source'
-                         AND COALESCE(n.node -> 'data' ->> 'source_project_id',
-                                      n.node ->> 'source_project_id', '') <> ''
-                   ), '[]'::jsonb) AS source_project_ids,
-                   COALESCE((
-                       SELECT jsonb_agg(n.node ->> 'file_source_id')
-                       FROM n
-                       WHERE n.id = p.id
-                         AND n.node ->> 'type' = 'file_source'
-                         AND COALESCE(n.node ->> 'file_source_id', '') <> ''
-                   ), '[]'::jsonb) AS file_source_ids
+                   COALESCE(refs.source_project_ids, '[]'::jsonb) AS source_project_ids,
+                   COALESCE(refs.file_source_ids, '[]'::jsonb) AS file_source_ids
             FROM p
+            LEFT JOIN LATERAL (
+                SELECT jsonb_agg(COALESCE(node -> 'data' ->> 'source_project_id',
+                                          node ->> 'source_project_id'))
+                           FILTER (WHERE node ->> 'type' = 'project_source'
+                                     AND COALESCE(node -> 'data' ->> 'source_project_id',
+                                                  node ->> 'source_project_id', '') <> '')
+                           AS source_project_ids,
+                       jsonb_agg(node ->> 'file_source_id')
+                           FILTER (WHERE node ->> 'type' = 'file_source'
+                                     AND COALESCE(node ->> 'file_source_id', '') <> '')
+                           AS file_source_ids
+                FROM jsonb_array_elements(
+                         CASE WHEN jsonb_typeof(p.doc -> 'nodes') = 'array'
+                              THEN p.doc -> 'nodes' ELSE '[]'::jsonb END
+                     ) AS node
+            ) AS refs ON true
             """,
             tuple(ordered_ids),
         )

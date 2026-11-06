@@ -18,9 +18,13 @@
  *    finestra). Niente doppio scorrimento, e niente contenitore con
  *    overflow che taglia i menu (⋯) delle schede;
  *  - nei nodi del canvas (`inCanvasNode`) la lista ha il SUO riquadro alto
- *    al piu' `maxHeight`, con le classi `nowheel nodrag` di React Flow: la
- *    rotella scorre le righe (non zooma) e trascinare la barra non sposta il
- *    nodo;
+ *    al piu' `maxHeight`. Le classi `nowheel nodrag` di React Flow (la
+ *    rotella scorre le righe invece di zoomare, la barra non sposta il nodo)
+ *    valgono SOLO quando il riquadro scorre davvero: righe oltre `maxHeight`
+ *    (stimate o misurate). Sotto la soglia, o con righe che stanno tutte,
+ *    niente classi: la rotella zooma il canvas come su ogni altro nodo
+ *    (conferma finale F1: prima il contenitore di TableNode le metteva
+ *    sempre);
  *  - altezze MISURATE e ricordate PER CHIAVE (`itemKey`), non per
  *    posizione: filtrare o riordinare non attribuisce a una riga l'altezza
  *    di un'altra; prima della misura vale `estimatedItemHeight`;
@@ -28,8 +32,15 @@
  *    sotto la parte visibile ci sono righe in piu' (OVERSCAN_PX): Tab e
  *    Shift+Tab raggiungono la riga dopo (il browser la porta in vista e la
  *    finestra delle righe la segue);
- *  - Ctrl+F / Cmd+F sulla pagina: la lista si disegna intera (la ricerca del
- *    browser trova anche le righe lontane) finche' resta montata.
+ *  - Ctrl+F / Cmd+F sulla pagina (non preso da nessun altro: un evento con
+ *    `defaultPrevented` e' di chi lo gestisce): la lista si disegna intera,
+ *    perche' la ricerca del browser trovi anche le righe lontane. Torna
+ *    virtuale (conferma finale F2) alla fine della ricerca: Esc, un clic
+ *    sulla pagina, o elementi nuovi (filtro, aggiornamento);
+ *  - il contenitore che scorre e' il primo antenato con overflow che scorre
+ *    DAVVERO (contenuto piu' alto del riquadro), cercato a ogni lettura; lo
+ *    scorrimento si ascolta sul documento (fase di cattura), quindi anche un
+ *    antenato che comincia a scorrere dopo il montaggio viene seguito.
  * Le liste lunghe dichiarate stanno in LONG_LISTS (test di enumerazione
  * tests/shared/virtualLists.contract): una lista nuova dei tipi elencati che
  * disegna `.map` senza passare di qui fa fallire il test.
@@ -53,11 +64,11 @@ export const LONG_LISTS = Object.freeze({
 
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
-/** Il primo antenato che scorre in verticale (null = la finestra). */
+/** Il primo antenato che scorre DAVVERO in verticale (null = la finestra). */
 function scrollParentOf(el) {
   for (let node = el?.parentElement; node && node !== document.body && node !== document.documentElement; node = node.parentElement) {
     const { overflowY } = window.getComputedStyle(node);
-    if (/(auto|scroll|overlay)/.test(overflowY)) return node;
+    if (/(auto|scroll|overlay)/.test(overflowY) && node.scrollHeight > node.clientHeight) return node;
   }
   return null;
 }
@@ -129,8 +140,6 @@ export default function VirtualList({
   useIsoLayoutEffect(() => {
     const el = containerRef.current;
     if (!virtual || !el) return undefined;
-    const parent = boxed ? el : scrollParentOf(el);
-    const target = parent || window;
     const read = () => {
       const rect = el.getBoundingClientRect();
       let top; let bottom;
@@ -138,6 +147,8 @@ export default function VirtualList({
         top = el.scrollTop;
         bottom = el.scrollTop + (el.clientHeight || maxHeight);
       } else {
+        // Cercato a ogni lettura: conta chi scorre ADESSO (F2).
+        const parent = scrollParentOf(el);
         const viewTop = parent ? parent.getBoundingClientRect().top : 0;
         const viewHeight = parent ? (parent.clientHeight || window.innerHeight) : window.innerHeight;
         top = Math.max(0, viewTop - rect.top);
@@ -147,7 +158,10 @@ export default function VirtualList({
       setView(v => (v.top === top && v.bottom === bottom && v.width === width ? v : { top, bottom, width }));
     };
     read();
-    target.addEventListener('scroll', read, { passive: true });
+    // Cattura sul documento: lo scorrimento di QUALUNQUE antenato (o della
+    // finestra) arriva qui, anche di uno che scorre solo da dopo il montaggio.
+    document.addEventListener('scroll', read, { capture: true, passive: true });
+    window.addEventListener('scroll', read, { passive: true });
     window.addEventListener('resize', read);
     let ro = null;
     if (typeof ResizeObserver === 'function') {
@@ -155,21 +169,39 @@ export default function VirtualList({
       ro.observe(el);
     }
     return () => {
-      target.removeEventListener('scroll', read);
+      document.removeEventListener('scroll', read, { capture: true });
+      window.removeEventListener('scroll', read);
       window.removeEventListener('resize', read);
       ro?.disconnect();
     };
   }, [virtual, boxed, maxHeight]);
 
   // Ctrl+F / Cmd+F: la ricerca del browser deve trovare tutte le righe.
+  // Fase di bolla: chi gestisce il tasto (l'editor) lo segna con
+  // preventDefault prima che arrivi qui.
   useEffect(() => {
     if (!virtual || boxed || renderAll) return undefined;
     const onKey = (e) => {
-      if (!isShortcutBlocked(e) && matchesShortcut('search_canvas', e)) setRenderAll(true);
+      if (!e.defaultPrevented && !isShortcutBlocked(e) && matchesShortcut('search_canvas', e)) setRenderAll(true);
     };
-    document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [virtual, boxed, renderAll]);
+
+  // Fine della ricerca (F2): Esc o un clic sulla pagina riportano la lista
+  // virtuale; elementi nuovi anche (sotto, con `items`).
+  useEffect(() => {
+    if (!renderAll) return undefined;
+    const onKey = (e) => { if (matchesShortcut('close', e)) setRenderAll(false); };
+    const onPointer = () => setRenderAll(false);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onPointer);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onPointer);
+    };
+  }, [renderAll]);
+  useEffect(() => { setRenderAll(false); }, [items]);
 
   const onFocus = useCallback((e) => {
     const row = e.target?.closest?.('[data-vlist-row]');
@@ -194,6 +226,8 @@ export default function VirtualList({
   }
 
   const total = layout[rows.length];
+  // F1: il riquadro scorre davvero solo se le righe superano la sua altezza.
+  const scrolls = boxed && total > maxHeight;
   let first = 0;
   let last = rows.length - 1;
   if (!renderAll) {
@@ -215,7 +249,7 @@ export default function VirtualList({
     ? { display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: `${gap}px` }
     : undefined;
   const rowStyle = gap > 0 ? { ...gridStyle, marginBottom: `${gap}px` } : gridStyle;
-  const boxClass = boxed ? ' vlist--box nowheel nodrag' : ' vlist--page';
+  const boxClass = boxed ? ` vlist--box${scrolls ? ' nowheel nodrag' : ''}` : ' vlist--page';
   const boxStyle = boxed ? { maxHeight: `${maxHeight}px` } : undefined;
   return (
     <div

@@ -21,6 +21,20 @@ from app.shared.contracts.payloads import JsonObject, JsonRows
 ExpectedColumns = JsonRows
 
 
+# Regola unica «l'Eseguibile ha un manifest» (UI conferma finale G5): un
+# manifest NON VUOTO. La colonna ``eseguibile_versions.manifest`` e' NOT NULL
+# e una versione senza modulo puo' avere ``{}``: prima la lista diceva
+# ``manifest IS NOT NULL`` (sempre vero) mentre dettaglio e upload trattano
+# ``{}`` come assenza. La stessa regola in SQL (lista) e in Python (dettaglio,
+# upload, esecuzione); il test di parita' le confronta su PostgreSQL vero.
+MANIFEST_PRESENT_SQL = "(COALESCE(v.manifest, '{}'::jsonb) NOT IN ('{}'::jsonb, 'null'::jsonb))"
+
+
+def manifest_present(manifest: object) -> bool:
+    """True se il manifest c'e' e non e' vuoto (stessa regola di MANIFEST_PRESENT_SQL)."""
+    return isinstance(manifest, dict) and bool(manifest)
+
+
 class _DbFacade:
     def fetchone(self, sql: str, params: tuple = ()) -> JsonObject | None:
         with unit_of_work() as session:
@@ -94,8 +108,9 @@ class EseguibileSummaryRow:
     project_type: str = "arricchisci"
     active_version: int = 1
     inputs_count: int = 1
-    # La versione attiva ha un manifest: si esegue con il modulo dinamico
-    # (stessa regola del dettaglio, ``manifest`` non nullo; UI conferma U14).
+    # La versione attiva ha un manifest: si esegue con il modulo dinamico.
+    # Regola unica ``manifest_present`` (UI conferma finale G5): manifest NON
+    # VUOTO, come il dettaglio e l'upload (un ``{}`` e' un manifest assente).
     has_manifest: bool = False
     # Binding del manifest attivo e i SOLI nodi del canvas della versione che
     # ne sono bersaglio (per ``binding_warnings`` senza caricare il canvas).
@@ -390,12 +405,12 @@ def list_eseguibili(
     Non carica canvas/expected_columns per la summary (prestazioni).
     Usa get_eseguibile per i dettagli completi.
     """
-    columns = """e.id, e.name, e.description, e.default_output_format,
+    columns = f"""e.id, e.name, e.description, e.default_output_format,
                  e.default_output_name, e.icon, e.source_canvas_id, e.group_id,
                  e.created_by, e.created_at, e.updated_at, e.expected_columns,
                  e.project_type, COALESCE(v.version_number, 1) AS active_version,
                  COALESCE(jsonb_array_length(v.manifest->'inputs'), 1) AS inputs_count,
-                 (v.manifest IS NOT NULL) AS has_manifest,
+                 {MANIFEST_PRESENT_SQL} AS has_manifest,
                  v.manifest->'bindings' AS bindings,
                  (SELECT jsonb_agg(n.node)
                     FROM jsonb_array_elements(

@@ -25,13 +25,22 @@
  *  - fine del task (qualunque esito): utils/taskRegistry.taskEnded invalida
  *    le risorse che il task ha cambiato (conferma A-K2);
  *  - stop() (smontaggio, cambio progetto, nuovo avvio) ferma tutto: nessuna
- *    risposta arrivata dopo scrive piu' niente.
+ *    risposta arrivata dopo scrive piu' niente. La FINE del task pero' si
+ *    vede lo stesso (conferma finale F5): un task registrato che resta senza
+ *    pagina che lo segue passa al poller di fondo (`taskBackground`: un giro
+ *    solo per tutti i task orfani, primo giro dopo l'intervallo, fermo a
+ *    scheda nascosta, backoff), che a fine task chiama taskEnded() come il
+ *    poller della pagina. Se un'altra pagina riprende a seguirlo, il poller
+ *    di fondo lo lascia.
  */
 import { getTaskStatus } from '../api';
 import { requestErrorMessage } from './errorMessages';
 import { taskOutcome } from './taskOutcome';
 import { POLL_PROFILES, startPoller } from './poller';
-import { taskEnded, taskProfileName } from './taskRegistry';
+import { registerSessionReset } from './session';
+import {
+  onOrphanTasks, orphanStatusReader, orphanTaskIds, taskEnded, taskProfileName, watchTask,
+} from './taskRegistry';
 
 const TASK_POLL_DEFAULTS = Object.freeze({ notFoundLimit: 15, errorLimit: 5 });
 
@@ -169,6 +178,8 @@ export function pollTasks(taskIds, {
   getStatus = getTaskStatus,
 } = {}) {
   let stopped = false;
+  // F5: questo poller segue i task; smettendo li lascia al poller di fondo.
+  const releases = taskIds.map((id) => watchTask(id, getStatus === getTaskStatus ? null : getStatus));
   const trackers = taskIds.map((id) => trackTask(id, {
     notFoundLimit, errorLimit, outcomeOpts, getStatus,
     onUpdate: onUpdate ? (o, data) => { if (!stopped) onUpdate(id, o, data); } : null,
@@ -191,7 +202,61 @@ export function pollTasks(taskIds, {
     stopped = true;
     trackers.forEach((t) => t.stop());
     stopPoller();
+    releases.forEach((release) => release());
   };
 }
+
+/*
+ * Poller di fondo dei task senza pagina (conferma finale F5). Uno per tutti:
+ * a ogni giro chiede lo stato dei task orfani (utils/taskRegistry), con le
+ * stesse regole dei poller delle pagine (trackTask: fine, 404, errori);
+ * finisce quando non ne restano. Durata massima: quella del profilo, poi
+ * i task rimasti finiscono come `task_poll_expired` (si invalida comunque:
+ * meglio rileggere che tenere dati vecchi).
+ */
+let background = null; // { stop, trackers: Map }
+
+function ensureBackground() {
+  if (background || orphanTaskIds().length === 0) return;
+  const trackers = new Map();
+  const sync = () => {
+    const orphans = new Set(orphanTaskIds());
+    for (const [id, t] of trackers) {
+      if (!orphans.has(id) || t.done()) { t.stop(); trackers.delete(id); }
+    }
+    for (const id of orphans) {
+      if (!trackers.has(id)) {
+        trackers.set(id, trackTask(id, {
+          ...TASK_POLL_DEFAULTS, outcomeOpts: undefined, getStatus: orphanStatusReader(id) || getTaskStatus,
+        }));
+      }
+    }
+    return [...trackers.values()];
+  };
+  const state = { trackers };
+  const stopPoller = startPoller(async () => {
+    const open = sync();
+    if (open.length === 0) { background = null; return { done: true }; }
+    const steps = await Promise.all(open.map((t) => t.step()));
+    if (background !== state) return { done: true };
+    return { changed: steps.some((s) => s.changed), done: false };
+  }, {
+    ...POLL_PROFILES.taskBackground,
+    immediate: false,
+    onExpire: () => {
+      sync().forEach((t) => t.expire());
+      if (background === state) background = null;
+      ensureBackground();
+    },
+  });
+  state.stop = () => { stopPoller(); trackers.forEach((t) => t.stop()); };
+  background = state;
+}
+
+onOrphanTasks(ensureBackground);
+registerSessionReset('taskPollerBackground', () => {
+  background?.stop();
+  background = null;
+});
 
 export default pollTask;

@@ -206,9 +206,10 @@ const TableNode = memo(({ data, id }) => {
           <div className="table-node__empty-message">Nessuna colonna</div>
         ) : (
           // Tabelle larghe: oltre la soglia solo le righe visibili (UI-2, V9).
-          // A-K6: la lista che scorre e' di chi la usa, non del canvas: la rotella
-          // la fa scorrere (non zooma) e trascinare la barra non sposta il nodo.
-          <div className="table-node__columns nowheel nodrag">
+          // A-K6 / conferma finale F1: `nowheel nodrag` li mette VirtualList
+          // (inCanvasNode) solo quando il riquadro scorre davvero; sotto la
+          // soglia la rotella zooma il canvas come sugli altri nodi.
+          <div className="table-node__columns">
           <VirtualList
             items={displayColumns} itemKey={column => column._origIndex}
             estimatedItemHeight={26} maxHeight={420} inCanvasNode label="Colonne della tabella"

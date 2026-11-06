@@ -286,7 +286,7 @@ describe('A-K7 — mappe /schemas e sorgenti a monte', () => {
     stop();
   });
 
-  it('salvataggio: una mappa vecchia (oltre SCHEMA_FRESH_MS) non si allega, si richiede', async () => {
+  it('salvataggio: una mappa vecchia (oltre SCHEMA_FRESH_MS) non si allega e non si aspetta (conferma finale F6)', async () => {
     vi.useFakeTimers();
     let t = 0;
     const { canvasStore, columnStore, fetchSchemas, stop } = setup(() => t);
@@ -296,10 +296,11 @@ describe('A-K7 — mappe /schemas e sorgenti a monte', () => {
     const known = columnStore.getState().schemas;
     expect(derivedColumnsForSave('p1', canvas, { columnStore })).toBe(known);
     t = SCHEMA_FRESH_MS + 1;
-    const pending = derivedColumnsForSave('p1', canvas, { columnStore });
-    expect(pending).toBeInstanceOf(Promise);
+    // Stessa firma, stesse sorgenti, solo vecchia: niente attesa di /schemas,
+    // il salvataggio parte subito senza colonne derivate (le ricalcola il backend).
+    expect(derivedColumnsForSave('p1', canvas, { columnStore })).toBeNull();
+    // La mappa si rinnova in sottofondo.
     await vi.advanceTimersByTimeAsync(0);
-    expect(await pending).toEqual(known);
     expect(fetchSchemas).toHaveBeenCalledTimes(2);
     stop();
   });
@@ -376,7 +377,8 @@ describe('C-K10 — conteggi non disponibili detti, gli altri restano', () => {
     });
     const { result } = renderHook(() => useProjectListData());
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.counts).toMatchObject({ api_connections: 0, datasources: 3, schedules_active: 1 });
+    // Conferma finale G11: non disponibile = null («—»), mai 0.
+    expect(result.current.counts).toMatchObject({ api_connections: null, datasources: 3, schedules_active: 1 });
     expect(result.current.failures).toEqual(['conteggio delle API esterne']);
   });
 });

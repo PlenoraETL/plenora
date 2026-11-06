@@ -28,7 +28,33 @@ const COUNT_LABELS = Object.freeze({
   schedules: 'conteggio delle pianificazioni',
 });
 const UNAVAILABLE = Object.freeze({ status: 'unavailable' });
+// Prima del primo caricamento (lo skeleton copre la pagina).
 const NO_COUNTS = Object.freeze({ api_connections: 0, datasources: 0, schedules_active: 0, schedules_by_project: {} });
+// Chiave della risposta -> gruppo di `unavailable` (GET /dashboard/counts).
+const COUNT_GROUPS = Object.freeze({
+  api_connections: 'api_connections',
+  datasources: 'datasources',
+  schedules_active: 'schedules',
+  schedules_by_project: 'schedules',
+});
+
+/**
+ * Conteggi della dashboard (conferma finale G11): un conteggio non
+ * disponibile (dichiarato in `unavailable`, o tutta la richiesta fallita) e'
+ * `null`, mai 0: la pagina lo mostra «—» (`formatCount`) e lo dice tra i dati
+ * non caricati. Prima valeva 0 e la tessera spariva come se non ci fosse
+ * niente.
+ */
+export function dashboardCounts(raw) {
+  const unavailable = new Set(raw && Array.isArray(raw.unavailable) ? raw.unavailable : []);
+  return Object.fromEntries(Object.entries(COUNT_GROUPS).map(([k, group]) => {
+    const value = raw ? raw[k] : undefined;
+    return [k, (!raw || unavailable.has(group) || value === undefined || value === null) ? null : value];
+  }));
+}
+
+/** Un conteggio da mostrare: «—» se non disponibile. */
+export const formatCount = (value) => (value === null || value === undefined ? '—' : String(value));
 
 // UI-1 (C4, C27): le liste dalla cache condivisa (utils/sharedResources: la
 // stessa risposta di gestori, editor e nodi, aggiornata quando una
@@ -44,10 +70,10 @@ async function loadDashboard({ force = false } = {}) {
   if (results[0].status === 'rejected') throw results[0].reason;
   const value = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
   const projectsList = value(0, {}).projects || [];
-  const rawCounts = value(2, null) || {};
-  // Un conteggio non disponibile vale 0 nei calcoli e si dice tra i dati non caricati.
-  const counts = Object.fromEntries(Object.entries(NO_COUNTS).map(([k, zero]) => [k, rawCounts[k] ?? zero]));
-  const countFailures = (Array.isArray(rawCounts.unavailable) ? rawCounts.unavailable : []).map((k) => COUNT_LABELS[k] || k);
+  const rawCounts = value(2, null);
+  // Non disponibile = null (G11), detto tra i dati non caricati.
+  const counts = dashboardCounts(rawCounts);
+  const countFailures = (Array.isArray(rawCounts?.unavailable) ? rawCounts.unavailable : []).map((k) => COUNT_LABELS[k] || k);
   const arcgisData = value(4, { connections: [] });
   const eseguibiliData = value(5, []);
   const sourcesMap = {};

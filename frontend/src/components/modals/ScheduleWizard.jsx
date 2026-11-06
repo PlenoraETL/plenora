@@ -14,7 +14,7 @@ import { toastApiError } from '../../utils/toastApiError';
 import * as codecs from '../../utils/fieldCodecs';
 import { formErrors, formPayload } from '../../utils/formSchema';
 import { DEFAULT_TIMEZONE, timezoneOptions } from '../../utils/timezones';
-import { describeCron, nextCronRuns, formatCronRun } from '../../utils/cron';
+import { cronWarning, describeCron, nextCronRuns, formatCronRun } from '../../utils/cron';
 import './ScheduleWizard.css';
 import { pressable } from '../../utils/pressable';
 
@@ -33,8 +33,35 @@ const STEPS = [
  * capire un cron. UI conferma C-K2: le esecuzioni sono nel fuso in cui il
  * beat valuta OGNI cron (BEAT_TIMEZONE, GET /schedules/healthcheck →
  * `timezone`), non nel fuso salvato nella pianificazione, che il beat non usa.
+ *
+ * Conferma finale G7: il fuso dice da dove viene (`timezone_source` del
+ * healthcheck): scritto dal beat, dalla configurazione del server (beat non
+ * attivo o non aggiornato) o, se lo stato dello scheduler non si e' letto,
+ * il fuso predefinito: una stima, e il wizard lo dice.
+ * Conferma finale G6: una forma che lo scheduler accetta ma esegue in modo
+ * diverso da come si legge (utils/cron.CRON_WARNINGS) si salva, con l'avviso
+ * al posto di descrizione ed esecuzioni.
  */
-function CronPreview({ expression, timeZone }) {
+const TIMEZONE_SOURCE_NOTES = Object.freeze({
+  beat: (tz) => `Orari nel fuso in cui il server esegue le pianificazioni (${tz}).`,
+  api_config: (tz) => `Orari nel fuso ${tz} della configurazione del server: il servizio che esegue le pianificazioni non lo ha ancora confermato (non attivo o non aggiornato).`,
+  fallback: (tz) => `Orari nel fuso ${tz} come stima: lo stato del servizio delle pianificazioni non è stato letto, quindi il fuso in cui esegue non è noto.`,
+});
+
+const timezoneSourceOf = (timeZone, source) => {
+  if (!timeZone) return 'fallback';
+  return source === 'beat' ? 'beat' : 'api_config';
+};
+
+function CronPreview({ expression, timeZone, tzSource }) {
+  const warning = cronWarning(expression);
+  if (warning) {
+    return (
+      <div className="wiz-cron-preview" aria-live="polite">
+        <div className="wiz-hint" role="note" data-cron-warning>{warning}</div>
+      </div>
+    );
+  }
   const words = describeCron(expression);
   if (!words) return null;
   const runs = nextCronRuns(expression, { count: 5, timeZone });
@@ -48,7 +75,7 @@ function CronPreview({ expression, timeZone }) {
       ) : (
         <div className="wiz-cron-preview__never">Questa espressione non capita nei prossimi anni.</div>
       )}
-      <div className="wiz-hint">Orari nel fuso in cui il server esegue le pianificazioni ({timeZone}).</div>
+      <div className="wiz-hint" data-tz-source={tzSource}>{TIMEZONE_SOURCE_NOTES[tzSource](timeZone)}</div>
     </div>
   );
 }
@@ -132,10 +159,11 @@ export function schedulePayload(form, fields) {
   };
 }
 
-function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = null, schedulerTimeZone = null }) {
+function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = null, schedulerTimeZone = null, schedulerTimeZoneSource = null }) {
   const toast = useToast();
   // Fuso del beat; finche' non e' noto, il predefinito del backend (lo stesso).
   const schedulerTz = schedulerTimeZone || DEFAULT_TIMEZONE;
+  const tzSource = timezoneSourceOf(schedulerTimeZone, schedulerTimeZoneSource);
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   // Fase 5 T2: dati del modulo dall'hook comune (id di richiesta). Il
@@ -342,7 +370,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                   placeholder="0 3 * * *" />
                 <span className="wiz-hint">minuto · ora · giorno · mese · giorno_settimana</span>
                 {errors.cron_expression && <span className="wiz-error">{errors.cron_expression}</span>}
-                <CronPreview expression={form.cron_expression} timeZone={schedulerTz} />
+                <CronPreview expression={form.cron_expression} timeZone={schedulerTz} tzSource={tzSource} />
               </div>
               <div className="wiz-row">
                 <div className="wiz-field">

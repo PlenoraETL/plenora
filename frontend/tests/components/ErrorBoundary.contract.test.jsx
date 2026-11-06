@@ -15,7 +15,6 @@ import {
   AppErrorBoundary,
   RouteErrorBoundary,
   CanvasErrorBoundary,
-  ModalErrorBoundary,
 } from '../../src/components/common/ErrorBoundary';
 import { setErrorReporter } from '../../src/utils/errorReporting';
 
@@ -72,7 +71,6 @@ describe('Error Boundary per area (R5.7)', () => {
   it.each([
     ['app', AppErrorBoundary, 'Plenora — Errore'],
     ['canvas', CanvasErrorBoundary, 'Errore nel canvas'],
-    ['pannello', ModalErrorBoundary, 'Si è verificato un errore imprevisto nel pannello.'],
   ])('area %s: testo italiano e invio a Sentry', (area, Boundary, text) => {
     render(<MemoryRouter><Boundary><Boom /></Boundary></MemoryRouter>);
     expect(screen.getByText(text)).toBeInTheDocument();

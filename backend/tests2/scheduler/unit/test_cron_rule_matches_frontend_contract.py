@@ -7,9 +7,10 @@ una sola, ``frontend/tests/fixtures/cronCases.json``: il frontend la verifica
 con la sua funzione, questo test con lo scheduler vero.
 
 - ``valid``: lo scheduler accetta se e solo se il caso dice ``true``;
-- ``stricter``: lo scheduler accetta ma il frontend no (piu' stretto,
-  dichiarato nel caso): mai il contrario, cioe' un cron che il frontend
-  lascia passare e lo scheduler rifiuta.
+- ``warning`` (conferma finale G6, al posto di ``stricter``): lo scheduler
+  accetta una forma che esegue diversamente da come si legge; il frontend la
+  accetta lo stesso (una pianificazione salvata si deve poter risalvare) e
+  avvisa. Nessun caso in cui frontend e scheduler non sono d'accordo.
 """
 from __future__ import annotations
 
@@ -46,8 +47,9 @@ def test_cases_table_is_not_empty() -> None:
 @pytest.mark.parametrize("case", _cases() if _CASES.exists() else [], ids=lambda c: repr(c["expr"]))
 def test_scheduler_agrees_with_frontend_table(case: dict) -> None:
     accepted = _scheduler_accepts(case["expr"])
-    if case.get("stricter"):
-        assert accepted, "un caso 'stricter' deve essere accettato dallo scheduler"
-        assert case["valid"] is False
-    else:
-        assert accepted is case["valid"]
+    # Conferma finale G6: il frontend accetta tutto cio' che lo scheduler
+    # accetta; le forme lette diversamente hanno solo un avviso (`warning`).
+    assert "stricter" not in case
+    if case.get("warning"):
+        assert accepted and case["valid"] is True
+    assert accepted is case["valid"]

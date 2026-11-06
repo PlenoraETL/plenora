@@ -7,29 +7,30 @@
  * ogni lettura e scrittura e' protetta e senza memoria lo stato vale per la
  * sola pagina. `normalize` riporta un valore letto nei limiti ammessi.
  *
- * Le chiavi sono in LAYOUT_KEYS: una sola tabella, prefisso unico.
+ * Le chiavi sono in LAYOUT_KEYS, sotto la riga `layout` della tabella unica
+ * utils/browserStorage (conferma finale G8: prefisso `plenora:layout:`; le
+ * chiavi `plenora-layout:` di prima si spostano alla prima lettura).
  */
 import { useCallback, useState } from 'react';
+import { STORAGE_KEYS, migrateLegacy, readJson, storageKey, writeJson } from '../utils/browserStorage';
 
 const identity = (v) => v;
 
 export const LAYOUT_KEYS = Object.freeze({
-  appSidebarCollapsed: 'plenora-layout:app-sidebar-collapsed',
-  editorSidebarCollapsed: 'plenora-layout:editor-sidebar-collapsed',
-  editorPanelWidth: 'plenora-layout:editor-panel-width',
+  appSidebarCollapsed: storageKey('layout', 'app-sidebar-collapsed'),
+  editorSidebarCollapsed: storageKey('layout', 'editor-sidebar-collapsed'),
+  editorPanelWidth: storageKey('layout', 'editor-panel-width'),
 });
 
+const { prefix, legacyPrefix } = STORAGE_KEYS.layout;
+
 function read(key, fallback) {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw == null ? fallback : JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
+  if (key.startsWith(prefix)) migrateLegacy('layout', key, [`${legacyPrefix}${key.slice(prefix.length)}`]);
+  return readJson('layout', key, fallback);
 }
 
 function write(key, value) {
-  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* non ricordato */ }
+  writeJson('layout', key, value);
 }
 
 export function useStoredState(key, fallback, normalize = identity) {

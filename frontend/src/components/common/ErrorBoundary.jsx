@@ -1,14 +1,16 @@
 /**
  * ErrorBoundary.jsx — Error Boundary per area (R5.7).
  *
- * Un solo meccanismo (`AreaErrorBoundary`), quattro aree:
+ * Un solo meccanismo (`AreaErrorBoundary`), tre aree:
  *
  *   <AppErrorBoundary>    — fuori dal Router: ultima istanza (provider,
  *     CommandPalette, ...). Pagina di errore con Ricarica / Torna alla home.
  *   <RouteErrorBoundary>  — dentro il Router, intorno alle pagine: un crash in
  *     una pagina sostituisce solo quella pagina e si azzera cambiando rotta.
  *   <CanvasErrorBoundary> — il canvas degli editor.
- *   <ModalErrorBoundary>  — un pannello o una modale.
+ *   Finestre caricate al bisogno: ognuna ha la sua boundary, con «Chiudi» e
+ *   «Ricarica la pagina» (components/common/LazyWindow, conferma finale G1:
+ *   prima una ModalErrorBoundary unica per tutte le finestre di un editor).
  *
  * Ogni boundary invia l'errore a Sentry se e' configurato (utils/errorReporting:
  * in produzione React non rilancia gli errori catturati) e mostra un testo
@@ -168,32 +170,6 @@ export function CanvasErrorBoundary({ children }) {
               Ricarica pagina
             </button>
           </div>
-        </div>
-      )}
-    >
-      {children}
-    </AreaErrorBoundary>
-  );
-}
-
-export function ModalErrorBoundary({ children }) {
-  return (
-    <AreaErrorBoundary
-      area="pannello"
-      renderFallback={({ error, reset }) => (
-        <div className="error-boundary error-boundary--modal" role="alert">
-          <div className="error-boundary__icon" aria-hidden="true">⚠️</div>
-          <p className="error-boundary__message">
-            Si è verificato un errore imprevisto nel pannello.
-          </p>
-          <TechnicalDetail error={error} />
-          <button
-            type="button"
-            className="error-boundary__btn error-boundary__btn--secondary"
-            onClick={reset}
-          >
-            Chiudi
-          </button>
         </div>
       )}
     >

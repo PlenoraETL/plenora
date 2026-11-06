@@ -14,7 +14,7 @@
  *
  * Route: /editor/manipola/:id
  */
-import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -34,9 +34,9 @@ import '../components/nodes/CaricanArcGISNode.css';
 import EditorSidebar from '../components/panels/EditorSidebar';
 
 // Modali lazy-loaded
-const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
-const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
-const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
+const PreviewModal = lazyWindow(() => import('../components/modals/PreviewModal'), term('preview').name);
+const ExecutionModal = lazyWindow(() => import('../components/modals/ExecutionModal'), 'Esecuzione');
+const CanvasVersionsModal = lazyWindow(() => import('../components/modals/CanvasVersionsModal'), 'Versioni');
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
 import DataSourceNode from '../components/nodes/DataSourceNode';
@@ -68,7 +68,7 @@ import '../components/nodes/StaticValuesNode.css';
 import '../components/nodes/AnnotationNode.css';
 import '../components/nodes/DataSourceNode.css';
 import { useAuth } from '../context/AuthContext';
-import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
+import { lazyWindow } from '../components/common/LazyWindow';
 import { useHexCanvas } from '../utils/hexCanvas';
 import { menuEntry, term } from '../utils/glossary';
 import { buildManipolaPaletteGroups } from '../components/canvas/manipolaPalette';
@@ -431,8 +431,7 @@ const ManipolaEditorContent = () => {
 
   // modals slot
   const modals = (
-    <ModalErrorBoundary>
-      <Suspense fallback={null}>
+    <>
         {showVersions && (
           <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
         )}
@@ -444,8 +443,7 @@ const ManipolaEditorContent = () => {
           permissionRevoked={preview.permissionRevoked}
           title={`${term('preview').name} del progetto Manipola`} projectType="manipola" disableGrouping />
 )}
-      </Suspense>
-    </ModalErrorBoundary>
+      </>
   );
 
   return (

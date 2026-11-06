@@ -457,4 +457,9 @@ class BeatHealthcheck(BaseModel):
     # Fuso in cui il beat valuta OGNI cron (BEAT_TIMEZONE): il fuso salvato
     # nella pianificazione non lo cambia. Il wizard calcola qui le «prossime
     # esecuzioni» (UI conferma C-K2); sempre presente, anche a beat giu'.
+    # Da dove viene (UI conferma finale G7): `beat` = scritto dal processo
+    # beat col suo battito; `api_config` = ripiego, il BEAT_TIMEZONE della
+    # configurazione del processo API (beat mai partito, non ancora
+    # aggiornato o heartbeat non leggibile): il wizard lo dice.
     timezone: str = Field(default_factory=lambda: str(cron_schedule.beat_timezone()))
+    timezone_source: Literal["beat", "api_config"] = "api_config"

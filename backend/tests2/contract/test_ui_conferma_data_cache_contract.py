@@ -18,10 +18,7 @@ fallirebbe senza la correzione:
 
 from __future__ import annotations
 
-import os
 import re
-import uuid
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,34 +30,16 @@ from fastapi.testclient import TestClient
 
 from app.core.auth.auth import require_not_esecutore
 from app.shared.contracts.auth import CurrentUser
+from tests2.shared._real_pg import real_pg_marks, real_pg_schema
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
-REAL_PG_DSN = os.environ.get("PLENORA_REAL_PG_DSN", "")
-needs_real_pg = pytest.mark.skipif(not REAL_PG_DSN, reason="PLENORA_REAL_PG_DSN non impostato: nessun PostgreSQL vero")
 
 
 @pytest.fixture
 def current_user() -> CurrentUser:
     return CurrentUser(user_id="u-1", username="tester", group_id="grp-1", role="admin")
-
-
-@contextmanager
-def real_pg_schema():
-    """Uno schema temporaneo su un PostgreSQL vero, rimosso alla fine."""
-    import psycopg
-    from psycopg.rows import dict_row
-
-    schema = f"conferma_{uuid.uuid4().hex[:10]}"
-    conn = psycopg.connect(REAL_PG_DSN, autocommit=True, row_factory=dict_row)
-    try:
-        conn.execute(f"CREATE SCHEMA {schema}")
-        conn.execute(f"SET search_path TO {schema}")
-        yield conn
-    finally:
-        conn.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
-        conn.close()
 
 
 def _fetchall_on(conn):
@@ -90,8 +69,7 @@ def test_refs_query_never_calls_pg_input_is_valid_on_jsonb():
     assert not re.search(r"\bcanvas::jsonb\b", sql)
 
 
-@needs_real_pg
-@pytest.mark.integration
+@real_pg_marks
 @pytest.mark.parametrize("column_type", ["jsonb", "text"])
 def test_manipola_source_refs_on_real_postgres(monkeypatch, column_type):
     from app.core.projects import db as projects_db
@@ -210,8 +188,7 @@ def test_files_route_passes_cursor_and_returns_next_cursor(monkeypatch, current_
     assert client.get("/api/files", params={"cursor": "non-valido"}).status_code == 422
 
 
-@needs_real_pg
-@pytest.mark.integration
+@real_pg_marks
 def test_file_pages_on_real_postgres_neither_skip_nor_repeat_during_upload(monkeypatch):
     from app.core.files import db as files_db
 
@@ -282,8 +259,7 @@ def test_runner_applies_no_transaction_migration_in_autocommit(tmp_path, monkeyp
     assert conn.autocommit is False
 
 
-@needs_real_pg
-@pytest.mark.integration
+@real_pg_marks
 def test_log_runs_index_migration_on_real_postgres():
     from app.db import migrations_runner as mr
 

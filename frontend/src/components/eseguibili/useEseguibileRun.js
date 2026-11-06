@@ -32,9 +32,17 @@
  * risultato», alla scadenza della copia locale, allo smontaggio e — UI
  * conferma B-K4 — anche chiudendo la scheda o la finestra del browser
  * (`pagehide`, con `pageExit: true`: la pagina chiama la variante keepalive,
- * api/tasks.releaseTaskOnPageExit; `active` = esecuzione ancora in corso, da
- * annullare). Chiudere la scheda con un'esecuzione in corso o un risultato
- * non scaricato chiede prima (prompt del browser, `beforeunload`).
+ * api/tasks.releaseTaskOnPageExit; un'esecuzione ancora in corso la annulla
+ * il server prima di pulire, F8/G3). Pagina messa nella cache del browser
+ * (`pagehide` con `persisted`, conferma finale G4): la pagina puo' tornare,
+ * quindi nessuna pulizia ora, solo `persisted: true` (la pagina annota);
+ * al ritorno (`pageshow` con `persisted`) `pageReturn: true`: se
+ * l'annotazione c'era ancora il risultato resta, se un'altra apertura l'ha
+ * gia' pulito e' «non piu' disponibile».
+ * Cosa si perde uscendo (esecuzione in corso, risultato non scaricato) e'
+ * una domanda del registro unico utils/leaveGuard (conferma finale G8):
+ * lo leggono il prompt di chiusura della scheda, il guard di navigazione e
+ * l'uscita dall'account.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { downloadEseguibileOutput } from '../../api';
@@ -44,10 +52,20 @@ import { useTransferProgress } from '../../hooks/useTransferProgress';
 import { useOptionalConfirm } from '../../context/ConfirmContext';
 import { saveBlob } from '../../utils/downloadBlob';
 import { formatTime } from '../../utils/format';
+import { registerLeaveProbe } from '../../utils/leaveGuard';
 
 /** Per quanto il file scaricato resta riscaricabile nella finestra. */
 export const RESULT_KEEP_MINUTES = 30;
 const KEEP_MS = RESULT_KEEP_MINUTES * 60_000;
+
+/** Il dialog dell'uscita con un'esecuzione in corso o un risultato non scaricato. */
+const RUN_LEAVE_DIALOG = Object.freeze({
+  title: 'Esecuzione non conclusa',
+  message: 'C\'è un\'esecuzione in corso o un risultato non ancora scaricato. Uscendo l\'esecuzione si ferma e il risultato viene eliminato.',
+  confirmText: 'Esci ed elimina',
+  cancelText: 'Resta qui',
+  variant: 'danger',
+});
 
 
 /** Cosa succede al risultato, detto accanto ai pulsanti: una frase per stato. */
@@ -85,9 +103,12 @@ export function useEseguibileRun({ eseguibileId, onCleanup = null, onClose = nul
       : gone ? 'gone'
         : 'on_server';
   const busy = task.isActive || dl.busy;
-  // Cosa si perde chiudendo la pagina (letto dai gestori della pagina).
+  // Cosa si perde uscendo: domanda del registro unico (utils/leaveGuard).
   const atRiskRef = useRef(false);
   atRiskRef.current = task.isActive || resultState === 'on_server';
+  useEffect(() => registerLeaveProbe(() => atRiskRef.current, RUN_LEAVE_DIALOG), []);
+  // Esecuzione lasciata in una pagina messa nella cache del browser (G4).
+  const parkedRef = useRef(null);
 
   const cleanup = useCallback(async () => {
     const { taskId, done } = finishedRef.current;
@@ -103,31 +124,43 @@ export function useEseguibileRun({ eseguibileId, onCleanup = null, onClose = nul
   // Smontaggio con un'esecuzione finita e non ancora pulita.
   useEffect(() => () => { cleanup(); }, [cleanup]);
 
-  // Chiusura della scheda o della finestra del browser (B-K4).
+  // Chiusura della scheda o della finestra del browser (B-K4, G4).
   useEffect(() => {
-    const onPageHide = () => {
+    const onPageHide = (event) => {
       const { taskId, done, active } = finishedRef.current;
       if (!onCleanupRef.current || !taskId || (!done && !active) || cleanedRef.current === taskId) return;
-      cleanedRef.current = taskId;
       try {
-        onCleanupRef.current(taskId, { pageExit: true, active });
+        if (event?.persisted) {
+          // Nella cache del browser: puo' tornare, si annota soltanto.
+          parkedRef.current = taskId;
+          onCleanupRef.current(taskId, { pageExit: true, persisted: true });
+          return;
+        }
+        cleanedRef.current = taskId;
+        onCleanupRef.current(taskId, { pageExit: true });
       } catch (err) {
         console.warn('[useEseguibileRun] Pulizia alla chiusura non partita:', err);
       }
-      // Pagina rimessa dalla cache del browser: il server non lo ha piu'.
       setGone(true);
     };
-    const onBeforeUnload = (event) => {
-      if (!atRiskRef.current) return undefined;
-      event.preventDefault();
-      event.returnValue = '';
-      return '';
+    const onPageShow = (event) => {
+      const taskId = parkedRef.current;
+      if (!event?.persisted || !taskId || !onCleanupRef.current) return;
+      parkedRef.current = null;
+      let stillHere = true;
+      try {
+        stillHere = onCleanupRef.current(taskId, { pageReturn: true }) !== false;
+      } catch (err) {
+        console.warn('[useEseguibileRun] Ritorno dalla cache non verificato:', err);
+      }
+      // Un'altra apertura di /run l'ha gia' pulito: non c'e' piu'.
+      if (!stillHere) { cleanedRef.current = taskId; setGone(true); }
     };
     window.addEventListener('pagehide', onPageHide);
-    window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('pageshow', onPageShow);
     return () => {
       window.removeEventListener('pagehide', onPageHide);
-      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, []);
 

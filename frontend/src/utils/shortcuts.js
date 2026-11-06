@@ -99,6 +99,10 @@ export const SHORTCUTS = Object.freeze([
     label: 'Cerca un nodo nel canvas e vai lì',
     match: (e) => mod(e) && !e.shiftKey && !e.altKey && key(e, 'f'),
   },
+  // Scelta dichiarata (conferma finale G9): «C» vale anche con Maiusc o con
+  // il Blocco maiuscole, come «A» di add_step. Le lettere delle scorciatoie
+  // indicano il TASTO (la guida scrive «C»), e chi ha il Blocco maiuscole
+  // attivo non deve trovare il comando spento; Maiusc+C non ha altri usi.
   {
     id: 'connect', group: 'Editor', keys: ['C'],
     label: 'Collega il nodo selezionato a un altro (da tastiera)',

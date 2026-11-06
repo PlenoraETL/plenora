@@ -12,9 +12,13 @@
  * `vite:preloadError` ricaricava a OGNI import fallito: bastava il prefetch
  * di un editor al passaggio del mouse (o della freccia in Ctrl+K) e, dentro
  * un editor con modifiche, compariva la domanda nativa del browser. Ora:
- *  - nessun gestore globale: un import fallito torna a chi lo ha chiesto. Il
- *    prefetch (utils/editorChunks) lo ignora, i caricamenti al bisogno
- *    (dagre, js-yaml, Sentry) mostrano il loro errore;
+ *  - nessun gestore globale: un import fallito torna a chi lo ha chiesto
+ *    (conferma finale G2, uno per uno): il prefetch (utils/editorChunks) lo
+ *    ignora; «Riordina» (dagre) e l'import di una specifica (js-yaml) lo
+ *    dicono all'utente con un avviso; Sentry no (il monitoraggio non e'
+ *    dell'utente: resta in console); le finestre al bisogno degli editor
+ *    mostrano la loro fallback con «Chiudi» e «Ricarica la pagina»
+ *    (components/common/LazyWindow, reloadAfterLeaveQuestion);
  *  - ricarica SOLO il caricatore di una pagina (`lazyPage`, le rotte di
  *    App.jsx), cioe' una navigazione vera;
  *  - mai senza la domanda delle modifiche non salvate: se un editor ha
@@ -25,9 +29,10 @@
  * (tests/shared/previewAndReload.contract.test.js).
  */
 import React from 'react';
-import { mustAskBeforeLeaving } from './leaveGuard';
+import { confirmLeave, mustAskBeforeLeaving } from './leaveGuard';
+import { storageKey } from './browserStorage';
 
-const RELOAD_KEY = 'plenora:chunk-reload-at';
+const RELOAD_KEY = storageKey('chunkReload');
 const WINDOW_MS = 30_000;
 
 /**
@@ -43,6 +48,19 @@ export function reloadForNewBuild(win = window) {
   } catch {
     return false;
   }
+  win.location.reload();
+  return true;
+}
+
+/**
+ * «Ricarica la pagina» scelto dall'utente (finestre al bisogno rotte,
+ * components/common/LazyWindow; conferma finale G1): prima la domanda delle
+ * modifiche non salvate del registro unico (utils/leaveGuard.confirmLeave),
+ * poi la ricarica; il prompt nativo non si ripete (uscita confermata).
+ * @returns {Promise<boolean>} true = ricarica partita.
+ */
+export async function reloadAfterLeaveQuestion(confirm, win = window) {
+  if (!(await confirmLeave(confirm))) return false;
   win.location.reload();
   return true;
 }

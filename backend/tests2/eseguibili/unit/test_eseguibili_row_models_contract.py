@@ -162,7 +162,9 @@ def test_summary_has_manifest_is_the_detail_rule(monkeypatch) -> None:
     captured: list[str] = []
     monkeypatch.setattr(eseguibili_db, "_fetchall", lambda sql, *a, **k: captured.append(sql) or [])
     eseguibili_db.list_eseguibili(group_id="grp-1")
-    assert "(v.manifest IS NOT NULL) AS has_manifest" in captured[0]
+    # Conferma finale G5: la regola unica (manifest NON VUOTO), non IS NOT NULL.
+    assert f"{eseguibili_db.MANIFEST_PRESENT_SQL} AS has_manifest" in captured[0]
+    assert "(v.manifest IS NOT NULL) AS has_manifest" not in captured[0]
     assert "LEFT JOIN eseguibile_versions v ON v.id = e.active_version_id" in captured[0]
 
     with_manifest = eseguibili_db.eseguibile_summary_row_from_db(_db_row(has_manifest=True))

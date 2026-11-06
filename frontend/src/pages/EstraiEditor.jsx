@@ -3,7 +3,7 @@
  * Logica invariata — solo classi CSS aggiornate al design system Plenora
  */
 import { ReactFlowProvider } from '@xyflow/react';
-import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import '@xyflow/react/dist/style.css';
 import EditorShell from '../components/editor/EditorShell';
@@ -19,9 +19,9 @@ import JoinEdgePanel from '../components/canvas/JoinEdgePanel';
 import { estraiJoinEdges, paletteJoinEnds, presentJoinEdges, relationJoinEnds, tableNodeAlias } from '../utils/estraiJoins';
 
 // Modali lazy-loaded — caricati solo quando l'utente li apre
-const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
-const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
-const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
+const PreviewModal = lazyWindow(() => import('../components/modals/PreviewModal'), term('preview').name);
+const ExecutionModal = lazyWindow(() => import('../components/modals/ExecutionModal'), 'Esecuzione');
+const CanvasVersionsModal = lazyWindow(() => import('../components/modals/CanvasVersionsModal'), 'Versioni');
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import ProjectInputNode from '../components/nodes/ProjectInputNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
@@ -53,7 +53,7 @@ import '../components/nodes/FeatureLayerNode.css';
 import '../components/panels/FeatureServicePanel.css';
 import { useAuth } from '../context/AuthContext';
 import { can } from '../utils/permissions';
-import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
+import { lazyWindow } from '../components/common/LazyWindow';
 import { useHexCanvas } from '../utils/hexCanvas';
 import { menuEntry, term } from '../utils/glossary';
 import useEditorActions from '../components/editor/useEditorActions';
@@ -590,8 +590,7 @@ function EstraiEditor() {
         }, [preview.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const modals = (
-    <ModalErrorBoundary>
-      <Suspense fallback={null}>
+    <>
         {showVersions && (
           <CanvasVersionsModal
             isOpen onClose={() => setShowVersions(false)} projectId={projectId}
@@ -611,8 +610,7 @@ function EstraiEditor() {
         title={`${term('preview').name} della query SQL`} projectType="estrai"
       />
         )}
-      </Suspense>
-    </ModalErrorBoundary>
+      </>
   );
 
   return (

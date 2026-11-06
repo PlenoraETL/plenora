@@ -1,5 +1,5 @@
 {
-  "_doc": "Regola unica del cron (Fase 5 T5, R8.13). valid = lo scheduler la accetta (backend CronSchedule: 5 campi + croniter.is_valid). stricter = croniter la accetta ma il frontend no (dichiarato). Letta da frontend/tests/shared/fieldCodecs.contract.test.js e da backend/tests2/scheduler/unit/test_cron_rule_matches_frontend_contract.py.",
+  "_doc": "Regola unica del cron (Fase 5 T5, R8.13; conferma finale G6). valid = lo scheduler la accetta (backend CronSchedule: 5 campi + croniter.is_valid) E il frontend la accetta. warning = forma che lo scheduler esegue diversamente da come si legge: valida, con l'avviso del frontend (utils/cron.CRON_WARNINGS) e senza descrizione ne' prossime esecuzioni. Letta da frontend/tests/shared/fieldCodecs.contract.test.js, cronWords.contract.test.js e da backend/tests2/scheduler/unit/test_cron_rule_matches_frontend_contract.py.",
   "cases": [
     { "expr": "*/15 * * * *", "valid": true },
     { "expr": "0 3 * * *", "valid": true },
@@ -46,7 +46,6 @@
     { "expr": "*/61 * * * *", "valid": true },
     { "expr": "* */24 * * *", "valid": true },
     { "expr": "0 0 */32 * *", "valid": true },
-
     { "expr": "", "valid": false },
     { "expr": "abc", "valid": false },
     { "expr": "@daily", "valid": false },
@@ -83,8 +82,7 @@
     { "expr": "0 0 * * 1#0", "valid": false },
     { "expr": "0 0 * * 1#6", "valid": false },
     { "expr": "0 0 * * 1#2,3", "valid": false },
-
-    { "expr": "0 0 1-L * *", "valid": false, "stricter": true },
-    { "expr": "* * * * 7-7", "valid": false, "stricter": true, "why": "croniter lo esegue OGNI giorno (non solo la domenica): il frontend lo rifiuta invece di mostrare esecuzioni diverse da quelle dello scheduler" }
+    { "expr": "0 0 1-L * *", "valid": true, "warning": "croniter accetta un intervallo che finisce con L: il frontend lo accetta con l'avviso, senza prossime esecuzioni (non calcolabili uguali)" },
+    { "expr": "* * * * 7-7", "valid": true, "warning": "croniter lo esegue OGNI giorno (non solo la domenica): il frontend lo accetta come lo scheduler, con l'avviso, senza descrizione ne' prossime esecuzioni" }
   ]
 }

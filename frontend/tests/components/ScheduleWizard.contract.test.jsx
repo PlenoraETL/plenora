@@ -224,7 +224,7 @@ describe('ScheduleWizard', () => {
     try {
       apiIndexMock.listProjects.mockResolvedValueOnce([{ id: 'proj-1', name: 'Project One', project_type: 'estrai' }]);
       apiIndexMock.listConnections.mockResolvedValueOnce([]);
-      render(<ScheduleWizard onClose={vi.fn()} onCreated={vi.fn()} schedulerTimeZone="Asia/Tokyo" />);
+      render(<ScheduleWizard onClose={vi.fn()} onCreated={vi.fn()} schedulerTimeZone="Asia/Tokyo" schedulerTimeZoneSource="beat" />);
       await userEvent.click((await screen.findAllByText('Project One'))[0]);
       await userEvent.click(screen.getByRole('button', { name: /avanti/i }));
       expect(screen.getByText('Orari nel fuso in cui il server esegue le pianificazioni (Asia/Tokyo).')).toBeInTheDocument();
@@ -238,5 +238,19 @@ describe('ScheduleWizard', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // Conferma finale G7: il fuso dice da dove viene; il ripiego e' dichiarato.
+  it.each([
+    ['beat', 'Asia/Tokyo', 'beat', /fuso in cui il server esegue le pianificazioni \(Asia\/Tokyo\)/],
+    ['configurazione del server', 'Asia/Tokyo', undefined, /fuso Asia\/Tokyo della configurazione del server: il servizio che esegue le pianificazioni non lo ha ancora confermato/],
+    ['stato non letto', undefined, undefined, /fuso Europe\/Rome come stima: lo stato del servizio delle pianificazioni non è stato letto/],
+  ])('fuso dal %s', async (_label, tz, source, text) => {
+    apiIndexMock.listProjects.mockResolvedValueOnce([{ id: 'proj-1', name: 'Project One', project_type: 'estrai' }]);
+    apiIndexMock.listConnections.mockResolvedValueOnce([]);
+    render(<ScheduleWizard onClose={vi.fn()} onCreated={vi.fn()} schedulerTimeZone={tz} schedulerTimeZoneSource={source} />);
+    await userEvent.click((await screen.findAllByText('Project One'))[0]);
+    await userEvent.click(screen.getByRole('button', { name: /avanti/i }));
+    expect(document.querySelector('[data-tz-source]').textContent).toMatch(text);
   });
 });

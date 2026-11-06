@@ -1,0 +1,12 @@
+-- Fuso del beat nel suo heartbeat (UI conferma finale G7, 06/11/2026).
+--
+-- Il beat valuta OGNI cron nel suo BEAT_TIMEZONE. Prima GET
+-- /schedules/healthcheck rispondeva con il BEAT_TIMEZONE del processo API,
+-- che puo' essere diverso da quello del beat. Ora il beat scrive il proprio
+-- fuso insieme al battito (workers/beat_scheduler._write_heartbeat) e
+-- l'healthcheck lo legge da qui; senza (beat non ancora aggiornato) dice che
+-- il fuso e' quello della configurazione dell'API (`timezone_source`).
+--
+-- SICUREZZA DELL'INSTALLAZIONE: solo ADD COLUMN IF NOT EXISTS di una colonna
+-- facoltativa; nessun dato letto o modificato, rieseguibile.
+ALTER TABLE beat_heartbeat ADD COLUMN IF NOT EXISTS timezone TEXT;

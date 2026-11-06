@@ -59,11 +59,13 @@
  * Salvataggio condizionato alla versione (token canvas_version, 409 se
  * superata): utils/canvasVersion.js.
  */
-const PREFIX = 'plenora:draft:';
-const TAB_PREFIX = 'plenora:tab:';
-const SAVED_PREFIX = 'plenora:saved:';
-const DELETED_PREFIX = 'plenora:deleted:';
-const TAB_ID_KEY = 'plenora:tab-id';
+import { STORAGE_KEYS } from './browserStorage';
+// Chiavi dalla tabella unica (utils/browserStorage, conferma finale G8).
+const PREFIX = STORAGE_KEYS.draft.prefix;
+const TAB_PREFIX = STORAGE_KEYS.draftTab.prefix;
+const SAVED_PREFIX = STORAGE_KEYS.draftSaved.prefix;
+const DELETED_PREFIX = STORAGE_KEYS.draftDeleted.prefix;
+const TAB_ID_KEY = STORAGE_KEYS.tabId.key;
 
 export const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 const HEARTBEAT_MS = 10 * 1000;

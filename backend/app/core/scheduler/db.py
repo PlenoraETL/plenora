@@ -251,7 +251,8 @@ def delete_schedule(schedule_id: str) -> bool:
 
 
 def get_beat_heartbeat():
-    return fetchone("SELECT ts FROM beat_heartbeat WHERE id = 'beat'")
+    # `timezone`: il fuso scritto dal beat col battito (UI conferma finale G7).
+    return fetchone("SELECT ts, timezone FROM beat_heartbeat WHERE id = 'beat'")
 
 
 def count_enabled_schedules() -> int:

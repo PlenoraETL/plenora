@@ -16,7 +16,7 @@ import ProjectCard from '../components/projects/ProjectCard';
 import ProjectListSkeleton from '../components/projects/ProjectListSkeleton';
 import QuickStart from '../components/projects/QuickStart';
 import EseguibiliSection from '../components/projects/EseguibiliSection';
-import { useProjectListData } from '../components/projects/useProjectListData';
+import { useProjectListData, formatCount } from '../components/projects/useProjectListData';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
@@ -392,7 +392,8 @@ function ProjectList() {
               { val: counts.schedules_active,                      label: 'Pianificazioni attive', accent: 'var(--pl-estrai)', to: '/schedules' },
               { val: counts.api_connections,                       label: 'API Esterne', accent: 'var(--pl-manipola)', to: '/external-connectors' },
               { val: files.length,                                  label: 'File',        accent: 'var(--pl-arricch)',  to: '/files' },
-            ].filter(t => t.val > 0);
+            // Un conteggio non disponibile (null) resta, con «—» (conferma finale G11).
+            ].filter(t => t.val === null || t.val > 0);
             if (tiles.length === 0) return null;
             return (
               <div className="pl__stats-row">
@@ -404,7 +405,7 @@ function ProjectList() {
                     style={{ '--stat-accent': accent }}
                     onClick={() => navigate(to)}
                   >
-                    <span className="pl__stat-val">{val}</span>
+                    <span className="pl__stat-val">{formatCount(val)}</span>
                     <span className="pl__stat-label">{label}</span>
                   </button>
                 ))}
@@ -413,7 +414,7 @@ function ProjectList() {
           })()}
           {projects.length === 0 && !section ? (
             <QuickStart
-              hasDataSource={connections.length + arcgisConnections.length + counts.api_connections + counts.datasources > 0}
+              hasDataSource={connections.length + arcgisConnections.length + (counts.api_connections ?? 0) + (counts.datasources ?? 0) > 0}
               canCreate={canCreateProj}
               onNewProject={openModalForType}
             />

@@ -64,7 +64,8 @@ def runs_in(zone: str, expr: str, start: str) -> list[str]:
 
 def build() -> dict:
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))["cases"]
-    valid = [c["expr"] for c in cases if c["valid"]]
+    # Le forme con avviso (`warning`) non hanno prossime esecuzioni nel frontend.
+    valid = [c["expr"] for c in cases if c["valid"] and not c.get("warning")]
     return {
         "_doc": (
             "Prossime esecuzioni dello scheduler (CronSchedule.next_runs, croniter) "

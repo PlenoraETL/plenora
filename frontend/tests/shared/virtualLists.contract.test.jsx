@@ -147,3 +147,73 @@ describe('VirtualList: pagina, canvas, misure, fuoco, ricerca (conferma A-K6)', 
     expect(screen.getAllByTestId('item')).toHaveLength(300);
   });
 });
+
+describe('VirtualList: conferma finale F1 e F2', () => {
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+  const items = n => Array.from({ length: n }, (_, i) => ({ id: `i${i}`, label: `Elemento ${i}` }));
+  const renderItem = item => <button type="button" data-testid="item">{item.label}</button>;
+  const count = () => screen.getAllByTestId('item').length;
+
+  it('F1: nel canvas nowheel/nodrag solo se il riquadro scorre davvero', () => {
+    // Sotto la soglia: nessun riquadro, nessuna classe (la rotella zooma).
+    const small = render(<VirtualList inCanvasNode items={items(20)} itemKey={x => x.id} renderItem={renderItem} estimatedItemHeight={26} maxHeight={420} />);
+    expect(small.container.innerHTML).not.toMatch(/nowheel|nodrag/);
+    small.unmount();
+    // Oltre la soglia ma righe che stanno tutte (61 x 5 px < 420): niente classi.
+    const fits = render(<VirtualList inCanvasNode items={items(61)} itemKey={x => x.id} renderItem={renderItem} estimatedItemHeight={5} maxHeight={420} />);
+    expect(fits.container.querySelector('.vlist').className).not.toMatch(/nowheel|nodrag/);
+    fits.unmount();
+    // Righe oltre l'altezza del riquadro: classi presenti.
+    const tall = render(<VirtualList inCanvasNode items={items(61)} itemKey={x => x.id} renderItem={renderItem} estimatedItemHeight={26} maxHeight={420} />);
+    expect(tall.container.querySelector('.vlist').className).toMatch(/\bnowheel\b.*\bnodrag\b/);
+  });
+
+  it('F2: dopo Ctrl+F la lista torna virtuale con Esc, con un clic e con elementi nuovi', () => {
+    const list = items(300);
+    const { rerender } = render(<VirtualList items={list} itemKey={x => x.id} renderItem={renderItem} estimatedItemHeight={40} />);
+    const search = () => act(() => { fireEvent.keyDown(document, { key: 'f', ctrlKey: true }); });
+    search();
+    expect(count()).toBe(300);
+    act(() => { fireEvent.keyDown(document, { key: 'Escape' }); });
+    expect(count()).toBeLessThan(60);
+    search();
+    act(() => { fireEvent.pointerDown(document.body); });
+    expect(count()).toBeLessThan(60);
+    search();
+    rerender(<VirtualList items={list.slice(1)} itemKey={x => x.id} renderItem={renderItem} estimatedItemHeight={40} />);
+    expect(count()).toBeLessThan(60);
+  });
+
+  it('F2: un Ctrl+F gia\' preso da altri (defaultPrevented) non disegna tutto', () => {
+    render(<VirtualList items={items(300)} itemKey={x => x.id} renderItem={renderItem} estimatedItemHeight={40} />);
+    const taker = (e) => e.preventDefault();
+    document.addEventListener('keydown', taker);
+    act(() => { fireEvent.keyDown(document, { key: 'f', ctrlKey: true }); });
+    document.removeEventListener('keydown', taker);
+    expect(count()).toBeLessThan(60);
+  });
+
+  it('F2: il contenitore e\' l\'antenato che scorre DAVVERO, cercato a ogni lettura', () => {
+    const { container } = render(
+      <div data-testid="box" style={{ overflowY: 'auto', height: '300px' }}>
+        <VirtualList items={items(1000)} itemKey={x => x.id} renderItem={renderItem} estimatedItemHeight={40} />
+      </div>,
+    );
+    const box = screen.getByTestId('box');
+    const list = container.querySelector('.vlist');
+    vi.spyOn(list, 'getBoundingClientRect').mockReturnValue({ top: -15000, bottom: 25000, left: 0, right: 0, width: 0, height: 40000 });
+    vi.spyOn(box, 'getBoundingClientRect').mockReturnValue({ top: 5000, bottom: 5300, left: 0, right: 0, width: 0, height: 300 });
+    // Overflow auto ma contenuto che non scorre: conta la finestra (riga ~375).
+    vi.spyOn(box, 'scrollHeight', 'get').mockReturnValue(300);
+    vi.spyOn(box, 'clientHeight', 'get').mockReturnValue(300);
+    act(() => { box.dispatchEvent(new Event('scroll')); });
+    let labels = screen.getAllByTestId('item').map(b => Number(b.textContent.split(' ')[1]));
+    expect(labels).toContain(380);
+    expect(labels).not.toContain(500);
+    // Ora il riquadro scorre davvero: conta lui (riga ~500), e il suo scorrimento arriva.
+    vi.spyOn(box, 'scrollHeight', 'get').mockReturnValue(40000);
+    act(() => { box.dispatchEvent(new Event('scroll')); });
+    labels = screen.getAllByTestId('item').map(b => Number(b.textContent.split(' ')[1]));
+    expect(labels).toContain(500);
+  });
+});

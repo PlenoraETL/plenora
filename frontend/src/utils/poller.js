@@ -48,6 +48,10 @@ export const POLL_PROFILES = Object.freeze({
   // ritmo limitato, anche ore): il tetto del client e' dichiarato qui, una
   // giornata di polling attivo; oltre, l'esito e' nei Log.
   enrichTask: Object.freeze({ interval: 1000, maxInterval: 15_000, maxDurationMs: 24 * HOUR }),
+  // Task avviati da una pagina che non c'e' piu' (conferma finale F5,
+  // utils/taskPoller): un giro solo per tutti, lento, fino alla fine del
+  // task (tetto del task piu' lungo, Arricchisci) per invalidare le risorse.
+  taskBackground: Object.freeze({ interval: 5000, maxInterval: 30_000, maxDurationMs: 24 * HOUR }),
   // Schedule con un'esecuzione in corso / senza.
   scheduleActive: Object.freeze({ interval: 3000, maxInterval: 15_000, maxDurationMs: 30 * MINUTE }),
   scheduleIdle: Object.freeze({ interval: 30_000, maxInterval: 2 * MINUTE, maxDurationMs: 30 * MINUTE }),

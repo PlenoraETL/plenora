@@ -19,7 +19,9 @@ import { describe, it, expect } from 'vitest';
 import { cronProblem, describeCron, nextCronRuns, formatCronRun } from '../../src/utils/cron';
 
 const { cases } = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../fixtures/cronCases.json'), 'utf-8'));
-const VALID = cases.filter(c => c.valid).map(c => c.expr);
+// Le forme con avviso (conferma finale G6) sono valide ma senza descrizione
+// ne' prossime esecuzioni: hanno il loro test (uiConfermaFinale.contract).
+const VALID = cases.filter(c => c.valid && !c.warning).map(c => c.expr);
 const INVALID = cases.filter(c => !c.valid).map(c => c.expr);
 // Venerdì 6 novembre 2026, 10:17 a Roma (09:17 UTC).
 const FROM = new Date(Date.UTC(2026, 10, 6, 9, 17, 30));

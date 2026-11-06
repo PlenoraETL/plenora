@@ -5,10 +5,15 @@
  * ESATTAMENTE 5 campi e `croniter.is_valid` lo accetta
  * (backend app/core/scheduler/cron_schedule.py, CronSchedule). Qui la stessa
  * grammatica di croniter per i 5 campi; dove croniter e' piu' largo (per
- * esempio `1-L`) il frontend e' piu' stretto e lo dichiara nella tabella dei
- * casi (`tests/fixtures/cronCases.json`, campo `stricter`). Un test del
- * backend fa girare croniter sugli stessi casi
- * (backend/tests2/shared/test_cron_rule_matches_frontend.py).
+ * esempio `1-L`, `7-7`) il frontend ACCETTA lo stesso (conferma finale G6:
+ * prima rifiutava, e una pianificazione salvata cosi' non si salvava piu' in
+ * modifica) ma avvisa: sono le forme di CRON_WARNINGS, che lo scheduler
+ * esegue in modo diverso da come si leggono; per loro niente descrizione
+ * ne' prossime esecuzioni (non si possono calcolare uguali a croniter),
+ * solo l'avviso (`cronWarning`). Tabella dei casi condivisa
+ * (`tests/fixtures/cronCases.json`, campo `warning`); un test del backend fa
+ * girare croniter sugli stessi casi
+ * (backend/tests2/scheduler/unit/test_cron_rule_matches_frontend_contract.py).
  *
  * | campo            | valori                  | speciali (da soli)      |
  * |------------------|-------------------------|-------------------------|
@@ -55,10 +60,35 @@ function itemValid(item, field) {
   const bounds = base.split('-');
   if (bounds.length > 2) return false;
   if (!bounds.every(b => b !== '' && valueOf(b, field) !== null)) return false;
-  // `7-7` (domenica-domenica): croniter lo esegue OGNI giorno. Piu' stretti
-  // (dichiarato in cronCases.json): mai esecuzioni diverse dallo scheduler.
-  if (field === CRON_FIELDS[4] && bounds.length === 2 && bounds.every(b => valueOf(b, field) === 7)) return false;
   return true;
+}
+
+/*
+ * Forme che lo scheduler (croniter) accetta ma esegue diversamente da come
+ * si leggono (conferma finale G6). Si salvano, con l'avviso; per loro il
+ * wizard non mostra descrizione ne' prossime esecuzioni.
+ */
+const CRON_WARNINGS = Object.freeze([
+  {
+    id: 'sunday_range',
+    field: 4,
+    match: (text) => text.split(',').some(item => /^(7|sun)-(7|sun)(\/\d+)?$/i.test(item)),
+    message: 'Con «7-7» nel giorno della settimana la pianificazione parte OGNI giorno, non solo la domenica: per la sola domenica scrivi «0» o «7».',
+  },
+  {
+    id: 'last_day_range',
+    field: 2,
+    match: (text) => /^\d+-L$/i.test(text) && valueOf(text.split('-')[0], CRON_FIELDS[2]) !== null,
+    message: 'Un intervallo che finisce con «L» (ultimo giorno del mese) si può salvare, ma le prossime esecuzioni non si possono mostrare qui: controllale dopo il salvataggio.',
+  },
+]);
+
+/** L'avviso di una forma di CRON_WARNINGS, o null. */
+export function cronWarning(expression) {
+  const parts = String(expression ?? '').trim().split(/\s+/);
+  if (parts.length !== 5) return null;
+  const hit = CRON_WARNINGS.find(w => w.match(parts[w.field]));
+  return hit ? hit.message : null;
 }
 
 function fieldValid(text, index) {
@@ -82,7 +112,9 @@ export function cronProblem(expression) {
   if (parts.length !== 5) {
     return `Servono 5 campi (minuto ora giorno mese giorno_settimana), ne hai scritti ${parts.length}`;
   }
-  const bad = parts.findIndex((part, i) => !fieldValid(part, i));
+  // Una forma di CRON_WARNINGS vale per il suo campo (lo scheduler la accetta).
+  const bad = parts.findIndex((part, i) => !fieldValid(part, i)
+    && !CRON_WARNINGS.some(w => w.field === i && w.match(part)));
   if (bad !== -1) return `Campo «${CRON_FIELDS[bad].name}» non valido: ${parts[bad]}`;
   return null;
 }
@@ -142,7 +174,8 @@ function expandField(text, field) {
 
 /** Espressione letta: per campo i valori, o la regola speciale del giorno. */
 function parseCron(expression) {
-  if (cronProblem(expression)) return null;
+  // Le forme con avviso non si calcolano (croniter le legge a modo suo).
+  if (cronProblem(expression) || cronWarning(expression)) return null;
   const [min, hour, dom, month, dow] = normalizeCron(expression).split(' ');
   const parsed = {
     minutes: expandField(min, CRON_FIELDS[0]),

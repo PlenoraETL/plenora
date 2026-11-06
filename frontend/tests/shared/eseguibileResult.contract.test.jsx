@@ -3,10 +3,11 @@
  * (UI conferma B-K4, B-K5), sopra l'hook unico useEseguibileRun.
  *
  *  B-K4 — privacy anche chiudendo la scheda: `pagehide` fa partire la
- *    pulizia (una volta) con `pageExit`, e `active` se l'esecuzione e'
- *    ancora in corso; la variante dell'API usa fetch keepalive con il token
- *    di sessione verso le route esistenti (annullamento, poi pulizia).
- *    Chiudere la scheda con qualcosa da perdere chiede (beforeunload).
+ *    pulizia (una volta) con `pageExit`; la variante dell'API usa fetch
+ *    keepalive con il token di sessione verso UNA route (full-cleanup: il
+ *    server annulla e poi pulisce, conferma finale F8/G3) e la annota prima
+ *    (G10). Chiudere la scheda con qualcosa da perdere chiede (beforeunload,
+ *    il prompt unico del registro utils/leaveGuard, G8).
  *  B-K5 — un solo stato del risultato: scaduta la copia scaricata (misurata
  *    sull'orologio, anche dopo una scheda nascosta) il risultato e' «non piu'
  *    disponibile»: blob tolto, server pulito, niente «Scarica» (che
@@ -64,7 +65,7 @@ describe('B-K4: pulizia anche chiudendo la scheda', () => {
     await waitFor(() => expect(result.current.resultState).toBe('on_server'), { timeout: 3000 });
     pageHide();
     expect(onCleanup).toHaveBeenCalledTimes(1);
-    expect(onCleanup).toHaveBeenCalledWith('t1', { pageExit: true, active: false });
+    expect(onCleanup).toHaveBeenCalledWith('t1', { pageExit: true });
     // Pagina rimessa dalla cache del browser: niente «Scarica» verso un server pulito.
     expect(result.current.resultState).toBe('gone');
     expect(result.current.canDownload).toBe(false);
@@ -73,7 +74,7 @@ describe('B-K4: pulizia anche chiudendo la scheda', () => {
     expect(onCleanup).toHaveBeenCalledTimes(1);
   });
 
-  it('esecuzione in corso: pagehide pulisce con active (da annullare)', async () => {
+  it('esecuzione in corso: pagehide pulisce (l\'annullamento lo fa il server prima)', async () => {
     api.getTaskStatus.mockResolvedValue({ status: 'progress', progress: 40 });
     const onCleanup = vi.fn();
     const { result } = renderHook(() => useEseguibileRun({ eseguibileId: 'e1', onCleanup }));
@@ -81,7 +82,7 @@ describe('B-K4: pulizia anche chiudendo la scheda', () => {
     expect(result.current.task.isActive).toBe(true);
     expect(beforeUnload()).toBe(true);
     pageHide();
-    expect(onCleanup).toHaveBeenCalledWith('t2', { pageExit: true, active: true });
+    expect(onCleanup).toHaveBeenCalledWith('t2', { pageExit: true });
   });
 
   it('senza pulizia dichiarata (ruoli non esecutore) pagehide non fa nulla', async () => {
@@ -102,15 +103,14 @@ describe('B-K4: pulizia anche chiudendo la scheda', () => {
     expect(beforeUnload()).toBe(false);
   });
 
-  it('l\'API parte con fetch keepalive e il token: annullamento (se in corso), poi pulizia', () => {
+  it('l\'API parte con fetch keepalive e il token: UNA richiesta, la pulizia (l\'ordine e\' del server)', () => {
     const fetchSpy = vi.fn(() => Promise.resolve({ ok: true }));
     vi.stubGlobal('fetch', fetchSpy);
     sessionStorage.setItem('urby_token', 'tok-1');
     try {
-      expect(releaseTaskOnPageExit('t/9', { active: true })).toBe(true);
+      expect(releaseTaskOnPageExit('t/9')).toBe(true);
       expect(fetchSpy.mock.calls.map(([url, o]) => [url.replace(/^.*\/api/, ''), o.method, o.keepalive, o.headers.Authorization]))
         .toEqual([
-          ['/tasks/t%2F9', 'DELETE', true, 'Bearer tok-1'],
           ['/tasks/t%2F9/full-cleanup', 'DELETE', true, 'Bearer tok-1'],
         ]);
       fetchSpy.mockClear();

@@ -29,6 +29,7 @@ def test_cleanup_task_deletes_only_task_result_and_task_logs(client, tmp_path):
     task_file.write_text("id\n1\n", encoding="utf-8")
 
     task_info = SimpleNamespace(
+        status="success",
         project_id=project_id,
         result={"project_id": project_id, "result_id": "res-1", "output_file": "task-output.csv"},
     )
@@ -38,7 +39,7 @@ def test_cleanup_task_deletes_only_task_result_and_task_logs(client, tmp_path):
         deleted_sql.append((sql, params))
         return SimpleNamespace(rowcount=1)
 
-    with patch("app.core.orchestrator.router.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)), \
+    with patch("app.core.orchestrator.task_cleanup.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status", return_value=task_info), \
          patch("app.core.projects.service.ProjectService.get_project_metadata", return_value={"id": project_id, "group_id": "grp-1"}), \
          patch("app.core.results.cleanup.delete_result", return_value=True) as delete_result, \

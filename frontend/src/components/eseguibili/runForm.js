@@ -3,8 +3,12 @@
  *
  * Con un manifest nella versione attiva si compila il modulo dinamico
  * (ExecutableDynamicRunForm); senza, si carica un file con le colonne attese
- * (EseguibileExecuteWizard). Il dettaglio porta il `manifest`, la lista
- * `has_manifest` (backend: stessa colonna, `v.manifest IS NOT NULL`). Prima
+ * (EseguibileExecuteWizard). Lista e dettaglio portano `has_manifest`,
+ * calcolato dal backend con la sua regola unica (conferma finale G5,
+ * core/eseguibili/db.manifest_present: manifest NON VUOTO; prima la lista
+ * diceva `v.manifest IS NOT NULL`, sempre vero, e gli Eseguibili a file
+ * singolo mostravano «Modulo»). Senza `has_manifest` (risposta vecchia) vale
+ * la stessa regola sul `manifest`: un oggetto vuoto non e' un modulo. Prima
  * la card di /run decideva con `expected_columns_count` e la finestra con il
  * manifest: un Eseguibile col modulo e colonne legacy diceva «File con 2
  * colonne» e apriva il modulo. La card, la finestra e la lista leggono da qui
@@ -12,7 +16,12 @@
  */
 
 /** L'Eseguibile si esegue con il modulo dinamico? */
-export const usesRunForm = (eseguibile) => Boolean(eseguibile?.manifest || eseguibile?.has_manifest);
+const manifestPresent = (manifest) => Boolean(manifest) && typeof manifest === 'object'
+  && Object.keys(manifest).length > 0;
+
+export const usesRunForm = (eseguibile) => (typeof eseguibile?.has_manifest === 'boolean'
+  ? eseguibile.has_manifest
+  : manifestPresent(eseguibile?.manifest));
 
 /** Che cosa prepara chi esegue, in parole (card di /run e della lista). */
 export function runInputSummary(eseguibile) {

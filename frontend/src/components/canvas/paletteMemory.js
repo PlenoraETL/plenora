@@ -7,9 +7,12 @@
  * stesso computer vedeva preferiti e recenti, nomi di tabelle compresi,
  * dell'utente precedente). La chiave porta lo user_id della sessione, come
  * le copie di sicurezza (utils/localDrafts.currentDraftUser); senza utente
- * la palette non ricorda niente. Come le copie di sicurezza restano
- * all'uscita (sono di quell'utente e tornano al suo prossimo accesso); le
- * chiavi per browser di prima si tolgono alla prima lettura.
+ * la palette non ricorda niente. Chiave e regole nella tabella unica
+ * utils/browserStorage (riga `palette`, conferma finale G8): si toglie
+ * all'uscita dall'account (memoria d'uso con nomi di tabelle); la chiave per
+ * utente di prima (`plenora.palette.user:…`) si sposta alla prima lettura,
+ * quella per browser di prima di B-K10 (di proprietario sconosciuto) si
+ * toglie senza darla a nessuno.
  * Ogni lettura e scrittura e' protetta (finestra privata, dati del sito
  * bloccati): senza memoria la palette funziona come prima.
  *
@@ -18,20 +21,21 @@
  * esiste piu' sparisce da sola.
  */
 import { currentDraftUser } from '../../utils/localDrafts';
+import { STORAGE_KEYS, migrateLegacy, readJson, storageKey, writeJson } from '../../utils/browserStorage';
 
-const LEGACY_KEY = (scope) => `plenora.palette.${scope}`;
 export const paletteMemoryKey = (scope, user = currentDraftUser()) => (
-  scope && user ? `plenora.palette.user:${user}.${scope}` : null);
+  scope && user ? storageKey('palette', user, scope) : null);
 const RECENT_MAX = 6;
 
 export const itemKey = (item) => `${item.kind || ''}:${item.id}`;
 
 function read(scope) {
   try {
-    try { window.localStorage.removeItem(LEGACY_KEY(scope)); } catch { /* niente */ }
-    const key = paletteMemoryKey(scope);
-    const raw = key ? window.localStorage.getItem(key) : null;
-    const parsed = raw ? JSON.parse(raw) : null;
+    const user = currentDraftUser();
+    const key = paletteMemoryKey(scope, user);
+    const row = STORAGE_KEYS.palette;
+    if (key) migrateLegacy('palette', key, [row.legacyUserKey(user, scope)], [row.legacyDrop(scope)]);
+    const parsed = key ? readJson('palette', key, null) : null;
     return {
       favorites: Array.isArray(parsed?.favorites) ? parsed.favorites.map(String) : [],
       recent: Array.isArray(parsed?.recent) ? parsed.recent.map(String) : [],
@@ -44,7 +48,7 @@ function read(scope) {
 function write(scope, memory) {
   const key = paletteMemoryKey(scope);
   if (!key) return;
-  try { window.localStorage.setItem(key, JSON.stringify(memory)); } catch { /* memoria non disponibile */ }
+  writeJson('palette', key, memory);
 }
 
 export const readPaletteMemory = (scope) => (scope ? read(scope) : { favorites: [], recent: [] });

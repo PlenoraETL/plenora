@@ -18,12 +18,26 @@ pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract]
 # Helpers
 
 
+def _cleanup_settings(results_dir):
+    """Settings finte di task_cleanup: RESULTS_DIR del test, il resto dai DEFAULTS
+    (la pulizia parziale si rimette in coda, conferma finale F8/G3)."""
+    from app.config import Settings
+
+    return SimpleNamespace(
+        RESULTS_DIR=results_dir,
+        DEFAULTS=Settings.DEFAULTS,
+        get=lambda name, default=None: Settings.DEFAULTS.get(name, default),
+    )
+
+
 def _make_task_info(project_id="p1", result_id="res-1", output_file=None):
     """task_info mock con payload tipico post-esecuzione."""
     result: dict = {"project_id": project_id, "result_id": result_id}
     if output_file is not None:
         result["output_file"] = output_file
     return SimpleNamespace(
+        # Conferma finale F8/G3: la pulizia tocca solo un task terminale.
+        status="success",
         project_id=project_id,
         result=result,
         subject_kind="project",
@@ -81,8 +95,8 @@ def _patched_cleanup(
         return real_unlink(self, *args, **kwargs)
 
     with patch(
-        "app.core.orchestrator.router.settings",
-        new=SimpleNamespace(RESULTS_DIR=tmp_path)
+        "app.core.orchestrator.task_cleanup.settings",
+        new=_cleanup_settings(tmp_path)
     ), patch(
         "app.core.orchestrator.task_service.task_service.get_task_status",
         return_value=task_info
@@ -119,6 +133,7 @@ def test_full_cleanup_returns_204_when_all_steps_succeed(client, tmp_path):
 
 def test_full_cleanup_authorizes_and_deletes_eseguibile_artifacts(client, tmp_path):
     task_info = SimpleNamespace(
+        status="success",
         project_id="exec_1",
         subject_kind="executable",
         subject_id="exec_1",
@@ -151,8 +166,8 @@ def test_full_cleanup_authorizes_and_deletes_eseguibile_artifacts(client, tmp_pa
         "app.core.orchestrator.task_service.task_service.forget_task_result",
         return_value=None,
     ), patch(
-        "app.core.orchestrator.router.settings",
-        new=SimpleNamespace(RESULTS_DIR=tmp_path),
+        "app.core.orchestrator.task_cleanup.settings",
+        new=_cleanup_settings(tmp_path),
     ):
         response = client.delete("/api/tasks/task-exec/full-cleanup")
 
@@ -257,8 +272,8 @@ def test_full_cleanup_preserves_404_when_no_project_id(client, tmp_path):
     task_info = SimpleNamespace(project_id=None, result={})
 
     with patch(
-        "app.core.orchestrator.router.settings",
-        new=SimpleNamespace(RESULTS_DIR=tmp_path)
+        "app.core.orchestrator.task_cleanup.settings",
+        new=_cleanup_settings(tmp_path)
     ), patch(
         "app.core.orchestrator.task_service.task_service.get_task_status",
         return_value=task_info
@@ -278,7 +293,7 @@ def test_full_cleanup_breadcrumb_has_exc_info_on_failed_step(client, tmp_path):
     """Ogni `logger.warning("cleanup: errore ...")` sui 4 step ora include
     exc_info=True (promozione C4 per diagnosticita' server-side)."""
     with patch(
-        "app.core.orchestrator.router.logger"
+        "app.core.orchestrator.task_cleanup.logger"
     ) as mock_logger:
         _patched_cleanup(
             client, "task-diag", tmp_path=tmp_path,

@@ -15,6 +15,7 @@ import http, { sendOnPageExit } from './http';
 import { downloadBlob } from '../utils/downloadBlob';
 import { downloadProgress } from '../utils/transferProgress';
 import { requestErrorMessage } from '../utils/errorMessages';
+import { parkExitCleanup, parkedExitCleanups, unparkExitCleanup } from '../utils/exitCleanups';
 
 /**
  * Restituisce lo stato corrente di un task asincrono.
@@ -75,19 +76,48 @@ export const downloadTaskOutput = async (taskId, filename = null, { onProgress =
 
 /**
  * Pulizia dell'esecuzione quando la pagina si chiude (scheda, finestra,
- * ricarica: `pagehide`), per l'esecutore (UI conferma B-K4). Stesse route
- * della chiusura della finestra, con `fetch keepalive` (http.sendOnPageExit):
- *  - esecuzione ancora in corso: prima l'annullamento (DELETE /tasks/{id}),
- *    perche' il risultato non arrivi a nessuno; quello che il worker avesse
- *    gia' scritto lo toglie la scadenza lato server (output degli Eseguibili
- *    2 ore, beat `_cleanup_eseguibili_outputs`; oggetti S3 con lifecycle);
- *  - poi la pulizia completa (DELETE /tasks/{id}/full-cleanup).
- * @returns {boolean} true se la pulizia e' partita.
+ * ricarica: `pagehide`), per l'esecutore (UI conferma B-K4). UNA richiesta,
+ * DELETE /tasks/{id}/full-cleanup con `fetch keepalive`
+ * (http.sendOnPageExit): l'ordine «prima annulla, poi pulisci» lo garantisce
+ * il server (conferma finale F8/G3, core/orchestrator/task_cleanup): un task
+ * in corso si annulla e si pulisce solo da terminale, anche piu' tardi.
+ * Prima di partire la pulizia si annota (utils/exitCleanups): se la
+ * keepalive non parte o non arriva, la rimanda la prossima apertura di /run
+ * (flushParkedExitCleanups; conferma finale G10).
+ * @returns {boolean} true se la richiesta e' partita.
  */
-export const releaseTaskOnPageExit = (taskId, { active = false } = {}) => {
-  const id = encodeURIComponent(taskId);
-  if (active) sendOnPageExit('DELETE', `/tasks/${id}`);
-  return sendOnPageExit('DELETE', `/tasks/${id}/full-cleanup`);
+export const releaseTaskOnPageExit = (taskId) => {
+  parkExitCleanup(taskId);
+  return sendOnPageExit('DELETE', `/tasks/${encodeURIComponent(taskId)}/full-cleanup`);
+};
+
+/**
+ * Pagina messa nella cache del browser (`pagehide` con `persisted`,
+ * conferma finale G4): niente pulizia adesso (la pagina puo' tornare con il
+ * risultato), solo l'annotazione. Torna -> `unparkExitCleanup`; non torna ->
+ * la pulizia la fa la prossima apertura di /run.
+ */
+export const parkTaskCleanup = (taskId) => parkExitCleanup(taskId);
+
+/**
+ * All'apertura di /run: le pulizie annotate e non ancora confermate dal
+ * server ripartono (idempotenti). Si tolgono appena il server risponde,
+ * qualunque risposta (fatta, in coda, task gia' sparito); un errore di rete
+ * le lascia annotate.
+ * @returns {Promise<number>} quante ne ha chiuse.
+ */
+export const flushParkedExitCleanups = async () => {
+  let closed = 0;
+  for (const taskId of parkedExitCleanups()) {
+    try {
+      await http.delete(`/tasks/${encodeURIComponent(taskId)}/full-cleanup`);
+      unparkExitCleanup(taskId);
+      closed += 1;
+    } catch (err) {
+      if (err?.response) { unparkExitCleanup(taskId); closed += 1; }
+    }
+  }
+  return closed;
 };
 
 /**
@@ -122,6 +152,11 @@ export const cleanupTaskCompletely = async (taskId) => {
   // manuale dell'amministratore".
   try {
     const response = await http.delete(`/tasks/${taskId}/full-cleanup`);
+    // 202: task ancora in corso, annullato; la pulizia la finisce il server
+    // appena il task si ferma (conferma finale F8/G3). Non e' parziale.
+    if (response.status === 202) {
+      return { partialCleanup: false, deferred: true, ...response.data };
+    }
     if (response.status === 207) {
       const failedSteps = response.data?.failed_steps || [];
       console.warn(

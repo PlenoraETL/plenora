@@ -24,7 +24,7 @@ from app.core.orchestrator.task_service import (
 from app.core.orchestrator import task_service as task_service_module
 from app.core.orchestrator import preview_payload_store
 from app.core.orchestrator.service import canvas_validation_gate_blocks
-from app.core.orchestrator import log_cleanup as orchestrator_log_cleanup
+from app.core.orchestrator import task_cleanup
 from app.core.orchestrator.execution_contract import (
     CaricaExecutionContract,
     build_pipeline_execution_contract,
@@ -42,7 +42,6 @@ from app.core.orchestrator.carica_payload_validation import (
 )
 from app.core.orchestrator import download_response as _download_response
 from app.core.projects import service as project_service_module
-from app.core.results import cleanup as results_cleanup
 from app.core.results import blob as results_blob
 from app.utils.router_utils import require_service
 from app.observability.audit_action import audit_action
@@ -62,7 +61,6 @@ from app.core.io.http_streaming import (
     CloseableStreamingResponse,
     safe_download_filename,
 )
-from app.core.results import output_file_cleanup
 from app.core.projects.canvas_preview_scope import preview_canvas
 from app.core.orchestrator.runtime_inputs import (
     apply_identity_inputs,
@@ -725,6 +723,13 @@ def cancel_task(
     response_model=None,
     responses={
         204: {"description": "Cleanup completato — tutti gli step ok"},
+        202: {
+            "description": (
+                "Task ancora in corso dopo l'annullamento: pulizia in coda, "
+                "la completa il beat quando il task e' terminale. "
+                "Body: {status: 'deferred', task_id}"
+            )
+        },
         207: {
             "description": (
                 "Cleanup parziale — almeno uno degli step ha fallito. "
@@ -741,11 +746,16 @@ def cleanup_task_completely(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Optional[JSONResponse]:
     """
-    Cleanup completo di un task: elimina result file/blob, log entries e revoca
-    il record Celery. Pensato per il ruolo "esecutore" che richiede privacy
-    GDPR-style: dopo aver scaricato il risultato, l'esecutore (o la sua UI)
-    chiama questo endpoint per rimuovere ogni traccia dell'esecuzione dal
-    server.
+    Cleanup completo di un task: elimina result file/blob, log entries e il
+    record del task. Pensato per il ruolo "esecutore" che richiede privacy
+    GDPR-style: dopo aver scaricato il risultato (o chiudendo la pagina),
+    l'esecutore (o la sua UI) chiama questo endpoint per rimuovere ogni
+    traccia dell'esecuzione dal server.
+
+    ORDINE GARANTITO (UI conferma finale F8/G3, app/core/orchestrator/
+    task_cleanup.cleanup_task): un task ancora in corso prima si annulla, poi
+    si pulisce, e solo quando e' terminale (dopo non scrive piu' niente).
+    Il client non deve piu' annullare a parte.
 
     SECURITY:
       - Verifica che il project_id collegato al task appartenga al gruppo
@@ -756,128 +766,29 @@ def cleanup_task_completely(
     STATUS CODE:
       - 204: tutti gli step applicabili, incluso l'object storage degli
         eseguibili, sono andati a buon fine.
-      - 207: almeno uno step ha sollevato. Body JSON con `failed_steps`
-        list espone al caller quali step non sono stati completati.
-        Gli step sono best-effort individualmente (uno che fallisce non
-        blocca gli altri), ma il caller deve poter sapere che il cleanup
-        non e' integrale — altrimenti il claim GDPR "rimuovere ogni traccia"
-        resta silenziosamente violato.
+      - 207: almeno uno step ha sollevato. Body JSON con `failed_steps`; la
+        pulizia resta in coda e il beat la riprova.
+      - 202: il task non si e' fermato entro TASK_CLEANUP_CANCEL_WAIT_SECONDS
+        dall'annullamento: pulizia in coda (`{"status": "deferred"}`), la fa
+        il beat appena il task e' terminale.
     """
     task_info = _assert_task_group(task_id, current_user)
-    project_id = task_info.project_id
-    task_result_payload: JsonObject = {}
-    if task_info.result:
-        task_result_payload = _task_result_to_dict(task_info.result)
-        if not project_id:
-            project_id = task_result_payload.get("project_id")
-
-    if not project_id:
+    if not task_cleanup.task_project_id(task_info):
         raise HTTPException(
             status_code=404,
             detail="Task non trovato o senza progetto associato — cleanup non eseguibile",
         )
-    eseguibile_record = _task_eseguibile_record(
-        project_id, task_result_payload,
-    )
-    is_eseguibile = eseguibile_record is not None
-    eseguibile_group_id = ""
-    if is_eseguibile:
-        eseguibile_group_id = str(eseguibile_record.get("group_id") or "")
-    # Cleanup scoped AL SINGOLO task_id (NON all'intero progetto!
-    # Rimuoviamo
-    # il record `result` collegato a questo task_id
-    # le righe logs / log_runs con run_id == task_id
-    # il file output specifico (se registrato nel payload
-    # NON tocchiamo `RESULTS_DIR/{project_id}` ne' altri risultati del
-    # progetto: un cleanup wide sarebbe data-loss grave.
-
-    # Accumulatore step cleanup falliti. Ogni step e' best-effort (un fallimento
-    # non blocca i successivi) ma l'esito aggregato finisce nel body 207 cosi'
-    # che il caller sappia quali step non sono andati a buon fine
-    failed_steps: List[str] = []
-
-    # Eseguibili persist outputs and the task-owner sidecar outside the generic
-    # results store. This step is required for the GDPR "remove every trace"
-    # contract and remains retryable when object storage is temporarily down.
-    if is_eseguibile:
-        try:
-            _eseg_output_store.delete_task_outputs(
-                task_id,
-                group_id=eseguibile_group_id,
-            )
-        except Exception as e:
-            logger.warning(
-                f"cleanup: errore delete output eseguibile: {e}",
-                exc_info=True,
-            )
-            failed_steps.append("delete_eseguibile_outputs")
-
-    # intent: cascade step best-effort / outcome: fail-open con aggregazione
-    # 3. Result row: solo il record di questo task, non tutti del progetto
-    try:
-        result_id = task_result_payload.get("result_id")
-        if result_id:
-            deleted = results_cleanup.delete_result(result_id)
-            if deleted:
-                logger.info(f"cleanup: result_id '{result_id}' eliminato (task {task_id})")
-        else:
-            # Nessun result_id nel payload: non cancelliamo nulla da results
-            # per non rischiare di toccare record di altri task
-            logger.debug(f"cleanup: task {task_id} senza result_id nel payload, skip results")
-    except Exception as e:
-        logger.warning(f"cleanup: errore delete_result: {e}", exc_info=True)
-        failed_steps.append("delete_result")
-
-    # 4. File output specifico del task (se persistito su disco
-    # Il task Celery salva il nome file in `output_file`. Proviamo a
-    # rimuoverlo se presente dentro RESULTS_DIR/{project_id}/ — ma NON
-    # rimuoviamo l'intera directory, che e' condivisa tra task
-    try:
-        output_file = task_result_payload.get("output_file")
-        if output_file:
-            try:
-                deleted_output = output_file_cleanup.delete_project_output_file(
-                    project_id,
-                    output_file,
-                    root=settings.RESULTS_DIR,
-                )
-                if deleted_output:
-                    logger.info(f"cleanup: file output rimosso: {output_file}")
-            except ValueError:
-                # Path traversal guard: file fuori da RESULTS_DIR, skip sicuro
-                # non contato in failed_steps: e' una safety skip, non un fallimento
-                logger.warning("cleanup: output_file fuori da RESULTS_DIR, skip")
-    except Exception as e:
-        logger.warning(f"cleanup: errore rimozione output_file: {e}", exc_info=True)
-        failed_steps.append("unlink_output_file")
-
-    try:
-        orchestrator_log_cleanup.delete_task_log_runs(task_id)
-    except Exception as e:
-        logger.warning(f"cleanup: errore delete log_runs: {e}", exc_info=True)
-        failed_steps.append("delete_log_runs")
-
-    # 6. Forget del result Celery (libera Redis
-    try:
-        task_service_module.task_service.forget_task_result(task_id)
-    except Exception as e:
-        logger.warning(f"cleanup: errore forget Celery: {e}", exc_info=True)
-        failed_steps.append("celery_forget")
-
-    # Esito aggregato: se qualche step ha fallito, 207 Multi-Status con body
-    # JSON che espone al caller quali step non sono stati completati. Altrimenti
-    # 204 No Content (path invariato). FE consumer (axios) tratta 207 come
-    # success (validateStatus default 200-299), quindi nessun breaking change
-    # UX — il body e' leggibile dai caller futuri che vogliono differenziare
-    if failed_steps:
-        logger.warning(
-            f"cleanup: task {task_id} partial — failed_steps={failed_steps}"
+    outcome = task_cleanup.cleanup_task(task_id, task_info)
+    if outcome.deferred:
+        return JSONResponse(
+            status_code=202,
+            content={"status": "deferred", "task_id": task_id},
         )
+    if outcome.failed_steps:
         return JSONResponse(
             status_code=207,
-            content={"status": "partial", "failed_steps": failed_steps},
+            content={"status": "partial", "failed_steps": list(outcome.failed_steps)},
         )
-
     return None  # 204 No Content
 
 

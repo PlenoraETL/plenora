@@ -99,7 +99,18 @@ import { isShortcutBlocked, isTypingTarget } from '../../utils/dialogStack';
 import { matchesShortcut } from '../../utils/shortcuts';
 import { requestCanvasDeletion } from '../../utils/canvasDeletion';
 import { formatDateTime } from '../../utils/format';
+import { reloadAfterLeaveQuestion } from '../../utils/chunkReload';
 import './EditorShell.css';
+
+// «Riordina» non disponibile (file mancante dopo un deploy, conferma finale G2).
+const LAYOUT_UNAVAILABLE_DIALOG = Object.freeze({
+  title: 'Riordina non disponibile',
+  message: 'La funzione «Riordina» non si è caricata: forse è appena uscita una versione nuova di Plenora. '
+    + 'Ricaricando la pagina la usi subito; prima ti viene chiesto se ci sono modifiche non salvate.',
+  confirmText: 'Ricarica la pagina',
+  cancelText: 'Chiudi',
+  variant: 'warning',
+});
 
 const EMPTY_OBJ = {};
 const NO_EDGES = [];
@@ -319,15 +330,24 @@ canvasConfig = EMPTY_OBJ,
 
   // Riordina: layout automatico come azione utente (annullabile, salvata).
   // dagre si scarica solo al primo «Riordina» (UI-4 V2: fuori dal chunk
-  // dell'editor). Un chunk mancante dopo un deploy NON ricarica la pagina
-  // (utils/chunkReload, UI conferma C-K1): il clic successivo riprova.
+  // dell'editor). Un chunk mancante dopo un deploy NON ricarica da solo
+  // (utils/chunkReload, UI conferma C-K1): l'utente lo vede (conferma finale
+  // G2: prima solo in console) e sceglie «Ricarica la pagina», che passa
+  // dalla domanda delle modifiche non salvate, o «Chiudi» (il clic
+  // successivo riprova).
+  const layoutConfirm = useOptionalConfirm();
   const handleAutoLayout = useCallback(() => {
     if (isReadOnly) return;
     import('../canvas/autoLayout').then(({ autoLayout }) => {
       editNodes(current => autoLayout(current, useCanvasStore.getState().edges));
       requestAnimationFrame(() => reactFlow.fitView({ padding: 0.15, duration: 300 }));
-    }).catch((err) => { console.warn('[EditorShell] Riordina non disponibile:', err); });
-  }, [isReadOnly, editNodes, reactFlow]);
+    }).catch(async (err) => {
+      console.warn('[EditorShell] Riordina non disponibile:', err);
+      if (!layoutConfirm) return;
+      const reload = await layoutConfirm(LAYOUT_UNAVAILABLE_DIALOG);
+      if (reload) reloadAfterLeaveQuestion(layoutConfirm);
+    });
+  }, [isReadOnly, editNodes, reactFlow, layoutConfirm]);
 
   // Titolo del passo da cui si apre la palette (ricalcolato col contenuto).
   const paletteContext = useCanvasDerived((s) => {

@@ -124,7 +124,15 @@ def test_orchestrator_router_uses_domain_cleanup_not_db_service():
     legacy_module = "app.db." + "log_runs" + "_db_" + "service"
     assert not imports_module(src, "app.db.pg_connection")
     assert legacy_module not in src
-    assert "delete_task_log_runs" in all_identifiers(src)
+    # Conferma finale F8/G3: la pulizia completa e' una regola sola
+    # (task_cleanup.cleanup_task); il router la delega e task_cleanup usa il
+    # confine di dominio dei log.
+    from app.core.orchestrator import task_cleanup
+
+    assert "task_cleanup" in all_identifiers(src)
+    cleanup_src = open(task_cleanup.__file__, encoding="utf-8").read()
+    assert not imports_module(cleanup_src, "app.db." + "log_runs" + "_db_" + "service")
+    assert "delete_task_log_runs" in all_identifiers(cleanup_src)
 
 
 def test_orchestrator_log_cleanup_owns_sql_not_db_service():

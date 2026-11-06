@@ -687,6 +687,15 @@
           "timezone": {
             "title": "Timezone",
             "type": "string"
+          },
+          "timezone_source": {
+            "default": "api_config",
+            "enum": [
+              "beat",
+              "api_config"
+            ],
+            "title": "Timezone Source",
+            "type": "string"
           }
         },
         "title": "BeatHealthcheck",
@@ -3576,6 +3585,11 @@
           "group_id": {
             "title": "Group Id",
             "type": "string"
+          },
+          "has_manifest": {
+            "default": false,
+            "title": "Has Manifest",
+            "type": "boolean"
           },
           "icon": {
             "anyOf": [
@@ -19379,7 +19393,7 @@
     },
     "/api/tasks/{task_id}/full-cleanup": {
       "delete": {
-        "description": "Cleanup completo di un task: elimina result file/blob, log entries e revoca\nil record Celery. Pensato per il ruolo \"esecutore\" che richiede privacy\nGDPR-style: dopo aver scaricato il risultato, l'esecutore (o la sua UI)\nchiama questo endpoint per rimuovere ogni traccia dell'esecuzione dal\nserver.\n\nSECURITY:\n  - Verifica che il project_id collegato al task appartenga al gruppo\n    dell'utente corrente. Cross-tenant → 403.\n  - Senza project_id non possiamo verificare ownership: 404.\n  - Idempotente: ripetere su stesso task non è un errore.\n\nSTATUS CODE:\n  - 204: tutti gli step applicabili, incluso l'object storage degli\n    eseguibili, sono andati a buon fine.\n  - 207: almeno uno step ha sollevato. Body JSON con `failed_steps`\n    list espone al caller quali step non sono stati completati.\n    Gli step sono best-effort individualmente (uno che fallisce non\n    blocca gli altri), ma il caller deve poter sapere che il cleanup\n    non e' integrale — altrimenti il claim GDPR \"rimuovere ogni traccia\"\n    resta silenziosamente violato.",
+        "description": "Cleanup completo di un task: elimina result file/blob, log entries e il\nrecord del task. Pensato per il ruolo \"esecutore\" che richiede privacy\nGDPR-style: dopo aver scaricato il risultato (o chiudendo la pagina),\nl'esecutore (o la sua UI) chiama questo endpoint per rimuovere ogni\ntraccia dell'esecuzione dal server.\n\nORDINE GARANTITO (UI conferma finale F8/G3, app/core/orchestrator/\ntask_cleanup.cleanup_task): un task ancora in corso prima si annulla, poi\nsi pulisce, e solo quando e' terminale (dopo non scrive piu' niente).\nIl client non deve piu' annullare a parte.\n\nSECURITY:\n  - Verifica che il project_id collegato al task appartenga al gruppo\n    dell'utente corrente. Cross-tenant → 403.\n  - Senza project_id non possiamo verificare ownership: 404.\n  - Idempotente: ripetere su stesso task non è un errore.\n\nSTATUS CODE:\n  - 204: tutti gli step applicabili, incluso l'object storage degli\n    eseguibili, sono andati a buon fine.\n  - 207: almeno uno step ha sollevato. Body JSON con `failed_steps`; la\n    pulizia resta in coda e il beat la riprova.\n  - 202: il task non si e' fermato entro TASK_CLEANUP_CANCEL_WAIT_SECONDS\n    dall'annullamento: pulizia in coda (`{\"status\": \"deferred\"}`), la fa\n    il beat appena il task e' terminale.",
         "operationId": "cleanup_task_completely_api_tasks__task_id__full_cleanup_delete",
         "parameters": [
           {
@@ -19393,6 +19407,9 @@
           }
         ],
         "responses": {
+          "202": {
+            "description": "Task ancora in corso dopo l'annullamento: pulizia in coda, la completa il beat quando il task e' terminale. Body: {status: 'deferred', task_id}"
+          },
           "204": {
             "description": "Cleanup completato — tutti gli step ok"
           },

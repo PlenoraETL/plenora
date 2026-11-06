@@ -246,7 +246,10 @@ export function startColumnSync({
   // La mappa a video vale per il salvataggio solo se recente e delle
   // sorgenti attuali (derivedColumnsForSave).
   const usable = (st, key) => st.key === key && st.sources === sourcesVersion() && now() - st.at <= SCHEMA_FRESH_MS;
-  columnStore.setState({ refresh, ensure, usable });
+  // Mappa a video della stessa firma e delle stesse sorgenti, solo vecchia
+  // (conferma finale F6): il salvataggio non la aspetta (derivedColumnsForSave).
+  const sameButOld = (st, key) => st.key === key && st.sources === sourcesVersion() && !usable(st, key);
+  columnStore.setState({ refresh, ensure, usable, sameButOld });
 
   // Sorgenti a monte cambiate (cache condivisa): la versione e' cambiata,
   // la mappa corrente si richiede subito (A-K7).
@@ -279,7 +282,7 @@ export function startColumnSync({
     unsubscribeSources();
     for (const entry of inflight.values()) if (entry.waiters === 0) entry.controller?.abort();
     inflight.clear();
-    columnStore.setState({ ...INITIAL, refresh: () => {}, ensure: NO_ENSURE, usable: null });
+    columnStore.setState({ ...INITIAL, refresh: () => {}, ensure: NO_ENSURE, usable: null, sameButOld: null });
   };
 }
 
@@ -301,6 +304,14 @@ export function derivedColumnsForSave(projectId, canvas, {
   // La mappa a video: solo della stessa firma, delle sorgenti attuali e
   // recente (A-K7); altrimenti ensure() la chiede.
   if (typeof st.usable === 'function' ? st.usable(st, key) : st.key === key) return st.schemas;
+  // Conferma finale F6: la stessa mappa, solo piu' vecchia di SCHEMA_FRESH_MS
+  // (nessuna modifica, sorgenti note uguali). Il salvataggio NON aspetta una
+  // /schemas: parte subito senza colonne derivate (le ricalcola il backend,
+  // come allo scadere del tetto) e la mappa si rinnova in sottofondo.
+  if (typeof st.sameButOld === 'function' && st.sameButOld(st, key)) {
+    st.refresh?.();
+    return null;
+  }
   let timer = null;
   const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(null), timeoutMs); });
   const wanted = st.ensure(canvas)

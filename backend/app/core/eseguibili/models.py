@@ -238,6 +238,8 @@ class EseguibileDetails(BaseModel):
     active_version: int = 1
     active_version_id: Optional[str] = None
     manifest: Optional[ExecutableManifest] = None
+    # Stessa regola della lista (db.manifest_present, UI conferma finale G5).
+    has_manifest: bool = False
     can_edit: Optional[bool] = None  # calcolato per l'utente corrente
     binding_warnings: List[BindingWarning] = Field(default_factory=list)
     # Flusso file-based (rest_file come ultimo nodo api_enrich

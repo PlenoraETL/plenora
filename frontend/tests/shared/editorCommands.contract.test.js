@@ -174,14 +174,23 @@ describe('B-K10: palette memory belongs to the signed-in user', () => {
     window.sessionStorage.removeItem('urby_user');
     expect(paletteMemoryKey('manipola')).toBeNull();
     rememberPick('manipola', pick);
-    expect(Object.keys(window.localStorage).filter(k => k.startsWith('plenora.palette'))).toEqual(['plenora.palette.user:anna.manipola']);
+    // Conferma finale G8: chiave della tabella unica (prefisso `plenora:`).
+    expect(Object.keys(window.localStorage).filter(k => k.startsWith('plenora:palette:'))).toEqual(['plenora:palette:anna:manipola']);
   });
 
-  it('the old per-browser key is removed on first read', () => {
+  it('the old per-browser key is removed on first read (owner unknown: given to nobody)', () => {
     window.localStorage.setItem('plenora.palette.manipola', JSON.stringify({ recent: ['transform:x'] }));
     window.sessionStorage.setItem('urby_user', JSON.stringify({ user_id: 'anna' }));
     expect(readPaletteMemory('manipola').recent).toEqual([]);
     expect(window.localStorage.getItem('plenora.palette.manipola')).toBeNull();
+  });
+
+  it('conferma finale B-K10: the old per-user key moves to the new key once', () => {
+    window.localStorage.setItem('plenora.palette.user:anna.estrai', JSON.stringify({ recent: ['table:t1'] }));
+    window.sessionStorage.setItem('urby_user', JSON.stringify({ user_id: 'anna' }));
+    expect(readPaletteMemory('estrai').recent).toEqual(['table:t1']);
+    expect(window.localStorage.getItem('plenora.palette.user:anna.estrai')).toBeNull();
+    expect(window.localStorage.getItem('plenora:palette:anna:estrai')).not.toBeNull();
   });
 });
 
@@ -274,9 +283,11 @@ describe('C-K11: keys in texts come from the shortcuts table', () => {
   });
 });
 
-describe('A-K6: the column list of TableNode does not move the canvas', () => {
-  it('its scroll container is nowheel and nodrag', () => {
-    const code = fs.readFileSync(path.join(SRC, 'components/nodes/TableNode.jsx'), 'utf-8');
-    expect(code).toMatch(/className="[^"]*\bnowheel\b[^"]*\bnodrag\b[^"]*">\s*<VirtualList/);
+describe('A-K6 / conferma finale F1: the column list of TableNode', () => {
+  it('leaves nowheel/nodrag to VirtualList (only when the box really scrolls)', () => {
+    const code = stripComments(fs.readFileSync(path.join(SRC, 'components/nodes/TableNode.jsx'), 'utf-8'));
+    expect(code).toMatch(/<VirtualList[\s\S]*?\binCanvasNode\b/);
+    // Nessun contenitore proprio con le classi: sotto la soglia la rotella zooma.
+    expect(code).not.toMatch(/className="[^"]*\b(nowheel|nodrag)\b/);
   });
 });

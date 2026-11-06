@@ -51,6 +51,11 @@ export const EFFECT_EXCEPTIONS = {
   // Guard di navigazione unico (T4): il `.then(` e' la risposta del dialog
   // di conferma (Esci/Resta) su una navigazione bloccata, non il server.
   'components/common/NavigationGuard.jsx': 'risposta del dialog di conferma su useBlocker, nessuna chiamata al server',
+  // Conferma finale G4/G10: le pulizie dell'esecutore rimaste annotate
+  // (keepalive non confermata, pagina messa nella cache del browser e mai
+  // tornata) ripartono UNA volta all'apertura di /run: non e' un dato della
+  // pagina, e' la fine di una pulizia gia' chiesta.
+  'pages/EsecutoreHome.jsx': 'pulizie rimaste annotate (api/tasks.flushParkedExitCleanups) all apertura di /run',
 };
 
 const INTERVAL_EXCEPTIONS = {

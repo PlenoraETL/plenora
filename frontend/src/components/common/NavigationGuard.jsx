@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useBlocker } from 'react-router-dom';
 import { useConfirmOrDeny } from '../../context/ConfirmContext';
-import { LEAVE_DIALOG, markLeaveConfirmed, shouldBlockNavigation } from '../../utils/leaveGuard';
+import { leaveDialog, markLeaveConfirmed, shouldBlockNavigation } from '../../utils/leaveGuard';
 
 export default function NavigationGuard() {
   const confirm = useConfirmOrDeny();
@@ -22,7 +22,7 @@ export default function NavigationGuard() {
   useEffect(() => {
     if (blocker.state !== 'blocked') return;
     let live = true;
-    Promise.resolve(confirm(LEAVE_DIALOG)).then((ok) => {
+    Promise.resolve(confirm(leaveDialog())).then((ok) => {
       const current = blockerRef.current;
       if (!live || current.state !== 'blocked') return;
       // Uscita confermata: la ricarica dopo un deploy (utils/chunkReload) e il
