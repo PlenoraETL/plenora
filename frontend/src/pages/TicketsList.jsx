@@ -25,7 +25,8 @@ import { useToast } from '../hooks/useToast';
 import { useResource } from '../hooks/useResource';
 import ListState, { ResourceError } from '../components/common/ListState';
 import { can } from '../utils/permissions';
-import { getTicketsMeta, listTickets } from '../api/tickets';
+import { listTickets } from '../api/tickets';
+import { useSharedResource } from '../hooks/useSharedResource';
 import '../styles/TicketsList.css';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
@@ -55,7 +56,8 @@ export default function TicketsList() {
   const { user } = useAuth();
   const toast = useToast();
 
-  const metaResource = useResource(getTicketsMeta, { key: 'tickets-meta' });
+  // Meta statiche: risorsa condivisa (UI-1, C10), una volta per sessione.
+  const metaResource = useSharedResource('ticketsMeta');
   const meta = metaResource.data || null;
   const [showCreate, setShowCreate] = useState(false);
 

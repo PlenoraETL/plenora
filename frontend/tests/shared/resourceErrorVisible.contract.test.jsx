@@ -192,7 +192,8 @@ const DECLARED = {
 describe('enumerazione: ogni useResource mostra il suo errore', () => {
   const found = [];
   for (const { file, code } of FILES) {
-    for (const m of code.matchAll(/(?:const|let)\s+(\w+)\s*=\s*useResource\(/g)) found.push({ file, name: m[1], code });
+    // UI-1: anche useSharedResource (stessa risorsa di useResource).
+    for (const m of code.matchAll(/(?:const|let)\s+(\w+)\s*=\s*use(?:Shared)?Resource\(/g)) found.push({ file, name: m[1], code });
   }
 
   it('trova i consumatori', () => {

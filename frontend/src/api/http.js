@@ -19,6 +19,7 @@ import { API_ENDPOINT, API_TIMEOUT, EXPECTED_API_VERSION } from './config';
 import { authBus } from '../utils/authBus';
 import { requestErrorMessage } from '../utils/errorMessages';
 import { registerSessionReset } from '../utils/session';
+import { invalidateAfterWrite } from '../utils/sharedCache';
 
 const TOKEN_KEY = 'urby_token';
 
@@ -89,8 +90,19 @@ http.interceptors.request.use((config) => {
 // e backend su un'altra, ogni response porta `X-API-Version`; logghiamo un
 // warning unico al primo mismatch osservato per evitare spam in console.
 let _versionMismatchLogged = false;
+// Cache condivisa (UI-1): ogni scrittura, riuscita o no, invalida le liste
+// che la tabella utils/sharedInvalidations le associa. Un solo punto: nessuna
+// pagina deve ricordarsi di invalidare.
+const afterWrite = (config) => {
+  const method = String(config?.method || 'get').toLowerCase();
+  if (method !== 'get' && method !== 'head') {
+    try { invalidateAfterWrite(method, config?.url); } catch (err) { console.warn('[http] invalidazione non riuscita:', err); }
+  }
+};
+
 http.interceptors.response.use(
   (response) => {
+    afterWrite(response.config);
     const observed = response.headers?.['x-api-version'];
     if (observed && observed !== EXPECTED_API_VERSION && !_versionMismatchLogged) {
       _versionMismatchLogged = true;
@@ -102,6 +114,7 @@ http.interceptors.response.use(
     return response;
   },
   async (error) => {
+    afterWrite(error?.config);
     let data = error?.response?.data;
     // Axios keeps JSON error responses as Blob when the request asked for a
     // binary download. Decode the envelope before normalizing the message.

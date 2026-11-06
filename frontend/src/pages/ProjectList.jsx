@@ -54,15 +54,13 @@ function ProjectList() {
   const location = useLocation();
   const { user } = useAuth();
 
-  // Data caricati via hook condiviso (8 fetch parallele + indici manipola).
+  // Dati dall'hook della dashboard (liste condivise + conteggi + indici manipola).
   const {
     projects,
     connections,
     arcgisConnections,
-    apiConnections,
+    counts,
     files,
-    schedules,
-    dataSources,
     eseguibili,
     projectSources,
     projectFileSources,
@@ -227,17 +225,12 @@ function ProjectList() {
 
   const getSourceProjects = pid => (projectSources[pid] || []).map(getProjectById).filter(Boolean);
 
-  const scheduleCountByProject = useMemo(() => {
-    const out = new Map();
-    for (const s of schedules) {
-      const pid = s.pipeline?.project_id;
-      if (pid) out.set(pid, (out.get(pid) || 0) + 1);
-    }
-    return out;
-  }, [schedules]);
-  const getScheduleCount = useCallback(pid => scheduleCountByProject.get(pid) || 0, [scheduleCountByProject]);
-
-  const activeSchedules = useMemo(() => schedules.filter(s => s.schedule?.enabled), [schedules]);
+  // Schedule come conteggi del server (UI-1, C4), non la lista intera.
+  const schedulesByProject = counts.schedules_by_project;
+  const getScheduleCount = useCallback(
+    pid => schedulesByProject?.[pid] || 0,
+    [schedulesByProject]
+  );
 
 
   const estraiProjects     = useMemo(() => projects.filter(p => p.project_type === 'estrai' || !p.project_type), [projects]);
@@ -396,8 +389,8 @@ function ProjectList() {
               { val: arricchisciProjects.length,                    label: 'Arricchisci', accent: 'var(--pl-arricch)',  to: '/#arricchisci' },
               { val: eseguibili.length,                             label: 'Eseguibili',  accent: 'var(--pl-blue)',     to: '/eseguibili' },
               { val: connections.length + arcgisConnections.length, label: 'Connessioni', accent: 'var(--pl-blue)',     to: '/connections' },
-              { val: activeSchedules.length,                        label: 'Pianificazioni attive', accent: 'var(--pl-estrai)', to: '/schedules' },
-              { val: apiConnections.length,                         label: 'API Esterne', accent: 'var(--pl-manipola)', to: '/external-connectors' },
+              { val: counts.schedules_active,                      label: 'Pianificazioni attive', accent: 'var(--pl-estrai)', to: '/schedules' },
+              { val: counts.api_connections,                       label: 'API Esterne', accent: 'var(--pl-manipola)', to: '/external-connectors' },
               { val: files.length,                                  label: 'File',        accent: 'var(--pl-arricch)',  to: '/files' },
             ].filter(t => t.val > 0);
             if (tiles.length === 0) return null;
@@ -420,7 +413,7 @@ function ProjectList() {
           })()}
           {projects.length === 0 && !section ? (
             <QuickStart
-              hasDataSource={connections.length + arcgisConnections.length + apiConnections.length + dataSources.length > 0}
+              hasDataSource={connections.length + arcgisConnections.length + counts.api_connections + counts.datasources > 0}
               canCreate={canCreateProj}
               onNewProject={openModalForType}
             />

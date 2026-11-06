@@ -18,7 +18,7 @@
  * Top bar: logo + saluto + cambia password + logout. Niente altro.
  */
 import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { listEseguibili, cleanupTaskCompletely } from '../api';
+import { cleanupTaskCompletely } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useSignOut } from '../hooks/useSignOut';
 import { useToast } from '../hooks/useToast';
@@ -27,12 +27,14 @@ import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteW
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
 import PlenoraLogo from '../components/common/PlenoraLogo';
-import { useResource } from '../hooks/useResource';
+import { useSharedResource } from '../hooks/useSharedResource';
+import { eseguibiliOf } from '../utils/sharedSelectors';
 import ListState from '../components/common/ListState';
 import './EsecutoreHome.css';
 import EmptyState from '../components/common/EmptyState';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
+
 function Logo() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
@@ -81,10 +83,8 @@ function EsecutoreHome() {
 
   // Fase 5 T2 (R4.8): un errore di caricamento e' un errore con «Riprova»,
   // mai "Nessuna azione disponibile".
-  const resource = useResource(async () => {
-    const data = await listEseguibili();
-    return Array.isArray(data) ? data : [];
-  });
+  // UI-1: risorsa condivisa `eseguibili` (utils/sharedResources).
+  const resource = useSharedResource('eseguibili', { select: eseguibiliOf });
   const items = useMemo(() => resource.data || [], [resource.data]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showPwdModal, setShowPwdModal] = useState(false);

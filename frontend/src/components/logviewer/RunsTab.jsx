@@ -20,7 +20,6 @@ import EmptyState from '../common/EmptyState';
 import { pressable } from '../../utils/pressable';
 import { runTriggerLabel } from '../../utils/runtimeInputKinds';
 
-export const LIVE_REFRESH_MS = 5000;
 
 const MODULE_COLORS = {
   estrai: '#34C17A', manipola: '#9B6DFF', arricchisci: '#F5A623', carica: '#4B8BFF',
@@ -52,7 +51,7 @@ export default function RunsTab({ live = false, projectNames = null }) {
   }), {
     key: { filterStatus, filterModule, offset },
     keepPreviousData: true,
-    refreshInterval: live ? LIVE_REFRESH_MS : 0,
+    refreshInterval: live ? 'live' : 0,
   });
   const runs = resource.data?.runs || [];
   const total = resource.data?.total || 0;

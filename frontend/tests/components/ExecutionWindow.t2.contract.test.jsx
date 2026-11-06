@@ -40,6 +40,8 @@ vi.mock('../../src/api/features', () => ({ listFeatureConnections: vi.fn(async (
 vi.mock('../../src/api/files', () => ({ getFiles: vi.fn(async () => ({ files: [] })) }));
 vi.mock('../../src/api/schedules', () => ({ listSchedules: vi.fn(async () => ({ schedules: [] })) }));
 vi.mock('../../src/api/datasources', () => ({ listDataSources: vi.fn(async () => ({ datasources: [] })) }));
+// UI-1 (C4): API, data source e schedule come conteggi.
+vi.mock('../../src/api/dashboard', () => ({ getDashboardCounts: vi.fn(async () => ({ api_connections: 0, datasources: 0, schedules_active: 0, schedules_by_project: {} })) }));
 vi.mock('../../src/api/logRuns', () => ({ getLatestRunByProject: vi.fn(async () => { throw new Error('log giu'); }) }));
 vi.mock('../../src/hooks/useToast', () => ({ useToast: () => globalThis.__frontendTestHelpers.createToastMock(vi) }));
 

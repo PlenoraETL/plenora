@@ -14,12 +14,13 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useResource } from '../hooks/useResource';
+import { useSharedResource } from '../hooks/useSharedResource';
 import { ResourceError } from '../components/common/ListState';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
 import { can } from '../utils/permissions';
 import {
-  listBackups, getBackupStatus, getBackupSchedule, triggerBackup,
+  listBackups, getBackupSchedule, triggerBackup,
 } from '../api/adminBackups';
 import PageLayout from '../components/common/PageLayout';
 import ConfirmDialog from '../components/common/ConfirmDialog';
@@ -159,7 +160,9 @@ export default function AdminBackupsPage() {
   const [triggerError, setTriggerError] = useState(null); // { code, text }
   // Versione della lista: l'ultimo backup finito visto seguendo lo stato.
   const [listVersion, setListVersion] = useState(null);
-  const statusResource = useResource(getBackupStatus, { key: 'backup-status' });
+  // UI-1 (C11): lo stato e' la risorsa condivisa `backupStatus`: la lettura
+  // della pagina e quella che segue il backup in corso sono UNA richiesta.
+  const statusResource = useSharedResource('backupStatus');
   const status = statusResource.data || null;
   const scheduleResource = useResource(getBackupSchedule, { key: 'backup-schedule' });
   const schedule = scheduleResource.data || null;
@@ -184,10 +187,10 @@ export default function AdminBackupsPage() {
   // Si segue il backup avviato finche' non c'e' un esito nuovo.
   const following = Boolean(triggered) && !awsCredentialsError;
   const running = status?.result === 'running';
-  const followStatus = useResource(getBackupStatus, {
+  const followStatus = useSharedResource('backupStatus', {
     key: 'backup-status-follow',
     enabled: following || running,
-    refreshInterval: 5000,
+    refreshInterval: 'backupFollow',
   });
   const followed = followStatus.data;
   useEffect(() => {

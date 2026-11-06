@@ -8,7 +8,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useResource } from '../hooks/useResource';
 import { saveBlob } from '../utils/downloadBlob';
 import { ResourceError } from '../components/common/ListState';
-import { LIVE_REFRESH_MS } from '../components/logviewer/RunsTab';
 import { useNavigate } from 'react-router-dom';
 import { getLogs, getLogsStats } from '../api/logs';
 import { useAuth } from '../context/AuthContext';
@@ -93,12 +92,12 @@ function LogViewer() {
     key: { filterLevel, filterModule, filterOp, searchText, offset },
     enabled: techTab,
     keepPreviousData: true,
-    refreshInterval: autoRefresh ? LIVE_REFRESH_MS : 0,
+    refreshInterval: autoRefresh ? 'live' : 0,
   });
   const statsResource = useResource(getLogsStats, {
     key: 'logs-stats',
     enabled: techTab,
-    refreshInterval: autoRefresh ? LIVE_REFRESH_MS : 0,
+    refreshInterval: autoRefresh ? 'live' : 0,
   });
   const logs = logsResource.data?.entries || [];
   const total = logsResource.data?.total || 0;

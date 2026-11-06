@@ -16,6 +16,7 @@
  * Auth, error handling e logout 401 sono già gestiti dagli interceptor di http.js.
  */
 import http from './http';
+import { fetchAllOffsetPages } from './pagination';
 import { assertFileSize, throwIfUploadTooLarge } from './uploadGuards';
 
 /**
@@ -68,12 +69,17 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
  * che fa rewrite o `redirect_slashes=False`, il client riceve 404 o
  * 307 non gestito. Post-fix: `/files` allineato al router BE.
  *
+ * UI-1 (C5, C26): tutte le pagine (il server ne da' al massimo 500 per
+ * richiesta: prima la lista si fermava a 200 senza avviso) e ogni file
+ * SENZA le colonne: nella lista ci sono `column_count` e i primi nomi
+ * (`column_names_preview`); le colonne intere con getFile(id).
+ *
  * @returns {Promise<{files: Array}>}
  */
-export const getFiles = async () => {
-  const response = await http.get('/files');
-  return response.data;
-};
+export const getFiles = async () => fetchAllOffsetPages('/files', {
+  extractItems: data => data.files,
+  mergeItems: (items, lastPage) => ({ ...lastPage, files: items }),
+});
 
 /**
  * Ottieni dettagli file

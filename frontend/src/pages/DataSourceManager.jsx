@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
 import {
-  listDataSources, createDataSource, updateDataSource,
+  createDataSource, updateDataSource,
   deleteDataSource, testDataSource, listFiles,
 } from '../api/datasources';
 import { useHexCanvas } from '../utils/hexCanvas';
@@ -20,6 +20,8 @@ import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 import useDialog from '../hooks/useDialog';
 import { can } from '../utils/permissions';
 import { useResource } from '../hooks/useResource';
+import { useSharedResource } from '../hooks/useSharedResource';
+import { datasourcesOf } from '../utils/sharedSelectors';
 import { useBusy } from '../hooks/useBusy';
 import '../styles/DataSourceManager.css';
 import SchemaFields from '../components/common/SchemaFields';
@@ -49,7 +51,8 @@ export default function DataSourceManager() {
   // Fase 5 T2 (R4.5, R4.7, R9.10): elenco e browser dall'hook comune (id
   // di richiesta: la cartella mostrata e' sempre l'ultima chiesta), test ed
   // eliminazioni per Data Source (useBusy).
-  const resource = useResource(async () => (await listDataSources()).datasources || [], { key: 'datasources', errorMessage: (e) => humanizeError(e).message });
+  // UI-1 (C27): lista condivisa (utils/sharedResources), invalidata dalle scritture.
+  const resource = useSharedResource('datasources', { select: datasourcesOf, errorMessage: (e) => humanizeError(e).message });
   const allDatasources = resource.data || [];
   const search = useSearch();
   const datasources = search.filter(allDatasources, ds => [ds.name, ds.description, ds.host, ds.site_url, ds.root_path, TYPE_INFO[ds.type]?.label]);

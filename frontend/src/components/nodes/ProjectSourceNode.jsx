@@ -10,7 +10,7 @@
 import React, { useState, useEffect, memo } from 'react';
 import { useResource } from '../../hooks/useResource';
 import { Position } from '@xyflow/react';
-import { getProject } from '../../api';
+import { readShared } from '../../utils/sharedResources';
 import { getColumnTypeIcon, getColumnTypeLabel, isGeometryType, getColumnSRID, normalizeColumnType } from '../../utils/columnUtils';
 import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -28,11 +28,18 @@ import { projectTypeChip } from '../../utils/projectTypes';
  * - Struttura colonne identica (checkbox, icona, nome, badge tipo)
  * - Expand/collapse per molte colonne
  */
+// Eta' accettata del progetto sorgente: il contratto in uscita cambia solo
+// quando il sorgente viene rieseguito.
+const SOURCE_MAX_AGE_MS = 2 * 60_000;
+
 const ProjectSourceNode = ({ id, data }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   // Fase 5 T2: progetto sorgente dall'hook comune (id di richiesta: il
   // progetto scelto prima non scrive le colonne di quello scelto dopo).
-  const resource = useResource(() => getProject(data.source_project_id), {
+  // UI-1 (C17): dalla cache condivisa, una lettura vale SOURCE_MAX_AGE_MS:
+  // selezionare di nuovo il nodo (o due nodi dello stesso progetto) non
+  // riscarica il progetto; Riprova lo chiede al server.
+  const resource = useResource(({ force } = {}) => readShared('project', [data.source_project_id], { force, maxAgeMs: SOURCE_MAX_AGE_MS }), {
     key: ['source-project', data.source_project_id || null],
     enabled: Boolean(data.source_project_id),
     errorMessage: (err) => humanizeError(err).message,

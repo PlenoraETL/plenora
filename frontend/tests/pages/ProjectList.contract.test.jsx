@@ -6,7 +6,11 @@ import { vi } from 'vitest';
 import ProjectList from '../../src/pages/ProjectList';
 
 
-const { apiMock, featureMock, filesMock, schedulesMock, datasourcesMock, httpMock, toastMock, navigateMock } = vi.hoisted(() => ({
+const { apiMock, featureMock, filesMock, schedulesMock, datasourcesMock, dashboardMock, httpMock, toastMock, navigateMock } = vi.hoisted(() => ({
+  // UI-1 (C4): API, data source e schedule arrivano come conteggi.
+  dashboardMock: {
+    getDashboardCounts: vi.fn(),
+  },
   apiMock: {
     listProjects: vi.fn(),
     createProject: vi.fn(),
@@ -38,6 +42,7 @@ vi.mock('../../src/api/features', () => featureMock);
 vi.mock('../../src/api/files', () => filesMock);
 vi.mock('../../src/api/schedules', () => schedulesMock);
 vi.mock('../../src/api/datasources', () => datasourcesMock);
+vi.mock('../../src/api/dashboard', () => dashboardMock);
 vi.mock('../../src/api/http', () => ({
   default: httpMock,
 }));
@@ -86,6 +91,14 @@ function mockDashboardData({
   featureMock.listFeatureConnections.mockResolvedValue({ connections: arcgisConnections });
   apiMock.listEseguibili.mockResolvedValue(eseguibili);
   datasourcesMock.listDataSources.mockResolvedValue({ datasources });
+  const schedulesByProject = {};
+  schedules.forEach((s) => { const pid = s.pipeline?.project_id; if (pid) schedulesByProject[pid] = (schedulesByProject[pid] || 0) + 1; });
+  dashboardMock.getDashboardCounts.mockResolvedValue({
+    api_connections: apiConnections.length,
+    datasources: datasources.length,
+    schedules_active: schedules.filter((s) => s.schedule?.enabled).length,
+    schedules_by_project: schedulesByProject,
+  });
 }
 
 describe('ProjectList', () => {

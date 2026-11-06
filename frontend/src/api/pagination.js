@@ -2,6 +2,10 @@ import http from './http';
 
 const DEFAULT_PAGE_SIZE = 200;
 const MAX_PAGES = 10_000;
+// UI-1 (V10): dopo la prima pagina piena le successive si chiedono a gruppi
+// in parallelo, non una dopo l'altra (la lista intera arriva in
+// ceil(pagine / PARALLEL_PAGES) giri invece di uno per pagina).
+const PARALLEL_PAGES = 4;
 
 /** Fetch every bounded offset page while preserving legacy API shapes. */
 export async function fetchAllOffsetPages(
@@ -13,14 +17,24 @@ export async function fetchAllOffsetPages(
     mergeItems = items => items,
   } = {},
 ) {
+  const getPage = (page) => http.get(url, {
+    params: { ...params, limit: pageSize, offset: page * pageSize },
+  });
   const allItems = [];
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const response = await http.get(url, {
-      params: { ...params, limit: pageSize, offset: page * pageSize },
-    });
-    const items = extractItems(response.data) || [];
-    allItems.push(...items);
-    if (items.length < pageSize) return mergeItems(allItems, response.data);
+  // Prima pagina da sola: con le liste piccole (il caso normale) basta.
+  const first = await getPage(0);
+  const firstItems = extractItems(first.data) || [];
+  allItems.push(...firstItems);
+  if (firstItems.length < pageSize) return mergeItems(allItems, first.data);
+  for (let next = 1; next < MAX_PAGES; next += PARALLEL_PAGES) {
+    const pages = Array.from({ length: Math.min(PARALLEL_PAGES, MAX_PAGES - next) }, (_, i) => next + i);
+    const responses = await Promise.all(pages.map(getPage));
+    for (const response of responses) {
+      const items = extractItems(response.data) || [];
+      allItems.push(...items);
+      // Una pagina corta e' l'ultima: quelle chieste dopo sono vuote.
+      if (items.length < pageSize) return mergeItems(allItems, response.data);
+    }
   }
   throw new Error(`Pagination limit exceeded for ${url}`);
 }

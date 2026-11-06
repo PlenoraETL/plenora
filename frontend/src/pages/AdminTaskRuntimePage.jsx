@@ -12,7 +12,6 @@ import '../styles/AdminTaskRuntimePage.css';
 import { formatDateTime } from '../utils/format';
 
 
-const REFRESH_MS = 5000;
 
 function duration(seconds) {
   const value = Math.max(0, Number(seconds || 0));
@@ -88,7 +87,7 @@ export default function AdminTaskRuntimePage() {
   // 5 s, un poll alla volta, fermo con la scheda nascosta); l'errore di
   // caricamento e quello di una risoluzione sono distinti (il poll non
   // cancella l'errore della risoluzione); risoluzioni per run (useBusy).
-  const resource = useResource(getTaskRuntime, { key: 'task-runtime', refreshInterval: REFRESH_MS });
+  const resource = useResource(getTaskRuntime, { key: 'task-runtime', refreshInterval: 'taskRuntime' });
   const data = resource.data || null;
   const loading = resource.loading;
   const load = resource.reload;

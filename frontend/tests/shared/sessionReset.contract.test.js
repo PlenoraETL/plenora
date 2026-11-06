@@ -10,6 +10,7 @@ import * as transformRegistry from '../../src/utils/transformRegistry';
 import * as http401 from '../../src/api/http';
 import * as connectionSets from '../../src/utils/connectionSets';
 import { listConnectionSets } from '../../src/api/connections';
+import { SHARED_RESOURCES } from '../../src/utils/sharedResources';
 
 vi.mock('../../src/api/connections', () => ({ listConnectionSets: vi.fn() }));
 
@@ -92,7 +93,7 @@ describe('fine sessione: registro unico (resetSession)', () => {
 
   it('resetSession svuota canvas, colonne e registry delle trasformazioni', () => {
     expect(http401).toBeTruthy();
-    expect(registeredSessionResets()).toEqual(expect.arrayContaining(['canvasStore', 'columnStore', 'transformRegistry', 'connectionSets', 'http401']));
+    expect(registeredSessionResets()).toEqual(expect.arrayContaining(['canvasStore', 'columnStore', 'transformRegistry', 'connectionSets', 'http401', 'sharedCache']));
 
     useCanvasStore.setState({ nodes: [{ id: 'n1', data: {} }], edges: [], projectId: 'p-utente-A', isReadOnly: false });
     useColumnStore.setState({ projectId: 'p-utente-A', schemas: { n1: [{ name: 'segreto' }] }, status: 'ok' });
@@ -121,7 +122,7 @@ describe('fine sessione: registro unico (resetSession)', () => {
 });
 
 describe('set di connessioni: risorsa condivisa della sessione (punto 12)', () => {
-  it('la risposta condivisa scade dopo CACHE_TTL_MS: set creati altrove compaiono (rilettura R3)', async () => {
+  it('la risposta condivisa scade dopo freshMs: set creati altrove compaiono (rilettura R3)', async () => {
     vi.useFakeTimers({ now: new Date('2026-11-05T10:00:00Z') });
     try {
       connectionSets.invalidateConnectionSets();
@@ -129,9 +130,13 @@ describe('set di connessioni: risorsa condivisa della sessione (punto 12)', () =
       listConnectionSets.mockResolvedValue({ connection_sets: [{ id: 'vecchio' }] });
       await connectionSets.loadSharedConnectionSets();
       listConnectionSets.mockResolvedValue({ connection_sets: [{ id: 'nuovo-altrove' }] });
-      vi.setSystemTime(Date.now() + connectionSets.CACHE_TTL_MS - 1);
+      vi.setSystemTime(Date.now() + SHARED_RESOURCES.connectionSets.freshMs - 1);
       expect((await connectionSets.loadSharedConnectionSets())[0].id).toBe('vecchio');
       vi.setSystemTime(Date.now() + 2);
+      // UI-1: scaduta = subito la copia, il server in background
+      // (stale-while-revalidate); la lettura dopo ha i set nuovi.
+      expect((await connectionSets.loadSharedConnectionSets())[0].id).toBe('vecchio');
+      await Promise.resolve();
       expect((await connectionSets.loadSharedConnectionSets())[0].id).toBe('nuovo-altrove');
       expect(listConnectionSets).toHaveBeenCalledTimes(2);
     } finally {

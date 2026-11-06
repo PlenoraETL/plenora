@@ -23,7 +23,7 @@ import { executeProjectQuery, executeTestRun, downloadTaskOutput, downloadProjec
 import { useTask } from './useTask';
 import { useDownload } from './useDownload';
 import useCanvasStore from '../store/useCanvasStore';
-import { pollTask } from '../utils/taskPoller';
+import { pollTasks } from '../utils/taskPoller';
 import { isPreparationChanged } from '../utils/beforeRun';
 
 /**
@@ -115,20 +115,20 @@ export function useExecution(projectId, options = {}) {
       task_id: t.task_id, node_id: t.node_id, status: 'pending', message: 'In coda...', rows_written: 0, error: null,
     })));
     setCaricaPolling(true);
-    tasks.forEach(({ task_id }) => {
-      const update = (o) => setCaricaTasks(prev => prev.map(t => (t.task_id === task_id ? caricaRow(t, o) : t)));
-      const stop = pollTask(task_id, {
-        interval: pollInterval,
-        outcome: { businessStatus: true },
-        onUpdate: update,
-        onDone: (o) => {
-          update(o);
-          caricaStops.current.delete(task_id);
-          if (caricaStops.current.size === 0) setCaricaPolling(false);
-        },
-      });
-      caricaStops.current.set(task_id, stop);
+    // UN poller per tutti i task di Carica (UI-1, C20): a ogni giro lo stato
+    // di quelli ancora aperti, non un timer per task.
+    const update = (taskId, o) => setCaricaTasks(prev => prev.map(t => (t.task_id === taskId ? caricaRow(t, o) : t)));
+    const stop = pollTasks(tasks.map(t => t.task_id), {
+      interval: pollInterval,
+      outcome: { businessStatus: true },
+      onUpdate: (taskId, o) => update(taskId, o),
+      onDone: (taskId, o) => {
+        update(taskId, o);
+        caricaStops.current.delete(taskId);
+        if (caricaStops.current.size === 0) setCaricaPolling(false);
+      },
     });
+    tasks.forEach(({ task_id }) => caricaStops.current.set(task_id, stop));
   }, [pollInterval, stopAllCaricaPolling]);
 
   // Cambio di progetto: niente di quello di prima resta qui.

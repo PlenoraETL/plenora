@@ -17,6 +17,7 @@ import { useResource } from '../hooks/useResource';
 import { ResourceError } from '../components/common/ListState';
 import { formatDateTime as fmtDate, formatBytes as fmtBytes, formatNumber, formatTime } from '../utils/format';
 import { ICON } from '../utils/icons';
+import { POLL_PROFILES } from '../utils/poller';
 const STATUS_LABELS = { ok: 'OK', warn: 'WARN', error: 'ERRORE', unknown: 'N/D' };
 const STATUS_ICONS = { ok: '✓', warn: '⚠', error: '✗', unknown: '?' };
 
@@ -302,7 +303,8 @@ function DbSchemaCard({ data }) {
     </Card>
   );
 }
-const REFRESH_INTERVAL_MS = 30000;
+// Ritmo del profilo `systemStatus` di utils/poller (UI-1).
+const REFRESH_INTERVAL_MS = POLL_PROFILES.systemStatus.interval;
 
 const STATUS_KEYS = [
   'backup', 'verify_restore', 'schedules', 'workers',
@@ -317,7 +319,7 @@ export default function AdminSystemStatusPage() {
   // l'ultima richiesta.
   const resource = useResource(async () => ({ status: await getSystemStatus(), at: new Date() }), {
     key: 'system-status',
-    refreshInterval: REFRESH_INTERVAL_MS,
+    refreshInterval: 'systemStatus',
   });
   const status = resource.data?.status || null;
   const refreshedAt = resource.data?.at || null;

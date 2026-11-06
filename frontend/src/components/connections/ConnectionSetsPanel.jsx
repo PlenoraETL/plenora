@@ -1,11 +1,12 @@
 import EmptyState from '../common/EmptyState';
 import React, { useRef, useState } from 'react';
-import { useResource } from '../../hooks/useResource';
+import { useSharedResource } from '../../hooks/useSharedResource';
+import { connectionSetsOf } from '../../utils/sharedSelectors';
 import { ResourceError } from '../common/ListState';
 import {
   createConnectionSet,
   deleteConnectionSet,
-  listConnectionSets,
+
   updateConnectionSet,
 } from '../../api/connections';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
@@ -38,7 +39,8 @@ const keyFromLabel = label => codecs.slugify(label, KEY_RULE).slice(0, 120);
 function ConnectionSetsPanel({ connections, canEdit, canEditItem = () => false, toast, confirm }) {
   // Fase 5 T2 (R4.8): elenco dall'hook comune, errore con «Riprova» (mai
   // "Nessun Connection Set configurato" per un errore).
-  const resource = useResource(async () => (await listConnectionSets()).connection_sets || [], { key: 'connection-sets-admin' });
+  // UI-1: la stessa risorsa condivisa dei nodi (utils/sharedResources).
+  const resource = useSharedResource('connectionSets', { select: connectionSetsOf });
   const sets = resource.data || [];
   const loading = resource.initialLoading;
   const load = () => resource.reload();

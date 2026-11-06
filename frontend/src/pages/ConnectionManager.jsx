@@ -7,11 +7,11 @@ import React, { useState, useRef } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
 import {
-  listConnections, createConnection, updateConnection,
+  createConnection, updateConnection,
   deleteConnection, testConnection
 } from '../api';
 import {
-  listFeatureConnections, createFeatureConnection,
+  createFeatureConnection,
   updateFeatureConnection, deleteFeatureConnection, testFeatureConnection
 } from '../api/features';
 import { useHexCanvas } from '../utils/hexCanvas';
@@ -26,6 +26,7 @@ import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { can, role } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
 import { useResource } from '../hooks/useResource';
+import { readShared } from '../utils/sharedResources';
 import { useBusy } from '../hooks/useBusy';
 import { ResourceError } from '../components/common/ListState';
 import '../styles/ConnectionManager.css';
@@ -56,6 +57,11 @@ const ALL_TYPES = [
   { value: 'sqlite',   label: '📁 SQLite',        color: '#6B7280', colorRgb: '107,114,128', defaultPort: 0,    defaultSchema: '',       category: 'database' },
   { value: 'arcgis',   label: '🌐 ArcGIS Server', color: '#F5A623', colorRgb: '245,166,35',  defaultPort: 0,    defaultSchema: '',       category: 'arcgis'   },
 ];
+// UI-1 (C27): le due liste dalla cache condivisa (utils/sharedResources);
+// una scrittura (crea, modifica, elimina, test) le invalida e la pagina si
+// ricarica da sola.
+const CONNECTION_LISTS = ['connections', 'arcgisConnections'];
+
 function ConnectionManager() {
   const toast    = useToast();
   const confirmModal = useConfirmModal();
@@ -89,10 +95,10 @@ function ConnectionManager() {
   // Fase 5 T2 (R4.7, R4.8): elenco dall'hook comune. Spinner a pagina
   // intera solo al primo caricamento; una delle due liste non caricata e'
   // un avviso con «Riprova» (non una lista vuota); entrambe = errore.
-  const resource = useResource(async () => {
+  const resource = useResource(async ({ force } = {}) => {
     const [dbResult, arcResult] = await Promise.allSettled([
-      listConnections(),
-      listFeatureConnections(),
+      readShared('connections', [], { force }),
+      readShared('arcgisConnections', [], { force }),
     ]);
     if (dbResult.status === 'rejected' && arcResult.status === 'rejected') throw dbResult.reason;
     const dbData = dbResult.status === 'fulfilled' ? dbResult.value : { connections: [] };
@@ -103,7 +109,7 @@ function ConnectionManager() {
     if (dbResult.status === 'rejected') failures.push(`Connessioni database non caricate: ${requestErrorMessage(dbResult.reason)}`);
     if (arcResult.status === 'rejected') failures.push(`Connessioni ArcGIS non caricate: ${requestErrorMessage(arcResult.reason)}`);
     return { connections: [...dbConns, ...arcConns], failures };
-  }, { key: 'connections' });
+  }, { key: 'connections', shared: CONNECTION_LISTS });
   const allConnections = resource.data?.connections || [];
   const loadFailures = resource.data?.failures || [];
   const loadConnections = () => resource.reload();

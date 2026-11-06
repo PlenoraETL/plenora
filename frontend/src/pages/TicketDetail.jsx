@@ -28,10 +28,11 @@ import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useToast } from '../hooks/useToast';
 import { toastApiError } from '../utils/toastApiError';
 import { useResource } from '../hooks/useResource';
+import { useSharedResource } from '../hooks/useSharedResource';
 import { ResourceError } from '../components/common/ListState';
 import { can } from '../utils/permissions';
 import {
-  addComment, deleteAttachment, deleteTicket, getTicket, getTicketsMeta,
+  addComment, deleteAttachment, deleteTicket, getTicket,
   openAttachment, updateTicket, uploadAttachment,
 } from '../api/tickets';
 import '../styles/TicketsList.css';
@@ -49,7 +50,8 @@ export default function TicketDetail() {
   const confirmModal = useConfirmModal();
   const fileInputRef = useRef(null);
 
-  const metaResource = useResource(getTicketsMeta, { key: 'tickets-meta' });
+  // Meta statiche: risorsa condivisa (UI-1, C10), una volta per sessione.
+  const metaResource = useSharedResource('ticketsMeta');
   const meta = metaResource.data || null;
   const resource = useResource(() => getTicket(id), { key: id });
   const data = resource.data || null;

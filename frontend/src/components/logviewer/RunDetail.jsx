@@ -26,7 +26,7 @@ const MODULE_COLORS = {
 // Fase 5 T2 (R4.13): dettaglio dall'hook comune; con Live (`live`) si
 // aggiorna finche' la run e' in corso; un errore ha «Riprova».
 export default function RunDetail({ runId, live = false }) {
-  const resource = useResource(() => getLogRun(runId, true, 300), { key: runId, refreshInterval: live ? 5000 : 0 });
+  const resource = useResource(() => getLogRun(runId, true, 300), { key: runId, refreshInterval: live ? 'live' : 0 });
   const detail = resource.data || null;
   const [tab, setTab]         = useState('steps');
 

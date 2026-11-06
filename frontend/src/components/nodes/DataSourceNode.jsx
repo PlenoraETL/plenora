@@ -13,7 +13,8 @@ import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useConfirmOrDeny } from '../../context/ConfirmContext';
-import { listDataSources, listFiles, getFileSchema } from '../../api/datasources';
+import { listFiles, getFileSchema } from '../../api/datasources';
+import { useSharedResource } from '../../hooks/useSharedResource';
 import ModalWrapper from '../common/ModalWrapper';
 import './DataSourceNode.css';
 import NodeHandle from '../canvas/NodeHandle';
@@ -57,6 +58,8 @@ const FILE_OFFSET = integer({ min: 0 });
  *   dest_filename   string
  *   dest_format     'csv' | 'geojson' | 'xlsx' | 'gpkg'
  */
+const datasourcesOf = (d) => d?.datasources || [];
+
 const DataSourceNode = memo(({ id, data }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const isReadOnly     = useCanvasStore(s => s.isReadOnly);
@@ -74,7 +77,8 @@ const DataSourceNode = memo(({ id, data }) => {
   // comune. Lo schema e' della coppia (connettore, file) della richiesta:
   // scelto X e poi Y, lo schema di X arrivato dopo non diventa mai le
   // colonne di Y (id di richiesta). Gli errori si vedono, con «Riprova».
-  const dsResource = useResource(async () => (await listDataSources()).datasources || [], { key: 'datasources' });
+  // UI-1 (C17): lista condivisa, non riscaricata a ogni selezione del nodo.
+  const dsResource = useSharedResource('datasources', { select: datasourcesOf });
   const datasources = dsResource.data || [];
   const loadingDs = dsResource.initialLoading;
   const browser = useResource(() => listFiles(dsId, { path: browserPath }), {

@@ -23,12 +23,13 @@ function readSrc(relPath) {
 describe('Sessione 9 cluster A hooks unmount safety', () => {
   // Fase 5 T2: i task di Carica usano il poller unico (utils/taskPoller: un
   // poll alla volta, stop allo smontaggio e a ogni nuovo avvio).
-  it('useExecution: i task di Carica usano pollTask e si fermano allo smontaggio', () => {
+  it('useExecution: i task di Carica usano UN poller (pollTasks) e si fermano allo smontaggio', () => {
     const src = readSrc('hooks/useExecution.js');
     const idx = src.indexOf('const startCaricaTasksPolling =');
     expect(idx).toBeGreaterThan(-1);
     const window = src.slice(idx, idx + 2500);
-    expect(window).toContain('pollTask(task_id');
+    // UI-1 (C20): un poller per tutti i task di Carica, non uno per task.
+    expect(window).toContain('pollTasks(tasks.map(t => t.task_id)');
     expect(window).toContain('stopAllCaricaPolling()');
     expect(src).not.toContain('setInterval(');
     expect(src).toMatch(/caricaStops\.current\.forEach\(stop => stop\(\)\)/);

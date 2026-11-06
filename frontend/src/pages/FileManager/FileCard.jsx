@@ -10,6 +10,10 @@ import { formatBytes as formatFileSize, formatNumber } from '../../utils/format'
 function FileCard({ file, onPreview, onDelete, onShare }) {
   const cfg = getFormatConfig(file.format);
   const label = file.layer ? `${cfg.label} · ${file.layer}` : file.sheet ? `${cfg.label} · ${file.sheet}` : cfg.label;
+  // UI-1 (C26): la lista porta il numero di colonne e i primi nomi, non le
+  // colonne intere (un dettaglio di getFile le ha ancora: valgono entrambi).
+  const columnCount = file.column_count ?? file.columns?.length ?? 0;
+  const columnNames = file.column_names_preview ?? (file.columns || []).slice(0, 5).map(c => c.name);
   return (
     <div className="fm__card">
       <div className="fm__card-accent" style={{ background: cfg.color }} />
@@ -26,7 +30,7 @@ function FileCard({ file, onPreview, onDelete, onShare }) {
         {file.description && <div className="fm__card-desc">{file.description}</div>}
         <div className="fm__card-meta">
           <div><div className="fm__meta-key">{SPATIAL_FORMATS.includes(file.format) ? 'Features' : 'Righe'}</div><div className="fm__meta-val">{formatNumber(file.row_count)}</div></div>
-          <div><div className="fm__meta-key">Colonne</div><div className="fm__meta-val">{file.columns?.length || 0}</div></div>
+          <div><div className="fm__meta-key">Colonne</div><div className="fm__meta-val">{columnCount}</div></div>
           <div><div className="fm__meta-key">Dimensione</div><div className="fm__meta-val">{formatFileSize(file.file_size)}</div></div>
           {file.crs ? (
             <div><div className="fm__meta-key">CRS</div><div className="fm__meta-val">{file.crs}</div></div>
@@ -34,14 +38,14 @@ function FileCard({ file, onPreview, onDelete, onShare }) {
             <div><div className="fm__meta-key">File</div><div className="fm__meta-val fm__meta-val--filename">{file.original_filename}</div></div>
           )}
         </div>
-        {file.columns?.length > 0 && (
+        {columnCount > 0 && columnNames.length > 0 && (
           <div className="fm__card-columns">
             <div className="fm__columns-label">Colonne</div>
             <div className="fm__columns-list">
-              {file.columns.slice(0, 5).map((col, i) => (
-                <span key={i} className="fm__col-tag">{col.name}</span>
+              {columnNames.slice(0, 5).map((name, i) => (
+                <span key={i} className="fm__col-tag">{name}</span>
               ))}
-              {file.columns.length > 5 && <span className="fm__col-more">+{file.columns.length - 5}</span>}
+              {columnCount > 5 && <span className="fm__col-more">+{columnCount - 5}</span>}
             </div>
           </div>
         )}

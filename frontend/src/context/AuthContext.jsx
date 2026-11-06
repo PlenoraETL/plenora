@@ -19,6 +19,8 @@ import { getMe } from '../api/users';
 const AuthContext = createContext(null);
 const TOKEN_KEY = 'urby_token';
 const USER_KEY  = 'urby_user';
+// Distanza minima tra due verifiche del profilo (GET /auth/me) al ritorno sulla scheda.
+const ME_REFRESH_GAP_MS = 2000;
 
 // Leggi token/user salvati (persistenza tra refresh pagina)
 function loadFromStorage() {
@@ -113,10 +115,18 @@ export function AuthProvider({ children }) {
   // finestra) il profilo si riallinea, quindi un admin declassato perde le
   // rotte /admin senza aspettare la scadenza del token. Un 401 qui chiude la
   // sessione nell'interceptor come per ogni altra richiesta.
+  // UI-1 (C3, V12): il ritorno sulla scheda fa scattare sia `focus` sia
+  // `visibilitychange`: UNA verifica per ritorno (nessuna se una e' in corso
+  // o se l'ultima e' partita da meno di ME_REFRESH_GAP_MS).
   useEffect(() => {
+    let inFlight = false;
+    let lastAt = 0;
     const refresh = () => {
       const sent = sessionStorage.getItem(TOKEN_KEY);
       if (!sent) return;
+      if (inFlight || Date.now() - lastAt < ME_REFRESH_GAP_MS) return;
+      inFlight = true;
+      lastAt = Date.now();
       Promise.resolve()
         .then(() => getMe())
         .then((me) => {
@@ -131,7 +141,8 @@ export function AuthProvider({ children }) {
             return next;
           });
         })
-        .catch(() => { /* rete o 401: gestiti altrove, il profilo resta */ });
+        .catch(() => { /* rete o 401: gestiti altrove, il profilo resta */ })
+        .finally(() => { inFlight = false; });
     };
     refresh();
     const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };

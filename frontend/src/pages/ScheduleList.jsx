@@ -32,6 +32,7 @@ import VirtualList from '../components/common/VirtualList';
 // Il cron in parole dalla regola unica (utils/cron, UI-4 U31); un valore
 // che la regola non legge si mostra com'e'.
 const formatCron = (cron) => (cron ? (describeCron(cron) || cron) : '');
+import { POLL_PROFILES } from '../utils/poller';
 // Tempo trascorso che si aggiorna da solo: solo questa etichetta si
 // ridisegna ogni secondo, non l'intera lista (Fase 5 T2, R4.16).
 function Elapsed({ since }) {
@@ -41,9 +42,9 @@ function Elapsed({ since }) {
 
 // Aggiornamento della lista: ogni 3 s con un'esecuzione in corso o in coda,
 // altrimenti ogni 30 s (cosi' si vedono anche le esecuzioni partite dal
-// pianificatore); mai con la scheda nascosta (hooks/useResource).
-const FAST_REFRESH_MS = 3000;
-const SLOW_REFRESH_MS = 30000;
+// pianificatore); mai con la scheda nascosta; senza novita' l'attesa si
+// allunga (profili scheduleActive/scheduleIdle di utils/poller, UI-1 C21).
+const FAST_REFRESH_MS = POLL_PROFILES.scheduleActive.interval;
 
 const getStatusConfig = (status) => ({
   idle:      { label:'Inattivo',       cls:'sl__badge--idle',      bar:'var(--sl-text-dim)' },
@@ -87,7 +88,7 @@ function ScheduleList() {
   const [anyActive, setAnyActive] = useState(false);
   const resource = useResource(async () => (await listSchedules(projectFilter)).schedules || [], {
     key: ['schedules', projectFilter || null],
-    refreshInterval: anyActive ? FAST_REFRESH_MS : SLOW_REFRESH_MS,
+    refreshInterval: anyActive ? 'scheduleActive' : 'scheduleIdle',
   });
   const schedules = resource.data || [];
   const setSchedules = resource.setData;

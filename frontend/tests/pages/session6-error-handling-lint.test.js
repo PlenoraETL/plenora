@@ -35,7 +35,8 @@ describe('sessione 6 frontend error handling lint', () => {
 
   it('ApiConnectionManager: errore di caricamento con Riprova', () => {
     const src = readSrc('pages/ApiConnectionManager.jsx');
-    expect(src).toContain('useResource(');
+    // UI-1: lista condivisa (useSharedResource, sopra useResource).
+    expect(src).toMatch(/useSharedResource\(|useResource\(/);
     expect(src).toContain('title="Connettori non caricati"');
   });
 

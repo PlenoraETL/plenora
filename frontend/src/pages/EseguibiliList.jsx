@@ -7,15 +7,14 @@
  */
 
 import React, { useState } from 'react';
-import { useResource } from '../hooks/useResource';
 import { useBusy } from '../hooks/useBusy';
 import ListState, { ResourceError } from '../components/common/ListState';
 import {
-  listEseguibili,
   updateEseguibile,
   deleteEseguibile,
-  listProjects,
 } from '../api';
+import { useSharedResource } from '../hooks/useSharedResource';
+import { eseguibiliOf } from '../utils/sharedSelectors';
 import { useAuth } from '../context/AuthContext';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
@@ -37,6 +36,9 @@ import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
 import { projectTypeChip } from '../utils/projectTypes';
 
+const PUBLISHABLE_TYPES = ['estrai', 'manipola', 'arricchisci'];
+const publishableProjects = (all) => (all?.projects || []).filter(p => PUBLISHABLE_TYPES.includes(p.project_type));
+
 function EseguibiliList() {
   const toast = useToast();
   const confirmModal = useConfirmModal();
@@ -44,10 +46,9 @@ function EseguibiliList() {
   // Fase 5 T2 (R4.8, R9.11): elenco dall'hook comune (errore con
   // «Riprova»); rinomina per eseguibile (useBusy): la fine del salvataggio
   // di A non chiude la rinomina di B.
-  const resource = useResource(async () => {
-    const data = await listEseguibili();
-    return Array.isArray(data) ? data : [];
-  }, { key: 'eseguibili' });
+  // UI-1: risorse condivise (utils/sharedResources): eseguibili e progetti
+  // pubblicabili dalla stessa risposta della dashboard (C9).
+  const resource = useSharedResource('eseguibili', { select: eseguibiliOf });
   const items = resource.data || [];
   const setItems = resource.setData;
   const loadItems = () => resource.reload();
@@ -62,10 +63,7 @@ function EseguibiliList() {
 
   // Selettore progetto sorgente per creazione nuovo eseguibile
   const [showSelector, setShowSelector] = useState(false);
-  const projectsResource = useResource(async () => {
-    const all = await listProjects();
-    return (all?.projects || []).filter(p => ['estrai', 'manipola', 'arricchisci'].includes(p.project_type));
-  }, { key: 'publishable-projects', enabled: showSelector });
+  const projectsResource = useSharedResource('projects', { select: publishableProjects, enabled: showSelector });
   const projects = projectsResource.data || [];
   const loadingProjects = projectsResource.initialLoading;
   const projectSearch = useSearch();

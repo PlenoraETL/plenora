@@ -23,19 +23,27 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useToast } from './useToast';
 import { useResource } from './useResource';
-import { getProject, listProjects }    from '../api/projects';
-import { listConnections, getConnectionTables } from '../api/connections';
-import { listFeatureConnections }       from '../api/features';
-import { getFiles }                     from '../api/files';
+import { useSharedResource } from './useSharedResource';
+import { readShared } from '../utils/sharedResources';
 import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
 
 const EMPTY_OBJ = Object.freeze({});
 const EMPTY_LIST = Object.freeze([]);
+const catalogOf = (d) => ({ tables: d?.tables || {}, views: d?.views || {} });
 
-async function loadBoot(projectId, withCatalog) {
+// UI-1 (C6-C8, M-Estrai): tutto dalla cache condivisa (utils/sharedResources).
+//  - Il progetto: la risposta appena letta da OpenProjectPage vale (5 s),
+//    Riprova/reload la chiede al server (force).
+//  - Le connessioni servono intere (selettori dei nodi, store del canvas):
+//    la stessa lista di dashboard e gestori, non un'altra richiesta; la
+//    connessione del progetto si cerca li' e, se e' ArcGIS, nella lista
+//    ArcGIS condivisa.
+//  - Catalogo tabelle: per connessione, fresco 10 minuti (non riscaricato a
+//    ogni apertura dell'editor); «Riprova» lo chiede al server.
+async function loadBoot(projectId, withCatalog, force) {
   const [projectData, connectionsRes] = await Promise.all([
-    getProject(projectId),
-    listConnections().then(d => ({ ok: d.connections || [] }), err => ({ err })),
+    readShared('project', [projectId], { force }),
+    readShared('connections', [], { force }).then(d => ({ ok: d.connections || [] }), err => ({ err })),
   ]);
   const allConnections = connectionsRes.ok || [];
   let projectConnection = null;
@@ -49,7 +57,7 @@ async function loadBoot(projectId, withCatalog) {
       // Se non trovata nelle DB, cerca nelle ArcGIS Feature Service.
       if (!projectConnection) {
         try {
-          const arcgisData = await listFeatureConnections();
+          const arcgisData = await readShared('arcgisConnections', [], { force });
           const arcgisConn = (arcgisData.connections || arcgisData || []).find(c => c.id === defaultConnectionId);
           if (arcgisConn) { projectConnection = { ...arcgisConn, type: 'arcgis' }; isArcgis = true; }
         } catch (_) { /* connessione non risolta: il catalogo resta vuoto */ }
@@ -75,7 +83,7 @@ export function useEditorData(projectId, options = {}) {
   const toast = useToast();
   const sourceTypesKey = Array.isArray(sourceTypes) ? sourceTypes.join(',') : '';
 
-  const boot = useResource(() => loadBoot(projectId, withCatalog), {
+  const boot = useResource(({ force } = {}) => loadBoot(projectId, withCatalog, force), {
     key: ['editor-boot', projectId || null, withCatalog],
     enabled: Boolean(projectId),
     errorMessage: (err) => humanizeError(err).message,
@@ -112,17 +120,18 @@ export function useEditorData(projectId, options = {}) {
   }, [bootStaleError, toast]);
 
   const dbConnection = withCatalog && projectConnection && bootData?.sourceType === 'database' ? projectConnection : null;
-  const catalogResource = useResource(async () => {
-    const d = await getConnectionTables(dbConnection.id);
-    return { tables: d.tables || {}, views: d.views || {} };
-  }, {
-    key: ['editor-catalog', projectId || null, dbConnection?.id || null],
+  const catalogResource = useSharedResource('connectionTables', {
+    params: [dbConnection?.id || null],
+    select: catalogOf,
     enabled: Boolean(dbConnection),
   });
 
-  const sourcesResource = useResource(async () => {
+  const sourcesResource = useResource(async ({ force } = {}) => {
     const types = sourceTypesKey ? sourceTypesKey.split(',') : [];
-    const [projectsRes, filesRes] = await Promise.allSettled([listProjects(), getFiles()]);
+    const [projectsRes, filesRes] = await Promise.allSettled([
+      readShared('projects', [], { force }),
+      readShared('files', [], { force }),
+    ]);
     if (projectsRes.status === 'rejected' && filesRes.status === 'rejected') throw projectsRes.reason;
     const all = projectsRes.status === 'fulfilled' ? (projectsRes.value.projects || []) : [];
     return {

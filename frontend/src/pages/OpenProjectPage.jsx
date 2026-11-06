@@ -5,12 +5,18 @@
  */
 import React, { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { getProject } from '../api/projects';
 import { useResource } from '../hooks/useResource';
+import { peekShared, readShared } from '../utils/sharedResources';
 import { projectEditorPath } from '../utils/projectRoutes';
 import { isValidProjectId } from '../utils/validateRouteParam';
 import { requestErrorMessage } from '../utils/errorMessages';
 import '../components/common/ErrorBoundary.css';
+
+function projectTypeOf(projectId) {
+  const listed = (peekShared('projects')?.data?.projects || []).find((p) => String(p.id) === String(projectId));
+  if (listed) return Promise.resolve(listed);
+  return readShared('project', [projectId]);
+}
 
 export default function OpenProjectPage() {
   const { projectId } = useParams();
@@ -18,7 +24,10 @@ export default function OpenProjectPage() {
   const valid = isValidProjectId(projectId);
   // Lettura del tipo dall'hook comune (T2): id di richiesta, una risposta
   // superata (altro id, smontaggio) non porta in un editor sbagliato.
-  const resource = useResource(() => getProject(projectId), {
+  // UI-1 (C6): il tipo dalla lista dei progetti gia' in cache, se c'e';
+  // altrimenti il progetto dalla cache condivisa, che l'editor riusa subito
+  // dopo invece di riscaricarlo.
+  const resource = useResource(() => projectTypeOf(projectId), {
     key: projectId,
     enabled: valid,
     errorMessage: (err) => requestErrorMessage(err, 'Progetto non disponibile.'),

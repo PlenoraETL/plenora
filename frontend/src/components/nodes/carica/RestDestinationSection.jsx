@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useResource } from '../../../hooks/useResource';
+import { useSharedResource } from '../../../hooks/useSharedResource';
 import '../../common/ListState.css';
-import { listApiConnections } from '../../../api/apiConnections';
+import { apiConnectionsOf } from '../../../utils/sharedSelectors';
 import {
   REST_AUTH_FIELD, isSecretHeader, replaceSecretsWithConnector, restSecretHeaderNames,
 } from '../../../utils/restSecrets';
@@ -37,10 +37,8 @@ const REST_BATCH_MODES = [
 // dice), oppure l'utente le rimuove con la ×. Niente si toglie in silenzio.
 // Connettori dall'hook comune (Fase 5 T2): errore con «Riprova».
 function useApiConnectors() {
-  const resource = useResource(async () => {
-    const data = await listApiConnections();
-    return Array.isArray(data) ? data : (data?.connections || data?.items || data?.api_connections || []);
-  }, { key: 'rest-connectors' });
+  // UI-1 (C27): lista condivisa (utils/sharedResources, senza filtri).
+  const resource = useSharedResource('apiConnections', { params: [{}], select: apiConnectionsOf });
   const status = resource.status === 'error' ? 'error' : resource.hasData ? 'ready' : 'loading';
   return { status, items: resource.data || [], error: resource.error, reload: resource.reload };
 }

@@ -74,7 +74,7 @@ function QueryPreview() {
 
   const sql = useMemo(() => {
     if (!hasNodes) return '-- Aggiungi tabelle al canvas per generare la query';
-    if (!result) return query.initialLoading ? '-- Preparazione della query…' : '';
+    if (!result) return (query.initialLoading || settledKey === null) ? '-- Preparazione della query…' : '';
     if (result.kind === 'feature_service' && result.feature_service) {
       const fs = result.feature_service;
       return [
@@ -87,7 +87,7 @@ function QueryPreview() {
       ].filter(Boolean).join('\n');
     }
     return result.sql || '';
-  }, [hasNodes, result, query.initialLoading]);
+  }, [hasNodes, result, query.initialLoading, settledKey]);
   const highlighted = useMemo(() => (sql ? highlightSQL(sql) : null), [sql]);
 
   const resultInfo = useCanvasDerived(s => {

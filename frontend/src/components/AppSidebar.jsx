@@ -34,8 +34,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSignOut } from '../hooks/useSignOut';
 import { role } from '../utils/permissions';
-import { getTicketsCounts } from '../api/tickets';
-import { useResource } from '../hooks/useResource';
+import { useSharedResource } from '../hooks/useSharedResource';
 import { useStoredState, LAYOUT_KEYS } from '../hooks/useStoredState';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
@@ -44,6 +43,8 @@ import { enumLabel } from '../utils/format';
 import { visibleNavItems } from '../utils/navItems';
 import { ICON } from '../utils/icons';
 import './AppSidebar.css';
+
+const selectActiveTickets = (data) => data?.active_total ?? data?.active_mine ?? 0;
 function Logo() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
@@ -70,13 +71,16 @@ export default function AppSidebar() {
   const [collapsed, setCollapsed] = useStoredState(LAYOUT_KEYS.appSidebarCollapsed, false, asBoolean);
 
   // Badge ticket: count attivi visibili all'utente (self/group/global
-  // a seconda del ruolo, enforcement backend). Aggiornato ogni 60s dall'hook
-  // comune (useResource: un poll alla volta, fermo con la scheda nascosta).
+  // a seconda del ruolo, enforcement backend). Risorsa condivisa (UI-1, C1,
+  // C2): la barra rimontata o il cambio di pagina riusano la stessa
+  // risposta; profilo di polling `ticketCounts` (fermo a scheda nascosta,
+  // backoff); una scrittura sui ticket la invalida.
   // Un errore nasconde il badge (dato secondario, nessun avviso all'utente).
-  const countsResource = useResource(async () => {
-    const data = await getTicketsCounts();
-    return data.active_total ?? data.active_mine ?? 0;
-  }, { key: ['tickets-counts', user?.user_id || null], enabled: Boolean(user) && !role.isEsecutore(user), refreshInterval: 60_000 });
+  const countsResource = useSharedResource('ticketsCounts', {
+    select: selectActiveTickets,
+    enabled: Boolean(user) && !role.isEsecutore(user),
+    refreshInterval: 'ticketCounts',
+  });
   const ticketsActiveCount = countsResource.status === 'error' ? null : (countsResource.data ?? null);
 
   const counts = { tickets: ticketsActiveCount || undefined };

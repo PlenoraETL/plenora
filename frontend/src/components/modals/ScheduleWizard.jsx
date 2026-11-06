@@ -6,7 +6,7 @@ import { useResource } from '../../hooks/useResource';
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../hooks/useToast';
 import { humanizeError } from '../../utils/errorMessages';
-import { listProjects, listConnections } from '../../api';
+import { readShared } from '../../utils/sharedResources';
 import { createSchedule, updateSchedule, getSchedule } from '../../api/schedules';
 import ModalWrapper from '../common/ModalWrapper';
 import Wizard from '../common/Wizard';
@@ -136,10 +136,11 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
   const [saving, setSaving] = useState(false);
   // Fase 5 T2: dati del modulo dall'hook comune (id di richiesta). Il
   // modulo parte dallo schedule caricato con un effetto senza richieste.
-  const formResource = useResource(async () => {
+  // UI-1 (C9): progetti e connessioni dalla cache condivisa.
+  const formResource = useResource(async ({ force } = {}) => {
     const [projectsData, connectionsData, existing] = await Promise.all([
-      listProjects(),
-      listConnections(),
+      readShared('projects', [], { force }),
+      readShared('connections', [], { force }),
       editId ? getSchedule(editId) : Promise.resolve(null),
     ]);
     return {

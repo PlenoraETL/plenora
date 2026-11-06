@@ -10,7 +10,7 @@
 import React, { useEffect, memo } from 'react';
 import { useResource } from '../../hooks/useResource';
 import { Position } from '@xyflow/react';
-import { getFile } from '../../api/files';
+import { readShared } from '../../utils/sharedResources';
 import { getColumnTypeIcon, getColumnTypeLabel, normalizeColumnType } from '../../utils/columnUtils';
 import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -28,7 +28,8 @@ import { pressable } from '../../utils/pressable';
 const FileSourceNode = ({ id, data }) => {
   // Fase 5 T2: dettagli del file dall'hook comune (id di richiesta: il
   // file scelto prima non scrive le colonne del file scelto dopo).
-  const resource = useResource(() => getFile(data.file_source_id), {
+  // UI-1 (C17): dalla cache condivisa (risorsa `file`, fresca 1 minuto).
+  const resource = useResource(({ force } = {}) => readShared('file', [data.file_source_id], { force }), {
     key: ['file-source', data.file_source_id || null],
     enabled: Boolean(data.file_source_id),
     errorMessage: (err) => humanizeError(err).message,

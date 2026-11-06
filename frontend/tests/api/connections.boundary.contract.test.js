@@ -68,8 +68,10 @@ describe('connections boundary contract (C3.2)', () => {
       );
       expect(importBlocks).not.toBeNull();
       const named = importBlocks.join('\n');
+      // UI-1: la lista arriva dalla risorsa condivisa `apiConnections`
+      // (utils/sharedResources chiama listApiConnections).
+      expect(src).toMatch(/useSharedResource\('apiConnections'/);
       for (const name of [
-        'listApiConnections',
         'createApiConnection',
         'updateApiConnection',
         'deleteApiConnection',
@@ -106,13 +108,9 @@ describe('connections boundary contract (C3.2)', () => {
       expect(/from\s+['"]\.\.\/\.\.\/api\/http['"]/.test(src)).toBe(false);
     });
 
-    it('uses listApiConnections({ connection_type }) instead of raw http.get', () => {
-      expect(
-        /import\s*\{[^}]*\blistApiConnections\b[^}]*\}\s*from\s*['"][^'"]*\/api\/apiConnections['"]/.test(
-          src,
-        ),
-      ).toBe(true);
-      expect(/\blistApiConnections\s*\(\s*\{[^}]*connection_type/.test(src)).toBe(
+    it('uses the shared apiConnections resource filtered by connection_type instead of raw http.get', () => {
+      // UI-1: risorsa condivisa (utils/sharedResources -> listApiConnections).
+      expect(/useSharedResource\('apiConnections',\s*\{\s*params:\s*\[[^\]]*connection_type/.test(src)).toBe(
         true,
       );
       expect(/\bhttp\.(get|post)\s*\(/.test(src)).toBe(false);

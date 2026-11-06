@@ -16,40 +16,32 @@
  */
 
 import { useCallback, useMemo, useRef } from 'react';
-import {
-  listProjects,
-  listConnections,
-  listApiConnections,
-  listEseguibili,
-} from '../../api';
-import { listFeatureConnections } from '../../api/features';
-import { getFiles } from '../../api/files';
-import { listSchedules } from '../../api/schedules';
-import { listDataSources } from '../../api/datasources';
 import { getLatestRunByProject } from '../../api/logRuns';
 import { useResource } from '../../hooks/useResource';
+import { readShared } from '../../utils/sharedResources';
 
-const SERVICES = ['progetti', 'connessioni', 'API', 'file', 'schedule', 'ArcGIS', 'eseguibili', 'datasources', 'stato delle esecuzioni'];
+const SERVICES = ['progetti', 'connessioni', 'conteggi', 'file', 'ArcGIS', 'eseguibili', 'stato delle esecuzioni'];
 const UNAVAILABLE = Object.freeze({ status: 'unavailable' });
+const NO_COUNTS = Object.freeze({ api_connections: 0, datasources: 0, schedules_active: 0, schedules_by_project: {} });
 
-async function loadDashboard() {
+// UI-1 (C4, C27): le liste dalla cache condivisa (utils/sharedResources: la
+// stessa risposta di gestori, editor e nodi, aggiornata quando una
+// scrittura la invalida); API, data source e schedule solo come conteggi
+// (GET /dashboard/counts), non tre liste intere.
+const DASHBOARD_SHARED = Object.freeze(['projects', 'connections', 'dashboardCounts', 'files', 'arcgisConnections', 'eseguibili']);
+
+async function loadDashboard({ force = false } = {}) {
   const results = await Promise.allSettled([
-    listProjects(),
-    listConnections(),
-    listApiConnections(),
-    getFiles(),
-    listSchedules(),
-    listFeatureConnections(),
-    listEseguibili(),
-    listDataSources(),
+    ...DASHBOARD_SHARED.map((name) => readShared(name, [], { force })),
     getLatestRunByProject(),
   ]);
   // Senza progetti la dashboard non ha senso: e' un errore, non "vuota".
   if (results[0].status === 'rejected') throw results[0].reason;
   const value = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
   const projectsList = value(0, {}).projects || [];
-  const arcgisData = value(5, { connections: [] });
-  const eseguibiliData = value(6, []);
+  const counts = { ...NO_COUNTS, ...(value(2, null) || {}) };
+  const arcgisData = value(4, { connections: [] });
+  const eseguibiliData = value(5, []);
   const sourcesMap = {};
   const fileSourcesMap = {};
   projectsList.forEach(p => {
@@ -61,13 +53,11 @@ async function loadDashboard() {
   return {
     projects: projectsList,
     connections: value(1, { connections: [] }).connections || [],
-    apiConnections: value(2, { api_connections: [] }).api_connections || [],
+    counts,
     files: value(3, { files: [] }).files || [],
-    schedules: value(4, { schedules: [] }).schedules || [],
     arcgisConnections: arcgisData.connections || arcgisData || [],
     eseguibili: Array.isArray(eseguibiliData) ? eseguibiliData : (eseguibiliData?.items || []),
-    dataSources: value(7, {})?.datasources || [],
-    runStatusByProject: results[8].status === 'fulfilled' ? (results[8].value?.statuses || {}) : null,
+    runStatusByProject: results[6].status === 'fulfilled' ? (results[6].value?.statuses || {}) : null,
     failures: results.map((r, i) => (r.status === 'rejected' ? SERVICES[i] : null)).filter(Boolean),
     projectSources: sourcesMap,
     projectFileSources: fileSourcesMap,
@@ -78,7 +68,7 @@ const EMPTY = Object.freeze({});
 const NONE = Object.freeze([]);
 
 export function useProjectListData() {
-  const resource = useResource(loadDashboard, { key: 'dashboard' });
+  const resource = useResource(loadDashboard, { key: 'dashboard', shared: DASHBOARD_SHARED });
   const data = resource.data || EMPTY;
   const { setData, reload } = resource;
 
@@ -144,10 +134,8 @@ export function useProjectListData() {
     projects: data.projects || NONE,
     connections: data.connections || NONE,
     arcgisConnections: data.arcgisConnections || NONE,
-    apiConnections: data.apiConnections || NONE,
+    counts: data.counts || NO_COUNTS,
     files: data.files || NONE,
-    schedules: data.schedules || NONE,
-    dataSources: data.dataSources || NONE,
     eseguibili: data.eseguibili || NONE,
     projectSources: data.projectSources || EMPTY,
     projectFileSources: data.projectFileSources || EMPTY,

@@ -12,7 +12,8 @@
  *  - dispatch del wizard via prop `seed` (new / edit / template).
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import { useResource } from '../hooks/useResource';
+import { useSharedResource } from '../hooks/useSharedResource';
+import { apiConnectionsOf } from '../utils/sharedSelectors';
 import { useBusy } from '../hooks/useBusy';
 import { ResourceError } from '../components/common/ListState';
 import { useToast } from '../hooks/useToast';
@@ -32,7 +33,7 @@ import PageLayout from '../components/common/PageLayout';
 import EmptyState from '../components/common/EmptyState';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import {
-  listApiConnections,
+
   createApiConnection,
   deleteApiConnection,
   testApiConnection,
@@ -104,7 +105,8 @@ function ApiConnectionManager() {
   // Fase 5 T2 (R4.8, R9.16): elenco dall'hook comune (errore con
   // «Riprova», mai "Nessun connettore configurato"); quick test per
   // connettore, non cliccabile due volte (useBusy).
-  const resource = useResource(async () => (await listApiConnections()).api_connections || [], { key: 'api-connections' });
+  // UI-1 (C27): lista condivisa (utils/sharedResources), invalidata dalle scritture.
+  const resource = useSharedResource('apiConnections', { params: [{}], select: apiConnectionsOf });
   const apiConnections = useMemo(() => resource.data || [], [resource.data]);
   const loading = resource.initialLoading;
   const loadApiConnections = () => resource.reload();

@@ -6,13 +6,14 @@
 import React, { useState, useRef } from 'react';
 import { srid as sridCodec } from '../utils/fieldCodecs';
 import { getColumnSRID } from '../utils/columnUtils';
-import { useResource } from '../hooks/useResource';
+import { useSharedResource } from '../hooks/useSharedResource';
+import { filesOf } from '../utils/sharedSelectors';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useAuth } from '../context/AuthContext';
 import {
-  getFiles,
+
   updateFile,
   uploadFile,
   uploadMultiLayer,
@@ -66,7 +67,8 @@ const FileManager = () => {
 
   // Fase 5 T2 (R4.3, R4.7): elenco dall'hook comune (spinner a pagina
   // intera solo al primo caricamento, errore con «Riprova»).
-  const resource = useResource(async () => (await getFiles()).files || [], { key: 'files', errorMessage: humanizeErrorMessage });
+  // UI-1 (C27): lista condivisa (utils/sharedResources), invalidata dalle scritture.
+  const resource = useSharedResource('files', { select: filesOf, errorMessage: humanizeErrorMessage });
   const files = resource.data || [];
   const loading = resource.initialLoading;
   const error = resource.error;

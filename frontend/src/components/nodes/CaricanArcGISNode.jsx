@@ -16,8 +16,9 @@ import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useColumnsOf } from '../../hooks/useColumns';
 import ColumnStatusNote from '../common/ColumnStatusNote';
+import { useSharedResource } from '../../hooks/useSharedResource';
+import { arcgisConnectionsOf } from '../../utils/sharedSelectors';
 import {
-  listFeatureConnections,
   browseServices,
   browseLayers,
   getLayerSchema,
@@ -111,10 +112,8 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   // solo in console). RB.7.C: niente richieste con la connessione
   // access_denied.
   const live = !isAccessDenied;
-  const connsResource = useResource(async () => {
-    const res = await listFeatureConnections();
-    return Array.isArray(res) ? res : res.connections || [];
-  }, { key: 'arcgis-connections', errorMessage: (e) => humanizeError(e).message });
+  // UI-1 (C17): lista ArcGIS condivisa, non riscaricata a ogni selezione.
+  const connsResource = useSharedResource('arcgisConnections', { select: arcgisConnectionsOf, errorMessage: (e) => humanizeError(e).message });
   const servicesResource = useResource(async () => {
     const res = await browseServices(arcgisConnectionId);
     return Array.isArray(res) ? res : res.services || [];

@@ -16,8 +16,9 @@ import { useResource } from '../../hooks/useResource';
 import '../common/ListState.css';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { humanizeError, requestErrorMessage } from '../../utils/errorMessages';
+import { useSharedResource } from '../../hooks/useSharedResource';
+import { arcgisConnectionsOf } from '../../utils/sharedSelectors';
 import {
-  listFeatureConnections,
   createFeatureConnection,
   browseServices,
   browseLayers,
@@ -86,10 +87,8 @@ function FeatureServicePanel({ layersInCanvas = new Set(), lockedConnection = nu
   // scelta nella chiave: scelta la connessione A e poi la B, i servizi di A
   // arrivati dopo non compaiono sotto B (id di richiesta).
   const humanize = (err) => humanizeError(err).message;
-  const connsResource = useResource(async () => {
-    const data = await listFeatureConnections();
-    return data.connections || data || [];
-  }, { key: 'feature-connections', enabled: !lockedConnection, errorMessage: humanize });
+  // UI-1 (C27): lista ArcGIS condivisa (utils/sharedResources).
+  const connsResource = useSharedResource('arcgisConnections', { select: arcgisConnectionsOf, enabled: !lockedConnection, errorMessage: humanize });
   const servicesResource = useResource(async () => {
     const data = await browseServices(selectedConnection.id);
     return data.services || data || [];

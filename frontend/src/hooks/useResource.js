@@ -21,8 +21,17 @@
  *    filtro nuovo. Riprova = reload();
  *  - `initialLoading` solo al primo caricamento di una chiave: un reload dopo
  *    un'azione non sostituisce la pagina con lo spinner (`refreshing`);
- *  - `refreshInterval`: aggiornamento periodico, un poll alla volta, fermo
- *    con la scheda nascosta (riparte subito quando torna visibile);
+ *  - `refreshInterval`: aggiornamento periodico con un profilo di
+ *    utils/poller (nome di POLL_PROFILES): un poll alla volta, fermo con la
+ *    scheda nascosta (riparte subito quando torna visibile), backoff quando
+ *    i dati non cambiano, durata massima (UI-1, C19-C23);
+ *  - `shared`: le risorse condivise (utils/sharedResources) che il
+ *    caricatore legge: quando una viene invalidata (scrittura) o arriva
+ *    nuova da un'altra richiesta, i dati si ricaricano in background;
+ *  - il caricatore riceve `{ signal, force }`: `force` e' true per reload(),
+ *    Riprova e i poll (la cache condivisa non basta, serve il server);
+ *  - `revalidate` con `initialData`: si parte dai dati iniziali (es. cache
+ *    scaduta) e si chiede comunque al server, in background;
  *  - `enabled: false` = nessuna richiesta (stato `idle`);
  *  - `keepPreviousData`: la chiave cambia ma la risorsa e' la stessa (es.
  *    filtri): i dati di prima restano visibili durante la nuova richiesta;
@@ -35,6 +44,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestErrorMessage } from '../utils/errorMessages';
+import { pollProfile, startPoller } from '../utils/poller';
+import { subscribeShared } from '../utils/sharedCache';
 
 const defaultIsEmpty = (data) => data == null || (Array.isArray(data) && data.length === 0);
 
@@ -45,8 +56,10 @@ const keyOf = (key) => (typeof key === 'string' ? key : JSON.stringify(key ?? nu
  * @param {Object} [opts]
  * @param {any} [opts.key]                chiave della risorsa (cambia = nuova richiesta)
  * @param {boolean} [opts.enabled=true]
- * @param {number} [opts.refreshInterval=0] ms tra un aggiornamento e il successivo
+ * @param {string|0} [opts.refreshInterval=0] profilo di utils/poller (POLL_PROFILES)
  * @param {boolean} [opts.pauseWhenHidden=true]
+ * @param {Array} [opts.shared]           risorse condivise lette dal caricatore
+ * @param {boolean} [opts.revalidate]     con initialData: chiede comunque al server
  * @param {(data) => boolean} [opts.isEmpty]
  * @param {(err) => string} [opts.errorMessage]
  * @param {any|(() => any)} [opts.initialData]
@@ -60,6 +73,8 @@ export function useResource(loader, {
   errorMessage = requestErrorMessage,
   initialData = undefined,
   keepPreviousData = false,
+  shared = null,
+  revalidate = false,
 } = {}) {
   const keepRef = useRef(keepPreviousData);
   keepRef.current = keepPreviousData;
@@ -80,11 +95,15 @@ export function useResource(loader, {
   errorMessageRef.current = errorMessage;
   const keyRef = useRef(k);
   keyRef.current = k;
+  const revalidateRef = useRef(revalidate);
+  revalidateRef.current = revalidate;
+  const dataRef = useRef(state.data);
+  dataRef.current = state.data;
 
   // background: aggiornamento periodico (l'errore mostrato resta finche'
   // non arriva una risposta); altrimenti Riprova/reload (l'errore si toglie
   // e si vede il caricamento).
-  const request = useCallback((background) => {
+  const request = useCallback((background, force = !background) => {
     const id = ++reqRef.current;
     abortRef.current?.abort?.();
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -99,7 +118,7 @@ export function useResource(loader, {
     // caricatore e' un errore della richiesta.
     let pending;
     try {
-      pending = Promise.resolve(loader({ signal: controller?.signal }));
+      pending = Promise.resolve(loader({ signal: controller?.signal, force }));
     } catch (err) {
       pending = Promise.reject(err);
     }
@@ -127,8 +146,11 @@ export function useResource(loader, {
         },
       );
   }, []);
-  const load = useCallback(() => request(false), [request]);
-  const poll = useCallback(() => request(true), [request]);
+  // Primo caricamento di una chiave: la cache condivisa vale (force false).
+  const firstLoad = useCallback(() => request(false, false), [request]);
+  // reload/Riprova: dal server.
+  const load = useCallback(() => request(false, true), [request]);
+  const poll = useCallback(() => request(true, true), [request]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -146,26 +168,38 @@ export function useResource(loader, {
       setState({ key: k, dataKey: null, data: undefined, error: null, rawError: null, loading: false });
       return;
     }
-    if (skipFirstRef.current) { skipFirstRef.current = false; return; }
-    load();
-  }, [k, enabled, load]);
+    if (skipFirstRef.current) {
+      skipFirstRef.current = false;
+      if (revalidateRef.current) request(true, false);
+      return;
+    }
+    firstLoad();
+  }, [k, enabled, firstLoad, request]);
 
-  // Aggiornamento periodico: dopo ogni risposta, mai con la scheda nascosta.
-  const settled = state.key === k && !state.loading;
+  // Aggiornamento periodico (utils/poller): parte dopo la prima risposta
+  // della chiave e resta lo stesso poller tra un poll e l'altro.
+  const settledOnce = state.key === k && (state.dataKey === k || state.error != null);
+  const loadingRef = useRef(false);
+  loadingRef.current = state.loading;
+  const profile = useMemo(() => pollProfile(refreshInterval), [refreshInterval]);
   useEffect(() => {
-    if (!enabled || !refreshInterval || !settled) return undefined;
-    const hidden = () => pauseWhenHidden && typeof document !== 'undefined' && document.visibilityState === 'hidden';
-    let timer = null;
-    const onVisible = () => {
-      if (!hidden()) { clearTimeout(timer); poll(); }
-    };
-    if (!hidden()) timer = setTimeout(poll, refreshInterval);
-    if (pauseWhenHidden && typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearTimeout(timer);
-      if (pauseWhenHidden && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [enabled, refreshInterval, pauseWhenHidden, settled, poll]);
+    if (!enabled || !profile || !settledOnce) return undefined;
+    return startPoller(() => {
+      // Una richiesta gia' in corso (reload dell'utente) vale come giro.
+      if (loadingRef.current) return { changed: true };
+      const before = JSON.stringify(dataRef.current ?? null);
+      // Nessun dato (errore, risposta superata) = nessuna novita': backoff.
+      return poll().then((data) => ({ changed: data !== undefined && JSON.stringify(data) !== before }));
+    }, { ...profile, pauseWhenHidden, resumeOnVisible: true });
+  }, [enabled, profile, pauseWhenHidden, settledOnce, poll]);
+
+  // Risorse condivise: invalidate (scrittura) o arrivate nuove da un'altra
+  // richiesta -> ricarica in background (dalla cache se gia' fresca).
+  const sharedKey = shared ? JSON.stringify(shared) : null;
+  useEffect(() => {
+    if (!enabled || !sharedKey) return undefined;
+    return subscribeShared(JSON.parse(sharedKey), () => { if (mountedRef.current) request(true, false); });
+  }, [enabled, sharedKey, request]);
 
   // Dati scritti da chi li conosce (azione riuscita, altra copia caricata):
   // sono i dati di questa chiave e l'errore precedente non vale piu'.

@@ -6,8 +6,8 @@
  * quando si aggiunge un nuovo nodo ApiEnrich senza creare un nuovo connettore.
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import { useResource } from '../../hooks/useResource';
-import { listApiConnections } from '../../api/apiConnections';
+import { useSharedResource } from '../../hooks/useSharedResource';
+import { apiConnectionsOf } from '../../utils/sharedSelectors';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { humanizeError } from '../../utils/errorMessages';
 import './ConnectionSelectorModal.css';
@@ -31,8 +31,10 @@ function ConnectionSelectorModal({
   createLink
 }) {
   // Fase 5 T2: elenco dall'hook comune (id di richiesta per categoria).
-  const resource = useResource(async () => (await listApiConnections({ connection_type: category })).api_connections || [], {
-    key: ['api-connections', category || null],
+  // UI-1 (C27): lista condivisa per filtro (utils/sharedResources).
+  const resource = useSharedResource('apiConnections', {
+    params: [category ? { connection_type: category } : {}],
+    select: apiConnectionsOf,
     enabled: Boolean(isOpen),
     errorMessage: (err) => humanizeError(err).message,
   });

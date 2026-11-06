@@ -9,6 +9,7 @@ import {
   createSearchParamsMock,
 } from './helpers/contextMocks';
 import { createReactFlowMock } from './helpers/reactflowMock';
+import { resetSharedCache } from '../src/utils/sharedCache';
 
 globalThis.__frontendTestHelpers = {
   createHttpMock,
@@ -27,6 +28,8 @@ globalThis.__frontendConsolePolicy = {
 let consoleErrorSpy;
 
 beforeEach(() => {
+  // Cache dati condivisa (UI-1): ogni test parte vuoto, come una sessione nuova.
+  resetSharedCache();
   globalThis.__frontendConsolePolicy.allowError = false;
   consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
