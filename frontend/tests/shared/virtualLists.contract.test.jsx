@@ -168,19 +168,22 @@ describe('VirtualList: conferma finale F1 e F2', () => {
     expect(tall.container.querySelector('.vlist').className).toMatch(/\bnowheel\b.*\bnodrag\b/);
   });
 
-  it('F2: dopo Ctrl+F la lista torna virtuale con Esc, con un clic e con elementi nuovi', () => {
+  it('H3: dopo Ctrl+F la lista resta intera finche\' le chiavi non cambiano davvero', () => {
     const list = items(300);
-    const { rerender } = render(<VirtualList items={list} itemKey={x => x.id} renderItem={renderItem} estimatedItemHeight={40} />);
-    const search = () => act(() => { fireEvent.keyDown(document, { key: 'f', ctrlKey: true }); });
-    search();
+    const props = { itemKey: x => x.id, renderItem, estimatedItemHeight: 40 };
+    const { rerender } = render(<VirtualList items={list} {...props} />);
+    act(() => { fireEvent.keyDown(document, { key: 'f', ctrlKey: true }); });
     expect(count()).toBe(300);
-    act(() => { fireEvent.keyDown(document, { key: 'Escape' }); });
-    expect(count()).toBeLessThan(60);
-    search();
+    // Array nuovo con le stesse chiavi (render del genitore senza useMemo,
+    // aggiornamento periodico della lista): resta intera.
+    rerender(<VirtualList items={list.map(x => ({ ...x }))} {...props} />);
+    expect(count()).toBe(300);
+    // Un clic o un pointerdown sulla barra di scorrimento: resta intera.
     act(() => { fireEvent.pointerDown(document.body); });
-    expect(count()).toBeLessThan(60);
-    search();
-    rerender(<VirtualList items={list.slice(1)} itemKey={x => x.id} renderItem={renderItem} estimatedItemHeight={40} />);
+    act(() => { fireEvent.keyDown(document, { key: 'Escape' }); });
+    expect(count()).toBe(300);
+    // Le chiavi cambiano (filtro, elemento tolto): torna virtuale.
+    rerender(<VirtualList items={list.slice(1)} {...props} />);
     expect(count()).toBeLessThan(60);
   });
 

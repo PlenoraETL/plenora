@@ -20,7 +20,7 @@ import { estraiJoinEdges, paletteJoinEnds, presentJoinEdges, relationJoinEnds, t
 
 // Modali lazy-loaded — caricati solo quando l'utente li apre
 const PreviewModal = lazyWindow(() => import('../components/modals/PreviewModal'), term('preview').name);
-const ExecutionModal = lazyWindow(() => import('../components/modals/ExecutionModal'), 'Esecuzione');
+const ExecutionModal = lazyWindow(() => import('../components/modals/ExecutionModal'), 'Esecuzione', { prefetch: true });
 const CanvasVersionsModal = lazyWindow(() => import('../components/modals/CanvasVersionsModal'), 'Versioni');
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import ProjectInputNode from '../components/nodes/ProjectInputNode';

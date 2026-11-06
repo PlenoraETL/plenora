@@ -36,9 +36,6 @@ def test_queue_routes_map_tasks_to_canonical_queues():
         "workers.tasks.cleanup_temp_files_task.run": (
             settings.TASK_QUEUE_CONTROL_PLANE
         ),
-        "workers.tasks.task_cleanup_task.run": (
-            settings.TASK_QUEUE_CONTROL_PLANE
-        ),
         "workers.tasks.schedule_task.schedule_pipeline_task": (
             settings.TASK_QUEUE_DATA_PLANE
         ),
@@ -124,7 +121,6 @@ def test_all_ten_task_names_have_a_dramatiq_actor():
         "cleanroom.ping",
         "cleanroom.beat_ping",
         "workers.tasks.cleanup_temp_files_task.run",
-        "workers.tasks.task_cleanup_task.run",
         "workers.tasks.admin_backup_task.run_manual_backup_task",
         "carica.execute",
         "pipeline.execute",

@@ -227,23 +227,25 @@ def test_full_cleanup_returns_207_when_celery_forget_fails(client, tmp_path):
 
 
 def test_full_cleanup_returns_207_with_multiple_failures(client, tmp_path):
-    """Step 3 (delete_result) e step 6 (celery_forget) falliscono →
-    failed_steps=[delete_result, celery_forget] nell'ordine d'esecuzione.
-    Step 4/5 (unlink/pg_exec) continuano a essere tentati e succedono."""
+    """Step delete_result fallisce, gli altri passi sui dati si tentano
+    comunque; il record del task (celery_forget) NON si tocca finche' resta
+    qualcosa (semplificazione H1: la ripetizione rifa' i passi col payload)."""
     response = _patched_cleanup(
         client, "task-fail-multi", tmp_path=tmp_path,
         delete_result_side_effect=RuntimeError("results DB"),
+        pg_exec_side_effect=RuntimeError("pg"),
         async_result_forget_raises=True,
     )
     assert response.status_code == 207
     body = response.json()
     assert body["status"] == "partial"
-    assert body["failed_steps"] == ["delete_result", "celery_forget"]
+    assert body["failed_steps"] == ["delete_result", "delete_log_runs"]
 
 
-def test_full_cleanup_returns_207_all_four_steps_fail(client, tmp_path):
-    """Tutti e 4 gli step cleanup falliscono → failed_steps contiene tutti
-    i 4 nomi nell'ordine d'esecuzione. L'endpoint NON solleva — aggrega."""
+def test_full_cleanup_returns_207_all_data_steps_fail(client, tmp_path):
+    """Tutti i passi sui dati falliscono → failed_steps li contiene tutti
+    nell'ordine d'esecuzione; il record resta (niente celery_forget).
+    L'endpoint NON solleva — aggrega."""
     response = _patched_cleanup(
         client, "task-fail-all", tmp_path=tmp_path,
         delete_result_side_effect=RuntimeError("dr"),
@@ -259,7 +261,6 @@ def test_full_cleanup_returns_207_all_four_steps_fail(client, tmp_path):
         "delete_result",
         "unlink_output_file",
         "delete_log_runs",
-        "celery_forget",
     ]
 
 
@@ -304,13 +305,14 @@ def test_full_cleanup_breadcrumb_has_exc_info_on_failed_step(client, tmp_path):
             async_result_forget_raises=True,
         )
 
-    # 4 warning con messaggio "cleanup: errore ..." e exc_info=True sui 4 step
+    # 3 warning "cleanup: errore ..." con exc_info=True sui 3 passi sui dati
+    # (il record non si tocca dopo un passo fallito: niente forget).
     step_warnings = [
         c for c in mock_logger.warning.call_args_list
         if "cleanup: errore" in str(c)
     ]
-    assert len(step_warnings) == 4, (
-        f"attesi 4 warning cleanup: errore su step, ricevuto: {step_warnings}"
+    assert len(step_warnings) == 3, (
+        f"attesi 3 warning cleanup: errore su step, ricevuto: {step_warnings}"
     )
     for call in step_warnings:
         assert call.kwargs.get("exc_info") is True, (

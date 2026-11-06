@@ -206,7 +206,7 @@ def test_apply_pending_migrations_creates_schema_before_tracking_table(
     with patch("app.db.pg_connection.get_connection", return_value=conn), \
          patch("app.db.pg_connection.put_connection"), \
          patch.object(mr, "list_applied_migrations", return_value=[]):
-        applied = mr._apply_pending_migrations_locked()  # il giro sotto il lock (F3)
+        applied = mr._REAL_APPLY_PENDING_MIGRATIONS()
 
     assert applied == []
     assert calls[0] == "ensure_schema", (
@@ -231,6 +231,6 @@ def test_apply_pending_migrations_rejects_custom_schema_until_sql_is_parametric(
          patch("app.db.pg_connection.put_connection"), \
          patch.object(mr, "list_applied_migrations", return_value=[]), \
          pytest.raises(RuntimeError, match="DB_SCHEMA='tenant_x' non supportato"):
-        mr._apply_pending_migrations_locked()  # il giro sotto il lock (F3)
+        mr._REAL_APPLY_PENDING_MIGRATIONS()
 
     cur.execute.assert_not_called()

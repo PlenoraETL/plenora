@@ -34,9 +34,10 @@
  *    finestra delle righe la segue);
  *  - Ctrl+F / Cmd+F sulla pagina (non preso da nessun altro: un evento con
  *    `defaultPrevented` e' di chi lo gestisce): la lista si disegna intera,
- *    perche' la ricerca del browser trovi anche le righe lontane. Torna
- *    virtuale (conferma finale F2) alla fine della ricerca: Esc, un clic
- *    sulla pagina, o elementi nuovi (filtro, aggiornamento);
+ *    perche' la ricerca del browser trovi anche le righe lontane. Resta
+ *    intera finche' la lista non cambia DAVVERO le chiavi (filtro, elementi
+ *    nuovi o tolti; semplificazione H3): un nuovo array con le stesse chiavi,
+ *    un clic o la barra di scorrimento non la riportano virtuale;
  *  - il contenitore che scorre e' il primo antenato con overflow che scorre
  *    DAVVERO (contenuto piu' alto del riquadro), cercato a ogni lettura; lo
  *    scorrimento si ascolta sul documento (fase di cattura), quindi anche un
@@ -188,20 +189,12 @@ export default function VirtualList({
     return () => window.removeEventListener('keydown', onKey);
   }, [virtual, boxed, renderAll]);
 
-  // Fine della ricerca (F2): Esc o un clic sulla pagina riportano la lista
-  // virtuale; elementi nuovi anche (sotto, con `items`).
-  useEffect(() => {
-    if (!renderAll) return undefined;
-    const onKey = (e) => { if (matchesShortcut('close', e)) setRenderAll(false); };
-    const onPointer = () => setRenderAll(false);
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('pointerdown', onPointer);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('pointerdown', onPointer);
-    };
-  }, [renderAll]);
-  useEffect(() => { setRenderAll(false); }, [items]);
+  // Ritorno virtuale (H3): SOLO quando la lista cambia davvero, cioe' le sue
+  // chiavi (filtro, elementi nuovi o tolti). Un nuovo array con le stesse
+  // chiavi (render del genitore, aggiornamento periodico), un clic o la barra
+  // di scorrimento non lo riportano: la ricerca del browser resta valida.
+  const keySignature = virtual ? list.map((item, i) => itemKey(item, i)).join('\u0000') : '';
+  useEffect(() => { setRenderAll(false); }, [keySignature]);
 
   const onFocus = useCallback((e) => {
     const row = e.target?.closest?.('[data-vlist-row]');

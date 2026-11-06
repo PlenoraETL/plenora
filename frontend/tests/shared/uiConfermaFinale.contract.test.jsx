@@ -112,7 +112,7 @@ describe('F7 — cursore dei file a pagine della dimensione massima del server',
 describe('F8 — una richiesta di pulizia, l\'ordine e\' del server', () => {
   it('nessun annullamento separato nella pulizia di chiusura; 202 = in coda, non parziale', async () => {
     const tasks = noComments(read('api/tasks.js'));
-    const release = tasks.slice(tasks.indexOf('export const releaseTaskOnPageExit'), tasks.indexOf('export const parkTaskCleanup'));
+    const release = tasks.slice(tasks.indexOf('export const releaseTaskOnPageExit'), tasks.indexOf('export const cancelTaskOnPageExit'));
     expect(release).not.toMatch(/`\/tasks\/\$\{[^}]+\}`/);
     expect((release.match(/sendOnPageExit\(/g) || []).length).toBe(1);
     const { default: http } = await import('../../src/api/http');
@@ -370,7 +370,7 @@ describe('G8 — una tabella delle chiavi di storage', () => {
     const listeners = SOURCES.filter(({ code }) => /addEventListener\(\s*'beforeunload'/.test(code)).map(({ file }) => file).sort();
     // useLocalDraft scrive la copia in sospeso uscendo: non chiede niente.
     expect(listeners).toEqual(['hooks/useLocalDraft.js', 'utils/leaveGuard.js']);
-    expect(noComments(read('components/eseguibili/useEseguibileRun.js'))).toMatch(/registerLeaveProbe\(\(\) => atRiskRef\.current, RUN_LEAVE_DIALOG\)/);
+    expect(noComments(read('components/eseguibili/useEseguibileRun.js'))).toMatch(/registerLeaveProbe\(\(\) => atRiskRef\.current, leaveDialog\)/);
     let risky = false;
     const off = registerLeaveProbe(() => risky, { title: 'Esecuzione non conclusa' });
     try {

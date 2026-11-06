@@ -264,23 +264,6 @@ class Settings:
         # una riga di audit riuscita per utente e azione ogni N secondi
         # (observability/audit_action, sample_reads; UI-1 C23). 0 = ogni lettura.
         "AUDIT_READ_SAMPLE_SECONDS": 900,
-        # Migrazioni all'avvio (UI conferma finale F3/F4, app/db/migrations_runner):
-        # le istanze che partono insieme si mettono in fila su un advisory lock
-        # di PostgreSQL; chi aspetta oltre MIGRATIONS_LOCK_WAIT_SECONDS non parte
-        # (errore esplicito). Un CREATE INDEX CONCURRENTLY aspetta la fine delle
-        # transazioni aperte al massimo MIGRATIONS_INDEX_WAIT_SECONDS: oltre,
-        # l'indice lasciato INVALID si toglie (subito o al prossimo avvio) e l'avvio fallisce con il
-        # motivo (al prossimo avvio si riprova), mai un'attesa senza fine.
-        "MIGRATIONS_LOCK_WAIT_SECONDS": 600,
-        "MIGRATIONS_INDEX_WAIT_SECONDS": 300,
-        # Pulizia completa di un task ancora in corso (DELETE
-        # /tasks/{id}/full-cleanup, UI conferma finale F8/G3): si annulla, si
-        # aspetta al piu' TASK_CLEANUP_CANCEL_WAIT_SECONDS che il task si fermi;
-        # se non si ferma, la pulizia resta in coda (task_cleanup_requests) e la
-        # fa il beat appena il task e' terminale, o comunque dopo
-        # TASK_CLEANUP_DEFER_MAX_SECONDS (oltre la durata massima di un task).
-        "TASK_CLEANUP_CANCEL_WAIT_SECONDS": 5,
-        "TASK_CLEANUP_DEFER_MAX_SECONDS": 3 * 60 * 60,
         # NB: LOG_ARCHIVE_BUCKET e' intenzionalmente fuori da DEFAULTS —
         # e' required-if-enabled con validazione fail-fast a boot, distinto
         # da BACKUP_BUCKET.

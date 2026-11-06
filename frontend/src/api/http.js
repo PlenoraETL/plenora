@@ -195,10 +195,11 @@ http.interceptors.response.use(
  * fanno partire una keepalive con preflight, senza errore (conferma finale
  * G10). Per questo chi la usa annota prima la richiesta e la rimanda alla
  * prossima apertura se non e' confermata (utils/exitCleanups). Non si
- * aspetta la risposta: la pagina non c'e' piu'.
+ * aspetta la risposta; se arriva (la pagina c'e' ancora) va a `onStatus`.
+ * @param {(status: number) => void} [onStatus]
  * @returns {boolean} true se la richiesta e' partita.
  */
-export function sendOnPageExit(method, url) {
+export function sendOnPageExit(method, url, onStatus = null) {
   const token = sessionStorage.getItem(TOKEN_KEY);
   if (!token || typeof fetch !== 'function') return false;
   try {
@@ -206,7 +207,8 @@ export function sendOnPageExit(method, url) {
       method,
       keepalive: true,
       headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => { /* la pagina si sta chiudendo: niente da mostrare */ });
+    }).then((response) => onStatus?.(response.status))
+      .catch(() => { /* la pagina si sta chiudendo: niente da mostrare */ });
     return true;
   } catch {
     return false;

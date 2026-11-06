@@ -81,3 +81,7 @@ Tutte le voci dell'elenco sopra sono chiuse o dichiarate. Regressioni trovate:
   questa torna nel pool con il lock ancora preso.
 - **H7 (B)** `LazyWindow.jsx:71-75`: ExecutionModal si scarica solo all'apertura, quindi dopo un deploy
   manca proprio all'avvio di un'esecuzione e compare la fallback.
+
+Correzione (semplificazione, 06/11/2026): `docs/development/piano-fase5-2026-11.md`, sezione «UI conferma
+finale — semplificazione H1–H7». Tolti la coda e lo sweep delle pulizie, il percorso «fuori transazione»
+e il lock di sessione delle migrazioni, il ritorno con Esc/clic di VirtualList.

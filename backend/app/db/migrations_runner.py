@@ -7,12 +7,9 @@ Motivazione (C8-nit)
 from __future__ import annotations
 
 import re
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterator, List, Optional
-
-import psycopg
+from typing import Any, Callable, List, Optional
 
 from psycopg import sql as _sql
 
@@ -37,104 +34,9 @@ _SUPPORTED_SCHEMA = "plenora"
 _PG_UNDEFINED_TABLE = "42P01"
 _PG_INVALID_SCHEMA = "3F000"
 
-# Migration fuori transazione (conferma UI A-K11, 06/11/2026): un indice su
-# una tabella grande e scritta di continuo (log_runs) si crea con
-# CREATE INDEX CONCURRENTLY, che non blocca le scritture ma non puo' girare
-# dentro una transazione. Il file lo dichiara nella PRIMA riga; ogni
-# istruzione gira da sola in autocommit e puo' essere solo
-# CREATE INDEX CONCURRENTLY IF NOT EXISTS / DROP INDEX CONCURRENTLY IF EXISTS
-# (rieseguibili). Il tracking si scrive dopo l'ultima: un'installazione
-# interrotta riesegue il file. Un indice rimasto INVALID da un'interruzione
-# si toglie prima di ricrearlo (IF NOT EXISTS lo salterebbe).
-#
-# Piu' istanze e attese (UI conferma finale F3/F4, 06/11/2026). Tutto il giro
-# (schema, tracking, lettura delle pending, controllo degli indici INVALID,
-# applicazione) gira sotto UN advisory lock di sessione (`migrations_lock`):
-# una seconda istanza che parte insieme aspetta, poi rilegge le pending e non
-# trova piu' niente da fare; non vede mai come INVALID l'indice che l'altra
-# sta ancora costruendo, perche' l'INVALID si guarda solo col lock in mano.
-# Attese dichiarate (config.py DEFAULTS): il lock al piu'
-# MIGRATIONS_LOCK_WAIT_SECONDS; un CREATE INDEX CONCURRENTLY aspetta le
-# transazioni aperte al piu' MIGRATIONS_INDEX_WAIT_SECONDS (`lock_timeout`),
-# poi l'indice rimasto INVALID si toglie (subito, o al prossimo avvio col lock
-# se anche la rimozione aspetta) e l'avvio fallisce col motivo:
-# nessuna attesa senza fine e mai un indice INVALID saltato da IF NOT EXISTS.
-NO_TRANSACTION_DIRECTIVE = "-- plenora:migration no-transaction"
-_NO_TRANSACTION_STATEMENT = re.compile(
-    r"^(CREATE\s+(UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+IF\s+NOT\s+EXISTS"
-    r"|DROP\s+INDEX\s+CONCURRENTLY\s+IF\s+EXISTS)\s",
-    re.IGNORECASE,
-)
-_CREATE_INDEX_NAME = re.compile(
-    r"^CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+IF\s+NOT\s+EXISTS\s+([A-Za-z_][A-Za-z0-9_]*)\s",
-    re.IGNORECASE,
-)
-
-
-# Chiave dell'advisory lock delle migrazioni ("plenora" in ASCII, int64).
+# Chiave dell'advisory lock di transazione delle migrazioni ("plenora" in
+# ASCII, int64): vedi apply_pending_migrations.
 MIGRATIONS_LOCK_KEY = 0x706C656E6F7261
-_PG_LOCK_NOT_AVAILABLE = "55P03"
-_PG_QUERY_CANCELED = "57014"
-
-
-def _seconds_setting(name: str) -> int:
-    raw = settings.get(name, settings.DEFAULTS[name])
-    return max(1, int(float(raw if raw is not None else settings.DEFAULTS[name])))
-
-
-def _is_lock_timeout(exc: BaseException) -> bool:
-    pgcode = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
-    return pgcode in {_PG_LOCK_NOT_AVAILABLE, _PG_QUERY_CANCELED}
-
-
-def _set_lock_timeout(cur: Any, seconds: Optional[int]) -> None:
-    """`lock_timeout` della sessione (None = nessun limite, il default)."""
-    value = f"{int(seconds) * 1000}ms" if seconds else "0"
-    cur.execute("SELECT set_config('lock_timeout', %s, false)", (value,))
-
-
-@contextmanager
-def migrations_lock() -> Iterator[None]:
-    """Advisory lock di sessione: una sola istanza applica le migrazioni.
-
-    Connessione propria in autocommit, tenuta per tutto il giro; il lock si
-    rilascia alla fine (anche su errore) e comunque muore con la sessione.
-    Attesa al piu' MIGRATIONS_LOCK_WAIT_SECONDS, poi RuntimeError.
-    """
-    wait = _seconds_setting("MIGRATIONS_LOCK_WAIT_SECONDS")
-    conn = pg_connection_module.get_connection()
-    locked = False
-    try:
-        conn.autocommit = True
-        with conn.cursor() as cur:
-            _set_lock_timeout(cur, wait)
-            try:
-                cur.execute("SELECT pg_advisory_lock(%s)", (MIGRATIONS_LOCK_KEY,))
-            except psycopg.Error as exc:
-                if _is_lock_timeout(exc):
-                    raise RuntimeError(
-                        "[MIGRATIONS] un'altra istanza sta applicando le migrazioni "
-                        f"da piu' di {wait} s (MIGRATIONS_LOCK_WAIT_SECONDS): "
-                        "avvio interrotto, riprovare quando ha finito"
-                    ) from exc
-                raise
-            locked = True
-            _set_lock_timeout(cur, None)
-        logger.info("[MIGRATIONS] lock delle migrazioni preso")
-        yield
-    finally:
-        try:
-            with conn.cursor() as cur:
-                if locked:
-                    cur.execute("SELECT pg_advisory_unlock(%s)", (MIGRATIONS_LOCK_KEY,))
-                _set_lock_timeout(cur, None)
-        except psycopg.Error:
-            logger.warning("[MIGRATIONS] rilascio del lock non riuscito (muore con la sessione)", exc_info=True)
-        try:
-            conn.autocommit = False
-        except psycopg.Error:
-            pass  # connessione rotta: il pool la scarta
-        pg_connection_module.put_connection(conn)
 
 
 @dataclass(frozen=True)
@@ -356,118 +258,14 @@ def _migration_notice_logger(filename: str) -> Callable[[Any], None]:
     return _log
 
 
-def is_no_transaction_migration(sql: str) -> bool:
-    """True se la prima riga del file dichiara la migration fuori transazione."""
-    first = sql.lstrip("\ufeff").splitlines()[0].strip() if sql.strip() else ""
-    return first == NO_TRANSACTION_DIRECTIVE
-
-
-def no_transaction_statements(sql: str) -> List[str]:
-    """Le istruzioni di una migration fuori transazione (commenti tolti).
-
-    Solo istruzioni ammesse (``_NO_TRANSACTION_STATEMENT``): altrimenti
-    ``RuntimeError`` prima di eseguire qualunque cosa.
-    """
-    code = re.sub(r"--[^\n]*", "", sql)
-    statements = [" ".join(part.split()) for part in code.split(";")]
-    statements = [stmt for stmt in statements if stmt]
-    for stmt in statements:
-        if not _NO_TRANSACTION_STATEMENT.match(stmt):
-            raise RuntimeError(
-                "[MIGRATIONS] istruzione non ammessa fuori transazione "
-                f"(solo CREATE/DROP INDEX CONCURRENTLY IF [NOT] EXISTS): {stmt[:120]}"
-            )
-    return statements
-
-
-def _drop_if_invalid(cur: Any, index_name: str) -> bool:
-    """Toglie l'indice se e' INVALID (CONCURRENTLY interrotto). Solo col lock."""
-    cur.execute(
-        "SELECT count(*) AS invalid FROM pg_index i "
-        "WHERE i.indexrelid = to_regclass(%s) AND NOT i.indisvalid",
-        (index_name,),
-    )
-    row = cur.fetchone()
-    invalid = row.get("invalid") if hasattr(row, "get") else (row[0] if row else 0)
-    if invalid:
-        cur.execute(
-            _sql.SQL("DROP INDEX CONCURRENTLY IF EXISTS {}").format(
-                _sql.Identifier(index_name)
-            )
-        )
-    return bool(invalid)
-
-
-def _apply_no_transaction_migration(conn: Any, sql: str, schema: str, filename: str) -> None:
-    """Esegue ogni istruzione da sola in autocommit, poi il tracking.
-
-    Chiamata solo dentro `migrations_lock` (apply_pending_migrations).
-    """
-    statements = no_transaction_statements(sql)
-    wait = _seconds_setting("MIGRATIONS_INDEX_WAIT_SECONDS")
-    conn.autocommit = True
-    with conn.cursor() as cur:
-        _set_lock_timeout(cur, wait)
-        try:
-            for stmt in statements:
-                index = _CREATE_INDEX_NAME.match(stmt)
-                try:
-                    if index:
-                        # Un CONCURRENTLY interrotto lascia l'indice INVALID:
-                        # si toglie, poi si ricrea.
-                        _drop_if_invalid(cur, index.group(1))
-                    cur.execute(stmt)
-                except psycopg.Error as exc:
-                    if not _is_lock_timeout(exc):
-                        raise
-                    # Transazioni aperte oltre l'attesa dichiarata. L'indice
-                    # rimasto INVALID si prova a togliere subito; anche la
-                    # rimozione CONCURRENTLY aspetta le stesse transazioni,
-                    # quindi se non riesce lo toglie il prossimo avvio (col
-                    # lock) prima di ricrearlo. Ogni attesa ha il suo tetto.
-                    leftover = "indice tolto"
-                    if index:
-                        try:
-                            _drop_if_invalid(cur, index.group(1))
-                        except psycopg.Error as drop_exc:
-                            if not _is_lock_timeout(drop_exc):
-                                raise
-                            leftover = "indice INVALID lasciato (lo toglie il prossimo avvio)"
-                    name = index.group(1) if index else stmt[:60]
-                    raise RuntimeError(
-                        f"[MIGRATIONS] {filename}: {name} aspetta transazioni aperte "
-                        f"da piu' di {wait} s (MIGRATIONS_INDEX_WAIT_SECONDS); "
-                        f"{leftover}; si riprova al prossimo avvio: chiudere le "
-                        "transazioni lunghe"
-                    ) from exc
-        finally:
-            _set_lock_timeout(cur, None)
-        cur.execute(
-            _sql.SQL(
-                "INSERT INTO {} (filename) VALUES (%s) "
-                "ON CONFLICT (filename) DO NOTHING"
-            ).format(_schema_migrations_table(schema)),
-            (filename,),
-        )
-
-
 def apply_pending_migrations() -> List[str]:
     """Applica e registra tutte le migration pending. Return l'elenco
     dei file applicati in questa chiamata.
-
-    Tutto sotto `migrations_lock` (F3/F4): con piu' istanze una sola applica,
-    le altre aspettano e poi rileggono le pending.
 
     Raises:
         Exception se una migration fallisce (l'app non deve partire
         con schema inconsistente).
     """
-    with migrations_lock():
-        return _apply_pending_migrations_locked()
-
-
-def _apply_pending_migrations_locked() -> List[str]:
-    """Il giro delle migrazioni; solo con il lock in mano."""
     # Bootstrap clean-install: lo schema applicativo deve esistere prima
     # del CREATE TABLE schema_migrations (che e' schema-qualified). Su DB
     # vuoto senza questo step il runner fallisce con InvalidSchemaName
@@ -511,12 +309,24 @@ def _apply_pending_migrations_locked() -> List[str]:
         conn = pg_connection_module.get_connection()
         notice_handler = _migration_notice_logger(filename)
         try:
+            conn.autocommit = False
             conn.add_notice_handler(notice_handler)
-            if is_no_transaction_migration(sql):
-                _apply_no_transaction_migration(conn, sql, schema, filename)
-            else:
-                conn.autocommit = False
-                with conn.cursor() as cur:
+            with conn.cursor() as cur:
+                # Piu' istanze che partono insieme: si mettono in fila su un
+                # advisory lock di TRANSAZIONE (H6, 06/11/2026), che si
+                # rilascia da solo con commit/rollback o con la connessione
+                # persa (niente unlock che possa fallire), poi si ricontrolla
+                # il tracking: chi arriva secondo trova la migration gia'
+                # registrata e la salta.
+                cur.execute("SELECT pg_advisory_xact_lock(%s)", (MIGRATIONS_LOCK_KEY,))
+                cur.execute(
+                    _sql.SQL("SELECT 1 AS done FROM {} WHERE filename = %s").format(
+                        _schema_migrations_table(schema)
+                    ),
+                    (filename,),
+                )
+                already = cur.fetchone() is not None
+                if not already:
                     cur.execute(sql)
                     cur.execute(
                         _sql.SQL(
@@ -525,9 +335,12 @@ def _apply_pending_migrations_locked() -> List[str]:
                         ).format(_schema_migrations_table(schema)),
                         (filename,),
                     )
-                conn.commit()
-            applied_now.append(filename)
-            logger.info(f"[MIGRATIONS] OK: {filename}")
+            conn.commit()
+            if already:
+                logger.info(f"[MIGRATIONS] gia' applicata da un'altra istanza: {filename}")
+            else:
+                applied_now.append(filename)
+                logger.info(f"[MIGRATIONS] OK: {filename}")
         except Exception as e:
             try:
                 conn.rollback()

@@ -1,54 +1,57 @@
-"""Pulizia completa di un task: prima l'annullamento, poi la pulizia.
+"""Pulizia completa di un task (DELETE /tasks/{id}/full-cleanup, esecutore).
 
-UI conferma finale F8/G3 (06/11/2026). Prima l'esecutore, chiudendo la
-scheda, mandava in parallelo DELETE /tasks/{id} (annulla) e DELETE
-/tasks/{id}/full-cleanup: nessun ordine, quindi quello che il worker scriveva
-DOPO la pulizia (righe di log, record del task, output degli Eseguibili)
-restava sul server.
+Semplificazione H1–H7 (06/11/2026): niente coda, niente sweep, niente
+attese. Tre casi, decisi da cosa c'e' sul server:
 
-Regola unica, per costruzione (``cleanup_task``, chiamata dall'endpoint
-full-cleanup e dallo sweep del beat):
+- NON RESTA NIENTE (nessun record di stato e nessun metadato del task):
+  ``nothing_left`` -> 204 subito, senza revoca ne' attesa (H2). E' il
+  marcatore «gia' pulito», affidabile per costruzione: una pulizia riuscita
+  toglie per ultimi i metadati e poi il record di stato, quindi «niente» vuol
+  dire pulito (o mai esistito, o scaduto), mai «in coda»: un task in coda ha
+  i metadati dal momento in cui e' accettato;
+- TASK TERMINALE (success / failure / revoked): si pulisce adesso
+  (``purge_terminal_task``). Il record di stato e i metadati si tolgono SOLO
+  se tutti gli altri passi sono riusciti: con un 207 il record resta, e
+  ripetere la pulizia rifa' i passi mancanti con il payload vero (H1: prima
+  il record si toglieva comunque e la ripetizione vedeva un task PENDING
+  senza payload);
+- TASK IN CORSO: si annota la richiesta SUL TASK (``request_cleanup``, chiave
+  con scadenza nel KV condiviso), lo si annulla e si risponde 202 subito. La
+  pulizia la fa chi porta il task allo stato terminale, dopo averlo scritto
+  (``finish_requested_cleanup``): il worker a fine task
+  (workers/dramatiq_app, _TaskResultMiddleware) o il beat che chiude i task
+  di un worker morto (workers/beat_scheduler._recover_runtime_leases). La
+  richiesta si annota PRIMA di rileggere lo stato: se il task e' finito nel
+  frattempo, la pulizia la fa subito questa chiamata (nessuna finestra in
+  cui nessuno dei due la vede).
 
-- la pulizia tocca SOLO un task terminale (success / failure / revoked): lo
-  stato terminale lo scrive il worker dopo l'ultima scrittura del task
-  (``workers/dramatiq_app`` after_process_message), quindi dopo non arriva
-  piu' niente da togliere;
-- un task non terminale si annulla (stessa revoca cooperativa di
-  DELETE /tasks/{id}) e si aspetta al piu' TASK_CLEANUP_CANCEL_WAIT_SECONDS;
-- se non si e' ancora fermato la pulizia resta IN CODA
-  (``task_cleanup_requests``): lo sweep del beat (``run_deferred_cleanups``,
-  ogni minuto) la fa appena il task e' terminale, o comunque dopo
-  TASK_CLEANUP_DEFER_MAX_SECONDS (task mai finito: worker morto);
-- una pulizia con passi non riusciti resta in coda e si riprova.
-
-Il client fa UNA sola chiamata (full-cleanup): l'ordine non dipende piu' da
-lui.
+Ogni passo riguarda solo questo task_id, mai i risultati di altri task.
 """
 
 from __future__ import annotations
 
-import time
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, List, Optional, TypedDict
+from typing import Any, List, Optional
 
 from app.config import settings
 from app.core.eseguibili import db as eseguibili_db
 from app.core.eseguibili import output_store as _eseg_output_store
 from app.core.orchestrator import log_cleanup as orchestrator_log_cleanup
-from app.core.orchestrator.access_control import TASK_LOOKUP_ERRORS
 from app.core.orchestrator import task_service as task_service_module
+from app.core.orchestrator.access_control import TASK_LOOKUP_ERRORS
 from app.core.orchestrator.router_mappers import task_result_to_dict as _task_result_to_dict
 from app.core.results import cleanup as results_cleanup
 from app.core.results import output_file_cleanup
-from app.db import pg_connection
 from app.shared.contracts.payloads import JsonObject
+from app.shared.kv import KeyValueStore, KeyValueStoreUnavailable, PgKeyValueStore
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 TERMINAL_STATUSES = frozenset({"success", "failure", "revoked"})
-_POLL_SECONDS = 0.25
+_REQUEST_PREFIX = "plenora:orchestrator:task_cleanup:"
+_requests: KeyValueStore = PgKeyValueStore()
 
 
 def _status_value(task_info: Any) -> str:
@@ -61,54 +64,42 @@ def is_terminal(task_info: Any) -> bool:
     return _status_value(task_info) in TERMINAL_STATUSES
 
 
-def _setting_seconds(name: str) -> float:
-    raw = settings.get(name, settings.DEFAULTS[name])
-    return max(0.0, float(raw if raw is not None else settings.DEFAULTS[name]))
-
-
 @dataclass(frozen=True)
 class CleanupOutcome:
-    """Esito di ``cleanup_task``: fatta (con i passi non riusciti) o in coda."""
+    """Esito di ``cleanup_task``: fatta (con i passi non riusciti) o richiesta."""
 
     deferred: bool
     failed_steps: tuple[str, ...] = ()
 
 
-# ── Coda delle pulizie differite (PostgreSQL) ──────────────────────────────
+# ── «Gia' pulito» ──────────────────────────────────────────────────────────
 
-def defer_cleanup(task_id: str, *, max_seconds: Optional[float] = None) -> None:
-    """Mette in coda la pulizia di un task non ancora terminale (idempotente)."""
-    wait = _setting_seconds("TASK_CLEANUP_DEFER_MAX_SECONDS") if max_seconds is None else max_seconds
-    pg_connection.execute(
-        """
-        INSERT INTO task_cleanup_requests (task_id, requested_at, deadline_at)
-        VALUES (%s, now(), now() + (%s * interval '1 second'))
-        ON CONFLICT (task_id) DO NOTHING
-        """,
-        (task_id, int(wait)),
-    )
+def nothing_left(task_id: str) -> bool:
+    """Nessun record di stato e nessun metadato: non c'e' niente da pulire.
 
-
-def deferred_cleanups() -> list[JsonObject]:
-    """Le pulizie in coda, con ``overdue`` = scaduta l'attesa massima."""
-    return list(pg_connection.fetchall(
-        "SELECT task_id, (deadline_at <= now()) AS overdue "
-        "FROM task_cleanup_requests ORDER BY requested_at",
-    ))
+    Il record si legge per primo e in modo fail-loud (DB giu' -> eccezione,
+    mai «gia' pulito» per un errore).
+    """
+    service = task_service_module.task_service
+    stored = service.runtime.get_result(task_id)
+    if stored.info is not None or str(stored.state or "PENDING").upper() != "PENDING":
+        return False
+    return service.metadata_store.get(task_id) is None
 
 
-def _record_attempt(task_id: str, failed_steps: List[str]) -> None:
-    pg_connection.execute(
-        "UPDATE task_cleanup_requests SET attempts = attempts + 1, last_error = %s "
-        "WHERE task_id = %s",
-        (",".join(failed_steps)[:500], task_id),
-    )
+# ── Richiesta di pulizia annotata sul task in corso ────────────────────────
+
+def request_cleanup(task_id: str) -> None:
+    """Annota sul task che va pulito appena e' terminale (scade col task)."""
+    _requests.set(_REQUEST_PREFIX + task_id, "1", ttl_seconds=int(settings.TASK_RESULT_EXPIRES))
 
 
-def forget_deferred_cleanup(task_id: str) -> None:
-    pg_connection.execute(
-        "DELETE FROM task_cleanup_requests WHERE task_id = %s", (task_id,)
-    )
+def cleanup_requested(task_id: str) -> bool:
+    return _requests.get(_REQUEST_PREFIX + task_id) is not None
+
+
+def _forget_request(task_id: str) -> None:
+    _requests.delete(_REQUEST_PREFIX + task_id)
 
 
 # ── Pulizia di un task terminale ───────────────────────────────────────────
@@ -135,8 +126,10 @@ def task_project_id(task_info: Any) -> Optional[str]:
 def purge_terminal_task(task_id: str, task_info: Any) -> List[str]:
     """Toglie ogni traccia di UN task terminale; restituisce i passi falliti.
 
-    Ogni passo e' best-effort (uno che fallisce non blocca gli altri) e
-    riguarda solo questo task_id: mai i risultati di altri task del progetto.
+    I passi sui dati sono best-effort (uno che fallisce non blocca gli
+    altri). Metadati e record di stato si tolgono per ultimi e solo se tutti
+    i passi sui dati sono riusciti (H1): finche' qualcosa resta, il record
+    porta il payload che serve a ripetere la pulizia.
     """
     if not is_terminal(task_info):
         raise RuntimeError(f"pulizia di un task non terminale rifiutata: {task_id}")
@@ -193,132 +186,72 @@ def purge_terminal_task(task_id: str, task_info: Any) -> List[str]:
         logger.warning(f"cleanup: errore delete log_runs: {e}", exc_info=True)
         failed_steps.append("delete_log_runs")
 
-    try:
-        task_service_module.task_service.forget_task_result(task_id)
-    except Exception as e:
-        logger.warning(f"cleanup: errore forget Celery: {e}", exc_info=True)
-        failed_steps.append("celery_forget")
-
     if failed_steps:
         logger.warning(f"cleanup: task {task_id} partial — failed_steps={failed_steps}")
-    return failed_steps
+        return failed_steps
 
-
-def cancel_and_wait(
-    task_id: str,
-    *,
-    wait_seconds: Optional[float] = None,
-    sleep: Callable[[float], None] = time.sleep,
-    clock: Callable[[], float] = time.monotonic,
-) -> Any:
-    """Annulla il task e ne aspetta lo stato terminale al piu' ``wait_seconds``.
-
-    Restituisce l'ultimo stato letto (terminale o no).
-    """
+    # Per ultimi: metadati, poi record di stato (dopo, il task e' «niente»).
     service = task_service_module.task_service
     try:
-        service.cancel_task(task_id)
-    except task_service_module.TaskAlreadyTerminalError:
-        pass
-    wait = _setting_seconds("TASK_CLEANUP_CANCEL_WAIT_SECONDS") if wait_seconds is None else wait_seconds
-    deadline = clock() + wait
-    task_info = service.get_task_status(task_id)
-    while not is_terminal(task_info) and clock() < deadline:
-        sleep(_POLL_SECONDS)
-        task_info = service.get_task_status(task_id)
-    return task_info
+        service.metadata_store.delete(task_id)
+        service.forget_task_result(task_id)
+    except Exception as e:
+        logger.warning(f"cleanup: errore forget Celery: {e}", exc_info=True)
+        return ["celery_forget"]
+    return []
 
 
-def cleanup_task(task_id: str, task_info: Any, **wait_opts: Any) -> CleanupOutcome:
-    """Regola unica: annulla e aspetta se serve, pulisci solo se terminale."""
-    if not is_terminal(task_info):
-        task_info = cancel_and_wait(task_id, **wait_opts)
-    if not is_terminal(task_info):
-        defer_cleanup(task_id)
-        logger.info(f"cleanup: task {task_id} ancora in corso, pulizia in coda")
-        return CleanupOutcome(deferred=True)
+def _purge_and_close(task_id: str, task_info: Any) -> List[str]:
     failed = purge_terminal_task(task_id, task_info)
     if not failed:
-        # Una richiesta in coda per lo stesso task (pagina chiusa prima) e' fatta.
+        _forget_request(task_id)
+    return failed
+
+
+def cleanup_task(task_id: str, task_info: Any) -> CleanupOutcome:
+    """La regola dell'endpoint: pulisci se terminale, altrimenti annota e annulla."""
+    if not is_terminal(task_info):
+        service = task_service_module.task_service
+        request_cleanup(task_id)  # prima di rileggere lo stato (vedi modulo)
         try:
-            forget_deferred_cleanup(task_id)
-        except TASK_LOOKUP_ERRORS:
-            logger.warning(f"cleanup: coda non aggiornata per {task_id}", exc_info=True)
-    else:
-        # Passi non riusciti: la riga in coda fa riprovare lo sweep. Se anche
-        # la coda non si scrive, l'esito parziale (207) resta comunque vero.
-        try:
-            defer_cleanup(task_id)
-        except TASK_LOOKUP_ERRORS:
-            logger.warning(f"cleanup: pulizia parziale di {task_id} non messa in coda", exc_info=True)
-    return CleanupOutcome(deferred=False, failed_steps=tuple(failed))
-
-
-class DeferredCleanupStats(TypedDict):
-    """Esito di uno sweep: fatte, ancora in attesa del task, non riuscite."""
-
-    done: int
-    waiting: int
-    failed: int
-
-
-def run_deferred_cleanups() -> DeferredCleanupStats:
-    """Sweep del beat: fa le pulizie in coda dei task ormai terminali.
-
-    Un task ancora in corso resta in coda finche' non finisce o finche' non
-    scade l'attesa massima (allora si pulisce comunque: worker morto, il task
-    non scrivera' piu').
-    """
-    done = waiting = failed = 0
-    for row in deferred_cleanups():
-        task_id = str(row["task_id"])
-        try:
-            task_info = task_service_module.task_service.get_task_status(task_id)
-        except TASK_LOOKUP_ERRORS:
-            logger.warning(f"cleanup differita: stato non leggibile per {task_id}", exc_info=True)
-            failed += 1
-            continue
-        if not is_terminal(task_info) and not row.get("overdue"):
-            waiting += 1
-            continue
+            service.cancel_task(task_id)
+        except task_service_module.TaskAlreadyTerminalError:
+            pass
+        task_info = service.get_task_status(task_id)
         if not is_terminal(task_info):
-            # Oltre l'attesa massima: si tratta come finito (revocato).
-            task_info = _as_revoked(task_info)
-        steps = purge_terminal_task(task_id, task_info)
-        if steps:
-            _record_attempt(task_id, steps)
-            failed += 1
-        else:
-            forget_deferred_cleanup(task_id)
-            done += 1
-    return DeferredCleanupStats(done=done, waiting=waiting, failed=failed)
+            logger.info(f"cleanup: task {task_id} in corso, annullato; lo pulisce chi lo chiude")
+            return CleanupOutcome(deferred=True)
+    return CleanupOutcome(deferred=False, failed_steps=tuple(_purge_and_close(task_id, task_info)))
 
 
-class _RevokedView:
-    """Lo stesso task, letto come revocato (attesa massima scaduta)."""
+def finish_requested_cleanup(task_id: str) -> Optional[List[str]]:
+    """Dopo lo stato terminale: fa la pulizia se era stata chiesta.
 
-    def __init__(self, task_info: Any) -> None:
-        self._task_info = task_info
-        self.status = "revoked"
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._task_info, name)
-
-
-def _as_revoked(task_info: Any) -> Any:
-    return _RevokedView(task_info)
+    None = nessuna richiesta (o task non terminale); altrimenti i passi non
+    riusciti (lista vuota = fatta). Una pulizia non riuscita resta richiesta:
+    la ripete la prossima chiamata dell'esecutore (la sua annotazione resta).
+    """
+    try:
+        if not cleanup_requested(task_id):
+            return None
+        task_info = task_service_module.task_service.get_task_status(task_id)
+        if not is_terminal(task_info):
+            return None
+        return _purge_and_close(task_id, task_info)
+    except (KeyValueStoreUnavailable, *TASK_LOOKUP_ERRORS):
+        logger.warning(f"cleanup: pulizia richiesta non fatta per {task_id}", exc_info=True)
+        return None
 
 
 __all__ = [
     "CleanupOutcome",
     "TERMINAL_STATUSES",
-    "cancel_and_wait",
+    "cleanup_requested",
     "cleanup_task",
-    "defer_cleanup",
-    "deferred_cleanups",
-    "forget_deferred_cleanup",
+    "finish_requested_cleanup",
     "is_terminal",
+    "nothing_left",
     "purge_terminal_task",
-    "run_deferred_cleanups",
+    "request_cleanup",
     "task_project_id",
 ]

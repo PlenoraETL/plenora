@@ -237,14 +237,10 @@ def test_system_status_read_audit_is_sampled_with_config_window():
     assert Settings.DEFAULTS["AUDIT_READ_SAMPLE_SECONDS"] > 0
 
 
-def test_log_runs_latest_by_project_index_migration():
-    path = BACKEND_ROOT / "migrations" / "2026-11-06_log_runs_latest_by_project_index.sql"
-    sql = path.read_text(encoding="utf-8")
-    statements = [s.strip() for s in sql.split(";") if s.strip() and not s.strip().startswith("--")]
-    code = re.sub(r"--[^\n]*", "", sql)
-    assert "ON log_runs (project_id, ts_start DESC)" in code
-    assert "ON log_runs (group_id, project_id, ts_start DESC)" in code
-    for stmt in [s for s in code.split(";") if s.strip()]:
-        assert re.match(r"\s*CREATE INDEX CONCURRENTLY IF NOT EXISTS", stmt), stmt
-    assert not re.search(r"\b(DROP|DELETE|UPDATE|TRUNCATE|ALTER)\b", code, re.I)
-    assert statements
+def test_log_runs_latest_by_project_indexes_are_declared():
+    # Semplificazione H5: indici facoltativi creati dal beat dopo l'avvio
+    # (app/db/optional_indexes), non piu' una migrazione.
+    from app.db.optional_indexes import OPTIONAL_INDEXES
+
+    assert OPTIONAL_INDEXES["idx_log_runs_project_ts_start"] == ("log_runs", "project_id, ts_start DESC")
+    assert OPTIONAL_INDEXES["idx_log_runs_group_project_ts_start"] == ("log_runs", "group_id, project_id, ts_start DESC")

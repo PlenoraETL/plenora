@@ -28,6 +28,22 @@ def _reset_orchestrator_module_singleton():
     router_mod._orchestrator = original
 
 
+@pytest.fixture(autouse=True)
+def _task_cleanup_without_db(monkeypatch):
+    """full-cleanup senza DB: il controllo «niente da pulire» (che legge
+    task_results e metadati) dice di no, le richieste di pulizia annotate sul
+    task stanno in memoria, i metadati si tolgono senza DB. I test che
+    blindano quelle regole le provano direttamente
+    (tests2/orchestrator/unit/test_full_cleanup_order_contract.py)."""
+    from app.core.orchestrator import task_cleanup
+    from app.core.orchestrator import task_service as task_service_module
+    from app.shared.kv import InMemoryKeyValueStore
+
+    monkeypatch.setattr(task_cleanup, "nothing_left", lambda task_id: False)
+    monkeypatch.setattr(task_cleanup, "_requests", InMemoryKeyValueStore())
+    monkeypatch.setattr(task_service_module.task_service.metadata_store, "delete", lambda task_id: True)
+
+
 @pytest.fixture
 def current_user() -> CurrentUser:
     return CurrentUser(

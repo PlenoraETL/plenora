@@ -29,15 +29,6 @@ def beat_schedule_config() -> Mapping[str, Mapping[str, Any]]:
             "kwargs": {},
             "options": {"queue": settings.TASK_QUEUE_CONTROL_PLANE},
         },
-        # Pulizie complete in coda dei task ormai terminali (UI conferma
-        # finale F8/G3, app/core/orchestrator/task_cleanup): l'esecutore che
-        # chiude la pagina con un task in corso non lascia tracce.
-        "task-cleanup-deferred-minutely": {
-            "task": "workers.tasks.task_cleanup_task.run",
-            "schedule": IntervalSchedule(60.0),
-            "kwargs": {},
-            "options": {"queue": settings.TASK_QUEUE_CONTROL_PLANE},
-        },
     }
 
     # Heartbeat cleanroom: opt-in di test, sub-minuto -> interval.

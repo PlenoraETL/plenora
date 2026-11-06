@@ -90,6 +90,7 @@ const UNGATED = {
   previewProjectQuery: 'anteprima della query di Estrai sul canvas corrente: sola lettura, non salva (T6, R3.13)',
   pinRun: 'segnalibro su una run, non distruttivo',
   cancelTask: 'annulla un task avviato dall\'utente stesso',
+  cancelTaskOnPageExit: 'annulla, uscendo dalla pagina, un task avviato dall\'utente stesso',
   cleanupTaskCompletely: 'pulizia di un task dell\'utente stesso',
   createTicket: 'ogni utente della UI normale apre ticket (rotta /tickets)',
   addComment: 'ogni utente che vede il ticket commenta',

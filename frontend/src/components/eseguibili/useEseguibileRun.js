@@ -29,11 +29,14 @@
  * Pulizia (`onCleanup(taskId, { pageExit, active })`, /run dell'esecutore:
  * privacy, «I file caricati ed elaborati non vengono conservati»): parte UNA
  * volta per esecuzione, alla chiusura della finestra o con «Elimina il
- * risultato», alla scadenza della copia locale, allo smontaggio e — UI
- * conferma B-K4 — anche chiudendo la scheda o la finestra del browser
- * (`pagehide`, con `pageExit: true`: la pagina chiama la variante keepalive,
- * api/tasks.releaseTaskOnPageExit; un'esecuzione ancora in corso la annulla
- * il server prima di pulire, F8/G3). Pagina messa nella cache del browser
+ * risultato» e alla scadenza della copia locale. Uscendo SENZA chiudere la
+ * finestra (`leave`, semplificazione H4: scheda o browser chiusi, uscita
+ * dall'account, pagina lasciata) con `pageExit: true`: la pagina chiama la
+ * variante keepalive, api/tasks.releaseTaskOnPageExit, e un'esecuzione
+ * ancora in corso la annulla il server prima di pulire. Fuori da /run (senza
+ * `onCleanup`) uscire annulla soltanto l'esecuzione in corso
+ * (api/tasks.cancelTaskOnPageExit). Il dialog di uscita dice quale dei due
+ * (RUN_LEAVE_DIALOGS). Pagina messa nella cache del browser
  * (`pagehide` con `persisted`, conferma finale G4): la pagina puo' tornare,
  * quindi nessuna pulizia ora, solo `persisted: true` (la pagina annota);
  * al ritorno (`pageshow` con `persisted`) `pageReturn: true`: se
@@ -46,6 +49,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { downloadEseguibileOutput } from '../../api';
+import { cancelTaskOnPageExit } from '../../api/tasks';
+import { authBus } from '../../utils/authBus';
 import { useTask } from '../../hooks/useTask';
 import { useDownload } from '../../hooks/useDownload';
 import { useTransferProgress } from '../../hooks/useTransferProgress';
@@ -58,13 +63,27 @@ import { registerLeaveProbe } from '../../utils/leaveGuard';
 export const RESULT_KEEP_MINUTES = 30;
 const KEEP_MS = RESULT_KEEP_MINUTES * 60_000;
 
-/** Il dialog dell'uscita con un'esecuzione in corso o un risultato non scaricato. */
-const RUN_LEAVE_DIALOG = Object.freeze({
-  title: 'Esecuzione non conclusa',
-  message: 'C\'è un\'esecuzione in corso o un risultato non ancora scaricato. Uscendo l\'esecuzione si ferma e il risultato viene eliminato.',
-  confirmText: 'Esci ed elimina',
-  cancelText: 'Resta qui',
-  variant: 'danger',
+/**
+ * Il dialog dell'uscita con un'esecuzione in corso o un risultato non
+ * scaricato: dice esattamente cosa fa `leave` (H4). In /run (con
+ * `onCleanup`) l'esecuzione si annulla e il server elimina tutto; fuori da
+ * /run l'esecuzione si annulla e basta.
+ */
+export const RUN_LEAVE_DIALOGS = Object.freeze({
+  cleansOnExit: Object.freeze({
+    title: 'Esecuzione non conclusa',
+    message: 'C\'è un\'esecuzione in corso o un risultato non ancora scaricato. Uscendo l\'esecuzione in corso si ferma e il risultato viene eliminato dal server.',
+    confirmText: 'Esci ed elimina',
+    cancelText: 'Resta qui',
+    variant: 'danger',
+  }),
+  keepsOnServer: Object.freeze({
+    title: 'Esecuzione non conclusa',
+    message: 'C\'è un\'esecuzione in corso o un risultato non ancora scaricato. Uscendo l\'esecuzione in corso si ferma e il risultato non ancora scaricato non si potrà più scaricare.',
+    confirmText: 'Esci comunque',
+    cancelText: 'Resta qui',
+    variant: 'danger',
+  }),
 });
 
 
@@ -106,7 +125,8 @@ export function useEseguibileRun({ eseguibileId, onCleanup = null, onClose = nul
   // Cosa si perde uscendo: domanda del registro unico (utils/leaveGuard).
   const atRiskRef = useRef(false);
   atRiskRef.current = task.isActive || resultState === 'on_server';
-  useEffect(() => registerLeaveProbe(() => atRiskRef.current, RUN_LEAVE_DIALOG), []);
+  const leaveDialog = useRef(onCleanup ? RUN_LEAVE_DIALOGS.cleansOnExit : RUN_LEAVE_DIALOGS.keepsOnServer).current;
+  useEffect(() => registerLeaveProbe(() => atRiskRef.current, leaveDialog), [leaveDialog]);
   // Esecuzione lasciata in una pagina messa nella cache del browser (G4).
   const parkedRef = useRef(null);
 
@@ -121,27 +141,53 @@ export function useEseguibileRun({ eseguibileId, onCleanup = null, onClose = nul
     }
   }, []);
 
-  // Smontaggio con un'esecuzione finita e non ancora pulita.
-  useEffect(() => () => { cleanup(); }, [cleanup]);
+  /*
+   * Uscita SENZA chiudere la finestra (H4): scheda chiusa (`pagehide`),
+   * uscita dall'account (prima di togliere l'utente) o pagina lasciata
+   * (smontaggio). Una regola, quella del dialog: in /run la pulizia completa
+   * (il server annulla prima un'esecuzione in corso), fuori da /run
+   * l'annullamento dell'esecuzione in corso. Sempre keepalive: parte subito,
+   * col token di adesso. true = partita.
+   */
+  const leave = useCallback(() => {
+    const { taskId, done, active } = finishedRef.current;
+    if (!taskId || cleanedRef.current === taskId) return false;
+    try {
+      if (onCleanupRef.current) {
+        if (!done && !active) return false;
+        cleanedRef.current = taskId;
+        onCleanupRef.current(taskId, { pageExit: true });
+        return true;
+      }
+      if (!active) return false;
+      cleanedRef.current = taskId;
+      cancelTaskOnPageExit(taskId);
+      return true;
+    } catch (err) {
+      console.warn('[useEseguibileRun] Uscita non gestita:', err);
+      return false;
+    }
+  }, []);
+
+  useEffect(() => () => { leave(); }, [leave]);
+  useEffect(() => authBus.addBeforeLogoutListener(() => { leave(); }), [leave]);
 
   // Chiusura della scheda o della finestra del browser (B-K4, G4).
   useEffect(() => {
     const onPageHide = (event) => {
       const { taskId, done, active } = finishedRef.current;
-      if (!onCleanupRef.current || !taskId || (!done && !active) || cleanedRef.current === taskId) return;
-      try {
-        if (event?.persisted) {
-          // Nella cache del browser: puo' tornare, si annota soltanto.
-          parkedRef.current = taskId;
+      if (event?.persisted) {
+        // Nella cache del browser: puo' tornare, si annota soltanto.
+        if (!onCleanupRef.current || !taskId || (!done && !active) || cleanedRef.current === taskId) return;
+        parkedRef.current = taskId;
+        try {
           onCleanupRef.current(taskId, { pageExit: true, persisted: true });
-          return;
+        } catch (err) {
+          console.warn('[useEseguibileRun] Annotazione alla chiusura non riuscita:', err);
         }
-        cleanedRef.current = taskId;
-        onCleanupRef.current(taskId, { pageExit: true });
-      } catch (err) {
-        console.warn('[useEseguibileRun] Pulizia alla chiusura non partita:', err);
+        return;
       }
-      setGone(true);
+      if (leave()) setGone(true);
     };
     const onPageShow = (event) => {
       const taskId = parkedRef.current;
@@ -162,7 +208,7 @@ export function useEseguibileRun({ eseguibileId, onCleanup = null, onClose = nul
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('pageshow', onPageShow);
     };
-  }, []);
+  }, [leave]);
 
   /** La copia locale e' scaduta? Allora la toglie e pulisce. true = non c'e' piu'. */
   const expireIfDue = useCallback(() => {

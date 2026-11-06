@@ -722,12 +722,18 @@ def cancel_task(
     status_code=204,
     response_model=None,
     responses={
-        204: {"description": "Cleanup completato — tutti gli step ok"},
+        204: {
+            "description": (
+                "Cleanup completato — tutti gli step ok, oppure non c'era "
+                "piu' niente da pulire (task gia' pulito, scaduto o mai "
+                "esistito): risposta immediata, senza annullamento ne' attesa"
+            )
+        },
         202: {
             "description": (
-                "Task ancora in corso dopo l'annullamento: pulizia in coda, "
-                "la completa il beat quando il task e' terminale. "
-                "Body: {status: 'deferred', task_id}"
+                "Task ancora in corso: annullato e pulizia richiesta sul task; "
+                "la fa chi lo porta allo stato terminale (worker, o beat per "
+                "un worker morto). Body: {status: 'deferred', task_id}"
             )
         },
         207: {
@@ -735,7 +741,9 @@ def cancel_task(
                 "Cleanup parziale — almeno uno degli step ha fallito. "
                 "Body: {status: 'partial', failed_steps: [step_name, ...]} "
                 "dove step_name in {delete_result, unlink_output_file, "
-                "delete_eseguibile_outputs, delete_log_runs, celery_forget}."
+                "delete_eseguibile_outputs, delete_log_runs, celery_forget}. "
+                "Il record del task resta: ripetere la richiesta rifa' i "
+                "passi mancanti."
             )
         },
     },
@@ -752,26 +760,25 @@ def cleanup_task_completely(
     l'esecutore (o la sua UI) chiama questo endpoint per rimuovere ogni
     traccia dell'esecuzione dal server.
 
-    ORDINE GARANTITO (UI conferma finale F8/G3, app/core/orchestrator/
-    task_cleanup.cleanup_task): un task ancora in corso prima si annulla, poi
-    si pulisce, e solo quando e' terminale (dopo non scrive piu' niente).
-    Il client non deve piu' annullare a parte.
+    Regola unica in app/core/orchestrator/task_cleanup (semplificazione
+    H1–H7): niente da pulire -> 204 subito; task terminale -> pulito ora;
+    task in corso -> annullato, pulizia annotata sul task e fatta da chi lo
+    chiude (202). Il client non deve annullare a parte.
 
     SECURITY:
       - Verifica che il project_id collegato al task appartenga al gruppo
         dell'utente corrente. Cross-tenant → 403.
       - Senza project_id non possiamo verificare ownership: 404.
+      - «Niente da pulire» si decide prima dell'ownership: non c'e' nessun
+        dato da proteggere e la risposta non dice niente del task (stessa
+        risposta per un id mai esistito).
       - Idempotente: ripetere su stesso task non è un errore.
-
-    STATUS CODE:
-      - 204: tutti gli step applicabili, incluso l'object storage degli
-        eseguibili, sono andati a buon fine.
-      - 207: almeno uno step ha sollevato. Body JSON con `failed_steps`; la
-        pulizia resta in coda e il beat la riprova.
-      - 202: il task non si e' fermato entro TASK_CLEANUP_CANCEL_WAIT_SECONDS
-        dall'annullamento: pulizia in coda (`{"status": "deferred"}`), la fa
-        il beat appena il task e' terminale.
     """
+    try:
+        if task_cleanup.nothing_left(task_id):
+            return None  # 204: gia' pulito
+    except _access_control.TASK_LOOKUP_ERRORS as exc:
+        _access_control._task_store_unavailable(task_id, logger=logger, exc=exc)
     task_info = _assert_task_group(task_id, current_user)
     if not task_cleanup.task_project_id(task_info):
         raise HTTPException(

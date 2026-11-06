@@ -156,6 +156,25 @@ class _TaskResultMiddleware(Middleware):
             run_id=effective_run_id,
             test_run=test_run,
         )
+        # Solo i task che un esecutore lancia (gli Eseguibili sono pipeline o
+        # arricchimenti): nessuna lettura in piu' per beat e manutenzione.
+        if message.actor_name in _RUN_BACKED_ACTORS:
+            _finish_requested_cleanup(str(message.message_id))
+
+
+def _finish_requested_cleanup(task_id: str) -> None:
+    """Pulizia completa chiesta mentre il task girava (esecutore che chiude
+    la pagina): la si fa ora, dopo lo stato terminale (semplificazione H1–H7,
+    app/core/orchestrator/task_cleanup). Best-effort: non tocca l'esito."""
+    from app.core.orchestrator.task_cleanup import finish_requested_cleanup
+
+    try:
+        failed = finish_requested_cleanup(task_id)
+    except Exception:
+        logger.warning("[CLEANUP] pulizia richiesta non riuscita task_id=%s", task_id, exc_info=True)
+        return
+    if failed:
+        logger.warning("[CLEANUP] pulizia richiesta parziale task_id=%s passi=%s", task_id, failed)
 
 
 def _worker_memory_recycle_cap_bytes() -> int:
@@ -635,9 +654,6 @@ TASK_QUEUE_ROUTES: dict[str, str] = {
     "workers.tasks.cleanup_temp_files_task.run": (
         settings.TASK_QUEUE_CONTROL_PLANE
     ),
-    "workers.tasks.task_cleanup_task.run": (
-        settings.TASK_QUEUE_CONTROL_PLANE
-    ),
     "workers.tasks.schedule_task.schedule_pipeline_task": (
         settings.TASK_QUEUE_DATA_PLANE
     ),
@@ -686,22 +702,6 @@ def cleanup_temp_files() -> dict:
     from workers.tasks.cleanup_temp_files_task import run_cleanup_temp_files
 
     return dict(run_cleanup_temp_files())
-
-
-@dramatiq.actor(
-    actor_name="workers.tasks.task_cleanup_task.run",
-    queue_name=queue_for("workers.tasks.task_cleanup_task.run"),
-    max_retries=0,
-)
-def deferred_task_cleanups() -> dict:
-    """Pulizie complete in coda (UI conferma finale F8/G3).
-
-    Import lazy come gli altri actor del beat: il bootstrap Dramatiq non
-    paga l'import dell'orchestratore finche' l'actor non viene eseguito.
-    """
-    from workers.tasks.task_cleanup_task import run_deferred_task_cleanups
-
-    return dict(run_deferred_task_cleanups())
 
 
 @dramatiq.actor(
@@ -920,7 +920,6 @@ __all__ = [
     "cleanroom_ping",
     "cleanup_temp_files",
     "current_message_id",
-    "deferred_task_cleanups",
     "execute_enrichment",
     "pipeline_execute",
     "pipeline_preview",

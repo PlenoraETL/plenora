@@ -53,7 +53,7 @@ import '../components/nodes/AnnotationNode.css';
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
 
 // Modali lazy-loaded
-const ExecutionModal = lazyWindow(() => import('../components/modals/ExecutionModal'), 'Esecuzione');
+const ExecutionModal = lazyWindow(() => import('../components/modals/ExecutionModal'), 'Esecuzione', { prefetch: true });
 const PreviewModal = lazyWindow(() => import('../components/modals/PreviewModal'), term('preview').name);
 const ConnectionSelectorModal = lazyWindow(() => import('../components/arricchisci/ConnectionSelectorModal'), 'Scelta della connessione');
 const CanvasVersionsModal = lazyWindow(() => import('../components/modals/CanvasVersionsModal'), 'Versioni');

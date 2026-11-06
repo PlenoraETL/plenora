@@ -35,7 +35,7 @@ import EditorSidebar from '../components/panels/EditorSidebar';
 
 // Modali lazy-loaded
 const PreviewModal = lazyWindow(() => import('../components/modals/PreviewModal'), term('preview').name);
-const ExecutionModal = lazyWindow(() => import('../components/modals/ExecutionModal'), 'Esecuzione');
+const ExecutionModal = lazyWindow(() => import('../components/modals/ExecutionModal'), 'Esecuzione', { prefetch: true });
 const CanvasVersionsModal = lazyWindow(() => import('../components/modals/CanvasVersionsModal'), 'Versioni');
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';

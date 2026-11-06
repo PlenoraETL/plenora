@@ -11,8 +11,9 @@ fallirebbe senza la correzione:
   destinazione, cosi' il client invalida il suo catalogo tabelle;
 - A-K10: la lista dei file a cursore (next_cursor dalle righe del DB, errore
   che propaga, nessun file saltato o ripetuto da un caricamento in mezzo);
-- A-K11: la migrazione degli indici di log_runs gira fuori transazione con
-  CREATE INDEX CONCURRENTLY (e un indice INVALID si ricrea);
+- A-K11: gli indici di log_runs non sono piu' una migrazione: li crea il beat
+  dopo l'avvio (semplificazione H5, app/db/optional_indexes; test in
+  tests2/contract/test_ui_semplificazione_h_contract.py);
 - C-K10: i conteggi della dashboard indipendenti e senza can_edit per riga.
 """
 
@@ -216,65 +217,6 @@ def test_file_pages_on_real_postgres_neither_skip_nor_repeat_during_upload(monke
             after = (page[-1]["created_at"].isoformat(), page[-1]["id"])
     assert sorted(seen) == sorted(f"f{i}" for i in range(7))
     assert len(seen) == len(set(seen))
-
-
-# ── A-K11: indici di log_runs senza bloccare le scritture ──────────────────
-
-MIGRATION = BACKEND_ROOT / "migrations" / "2026-11-06_log_runs_latest_by_project_index.sql"
-
-
-def test_log_runs_index_migration_is_concurrent_and_outside_transaction():
-    from app.db import migrations_runner as mr
-
-    sql = MIGRATION.read_text(encoding="utf-8")
-    assert mr.is_no_transaction_migration(sql)
-    statements = mr.no_transaction_statements(sql)
-    assert len(statements) == 2
-    assert all(s.startswith("CREATE INDEX CONCURRENTLY IF NOT EXISTS") for s in statements)
-    with pytest.raises(RuntimeError):
-        mr.no_transaction_statements(mr.NO_TRANSACTION_DIRECTIVE + "\nCREATE INDEX x ON t (a);")
-
-
-def test_runner_applies_no_transaction_migration_in_autocommit(tmp_path, monkeypatch):
-    from app.db import migrations_runner as mr
-
-    monkeypatch.setenv("DB_SCHEMA", "plenora")
-    (tmp_path / MIGRATION.name).write_text(MIGRATION.read_text(encoding="utf-8"), encoding="utf-8")
-    monkeypatch.setattr(mr, "MIGRATIONS_DIR", tmp_path)
-    executed: list[tuple[bool, str]] = []
-    conn = MagicMock()
-    conn.autocommit = False
-    cur = conn.cursor.return_value.__enter__.return_value
-    cur.execute.side_effect = lambda stmt, params=(): executed.append((conn.autocommit, str(stmt)))
-    cur.fetchone.return_value = {"invalid": 1}
-    with patch.object(mr, "ensure_schema", return_value="plenora"), \
-         patch("app.db.pg_connection.get_connection", return_value=conn), \
-         patch("app.db.pg_connection.put_connection"), \
-         patch.object(mr, "list_applied_migrations", return_value=[]):
-        assert mr._REAL_APPLY_PENDING_MIGRATIONS() == [MIGRATION.name]
-    creates = [(auto, s) for auto, s in executed if "CREATE INDEX CONCURRENTLY" in s]
-    assert len(creates) == 2 and all(auto for auto, _ in creates)
-    # Indice INVALID (interruzione precedente): tolto prima di ricrearlo.
-    assert sum("DROP INDEX CONCURRENTLY" in s for _, s in executed) == 2
-    assert conn.autocommit is False
-
-
-@real_pg_marks
-def test_log_runs_index_migration_on_real_postgres():
-    from app.db import migrations_runner as mr
-
-    sql = MIGRATION.read_text(encoding="utf-8")
-    with real_pg_schema() as conn:
-        conn.execute("CREATE TABLE log_runs (id text, project_id text, group_id text, ts_start timestamptz)")
-        for stmt in mr.no_transaction_statements(sql):
-            conn.execute(stmt)  # autocommit: CONCURRENTLY ammesso
-        for stmt in mr.no_transaction_statements(sql):
-            conn.execute(stmt)  # rieseguibile
-        names = {r["indexname"] for r in conn.execute("SELECT indexname FROM pg_indexes WHERE tablename = 'log_runs'").fetchall()}
-        with pytest.raises(Exception):
-            with conn.transaction():
-                conn.execute(mr.no_transaction_statements(sql)[0])
-    assert {"idx_log_runs_project_ts_start", "idx_log_runs_group_project_ts_start"} <= names
 
 
 # ── C-K10: conteggi indipendenti, senza can_edit ───────────────────────────

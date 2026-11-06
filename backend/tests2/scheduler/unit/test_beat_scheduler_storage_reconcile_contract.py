@@ -455,6 +455,7 @@ def test_reconcile_storage_called_from_tick():
          patch.object(sched, "_cleanup_task_results"), \
          patch.object(sched, "_drain_task_dispatch_outbox"), \
          patch.object(sched, "_recover_runtime_leases"), \
+         patch.object(sched, "_ensure_optional_indexes"), \
          patch.object(sched, "_emit_due_via_dispatch"):
         sched.tick()
 

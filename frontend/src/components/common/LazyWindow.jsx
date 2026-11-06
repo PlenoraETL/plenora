@@ -17,7 +17,7 @@
  *    pagina», che passa dalla domanda delle modifiche non salvate
  *    (utils/chunkReload.reloadAfterLeaveQuestion) prima di ricaricare.
  */
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { reportError } from '../../utils/errorReporting';
 import { reloadAfterLeaveQuestion } from '../../utils/chunkReload';
 import { useConfirmOrDeny } from '../../context/ConfirmContext';
@@ -68,6 +68,9 @@ class WindowBoundary extends React.Component {
 
 /** La finestra aperta: boundary e Suspense suoi; chiusa non si monta. */
 function LazyWindowFrame({ windowState, windowName, ...props }) {
+  // `prefetch` (H7): il file si scarica gia' all'apertura della pagina, cosi'
+  // un deploy successivo non lo toglie proprio quando serve (Esecuzione).
+  useEffect(() => { windowState.prefetch?.(); }, [windowState]);
   if (!props.isOpen) {
     // React.lazy ricorda per sempre un caricamento fallito: chiusa dopo un
     // errore, si prepara un caricatore nuovo, cosi' riaprendo si riprova.
@@ -90,13 +93,19 @@ function LazyWindowFrame({ windowState, windowName, ...props }) {
  * Una finestra caricata al bisogno, con la sua boundary.
  * @param {() => Promise<{default: React.ComponentType}>} loader
  * @param {string} name nome della finestra per l'utente («Versioni», ...)
+ * @param {{prefetch?: boolean}} [options] `prefetch`: scarica il file alla
+ *   prima apparizione della pagina, non all'apertura della finestra (per la
+ *   finestra che serve proprio quando si esegue: Esecuzione, H7)
  */
-export function lazyWindow(loader, name) {
+export function lazyWindow(loader, name, { prefetch = false } = {}) {
+  let warm = null;
   const windowState = {
     Lazy: React.lazy(loader),
     failed: false,
     fail() { windowState.failed = true; },
     reset() { windowState.Lazy = React.lazy(loader); windowState.failed = false; },
+    // Una volta: un errore qui non conta (lo mostra l'apertura, come sempre).
+    prefetch: prefetch ? () => { warm = warm || Promise.resolve().then(loader).catch(() => {}); } : null,
   };
   const render = (props) => <LazyWindowFrame {...props} windowState={windowState} windowName={name} />;
   render.displayName = `LazyWindow(${name})`;

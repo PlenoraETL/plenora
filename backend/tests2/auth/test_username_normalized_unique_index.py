@@ -146,6 +146,9 @@ def test_runner_attaches_the_notice_handler_while_applying(monkeypatch, tmp_path
         def execute(self, *args, **kwargs):
             events.append("execute")
 
+        def fetchone(self):
+            return None  # migrazione non ancora registrata (ricontrollo sotto il lock)
+
     class _Conn:
         autocommit = True
 
@@ -166,8 +169,7 @@ def test_runner_attaches_the_notice_handler_while_applying(monkeypatch, tmp_path
 
     monkeypatch.setattr(migrations_runner.pg_connection_module, "get_connection", lambda: _Conn())
     monkeypatch.setattr(migrations_runner.pg_connection_module, "put_connection", lambda conn: None)
-    # Il giro sotto il lock (il lock ha i suoi test: conferma finale F3).
-    assert migrations_runner._apply_pending_migrations_locked() == ["a.sql"]
+    assert migrations_runner._REAL_APPLY_PENDING_MIGRATIONS() == ["a.sql"]
     first_add = events.index("add")
     assert events[first_add + 1] == "execute" and events[-1] == "remove"
 
