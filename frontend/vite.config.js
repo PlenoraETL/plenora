@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import securityHeaders from './vite-plugins/securityHeaders.js';
+import fontPreload from './vite-plugins/fontPreload.js';
 
 /**
  * vite.config.js — Configurazione build URBY-ETL Frontend
@@ -27,7 +28,8 @@ export default defineConfig(({ mode }) => {
   return {
     // securityHeaders: CSP e intestazioni di sicurezza (P31) in `vite` (Report-Only)
     // e `vite preview` (identiche alla produzione).
-    plugins: [react(), securityHeaders({ apiUrl: env.VITE_API_URL })],
+    // fontPreload: <link rel="preload"> dei font principali nella build (UI-4, V13).
+    plugins: [react(), securityHeaders({ apiUrl: env.VITE_API_URL }), fontPreload()],
     test: {
       environment: 'jsdom',
       globals: true,

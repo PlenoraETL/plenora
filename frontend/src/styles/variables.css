@@ -19,9 +19,10 @@
 
   /* Text */
   --plen-text:     #DDE4F2;
-  --plen-text-sub: #7D8BA8;
-  /* a11y batch: contrast bump per testo piccolo (~5.0:1 su --plen-bg). */
-  --plen-text-dim: #5A6B8A;
+  /* UI-4 (U25): ogni colore di testo >= 4,5:1 (AA) su ogni superficie del
+     tema; lo calcola tests/shared/textContrast.contract.test.js. */
+  --plen-text-sub: #8F9CB7;
+  --plen-text-dim: #7F8DAA;
 
   /* Module accents */
   --plen-estrai:      #34C17A;
@@ -80,20 +81,21 @@
   /* Text */
   --plen-text:     #0F1729;
   --plen-text-sub: #4A5568;
-  /* a11y batch: contrast bump per testo piccolo (~5.5:1 su --plen-bg). */
-  --plen-text-dim: #5F6E8C;
+  /* UI-4 (U25): AA anche su --plen-surface-3 (prima 4,0:1). */
+  --plen-text-dim: #56647F;
 
-  /* Module accents — invariati */
-  --plen-estrai:      #2AAD69;
+  /* Module accents — UI-4 (U25): piu' scuri dove sono usati come testo
+     (prima verde 2,9:1 e arancio 3,2:1 sul bianco). */
+  --plen-estrai:      #157A45;
   --plen-manipola:    #7C3AED;
-  --plen-arricchisci: #D97706;
-  --plen-blue:        #2563EB;
-  --plen-blue-mid:    #1D4ED8;
+  --plen-arricchisci: #9A5806;
+  --plen-blue:        #1D4ED8;
+  --plen-blue-mid:    #1E40AF;
 
-  /* Semantic */
-  --plen-ok:   #059669;
-  --plen-warn: #D97706;
-  --plen-err:  #DC2626;
+  /* Semantic — UI-4 (U25): AA come testo su sfondo e superfici. */
+  --plen-ok:   #047857;
+  --plen-warn: #9A5806;
+  --plen-err:  #B91C1C;
   /* Sfondi tenui per avvisi e selezioni (pannelli della Fase 4). */
   --plen-ok-bg:      #E8F7EE;
   --plen-warn-bg:    #FEF3C7;

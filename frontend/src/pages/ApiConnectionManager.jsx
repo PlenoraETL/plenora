@@ -46,12 +46,13 @@ import { formatNumber } from '../utils/format';
 import { lastTestFromResult, withLastTest } from '../utils/connectionTestStatus';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
+import { ICON } from '../utils/icons';
 const CATEGORIES = [
   { id:'all',        label:'Tutte',       icon:'🔗' },
   { id:'geocoding',  label:'Geocoding',   icon:'🌍' },
   { id:'routing',    label:'Routing',     icon:'🚗' },
   { id:'catasto',    label:'Catasto',     icon:'🏠' },
-  { id:'datasource', label:'Data Source', icon:'📁' },
+  { id:'datasource', label:'Data Source', icon:ICON.datasource },
   { id:'custom',     label:'Custom',      icon:'⚙️' },
 ];
 
@@ -238,7 +239,7 @@ const openWizardForNew = () => {
                   <div className="acm__dropdown">
                     <button type="button" className="acm__dropdown-item" onClick={()=>{setShowTemplateLibrary(true);setShowNewApiDropdown(false);}}>
                       <span className="acm__dropdown-icon">📦</span>
-                      <div><div className="acm__dropdown-label">Da Template</div><div className="acm__dropdown-sub">Nominatim, OSRM, Catasto…</div></div>
+                      <div><div className="acm__dropdown-label">Da modello</div><div className="acm__dropdown-sub">Nominatim, OSRM, Catasto…</div></div>
                     </button>
                     <button type="button" className="acm__dropdown-item" onClick={()=>{setShowOpenAPIImport(true);setShowNewApiDropdown(false);}}>
                       <span className="acm__dropdown-icon">📋</span>
@@ -310,7 +311,7 @@ const openWizardForNew = () => {
                 text={apiConnections.length===0?'Configura il tuo primo connettore API':'Modifica i filtri di ricerca'}
                 action={apiConnections.length===0 && canCreateApi && (
                   <div className="acm__empty-actions">
-                    <button type="button" className="acm__btn acm__btn--ghost" onClick={()=>setShowTemplateLibrary(true)}>📦 Da Template</button>
+                    <button type="button" className="acm__btn acm__btn--ghost" onClick={()=>setShowTemplateLibrary(true)}>📦 Da modello</button>
                     <button type="button" className="acm__btn acm__btn--primary" onClick={openWizardForNew}>✏️ Manuale</button>
                   </div>
                 )}
@@ -336,10 +337,10 @@ const openWizardForNew = () => {
                 <div className="acm__card acm__card--add">
                   <div className="acm__add-title">Aggiungi Connettore</div>
                   <div className="acm__add-btns">
-                    <button type="button" className="acm__add-btn" onClick={()=>setShowTemplateLibrary(true)}>📦 Template</button>
+                    <button type="button" className="acm__add-btn" onClick={()=>setShowTemplateLibrary(true)}>📦 Modello</button>
                     <button type="button" className="acm__add-btn" onClick={()=>setShowOpenAPIImport(true)}>📋 OpenAPI</button>
                     <button type="button" className="acm__add-btn" onClick={openWizardForNew}>✏️ Manuale</button>
-                    {can.createDataSource(user) && <button type="button" className="acm__add-btn" onClick={()=>setShowDataSourceConfig(true)}>📁 DataSource</button>}
+                    {can.createDataSource(user) && <button type="button" className="acm__add-btn" onClick={()=>setShowDataSourceConfig(true)}>{ICON.datasource} Data Source</button>}
                   </div>
                 </div>
                 )}

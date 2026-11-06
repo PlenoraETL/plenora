@@ -113,12 +113,12 @@ describe('FileManager', () => {
     render(<FileManager />);
 
     expect(await screen.findByText('Cities')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /preview/i }));
+    await userEvent.click(screen.getByRole('button', { name: /anteprima/i }));
 
     await waitFor(() => {
       expect(getFilePreviewMock).toHaveBeenCalledWith('file-1', 50);
     });
-    expect(await screen.findByText(/preview — cities/i)).toBeInTheDocument();
+    expect(await screen.findByText(/anteprima — cities/i)).toBeInTheDocument();
     expect(screen.getByText('Rome')).toBeInTheDocument();
   });
 

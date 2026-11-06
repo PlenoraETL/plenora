@@ -164,7 +164,7 @@ describe('ProjectList', () => {
     expect(navigateMock).toHaveBeenNthCalledWith(2, '/editor/manipola/man-1');
     expect(navigateMock).toHaveBeenNthCalledWith(3, '/arricchisci/arr-1');
 
-    await userEvent.click(screen.getByTitle(/schedule automatici/i));
+    await userEvent.click(screen.getByTitle(/pianificazioni automatiche/i));
     expect(navigateMock).toHaveBeenNthCalledWith(4, '/schedules?project_id=estrai-1');
   });
 });

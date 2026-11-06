@@ -26,7 +26,7 @@ function duration(seconds) {
 const RESOLUTIONS = {
   confirm_completed: {
     title: 'Conferma scrittura completata',
-    consequence: 'La run viene segnata come completata e non verrà ripetuta. '
+    consequence: 'L’esecuzione viene segnata come completata e non verrà ripetuta. '
       + 'Confermala solo dopo aver verificato nella destinazione che i dati sono stati scritti.',
     label: 'Cosa hai verificato sulla destinazione',
     confirmText: 'Conferma completata',
@@ -63,7 +63,7 @@ function ResolveRunDialog({ request, busy, onCancel, onConfirm }) {
         </>
       )}
     >
-      <p className="task-runtime__dialog-run">Run <code>{request.run.run_id}</code> · progetto <code>{request.run.project_id}</code></p>
+      <p className="task-runtime__dialog-run">Esecuzione <code>{request.run.run_id}</code> · progetto <code>{request.run.project_id}</code></p>
       <p className="task-runtime__dialog-consequence">{cfg.consequence}</p>
       <label className="task-runtime__dialog-label">
         {cfg.label} (obbligatoria, almeno {NOTE_MIN_LENGTH} caratteri)
@@ -161,7 +161,7 @@ export default function AdminTaskRuntimePage() {
             </div>
             <div className="task-runtime__table-wrap">
               <table>
-                <thead><tr><th>Run</th><th>Progetto</th><th>Gruppo</th><th>Avvio</th><th>Errore</th><th>Azioni</th></tr></thead>
+                <thead><tr><th>Esecuzione</th><th>Progetto</th><th>Gruppo</th><th>Avvio</th><th>Errore</th><th>Azioni</th></tr></thead>
                 <tbody>
                   {data.uncertain_runs.map((run) => (
                     <tr key={run.run_id}>

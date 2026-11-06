@@ -48,7 +48,7 @@ function FileCard({ file, onPreview, onDelete, onShare }) {
         <div className="fm__card-footer">
           <span className="fm__card-filename">{file.original_filename}</span>
           <div className="fm__card-actions">
-            <button type="button" className="fm__btn fm__btn--ghost fm__btn--sm" onClick={onPreview}>👁 Preview</button>
+            <button type="button" className="fm__btn fm__btn--ghost fm__btn--sm" onClick={onPreview}>👁 Anteprima</button>
             {onShare && (
               <button
                 type="button"

@@ -74,11 +74,16 @@ export function exportUsage() {
         origins(mod, u[1]).forEach(k => used.add(k));
       }
     }
-    // Import dinamico con destrutturazione: `const { x } = await import('./y')`.
-    for (const m of f.clean.matchAll(/\{([^{}]*)\}\s*=\s*await\s+import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
-      const mod = resolveFrom(f.abs, m[2]);
+    // Import dinamico con destrutturazione: `const { x } = await import('./y')`
+    // e `import('./y').then(({ x }) => ...)` (UI-4: dagre al bisogno).
+    const dynamic = [
+      ...[...f.clean.matchAll(/\{([^{}]*)\}\s*=\s*await\s+import\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => [m[1], m[2]]),
+      ...[...f.clean.matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)\s*\.then\(\s*\(\s*\{([^{}]*)\}\s*\)/g)].map(m => [m[2], m[1]]),
+    ];
+    for (const [names, spec] of dynamic) {
+      const mod = resolveFrom(f.abs, spec);
       if (!mod) continue;
-      for (const part of m[1].split(',')) {
+      for (const part of names.split(',')) {
         const orig = part.trim().split(/\s*:\s*/)[0].trim();
         if (orig) origins(mod, orig).forEach(k => used.add(k));
       }

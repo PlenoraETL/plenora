@@ -9,6 +9,7 @@ import { fetchAllOffsetPages } from './pagination';
 import { API_ENDPOINT } from './config';
 import { downloadBlob } from '../utils/downloadBlob';
 import { requestErrorMessage } from '../utils/errorMessages';
+import { rememberProjects } from '../utils/knownProjects';
 
 /**
  * Crea un nuovo progetto.
@@ -119,10 +120,13 @@ export const restoreCanvasVersion = async (projectId, versionId, baseCanvasVersi
  * @returns {Promise<Object>} { projects: [...] }
  */
 export const listProjects = async () => {
-  return fetchAllOffsetPages('/projects', {
+  const data = await fetchAllOffsetPages('/projects', {
     extractItems: data => data.projects,
     mergeItems: (items, lastPage) => ({ ...lastPage, projects: items }),
   });
+  // La palette Ctrl+K cerca tra i progetti gia' scaricati (UI-4, U23).
+  rememberProjects(data?.projects);
+  return data;
 };
 
 /**

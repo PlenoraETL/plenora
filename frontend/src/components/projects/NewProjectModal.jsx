@@ -5,12 +5,10 @@ import { useToast } from '../../hooks/useToast';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { toastApiError } from '../../utils/toastApiError';
 import { pressable } from '../../utils/pressable';
+import { PROJECT_TYPES, projectTypeChip } from '../../utils/projectTypes';
 
-const TYPE_META = {
-  estrai:      { icon: '↓', label: 'Estrai',      btn: '↓ Estrai' },
-  manipola:    { icon: '⚙', label: 'Manipola',    btn: '⚙ Manipola' },
-  arricchisci: { icon: '◈', label: 'Arricchisci', btn: '◈ Arricchisci' },
-};
+// Nome, icona e descrizione dalla tabella unica dei tipi (UI-4, U24 e U32).
+const TYPE_META = Object.fromEntries(Object.keys(PROJECT_TYPES).map(t => [t, { ...PROJECT_TYPES[t], btn: projectTypeChip(t) }]));
 
 function NewProjectModal({
   isOpen,
@@ -73,7 +71,7 @@ function NewProjectModal({
         <>
           <ModalButton variant="secondary" onClick={onClose} disabled={creating}>Annulla</ModalButton>
           <ModalButton variant="primary" onClick={handleCreate} loading={creating}>
-            Crea Progetto
+            Crea progetto
           </ModalButton>
         </>
       }
@@ -152,17 +150,10 @@ function NewProjectModal({
         </div>
       )}
 
-      {type === 'manipola' && (
-        <div className="pl__modal-info pl__modal-info--manipola">
-          💡 I progetti Manipola usano come input i risultati dei progetti Estrai.
-        </div>
-      )}
-
-      {type === 'arricchisci' && (
-        <div className="pl__modal-info pl__modal-info--arricchisci">
-          💡 I progetti Arricchisci chiamano API esterne per arricchire i dati estratti.
-        </div>
-      )}
+      {/* Cosa fa il tipo scelto: la stessa frase ovunque (utils/projectTypes). */}
+      <div className={`pl__modal-info pl__modal-info--${type}`}>
+        💡 {meta.description}
+      </div>
     </ModalWrapper>
   );
 }

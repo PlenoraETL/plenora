@@ -26,14 +26,6 @@
   gap: 4px;
 }
 
-.app-sidebar__sub {
-  font-size: 11px;
-  color: var(--plen-text-sub, #7D8BA8);
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  margin-left: 2px;
-  font-weight: 500;
-}
 
 /* ── Sezione navigazione ─────────────────────────────────────────── */
 
@@ -47,7 +39,7 @@
 }
 
 .app-sidebar__nav-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.8px;
@@ -255,3 +247,35 @@ button.app-sidebar__user-row {
 }
 button.app-sidebar__item.app-sidebar__item--active { background: rgba(75, 139, 255, 0.14); color: var(--plen-blue); }
 button.app-sidebar__user-row:hover { background: var(--plen-surface-2); }
+
+/* ── Barra chiusa a sole icone (UI-4, U26) ───────────────────────── */
+
+.app-sidebar__logo { position: relative; }
+.app-sidebar__collapse {
+  position: absolute;
+  top: 14px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--plen-border);
+  background: transparent;
+  color: var(--plen-text-sub);
+  font-size: 14px;
+  cursor: pointer;
+}
+.app-sidebar__collapse:hover { color: var(--plen-blue); border-color: var(--plen-blue); }
+
+.app-sidebar--collapsed { width: 64px; }
+.app-sidebar--collapsed .app-sidebar__logo { padding: 14px 10px; min-height: 54px; }
+.app-sidebar--collapsed .app-sidebar__collapse { position: static; align-self: center; }
+.app-sidebar--collapsed .app-sidebar__nav { padding: 12px 8px; }
+.app-sidebar--collapsed .app-sidebar__nav-label,
+.app-sidebar--collapsed .app-sidebar__item-label,
+.app-sidebar--collapsed .app-sidebar__user-info,
+.app-sidebar--collapsed .app-sidebar__icon-btn { display: none; }
+.app-sidebar--collapsed .app-sidebar__item { justify-content: center; padding: 9px 0; }
+.app-sidebar--collapsed .app-sidebar__item-icon { font-size: 16px; }
+.app-sidebar--collapsed .app-sidebar__count { position: absolute; top: 0; right: 0; padding: 0 4px; min-width: 0; }
+.app-sidebar--collapsed .app-sidebar__footer { padding: 10px 8px; align-items: center; }
+.app-sidebar--collapsed .app-sidebar__user-row { flex-direction: column; padding: 6px 0; gap: 6px; }

@@ -38,7 +38,7 @@ export default function PermissionRevokedBanner({ message }) {
         {message || (
           <>
             Il tuo ruolo è stato modificato o l'utenza disabilitata mentre
-            il task era in corso. L'operazione è stata interrotta in modo
+            l'esecuzione era in corso. L'operazione è stata interrotta in modo
             sicuro. Contatta un amministratore per ripristinare i permessi.
           </>
         )}

@@ -28,6 +28,7 @@ import './EseguibileExecuteWizard.css';
 import ExecutableDynamicRunForm from './ExecutableDynamicRunForm';
 import { initialOutputFormat, outputFormatOptions, DEFAULT_OUTPUT_FORMAT } from '../../constants/outputFormats';
 import { formatBytes } from '../../utils/format';
+import { downloadCsvTemplate } from '../../utils/csvTemplate';
 
 
 function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null }) {
@@ -115,7 +116,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
       column_mapping,
       output_format: outputFormat,
       output_name: outputName || undefined,
-    }), { startMessage: 'Task in coda...' });
+    }), { startMessage: 'In attesa di partire…' });
   };
 
   const handleDownload = () => {
@@ -171,7 +172,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
 
         {/* Stepper */}
         <div className="esw-stepper">
-          {['📁 Upload file', '🔗 Mappa colonne', '▶ Esegui'].map((label, idx) => {
+          {['📁 Carica il file', '🔗 Abbina le colonne', '▶ Esegui'].map((label, idx) => {
             const num = idx + 1;
             const active = step === num;
             const done = step > num;
@@ -203,7 +204,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
               <div className="esw-step-content">
                 <h3>Carica il file con i dati da processare</h3>
                 <p className="esw-hint">
-                  La catena si aspetta queste colonne:
+                  Il file deve avere queste colonne:
                 </p>
                 <ul className="esw-expected">
                   {eseguibile.expected_columns.map(c => (
@@ -216,6 +217,16 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                     </li>
                   ))}
                 </ul>
+                {/* UI-4 (U14): un file con le colonne giuste, da riempire. */}
+                {eseguibile.expected_columns.length > 0 && (
+                  <button
+                    type="button"
+                    className="esw-btn esw-btn--ghost esw-template-btn"
+                    onClick={() => downloadCsvTemplate(eseguibile.name, eseguibile.expected_columns)}
+                  >
+                    ⬇ Scarica il file modello (CSV con queste colonne)
+                  </button>
+                )}
 
                 <div
                   className={`esw-dropzone ${isDragging ? 'esw-dropzone--dragging' : ''}`}
@@ -272,14 +283,14 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
             )}
             {step === 2 && uploadResult && eseguibile && (
               <div className="esw-step-content">
-                <h3>Mappa le colonne del tuo file alle colonne della catena</h3>
+                <h3>Abbina le colonne del tuo file a quelle richieste</h3>
                 <p className="esw-hint">
                   File caricato: <strong>{uploadResult.row_count}</strong> righe, <strong>{uploadResult.detected_columns.length}</strong> colonne
                 </p>
 
                 <div className="esw-mapping">
                   <div className="esw-mapping-header">
-                    <div>Colonna catena</div>
+                    <div>Colonna richiesta</div>
                     <div>Colonna file</div>
                   </div>
                   {eseguibile.expected_columns.map(c => (
@@ -354,10 +365,10 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
               <div className="esw-step-content">
                 {state.phase === 'idle' || runFailed || permissionRevoked ? (
                   <>
-                    <h3>Configura l'output ed esegui</h3>
+                    <h3>Scegli il risultato ed esegui</h3>
                     <div className="esw-form">
                       <div className="esw-field">
-                        <label>Formato output</label>
+                        <label>Formato del risultato</label>
                         {eseguibile.output_is_file_based ? (
                           <div className="esw-format-fixed">
                             <span className="esw-format-fixed__ext">
@@ -376,7 +387,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                         )}
                       </div>
                       <div className="esw-field">
-                        <label>Nome file output (opzionale)</label>
+                        <label>Nome del file (facoltativo)</label>
                         <input
                           type="text"
                           className="esw-input"

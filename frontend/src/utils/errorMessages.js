@@ -34,16 +34,16 @@ export const ERROR_MESSAGES = {
 
   // Servizi esterni / risorse
   external_service_unreachable: { title: 'Servizio esterno non raggiungibile', message: 'Un servizio esterno (es. ArcGIS o un’API) non risponde. Verifica la connessione e riprova; se persiste, contatta l’amministratore.' },
-  memory_limit_exceeded: { title: 'File troppo grande', message: 'Il file o il dataset supera il limite di memoria per l’elaborazione. Prova con un file più piccolo o contatta l’amministratore.' },
+  memory_limit_exceeded: { title: 'File troppo grande', message: 'Il file o la tabella supera il limite di memoria per l’elaborazione. Prova con un file più piccolo o contatta l’amministratore.' },
   service_not_initialized: { title: 'Sistema in avvio', message: 'Il sistema si sta avviando. Riprova tra qualche secondo; se persiste, contatta l’amministratore.' },
   access_denied: { title: 'Accesso negato', message: 'Non hai i permessi per accedere a questa risorsa.' },
 
   // Not found
   project_not_found: { title: 'Progetto non trovato', message: 'Il progetto non esiste o è stato rimosso.' },
   task_not_found: { title: 'Operazione non trovata', message: 'L’operazione richiesta non esiste più (potrebbe essere già terminata).' },
-  schedule_not_found: { title: 'Schedule non trovato', message: 'La pianificazione non esiste o è stata rimossa.' },
+  schedule_not_found: { title: 'Pianificazione non trovata', message: 'La pianificazione non esiste o è stata rimossa.' },
   run_not_found: { title: 'Esecuzione non trovata', message: 'L’esecuzione richiesta non esiste più.' },
-  bundle_not_found: { title: 'Bundle non trovato', message: 'Il bundle IMDF non è disponibile o è scaduto. Rigenera l’output.' },
+  bundle_not_found: { title: 'Bundle non trovato', message: 'Il bundle IMDF non è disponibile o è scaduto. Rigenera il risultato.' },
   api_connection_not_found: { title: 'Connessione API non trovata', message: 'La connessione API non esiste o è stata rimossa.' },
   file_source_not_found: { title: 'File non trovato', message: 'Il file sorgente non esiste o è stato rimosso.' },
   connection_not_found: { title: 'Connessione non trovata', message: 'La connessione non esiste o è stata rimossa.' },
@@ -79,7 +79,7 @@ export const ERROR_MESSAGES = {
   carica_target_lock_lost: { title: 'Scrittura da verificare', message: 'Il controllo esclusivo sulla destinazione e stato perso durante la scrittura. Verifica i dati prima di rilanciare.' },
   carica_completion_uncertain: { title: 'Conferma incompleta', message: 'La scrittura potrebbe essere riuscita, ma il sistema non ha salvato la conferma. Verifica la destinazione.' },
   carica_external_write_uncertain: { title: 'Esito non determinabile', message: 'La destinazione esterna potrebbe aver ricevuto i dati. Verificala prima di ripetere il caricamento.' },
-  carica_uncertain_resolution_conflict: { title: 'Run non risolvibile', message: 'La run non e piu in uno stato incerto risolvibile. Aggiorna la pagina.' },
+  carica_uncertain_resolution_conflict: { title: 'Esecuzione non risolvibile', message: 'L’esecuzione non è più in uno stato incerto da risolvere. Aggiorna la pagina.' },
   carica_task_fatal: { title: 'Caricamento fallito', message: 'Il caricamento non e riuscito. Consulta i log o contatta l’amministratore.' },
   carica_unsafe_write_config: { title: 'Configurazione non sicura', message: 'La configurazione di scrittura e stata bloccata. Controlla destinazione e modalita di caricamento.' },
 

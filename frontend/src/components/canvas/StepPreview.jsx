@@ -125,7 +125,7 @@ export default function StepPreview({ projectId }) {
         <div className="step-preview__body">
           {saveError && <div className="step-preview__msg step-preview__msg--error">{saveError}</div>}
           {!saveError && status === 'idle' && (
-            <div className="step-preview__msg">Premi «{term('preview').name}» per vedere i dati in questo punto del flusso.</div>
+            <div className="step-preview__msg">Premi «{term('preview').name}» per vedere i dati in questo punto del progetto.</div>
           )}
           {status === 'loading' && <div className="step-preview__msg">Calcolo dell&apos;anteprima…</div>}
           {status === 'error' && <div className="step-preview__msg step-preview__msg--error">{error}</div>}

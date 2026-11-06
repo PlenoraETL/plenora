@@ -35,6 +35,7 @@ import './EseguibiliList.css';
 import { pressable } from '../utils/pressable';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
+import { projectTypeChip } from '../utils/projectTypes';
 
 function EseguibiliList() {
   const toast = useToast();
@@ -156,7 +157,7 @@ function EseguibiliList() {
             title="Nessun eseguibile disponibile"
             text={canCreate
               ? 'Seleziona un progetto Estrai, Manipola o Arricchisci e pubblicalo come eseguibile.'
-              : 'Chiedi a un amministratore del gruppo di pubblicare una catena come eseguibile.'}
+              : 'Chiedi a un amministratore del gruppo di pubblicare un progetto come eseguibile.'}
             action={canCreate && (
               <button type="button" className="esl__btn esl__btn--primary" onClick={openSelector}>＋ Nuovo Eseguibile</button>
             )}
@@ -213,7 +214,7 @@ function EseguibiliList() {
                 )}
                 {canEdit && <BindingWarnings warnings={item.binding_warnings} />}
                 <div className="esl__card-meta">
-                  <span>{item.project_type?.toUpperCase()} - v{item.active_version} - {item.inputs_count} input</span>
+                  <span>{projectTypeChip(item.project_type)} · v{item.active_version} · {item.inputs_count} input</span>
                 </div>
                 <div className="esl__card-actions">
                   <ActionMenu

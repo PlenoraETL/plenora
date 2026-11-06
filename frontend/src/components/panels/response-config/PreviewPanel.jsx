@@ -22,12 +22,12 @@ export default function PreviewPanel({
   return (
     <div className="response-config-builder__panel">
       <div className="response-config-builder__section-header">
-        <h4>👁️ Preview risultato</h4>
+        <h4>👁️ Anteprima del risultato</h4>
         <button type="button"
           onClick={generatePreview}
           className="response-config-builder__btn response-config-builder__btn--primary"
         >
-          🔄 Aggiorna preview
+          🔄 Aggiorna l'anteprima
         </button>
       </div>
 
@@ -67,7 +67,7 @@ export default function PreviewPanel({
         </div>
       ) : (
         <div className="response-config-builder__empty-section">
-          <p>Nessun dato da mostrare. Configura i mappings e clicca "Aggiorna preview".</p>
+          <p>Nessun dato da mostrare. Scegli i campi da estrarre e premi «Aggiorna l'anteprima».</p>
         </div>
       )}
 

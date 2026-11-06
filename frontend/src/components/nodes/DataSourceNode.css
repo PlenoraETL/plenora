@@ -77,7 +77,7 @@
   background: var(--dsn-accent-tint);
   color: var(--dsn-accent);
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 500;
   border-bottom: 1px solid var(--dsn-accent-border);
   overflow: hidden;
@@ -98,7 +98,7 @@
 
 .dsn__label {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -129,7 +129,7 @@
 .dsn__select:focus { border-color: var(--dsn-accent); }
 
 .dsn__hint {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   font-style: italic;
 }
@@ -227,7 +227,7 @@
   background: var(--dsn-accent-tint);
   color: var(--dsn-accent);
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -235,7 +235,7 @@
   background: rgba(255,255,255,0.12);
   padding: 1px 6px;
   border-radius: 8px;
-  font-size: 9px;
+  font-size: 11px;
 }
 [data-theme='light'] .dsn__format-badge { background: rgba(0,0,0,0.08); }
 
@@ -280,7 +280,7 @@
   border-radius: 4px;
   cursor: pointer;
   padding: 1px 5px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--plen-text-sub, #7D8BA8);
   transition: all 0.12s;
   margin-left: 6px;
@@ -305,7 +305,7 @@
 }
 
 .dsn__column-type {
-  font-size: 9px;
+  font-size: 11px;
   padding: 1px 5px;
   border-radius: 3px;
   margin-left: 5px;
@@ -419,7 +419,7 @@
 .dsn__browser-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsn__browser-type {
   font-family: var(--plen-font-mono);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   background: var(--plen-surface-3, #171C2E);
   color: var(--plen-text-dim, #3F4D68);

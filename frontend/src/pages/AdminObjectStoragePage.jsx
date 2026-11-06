@@ -21,6 +21,7 @@ import { useBusy } from '../hooks/useBusy';
 import { useDownload } from '../hooks/useDownload';
 import '../styles/AdminObjectStoragePage.css';
 import { formatDateTime, formatBytes } from '../utils/format';
+import { projectTypeChip } from '../utils/projectTypes';
 
 const DOMAINS = [
   ['results', 'Risultati'],
@@ -287,7 +288,7 @@ export default function AdminObjectStoragePage() {
             {(projectCatalog?.projects || []).map((project, index) => (
               <details className="storage-admin__project" key={`${project.group_id}:${project.project_id}`} open={index === 0}>
                 <summary>
-                  <div><strong>{project.project_name}</strong><span>{project.project_type?.toUpperCase() || 'PROGETTO ELIMINATO'} - {project.project_id}</span></div>
+                  <div><strong>{project.project_name}</strong><span>{project.project_type ? projectTypeChip(project.project_type) : 'Progetto eliminato'} · {project.project_id}</span></div>
                   <div>
                     <span>{project.group_id}</span>
                     <b>{project.results.length} risultati</b>

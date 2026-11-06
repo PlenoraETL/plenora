@@ -169,7 +169,7 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
               <span className="um__field-hint">
                 L'esecutore vede SOLO la lista degli eseguibili del proprio gruppo (e quelli condivisi)
                 e può lanciarli. Non ha accesso al resto della UI. I file caricati per l'esecuzione
-                vengono cancellati subito dopo il download del risultato (privacy/GDPR).
+                vengono cancellati subito dopo lo scaricamento del risultato (privacy/GDPR).
               </span>
             )}
             {role.isViewer(form) && (
@@ -362,7 +362,7 @@ const GROUP_IMPACT = [
   ['file_sources', '📄', 'File sorgente'],
   ['datasources', '🗄️', 'DataSources'],
   ['api_connections', '🔗', 'Connettori API'],
-  ['schedules', '⏱️', 'Schedule'],
+  ['schedules', '⏱️', 'Pianificazioni'],
 ];
 
 const groupImpactItems = (summary) => GROUP_IMPACT
@@ -436,7 +436,7 @@ function ConfirmDeleteGroupModal({ group, onClose, onConfirm }) {
             ))}
           </div>
           {total === 0 && <div className="um__cdg-empty-note">Il gruppo è vuoto.</div>}
-          <div className="um__cdg-extra-note">+ log di esecuzione, dati intermedi e risultati delle pipeline</div>
+          <div className="um__cdg-extra-note">+ log di esecuzione, dati intermedi e risultati dei progetti</div>
         </>
       )}
       <div className="um__cdg-confirm-line">

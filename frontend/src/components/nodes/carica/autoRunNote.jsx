@@ -10,7 +10,7 @@ import { term } from '../../../utils/glossary';
 
 const AFTER = {
   estrai: 'dopo la query',
-  manipola: 'dopo il flusso',
+  manipola: 'dopo i passi',
   arricchisci: "dopo l'arricchimento",
 };
 

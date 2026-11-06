@@ -73,7 +73,7 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
           <p className="pem-info">
             Il progetto <strong>{project.name}</strong> verrà pubblicato come eseguibile on-demand.
             Il form di esecuzione verrà generato dagli Input progetto presenti nel canvas.
-            Se non ci sono input, la catena userà la configurazione pubblicata.
+            Se non ci sono input, il progetto userà la configurazione pubblicata.
           </p>
 
           {error && <div className="pem-error">❌ {error}</div>}
@@ -94,7 +94,7 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Descrivi brevemente cosa fa questa catena..."
+              placeholder="Descrivi brevemente cosa fa questo progetto..."
               rows={3}
               maxLength={500}
             />
@@ -102,7 +102,7 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
 
           <div className="pem-row">
             <div className="pem-field">
-              <label>Formato output di default</label>
+              <label>Formato predefinito del risultato</label>
               <select value={outputFormat} onChange={(e) => setOutputFormat(e.target.value)}>
                 {/* Catalogo unico dei formati (constants/outputFormats, R8.11). */}
                 {outputFormatOptions(outputFormat).map(f => (

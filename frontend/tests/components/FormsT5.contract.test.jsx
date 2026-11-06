@@ -227,7 +227,7 @@ describe('ProjectInputNode (R8.1, N4, N11)', () => {
     s.loadGraph([{ id: 'in1', type: 'project_input', position: { x: 0, y: 0 },
       data: { input_key: 'utente', label: 'Utente', input_kind: 'current_user' } }], []);
     const { rerender } = render(<ProjectInputNode id="in1" data={nodeData()} />);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Come entra nella catena' }), { target: { value: 'source' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Come entra nel progetto' }), { target: { value: 'source' } });
     expect(nodeData()).toMatchObject({ as_source: true, source_column: 'utente' });
     rerender(<ProjectInputNode id="in1" data={nodeData()} />);
     expect(screen.getByRole('textbox', { name: 'Nome della colonna' })).toHaveValue('utente');
@@ -236,7 +236,7 @@ describe('ProjectInputNode (R8.1, N4, N11)', () => {
     cleanup();
     loadInput({ input_key: 'utente', label: 'Utente', input_kind: 'current_user' });
     render(<ProjectInputNode id="in1" data={nodeData()} />);
-    expect(screen.queryByRole('combobox', { name: 'Come entra nella catena' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Come entra nel progetto' })).toBeNull();
   });
 
   it.each(['file', 'text', 'integer', 'select', 'connection', 'current_user'])('sola lettura (%s): ogni controllo e\' spento (N11)', (kind) => {

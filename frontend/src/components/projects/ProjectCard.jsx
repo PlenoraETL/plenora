@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ActionMenu from '../common/ActionMenu';
+import { prefetchProjectEditor } from '../../utils/editorChunks';
 
 /**
  * Card di un singolo progetto (Estrai / Manipola / Arricchisci).
@@ -66,7 +67,8 @@ function ProjectCard({
     : '';
 
   return (
-    <div className="pl__card">
+    // Passando sul progetto si scarica gia' il suo editor (UI-4, V13).
+    <div className="pl__card" onMouseEnter={() => prefetchProjectEditor(project.project_type)} onFocus={() => prefetchProjectEditor(project.project_type)}>
       <div className={`pl__card-accent ${accentClass}`} />
       <div className="pl__card-body">
         <div className="pl__card-header-row">
@@ -135,7 +137,7 @@ function ProjectCard({
             {scheduleCount > 0 && (
               <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm pl__btn--schedule"
                 onClick={e => { e.stopPropagation(); onSchedule(); }}
-                title="Schedule automatici"
+                title="Pianificazioni automatiche"
               >
                 ⏰ <span className="pl__schedule-badge">{scheduleCount}</span>
               </button>

@@ -384,7 +384,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
               <div className="carica-arcgis-node__hint">
                 {isMultiLayerUpstream
                   ? 'Verrà creato un Feature Service con tutti i layer del pacchetto (nomi, schema, chiavi e simbologia dal pacchetto)'
-                  : 'Verrà creato un nuovo Feature Service con lo schema dei dati del flusso'}
+                  : 'Verrà creato un nuovo Feature Service con lo schema dei dati del progetto'}
               </div>
             </>
           )}

@@ -120,7 +120,7 @@ function StatusCard({ status, resource }) {
         <div><strong>Exit code:</strong> {status.exit_code ?? '—'}</div>
         {status.log_tail && status.log_tail.length > 0 && (
           <details className="ab__log-details">
-            <summary>Log ultimo run ({status.log_tail.length} righe)</summary>
+            <summary>Log dell'ultima esecuzione ({status.log_tail.length} righe)</summary>
             <pre className="ab__log-tail">{status.log_tail.join('\n')}</pre>
           </details>
         )}
@@ -138,8 +138,8 @@ function ScheduleCard({ schedule, resource }) {
         {schedule.timer_active ? '⏰ Timer attivo' : '⚠ Timer disattivato'}
       </div>
       <div className="ab__card-body">
-        <div><strong>Prossimo run:</strong> {fmtDate(schedule.next_run)}</div>
-        <div><strong>Ultimo run:</strong> {fmtDate(schedule.last_run)}</div>
+        <div><strong>Prossima esecuzione:</strong> {fmtDate(schedule.next_run)}</div>
+        <div><strong>Ultima esecuzione:</strong> {fmtDate(schedule.last_run)}</div>
       </div>
     </div>
   );
@@ -233,8 +233,8 @@ export default function AdminBackupsPage() {
         <>
           Avviare un backup manuale adesso?
           <br /><br />
-          Il pg_dump e l'upload S3 richiedono qualche secondo. I backup
-          schedulati continuano normalmente.
+          Il pg_dump e il caricamento su S3 richiedono qualche secondo. I backup
+          pianificati continuano normalmente.
         </>
       ),
       confirmText: 'Avvia backup',
@@ -399,7 +399,7 @@ export default function AdminBackupsPage() {
           <h3>Procedure operative</h3>
           <ul>
             <li>
-              <strong>Schedulazione:</strong> systemd timer <code>urby-backup.timer</code> —
+              <strong>Pianificazione:</strong> systemd timer <code>urby-backup.timer</code> —
               ogni notte alle 02:00 UTC (circa +05:00 dal delay randomizzato).
             </li>
             <li>

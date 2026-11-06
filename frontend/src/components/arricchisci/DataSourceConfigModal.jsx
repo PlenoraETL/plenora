@@ -202,7 +202,7 @@ function DataSourceConfigModal({ onClose, onSave }) {
               </div>
 
               <div className="dsm__info-box">
-                💡 <strong>Nota:</strong> I Data Source funzionano come <em>Generatori</em>. Quando eseguiti, scaricano i file dal percorso specificato e li rendono disponibili come dataset.
+                💡 <strong>Nota:</strong> I Data Source funzionano come <em>Generatori</em>. Quando eseguiti, scaricano i file dal percorso specificato e li rendono disponibili come tabelle.
               </div>
             </div>
           ),

@@ -104,7 +104,7 @@
 
 .filter-modal__preview-label {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -135,7 +135,7 @@
 .filter-modal__type-hint {
   font-weight: 400;
   color: var(--plen-text-dim, #3F4D68);
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--plen-font-mono);
 }
 

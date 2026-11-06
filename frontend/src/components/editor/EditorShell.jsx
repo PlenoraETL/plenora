@@ -78,10 +78,10 @@ import { isValidProjectId } from '../../utils/validateRouteParam';
 import { CanvasErrorBoundary } from '../common/ErrorBoundary';
 import { LoadingOverlay } from '../common/LoadingOverlay';
 import NodeInspector from '../canvas/NodeInspector';
+import { SidePanelFrame, PanelResizer } from './EditorPanels';
 import { compactNodeTypes } from '../canvas/compactNodeTypes';
 import NodePalette from '../canvas/NodePalette';
 import StepPreview from '../canvas/StepPreview';
-import { autoLayout } from '../canvas/autoLayout';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import StepsView from '../canvas/StepsView';
 import EditorToolbar from './EditorToolbar';
@@ -95,6 +95,7 @@ import { CanvasGraphContext } from '../canvas/CanvasGraphContext';
 import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
 import { withFlowEdgeLabels } from '../../utils/glossary';
 import { isShortcutBlocked, isTypingTarget } from '../../utils/dialogStack';
+import { matchesShortcut } from '../../utils/shortcuts';
 import { requestCanvasDeletion } from '../../utils/canvasDeletion';
 import { formatDateTime } from '../../utils/format';
 import './EditorShell.css';
@@ -258,7 +259,7 @@ canvasConfig = EMPTY_OBJ,
     // nel pannello, in una modale o su un pulsante non apre la palette.
     const onKey = (e) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key !== '/' && e.key !== 'a' && e.key !== 'A') return;
+      if (!matchesShortcut('add_step', e)) return;
       const t = e.target;
       const onCanvas = t === document.body || t === document.documentElement || Boolean(t?.closest?.('.react-flow'));
       if (!onCanvas || isTypingTarget(t)) return;
@@ -311,7 +312,7 @@ canvasConfig = EMPTY_OBJ,
   onSaveRef.current = toolbar && !loading && !loadError && project ? (toolbar.onSave || null) : null;
   useEffect(() => {
     const onKey = (e) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's') return;
+      if (!matchesShortcut('save', e)) return;
       const blocked = isShortcutBlocked(e);
       e.preventDefault();
       if (blocked) return;
@@ -327,10 +328,14 @@ canvasConfig = EMPTY_OBJ,
   }, []);
 
   // Riordina: layout automatico come azione utente (annullabile, salvata).
+  // dagre si scarica solo al primo «Riordina» (UI-4 V2: fuori dal chunk
+  // dell'editor); un chunk mancante dopo un deploy lo gestisce chunkReload.
   const handleAutoLayout = useCallback(() => {
     if (isReadOnly) return;
-    editNodes(current => autoLayout(current, useCanvasStore.getState().edges));
-    requestAnimationFrame(() => reactFlow.fitView({ padding: 0.15, duration: 300 }));
+    import('../canvas/autoLayout').then(({ autoLayout }) => {
+      editNodes(current => autoLayout(current, useCanvasStore.getState().edges));
+      requestAnimationFrame(() => reactFlow.fitView({ padding: 0.15, duration: 300 }));
+    }).catch(() => { /* chunk non caricato: utils/chunkReload */ });
   }, [isReadOnly, editNodes, reactFlow]);
 
   // Titolo del passo da cui si apre la palette (ricalcolato col contenuto).
@@ -470,7 +475,8 @@ canvasConfig = EMPTY_OBJ,
       {beforeCanvas}
       <CanvasGraphContext.Provider value={graph}>
       <div className="editor-shell__main">
-        {sidebar}
+        {/* UI-4 (U26): barra richiudibile, pannello del passo ridimensionabile. */}
+        {sidebar && <SidePanelFrame>{sidebar}</SidePanelFrame>}
         <CanvasErrorBoundary>
           {/* Drop handler sul canvas div (gli eventi bubble da ReactFlow). */}
           <div
@@ -508,6 +514,7 @@ canvasConfig = EMPTY_OBJ,
         </CanvasErrorBoundary>
         {/* Nuova interfaccia (Fase 4, M1): nodi compatti sul canvas, form
             completo del nodo selezionato nel pannello a destra. */}
+        <PanelResizer />
         <NodeInspector fullNodeTypes={nodeTypes} prefix={prefix} branchActions={branchActions} edgeInspector={edgeInspector} />
       </div>
       </CanvasGraphContext.Provider>

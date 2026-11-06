@@ -3,6 +3,7 @@ import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import SearchField, { SearchEmpty } from '../common/SearchField';
 import { useSearch } from '../../hooks/useSearch';
 import { pressable } from '../../utils/pressable';
+import { projectType } from '../../utils/projectTypes';
 
 /**
  * Modal di selezione progetto Arricchisci da pubblicare come Eseguibile.
@@ -68,10 +69,10 @@ function EsegSelectorModal({
               className="pl__modal-row"
               {...pressable(() => onSelect?.(p))}
             >
-              <span className="pl__modal-row-icon">◈</span>
+              <span className="pl__modal-row-icon">{projectType(p.project_type).icon}</span>
               <div className="pl__modal-row-body">
                 <div className="pl__modal-row-name">{p.name}</div>
-                <div className="pl__modal-row-desc">{String(p.project_type || '').toUpperCase()}</div>
+                <div className="pl__modal-row-desc">{projectType(p.project_type).label}</div>
                 {p.description && (
                   <div className="pl__modal-row-desc">{p.description}</div>
                 )}

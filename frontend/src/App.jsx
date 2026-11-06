@@ -28,6 +28,7 @@ import KeyboardShortcutsHelp from './components/common/KeyboardShortcutsHelp';
 import NavigationGuard from './components/common/NavigationGuard';
 import { role, can } from './utils/permissions';
 import { loginRedirectState } from './utils/navigation';
+import { EDITOR_LOADERS } from './utils/editorChunks';
 
 // Lazy loading: ogni pagina viene caricata solo quando la route viene visitata.
 // Riduce il bundle iniziale da ~1 chunk a chunk separati per pagina.
@@ -35,11 +36,12 @@ import { loginRedirectState } from './utils/navigation';
 import LoginPage from './pages/LoginPage';
 
 const ProjectList          = React.lazy(() => import('./pages/ProjectList'));
-const EstraiEditor         = React.lazy(() => import('./pages/EstraiEditor'));
-const ManipolaEditor       = React.lazy(() => import('./pages/ManipolaEditor'));
+// Editor: caricatori dalla tabella unica (prefetch dalla dashboard, UI-4 V13).
+const EstraiEditor         = React.lazy(EDITOR_LOADERS.estrai);
+const ManipolaEditor       = React.lazy(EDITOR_LOADERS.manipola);
 const ConnectionManager    = React.lazy(() => import('./pages/ConnectionManager'));
 const ApiConnectionManager = React.lazy(() => import('./pages/ApiConnectionManager'));
-const ArricchisciEditor    = React.lazy(() => import('./pages/ArricchisciEditor'));
+const ArricchisciEditor    = React.lazy(EDITOR_LOADERS.arricchisci);
 const FileManager          = React.lazy(() => import('./pages/FileManager'));
 const ScheduleList         = React.lazy(() => import('./pages/ScheduleList'));
 const LogViewer            = React.lazy(() => import('./pages/LogViewer'));

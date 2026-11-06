@@ -22,7 +22,7 @@ function EseguibiliSection({
       <div className="pl__section-header">
         <div className="pl__section-title-wrap">
           <span className="pl__chip pl__chip--eseg">🚀 Eseguibili</span>
-          <span className="pl__section-sub">Catene on-demand — l'utente carica un file e ottiene il risultato</span>
+          <span className="pl__section-sub">Progetti pronti da eseguire: si carica un file e si ottiene il risultato</span>
         </div>
         {canCreate && (
           <button
@@ -43,7 +43,7 @@ function EseguibiliSection({
             ? 'Cambia o cancella la ricerca.'
             : canCreate
               ? 'Pubblica un progetto come eseguibile con «＋ Nuovo» qui sopra.'
-              : 'Chiedi a un amministratore di pubblicare una catena come eseguibile.'}
+              : 'Chiedi a un amministratore di pubblicare un progetto come eseguibile.'}
         />
       ) : (
         <div className="pl__cards-grid">

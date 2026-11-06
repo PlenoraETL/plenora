@@ -64,7 +64,7 @@
 /* Type badge */
 .project-source-node__type-badge {
   font-family: var(--plen-font-mono);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   padding: 2px 5px;
   border-radius: 4px;
@@ -145,14 +145,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   margin-bottom: 5px;
   padding: 0 2px;
   font-family: var(--plen-font-mono);
 }
 .project-source-node__columns-hint {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   opacity: 0.7;
 }
@@ -211,7 +211,7 @@
   border: 1px solid rgba(155,109,255,0.3);
   color: #9B6DFF;
   font-family: var(--plen-font-mono);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   padding: 1px 4px;
   border-radius: 3px;
@@ -222,7 +222,7 @@
 /* ── Type badges ──────────────────────────────────────────────── */
 .project-source-node__column-badge {
   font-family: var(--plen-font-mono);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   padding: 1px 5px;
   border-radius: 4px;
@@ -263,7 +263,7 @@
   border: 1px dashed rgba(52,193,122,0.25);
   border-radius: 5px;
   cursor: pointer;
-  font-size: 10.5px;
+  font-size: 11px;
   font-family: var(--plen-font-mono);
   color: var(--plen-text-dim, #3F4D68);
   transition: all 0.12s;

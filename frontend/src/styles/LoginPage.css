@@ -6,20 +6,20 @@
 
 /* ── Token dark (default) ── */
 .lp {
-  --lp-bg:       #07090F;
-  --lp-surface:  #0C0F18;
-  --lp-border:   rgba(255,255,255,0.06);
-  --lp-border-hi:rgba(255,255,255,0.11);
-  --lp-text:     #DDE4F2;
-  --lp-text-sub: #7D8BA8;
-  --lp-text-dim: #3F4D68;
-  --lp-blue:     #4B8BFF;
-  --lp-blue-mid: #2563EB;
+  --lp-bg:       var(--plen-bg);
+  --lp-surface:  var(--plen-surface);
+  --lp-border:   var(--plen-border);
+  --lp-border-hi:var(--plen-border-hi);
+  --lp-text:     var(--plen-text);
+  --lp-text-sub: var(--plen-text-sub);
+  --lp-text-dim: var(--plen-text-dim);
+  --lp-blue:     var(--plen-blue);
+  --lp-blue-mid: var(--plen-blue-mid);
   --lp-blue-dim: rgba(75,139,255,0.10);
-  --lp-estrai:   #34C17A;
-  --lp-manipola: #9B6DFF;
+  --lp-estrai:   var(--plen-estrai);
+  --lp-manipola: var(--plen-manipola);
   --lp-arricch:  #F5A623;
-  --lp-err:      #F87171;
+  --lp-err:      var(--plen-err);
 
   --lp-font-d: 'Syne',     'Trebuchet MS', 'Arial Black', sans-serif;
   --lp-font-b: 'Inter',    'Segoe UI',     'Helvetica Neue', sans-serif;
@@ -28,17 +28,7 @@
 
 /* ── Token light ── */
 [data-theme='light'] .lp {
-  --lp-bg:       #EFF2F9;
-  --lp-surface:  #FFFFFF;
-  --lp-border:   rgba(0,0,0,0.07);
-  --lp-border-hi:rgba(0,0,0,0.13);
-  --lp-text:     #0B1120;
-  --lp-text-sub: #4A5678;
-  --lp-text-dim: #96A3BE;
-  --lp-blue:     #2563EB;
-  --lp-blue-mid: #1D4ED8;
   --lp-blue-dim: rgba(37,99,235,0.10);
-  --lp-err:      #DC2626;
 }
 
 /* ── Layout root ── */
@@ -192,7 +182,7 @@
 
 .lp__brand-badge {
   font-family: var(--lp-font-m);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--lp-text-dim);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -249,7 +239,7 @@
 
 .lp__label {
   font-family: var(--lp-font-m);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -342,7 +332,7 @@
   bottom: 24px;
   z-index: 31;
   font-family: var(--lp-font-m);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--lp-text-dim);
   letter-spacing: 0.05em;
   text-align: center;

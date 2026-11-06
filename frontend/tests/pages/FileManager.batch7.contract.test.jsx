@@ -151,7 +151,7 @@ describe('FileManager contract', () => {
     render(<FileManager />);
     await screen.findByText('Cities');
 
-    await userEvent.click(screen.getByRole('button', { name: /preview/i }));
+    await userEvent.click(screen.getByRole('button', { name: /anteprima/i }));
 
     await waitFor(() => expect(toastMock.error).toHaveBeenCalledTimes(1));
     const [msg] = toastMock.error.mock.calls[0];
@@ -177,7 +177,7 @@ describe('FileManager contract', () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText('Cities')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /preview/i }),
+      screen.getByRole('button', { name: /anteprima/i }),
     ).toBeInTheDocument();
   });
 });

@@ -49,8 +49,8 @@ export default function QuickStart({ hasDataSource, canCreate, onNewProject }) {
     {
       n: 3,
       done: false,
-      title: 'Costruisci la pipeline ed esegui',
-      desc: 'Nell’editor trascini i nodi, colleghi l’output e premi Esegui: il risultato appare in anteprima nel nodo.',
+      title: 'Costruisci il progetto ed esegui',
+      desc: 'Nell’editor aggiungi i passi, li colleghi all’Output e premi Esegui: il risultato appare in anteprima.',
       action: null,
     },
   ];

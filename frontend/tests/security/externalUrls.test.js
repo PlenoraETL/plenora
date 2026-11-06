@@ -23,8 +23,6 @@ const DECLARED = {
   'server.arcgisonline.com': { kind: 'tile', files: ['src/config/mapTiles.js'] },
   // Namespace XML degli SVG (attributo xmlns, anche dentro un data: URI): nessuna richiesta.
   'www.w3.org': { kind: 'namespace', files: ['src/components/common/PlenoraLogo.jsx', 'src/styles/ProjectList.css'] },
-  // Link aperto dall'utente in una nuova scheda (navigazione, non risorsa).
-  'crontab.guru': { kind: 'link', files: ['src/components/modals/ScheduleWizard.jsx'] },
   // Esempi nei placeholder e negli aiuti dei campi: testo, mai richiesto.
   'analisi.re-val.it': { kind: 'example', files: ['src/components/arricchisci/OpenAPIImportModal.jsx'] },
   'api.example.com': { kind: 'example', files: ['src/components/api-conn/wizard-steps/Step1BasicInfo.jsx', 'src/components/arricchisci/OpenAPIImportModal.jsx', 'src/components/nodes/carica/RestDestinationSection.jsx'] },

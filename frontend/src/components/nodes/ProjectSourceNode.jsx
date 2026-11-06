@@ -18,6 +18,7 @@ import './ProjectSourceNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { pressable } from '../../utils/pressable';
 import { READ_ONLY_SAFE } from '../common/readOnlySafe';
+import { projectTypeChip } from '../../utils/projectTypes';
 
 /**
  * ProjectSourceNode - Nodo sorgente per progetti SQL (tipo "estrai") o Manipola
@@ -152,7 +153,7 @@ const ProjectSourceNode = ({ id, data }) => {
           {projectName && <span className="project-source-node__info-name">📥 {projectName}</span>}
           {projectType && (
             <span className={`project-source-node__type-badge project-source-node__type-badge--${projectType}`}>
-              {projectType}
+              {projectTypeChip(projectType)}
             </span>
           )}
         </div>

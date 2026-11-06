@@ -48,7 +48,6 @@
  * Gli errori bloccanti sono in italiano con riga e colonna (JSON/YAML) o col
  * percorso nel documento.
  */
-import yaml from 'js-yaml';
 import { formatNumber } from './format';
 
 // Chiavi delle operazioni di un path item (OpenAPI 3.x e Swagger 2.0).
@@ -60,7 +59,21 @@ const MAX_SCHEMA_DEPTH = 6;
 /** Budget di lavoro di un import: nodi di schema letti (in tutto) e colonne per risposta. */
 export const IMPORT_LIMITS = { schemaNodes: 100000, fieldsPerResponse: 2000 };
 
-const YAML_SCHEMA = yaml.CORE_SCHEMA.extend({ implicit: [yaml.types.merge] });
+/*
+ * js-yaml si scarica solo al primo import di una specifica (UI-4, V3b):
+ * `loadOpenApi` lo carica e poi normalizza. `normalizeOpenApi` resta
+ * sincrona; con un testo YAML richiede il parser gia' caricato.
+ */
+let yamlParser = null;
+
+/** Carica il parser YAML (una volta). */
+async function loadYamlParser() {
+  if (!yamlParser) {
+    const { default: yaml } = await import('js-yaml');
+    yamlParser = { yaml, schema: yaml.CORE_SCHEMA.extend({ implicit: [yaml.types.merge] }) };
+  }
+  return yamlParser;
+}
 
 class OpenApiImportError extends Error {
   constructor(message) {
@@ -99,8 +112,9 @@ function parseText(raw) {
       throw new OpenApiImportError(`JSON non valido${where ? ` alla riga ${where.line}, colonna ${where.column}` : ''}.`);
     }
   }
+  if (!yamlParser) throw new Error('[openapiImport] parser YAML non caricato: usare loadOpenApi');
   try {
-    return yaml.load(text, { schema: YAML_SCHEMA });
+    return yamlParser.yaml.load(text, { schema: yamlParser.schema });
   } catch (e) {
     if (e?.name !== 'YAMLException') throw e;
     const where = e.mark ? ` alla riga ${e.mark.line + 1}, colonna ${e.mark.column + 1}` : '';
@@ -500,7 +514,7 @@ const SECURITY_RULES = [
   { match: s => s.type === 'http' && /^bearer$/i.test(s.scheme || ''), auth: () => blankAuth('bearer') },
   { match: s => s.type === 'http', unsupported: s => `schema HTTP «${s.scheme}» non supportato` },
   { match: s => s.type === 'oauth2', auth: (s, env) => oauthAuth(s, env),
-    unsupported: () => 'OAuth2 senza flusso password o client credentials' },
+    unsupported: () => 'OAuth2 senza le modalità password o client credentials' },
   { match: s => s.type === 'openIdConnect', unsupported: () => 'OpenID Connect non supportato' },
   { match: () => true, unsupported: s => `tipo «${s.type}» non supportato` },
 ];
@@ -548,6 +562,12 @@ function successStatus(responses) {
 }
 
 // ------------------------------------------------------------- pubblico ---
+
+/** Come normalizeOpenApi, dopo aver caricato il parser YAML: la usa la UI. */
+export async function loadOpenApi(source, options) {
+  await loadYamlParser();
+  return normalizeOpenApi(source, options);
+}
 
 /**
  * Normalizza una specifica OpenAPI 3.x o Swagger 2.0 (testo JSON/YAML o

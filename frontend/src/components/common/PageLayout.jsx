@@ -25,6 +25,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import AppSidebar from '../AppSidebar';
 import ThemeToggle from './ThemeToggle';
+import ShortcutsButton from './ShortcutsButton';
 import './PageLayout.css';
 
 function PageHeader({ title, subtitle, badge, actions, parent }) {
@@ -42,6 +43,7 @@ function PageHeader({ title, subtitle, badge, actions, parent }) {
       </div>
       <div className="plen-page__actions">
         {actions}
+        <ShortcutsButton className="plen-page__shortcuts" />
         <ThemeToggle classPrefix="plen-page" />
       </div>
     </header>

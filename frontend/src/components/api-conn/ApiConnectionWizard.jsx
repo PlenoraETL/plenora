@@ -614,7 +614,7 @@ const getCustomHeadersObject = () => {
         />
       ),
     },
-    { label: 'Batch', content: <Step4Batch formData={formData} setFormData={setFormData} /> },
+    { label: 'Chiamate a blocchi', content: <Step4Batch formData={formData} setFormData={setFormData} /> },
     {
       label: 'Test',
       content: (

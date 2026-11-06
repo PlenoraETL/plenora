@@ -233,6 +233,8 @@ describe('codice morto', () => {
     'components/transforms/ParameterInput.jsx:HANDLED_PARAM_TYPES': 'tipi di parametro del modulo generico: il test la confronta col catalogo',
     'utils/dialogStack.js:__dialogStackSize': 'sonda della pila delle finestre per i test',
     'utils/escapeHtml.js:escapeHtml': 'l\'unica funzione ammessa dalla guardia dei sink HTML (htmlSinks.contract)',
+    'utils/leaveGuard.js:isLeaveGuardActive': 'sonda degli editor montati per il test del guard di navigazione',
+    'utils/glossary.js:CONCEPTS': 'concetti e termini sostituiti: letta dal test dei termini di tutta l\'app (UI-4, U22)',
     'utils/glossary.js:ALLOWED_ENGLISH': 'parole inglesi ammesse: lette dal test del glossario',
     'utils/glossary.js:NODE_TYPE_TERMS': 'tipo di nodo -> entità del glossario: letta dal test del glossario',
     'utils/permissions.js:CAPABILITY_BACKEND': 'capability -> regola del backend: letta dal test dei permessi',

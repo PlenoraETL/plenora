@@ -32,6 +32,7 @@ import { useEseguibileRun } from './useEseguibileRun';
 import { initialOutputFormat, outputFormatOptions } from '../../constants/outputFormats';
 import './EseguibileExecuteWizard.css';
 import { formatBytes, formatNumber } from '../../utils/format';
+import { projectTypeChip } from '../../utils/projectTypes';
 
 
 /** Definizioni del manifest nel formato della finestra «Prima di avviare». */
@@ -222,7 +223,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
     id: Date.now(),
     mode: projectType,
     title: eseguibile.name,
-    subtitle: `Versione ${eseguibile.active_version} · ${projectType.toUpperCase()}`,
+    subtitle: `Versione ${eseguibile.active_version} · ${projectTypeChip(projectType)}`,
     inputDefinitions: scalars,
     omitEmptyOptional: true,
     user: null,
@@ -273,7 +274,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
     <>
       <FileInputs definitions={fileDefs} files={files} setFiles={setFiles} eseguibileId={eseguibile.id} />
       <section className="before-run__section" aria-label="Risultato">
-        <h3 className="before-run__heading">File di output</h3>
+        <h3 className="before-run__heading">File del risultato</h3>
         <div className="before-run__row">
           <label htmlFor="esw-output-format" className="before-run__label">Formato</label>
           {fileBased ? (

@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { fetchOpenApiSchema } from '../../api/apiConnections';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { humanizeError } from '../../utils/errorMessages';
-import { normalizeOpenApi, buildConnectionPayloads, needsBaseUrl, IMPORT_AUTH_OPTIONS } from '../../utils/openapiImport';
+import { loadOpenApi, buildConnectionPayloads, needsBaseUrl, IMPORT_AUTH_OPTIONS } from '../../utils/openapiImport';
 import './OpenAPIImportModal.css';
 
 const NO_AUTH = { type: 'none' };
@@ -42,10 +42,10 @@ function OpenAPIImportModal({ onClose, onImport }) {
     try {
       if (importMode === 'url') {
         if (!url) throw new Error('Inserisci un URL');
-        applySpec(normalizeOpenApi(await fetchOpenApiSchema(url), { sourceUrl: url }));
+        applySpec(await loadOpenApi(await fetchOpenApiSchema(url), { sourceUrl: url }));
       } else {
         if (!pastedSchema) throw new Error('Incolla lo schema OpenAPI');
-        applySpec(normalizeOpenApi(pastedSchema));
+        applySpec(await loadOpenApi(pastedSchema));
       }
     } catch (e) { setError(humanizeError(e).message); }
     finally { setLoading(false); }
@@ -55,7 +55,7 @@ function OpenAPIImportModal({ onClose, onImport }) {
     const file = e.target.files[0]; if (!file) return;
     setLoading(true); setError(null);
     try {
-      applySpec(normalizeOpenApi(await file.text()));
+      applySpec(await loadOpenApi(await file.text()));
     } catch (err) { setError(`File «${file.name}» non valido: ${humanizeError(err).message}`); }
     finally { setLoading(false); }
   };

@@ -210,8 +210,8 @@ describe('ApiConnectionManager', () => {
 
     render(<ApiConnectionManager />);
 
-    await screen.findByRole('button', { name: /da template/i });
-    await userEvent.click(screen.getByRole('button', { name: /da template/i }));
+    await screen.findByRole('button', { name: /da modello/i });
+    await userEvent.click(screen.getByRole('button', { name: /da modello/i }));
     await userEvent.click(screen.getByRole('button', { name: /usa template test/i }));
 
     expect(await screen.findByDisplayValue('POI Search')).toBeInTheDocument();

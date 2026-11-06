@@ -83,7 +83,7 @@
 }
 
 .estrai-sidebar__section-toggle {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--plen-text-dim);
   width: 12px;
   flex-shrink: 0;
@@ -101,7 +101,7 @@
 
 .estrai-sidebar__count-badge {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--plen-text-dim);
   background: var(--plen-surface-2);
   border: 1px solid var(--plen-border-hi);
@@ -150,7 +150,7 @@
 
 .estrai-sidebar__table-cols {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--plen-text-dim);
   flex-shrink: 0;
 }
@@ -200,7 +200,7 @@
 }
 .estrai-sidebar__user-email {
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-dim);
 }
 .estrai-sidebar__logout {

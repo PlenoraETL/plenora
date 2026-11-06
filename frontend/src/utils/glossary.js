@@ -13,11 +13,15 @@
  * resto e' in italiano. Il test tests/shared/glossary.contract.test.js
  * cerca i termini vietati nel testo visibile dei file degli editor.
  *
+ * Le icone vengono dalla tabella per significato (utils/icons, UI-4 U24).
+ *
  * Il catalogo delle operazioni Manipola arriva dal backend
  * (transforms_registry.json): TRANSFORM_TERMS ne sovrascrive, per chiave
  * operazione, i nomi e le descrizioni con termini inglesi. Si applica una
  * volta sola, quando il registry entra in cache (utils/transformRegistry).
  */
+
+import { ICON } from './icons';
 
 /** Termini inglesi ammessi nel testo visibile (decisione dell'utente). */
 export const ALLOWED_ENGLISH = Object.freeze({
@@ -41,57 +45,57 @@ export const ALLOWED_ENGLISH = Object.freeze({
  */
 const T = {
   // ── Tipi di nodo ────────────────────────────────────────────────────────
-  table: { name: 'Tabella', icon: '🗂️', description: 'Una tabella o una vista del database' },
-  view: { name: 'Vista', icon: '👁', description: 'Una vista del database' },
-  feature_layer: { name: 'Layer ArcGIS', icon: '🗺️', description: 'Un layer di un Feature Service ArcGIS' },
-  project_source: { name: 'Progetto sorgente', icon: '📊', description: 'Il risultato di un altro progetto' },
-  file_source: { name: 'File', icon: '📄', description: 'Un file caricato nella gestione file' },
+  table: { name: 'Tabella', icon: ICON.table, description: 'Una tabella o una vista del database' },
+  view: { name: 'Vista', icon: ICON.view, description: 'Una vista del database' },
+  feature_layer: { name: 'Layer ArcGIS', icon: ICON.arcgis_layer, description: 'Un layer di un Feature Service ArcGIS' },
+  project_source: { name: 'Progetto sorgente', icon: ICON.project_result, description: 'Il risultato di un altro progetto' },
+  file_source: { name: 'File', icon: ICON.file, description: 'Un file caricato nella gestione file' },
   datasource: {
-    name: 'Data Source', icon: '🗄️', description: 'File da SharePoint, FTP o cartella locale',
+    name: 'Data Source', icon: ICON.datasource, description: 'File da SharePoint, FTP o cartella locale',
     formerNames: ['DataSource', 'DS'],
   },
-  datasource_write: { name: 'Scrittura su Data Source', icon: '🗄️', description: "Scrive l'Output su un Data Source" },
-  static_values: { name: 'Valori statici', icon: '📝', description: 'Valori fissi scritti a mano', formerNames: ['Valori Statici'] },
-  runtime_input: { name: 'Input runtime', icon: '⌨', description: 'Un valore chiesto quando il progetto viene eseguito' },
-  transform: { name: 'Operazione', icon: '⚙️', description: "Un'operazione sui dati", formerNames: ['Trasformazione'] },
+  datasource_write: { name: 'Scrittura su Data Source', icon: ICON.datasource, description: "Scrive l'Output su un Data Source" },
+  static_values: { name: 'Valori statici', icon: ICON.static_values, description: 'Valori fissi scritti a mano', formerNames: ['Valori Statici'] },
+  runtime_input: { name: 'Input runtime', icon: ICON.runtime_input, description: 'Un valore chiesto quando il progetto viene eseguito' },
+  transform: { name: 'Operazione', icon: ICON.operation, description: "Un'operazione sui dati", formerNames: ['Trasformazione'] },
   multi_join: {
-    name: 'Multi-Join', icon: '🔗', description: 'Unisce più sorgenti su chiavi comuni',
+    name: 'Multi-Join', icon: ICON.join, description: 'Unisce più sorgenti su chiavi comuni',
     formerNames: ['Unione', 'Multi Join', 'MultiJoin'],
   },
-  api_enrich: { name: 'Arricchimento API', icon: '🔌', description: 'Chiama una API per ogni riga' },
-  output: { name: 'Output', icon: '📁', description: 'Il file finale del flusso' },
+  api_enrich: { name: 'Arricchimento API', icon: ICON.api, description: 'Chiama una API per ogni riga' },
+  output: { name: 'Output', icon: ICON.output, description: 'Il file finale del flusso' },
   load_db: {
-    name: 'Carica su database', icon: '💾', description: "Scrive l'Output in una tabella o su un servizio REST",
+    name: 'Carica su database', icon: ICON.load_db, description: "Scrive l'Output in una tabella o su un servizio REST",
     formerNames: ['Carica DB', 'CARICA DB', 'CARICA'],
   },
   load_arcgis: {
-    name: 'Carica su ArcGIS', icon: '🌐', description: "Scrive l'Output su un layer ArcGIS",
+    name: 'Carica su ArcGIS', icon: ICON.load_arcgis, description: "Scrive l'Output su un layer ArcGIS",
     formerNames: ['Carica ArcGIS', 'CARICA ArcGIS'],
   },
-  note: { name: 'Nota', icon: '💬', description: 'Un appunto libero sul canvas' },
-  join: { name: 'Join', icon: '🔗', description: 'Unisce due tabelle su colonne chiave' },
-  concat: { name: 'Concatena', icon: '➕', description: 'Accoda le righe di più tabelle' },
-  lookup: { name: 'Mappa valori', icon: '🔁', description: 'Ricodifica i valori di una colonna' },
+  note: { name: 'Nota', icon: ICON.note, description: 'Un appunto libero sul canvas' },
+  join: { name: 'Join', icon: ICON.join, description: 'Unisce due tabelle su colonne chiave' },
+  concat: { name: 'Concatena', icon: ICON.concat, description: 'Accoda le righe di più tabelle' },
+  lookup: { name: 'Mappa valori', icon: ICON.lookup, description: 'Ricodifica i valori di una colonna' },
 
   // ── Connettori di Arricchisci (palette e menu) ──────────────────────────
-  connector_template: { name: 'Arricchimento da modello', icon: '🍪', description: 'Una connessione creata da un modello di API' },
-  connector_manual: { name: 'API manuale', icon: '✏️', description: 'Connettore configurato a mano' },
-  connector_openapi: { name: 'API OpenAPI', icon: '📋', description: 'Da uno schema OpenAPI importato' },
-  connector_rest_file: { name: 'Processore file', icon: '📦', description: 'Servizio REST che riceve e restituisce file' },
+  connector_template: { name: 'Arricchimento da modello', icon: ICON.template, description: 'Una connessione creata da un modello di API' },
+  connector_manual: { name: 'API manuale', icon: ICON.manual, description: 'Connettore configurato a mano' },
+  connector_openapi: { name: 'API OpenAPI', icon: ICON.openapi, description: 'Da uno schema OpenAPI importato' },
+  connector_rest_file: { name: 'Processore file', icon: ICON.file_processor, description: 'Servizio REST che riceve e restituisce file' },
 
   // ── Azioni dell'editor ──────────────────────────────────────────────────
-  run: { name: 'Esegui', icon: '▶', description: 'Salva, controlla ed esegui', busyName: 'In esecuzione…' },
-  before_run: { name: 'Prima di avviare', icon: '🧭', description: 'Input, stima e conferma prima di eseguire' },
-  fill_values: { name: 'Riempi con i valori presenti', icon: '⤓', description: "Propone come righe da tradurre i valori che la colonna ha nei dati in ingresso" },
-  preview: { name: 'Anteprima', icon: '👁️', description: 'Mostra le prime righe del risultato' },
-  validate: { name: 'Valida', icon: '🔍', description: 'Controlla il canvas prima di eseguire' },
-  save: { name: 'Salva', icon: '💾', description: 'Salva (Ctrl+S)', busyName: 'Salvataggio…' },
-  versions: { name: 'Versioni', icon: '🕘', description: 'Versioni salvate del canvas' },
-  run_history: { name: 'Cronologia esecuzioni', icon: '🕐', description: 'Le esecuzioni passate di questo passo' },
-  connections: { name: 'Connessioni', icon: '🔌', description: 'Gestione delle connessioni ai database' },
-  add_step: { name: 'Passo', icon: '＋', description: 'Aggiungi un passo (/ o A)' },
-  delete_step: { name: 'Elimina passo', icon: '🗑', description: 'Elimina il passo e i suoi collegamenti' },
-  schedule: { name: 'Pianificazione', icon: '⏰', description: 'Esecuzioni automatiche programmate' },
+  run: { name: 'Esegui', icon: ICON.run, description: 'Salva, controlla ed esegui', busyName: 'In esecuzione…' },
+  before_run: { name: 'Prima di avviare', icon: ICON.before_run, description: 'Input, stima e conferma prima di eseguire' },
+  fill_values: { name: 'Riempi con i valori presenti', icon: ICON.fill_values, description: "Propone come righe da tradurre i valori che la colonna ha nei dati in ingresso" },
+  preview: { name: 'Anteprima', icon: ICON.preview, description: 'Mostra le prime righe del risultato' },
+  validate: { name: 'Valida', icon: ICON.validate, description: 'Controlla il canvas prima di eseguire' },
+  save: { name: 'Salva', icon: ICON.save, description: 'Salva (Ctrl+S)', busyName: 'Salvataggio…' },
+  versions: { name: 'Versioni', icon: ICON.versions, description: 'Versioni salvate del canvas' },
+  run_history: { name: 'Cronologia esecuzioni', icon: ICON.run_history, description: 'Le esecuzioni passate di questo passo' },
+  connections: { name: 'Connessioni', icon: ICON.connection, description: 'Gestione delle connessioni ai database' },
+  add_step: { name: 'Passo', icon: ICON.add, description: 'Aggiungi un passo (/ o A)' },
+  delete_step: { name: 'Elimina passo', icon: ICON.delete, description: 'Elimina il passo e i suoi collegamenti' },
+  schedule: { name: 'Pianificazione', icon: ICON.schedule, description: 'Esecuzioni automatiche programmate' },
 };
 
 export const TERMS = Object.freeze(T);
@@ -128,6 +132,31 @@ export function term(key) {
 
 /** Nome dell'entita'. */
 export const termName = (key) => term(key).name;
+
+/*
+ * Concetti dell'app (UI-4, U22): per ognuno il termine italiano scelto e
+ * quelli che sostituisce. I sostituiti sono vietati nel testo visibile di
+ * TUTTA l'app, pagine di sistema e /run comprese (gli editor hanno in piu'
+ * l'elenco lungo del loro test): tests/shared/terms.contract.test.js.
+ * Prima la stessa cosa era progetto, flusso, catena o pipeline a seconda
+ * della pagina.
+ */
+export const CONCEPTS = Object.freeze({
+  progetto: { term: 'progetto', replaces: ['flusso', 'flussi', 'catena', 'catene', 'pipeline', 'workflow'] },
+  passo: { term: 'passo', replaces: ['step', 'steps'] },
+  esecuzione: { term: 'esecuzione', replaces: ['run', 'runs', 'job', 'jobs', 'task', 'tasks'] },
+  pianificazione: { term: 'pianificazione', replaces: ['schedule', 'scheduler', 'schedulazione', 'schedulato', 'schedulati'] },
+  caricare: { term: 'carica', replaces: ['upload'] },
+  scaricare: { term: 'scarica', replaces: ['download'] },
+  pulizia: { term: 'pulizia', replaces: ['cleanup'] },
+  anteprima: { term: 'anteprima', replaces: ['preview'] },
+  modello: { term: 'modello', replaces: ['template', 'templates'] },
+  tabella: { term: 'tabella', replaces: ['dataset'] },
+  arricchimento: { term: 'arricchimento', replaces: ['enrichment'] },
+  blocco: { term: 'a blocchi', replaces: ['batch'] },
+  // «Output» e' solo il passo finale (sempre maiuscolo); il resto e' il risultato.
+  risultato: { term: 'risultato', replaces: [], exactCase: ['Output'] },
+});
 
 /** Tipi di input runtime (pannello dell'input e riepiloghi): un solo nome. */
 export const INPUT_KIND_LABELS = Object.freeze({

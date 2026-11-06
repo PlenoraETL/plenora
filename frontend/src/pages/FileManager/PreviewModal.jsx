@@ -16,7 +16,7 @@ function PreviewModal({ file, data, onClose }) {
     <ModalWrapper
       isOpen={true}
       onClose={onClose}
-      title={`Preview — ${file.name}`}
+      title={`Anteprima — ${file.name}`}
       icon="👁"
       subtitle={`Prime ${data.rows?.length || 0} righe · ${formatNumber(data.total_count ?? 0)} totali`}
       size="xl"

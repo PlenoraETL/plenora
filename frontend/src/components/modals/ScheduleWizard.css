@@ -4,38 +4,26 @@
 ───────────────────────────────────────────────────────────────────────── */
 
 :root {
-  --wiz-bg:        #07090F;
-  --wiz-surface:   #0C0F18;
-  --wiz-surface-2: #111525;
-  --wiz-surface-3: #171C2E;
-  --wiz-border:    rgba(255,255,255,0.06);
-  --wiz-border-hi: rgba(255,255,255,0.11);
-  --wiz-text:      #DDE4F2;
-  --wiz-text-sub:  #7D8BA8;
-  --wiz-text-dim:  #3F4D68;
-  --wiz-blue:      #4B8BFF;
-  --wiz-blue-mid:  #2563EB;
+  --wiz-bg:        var(--plen-bg);
+  --wiz-surface:   var(--plen-surface);
+  --wiz-surface-2: var(--plen-surface-2);
+  --wiz-surface-3: var(--plen-surface-3);
+  --wiz-border:    var(--plen-border);
+  --wiz-border-hi: var(--plen-border-hi);
+  --wiz-text:      var(--plen-text);
+  --wiz-text-sub:  var(--plen-text-sub);
+  --wiz-text-dim:  var(--plen-text-dim);
+  --wiz-blue:      var(--plen-blue);
+  --wiz-blue-mid:  var(--plen-blue-mid);
   --wiz-blue-dim:  rgba(75,139,255,0.10);
-  --wiz-ok:        #34D399;
-  --wiz-err:       #F87171;
+  --wiz-ok:        var(--plen-ok);
+  --wiz-err:       var(--plen-err);
   --wiz-font-d: 'Syne',    sans-serif;
   --wiz-font-b: 'Inter',   sans-serif;
   --wiz-font-m: 'DM Mono', monospace;
 }
 [data-theme='light'] {
-  --wiz-bg:        #EFF2F9;
-  --wiz-surface:   #FFFFFF;
-  --wiz-surface-2: #E8EDF8;
-  --wiz-surface-3: #D8E0F0;
-  --wiz-border:    rgba(0,0,0,0.07);
-  --wiz-border-hi: rgba(0,0,0,0.13);
-  --wiz-text:      #0B1120;
-  --wiz-text-sub:  #4A5678;
-  --wiz-text-dim:  #96A3BE;
-  --wiz-blue:      #2563EB;
-  --wiz-blue-mid:  #1D4ED8;
   --wiz-blue-dim:  rgba(37,99,235,0.08);
-  --wiz-err:       #DC2626;
 }
 
 /* Overlay */
@@ -99,15 +87,6 @@
 .wiz-select--error { border-color: var(--wiz-err); }
 .wiz-hint  { font-size: 11px; color: var(--wiz-text-dim); font-family: var(--wiz-font-m); }
 .wiz-error { font-size: 11px; color: var(--wiz-err); font-weight: 600; font-family: var(--wiz-font-m); }
-.wiz-help-link {
-  font-size: 10px;
-  color: var(--wiz-blue);
-  text-decoration: none;
-  margin-left: auto;
-  font-family: var(--wiz-font-m);
-  opacity: .7;
-}
-.wiz-help-link:hover { opacity: 1; text-decoration: underline; }
 .wiz-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .wiz-muted { color: var(--wiz-text-dim); font-style: italic; }
 
@@ -151,14 +130,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.wiz-project-card__type { font-size: 10px; font-family: var(--wiz-font-m); margin-top: 1px; }
+.wiz-project-card__type { font-size: 11px; font-family: var(--wiz-font-m); margin-top: 1px; }
 .wiz-project-card__check {
   width: 18px; height: 18px;
   border-radius: 50%;
   background: var(--wiz-blue);
   color: white;
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -251,7 +230,7 @@
 .wiz-queue-opt--active { border-color: var(--wiz-blue); background: var(--wiz-blue-dim); }
 .wiz-queue-opt__num { font-family: var(--wiz-font-d); font-size: 18px; font-weight: 800; color: var(--wiz-text); }
 .wiz-queue-opt--active .wiz-queue-opt__num { color: var(--wiz-blue); }
-.wiz-queue-opt__desc { font-size: 10px; color: var(--wiz-text-dim); font-family: var(--wiz-font-m); text-align: center; }
+.wiz-queue-opt__desc { font-size: 11px; color: var(--wiz-text-dim); font-family: var(--wiz-font-m); text-align: center; }
 
 /* Write mode selector */
 .wiz-write-modes { display: flex; gap: 8px; }
@@ -272,7 +251,7 @@
 .wiz-write-mode--active { border-color: var(--wiz-blue); background: var(--wiz-blue-dim); }
 .wiz-write-mode__label { font-size: 12.5px; font-weight: 700; color: var(--wiz-text); font-family: var(--wiz-font-d); }
 .wiz-write-mode--active .wiz-write-mode__label { color: var(--wiz-blue); }
-.wiz-write-mode__desc  { font-size: 10px; color: var(--wiz-text-dim); font-family: var(--wiz-font-m); }
+.wiz-write-mode__desc  { font-size: 11px; color: var(--wiz-text-dim); font-family: var(--wiz-font-m); }
 
 /* Destination fields */
 .wiz-destination-fields {
@@ -309,7 +288,7 @@
   border: 1px solid var(--wiz-border);
 }
 .wiz-summary__group-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -355,3 +334,13 @@
   align-items: center;
   padding-top: 24px;
 }
+
+/* Cron in parole e prossime esecuzioni (UI-4, U31). */
+.wiz-cron-preview {
+  margin-top: 6px; padding: 9px 11px; border-radius: 8px;
+  background: var(--wiz-surface-2); border: 1px solid var(--wiz-border);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.wiz-cron-preview__words { font-size: 13px; font-weight: 600; color: var(--wiz-text); }
+.wiz-cron-preview__runs { margin: 0; padding-left: 18px; font-size: 12px; color: var(--wiz-text-sub); font-family: var(--wiz-font-m); }
+.wiz-cron-preview__never { font-size: 12px; color: var(--wiz-err); }

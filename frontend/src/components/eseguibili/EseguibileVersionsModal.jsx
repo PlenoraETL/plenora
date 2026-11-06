@@ -21,6 +21,7 @@ import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import ConfirmDialog from '../common/ConfirmDialog';
 import ListState from '../common/ListState';
 import { formatDateTime } from '../../utils/format';
+import { projectTypeChip } from '../../utils/projectTypes';
 
 function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
   const toast = useToast();
@@ -108,7 +109,7 @@ function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
               <div className={`esv__item ${version.active ? 'esv__item--active' : ''}`} key={version.id}>
                 <div>
                   <strong>Versione {version.version_number}</strong>
-                  <span>{version.project_type.toUpperCase()} - {version.inputs_count} input</span>
+                  <span>{projectTypeChip(version.project_type)} · {version.inputs_count} input</span>
                   <small>{formatDateTime(version.created_at)}</small>
                 </div>
                 {version.active ? (

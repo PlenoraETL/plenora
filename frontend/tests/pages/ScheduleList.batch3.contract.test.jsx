@@ -83,7 +83,7 @@ describe('ScheduleList contract', () => {
     render(<ScheduleList />);
     await screen.findByText('Nightly Import');
 
-    await userEvent.click(screen.getByRole('button', { name: /Elimina schedule/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Elimina la pianificazione/i }));
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );
@@ -108,7 +108,7 @@ describe('ScheduleList contract', () => {
     render(<ScheduleList />);
     await screen.findByText('Nightly Import');
 
-    await userEvent.click(screen.getByRole('button', { name: /Elimina schedule/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Elimina la pianificazione/i }));
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );
@@ -160,10 +160,10 @@ describe('ScheduleList contract', () => {
 
     render(<ScheduleList />);
     await screen.findByText('Nightly Import');
-    const toggle = screen.getByRole('checkbox', { name: /disabilita schedule/i });
+    const toggle = screen.getByRole('checkbox', { name: /disattiva la pianificazione/i });
     await userEvent.click(toggle);
 
-    expect(screen.getByRole('checkbox', { name: /abilita schedule/i }).checked).toBe(false);
+    expect(screen.getByRole('checkbox', { name: /attiva la pianificazione/i }).checked).toBe(false);
     resolveToggle({ ok: true });
     await waitFor(() => expect(schedulesMock.listSchedules).toHaveBeenCalledTimes(2));
     expect(screen.getByText('Nightly Import')).toBeTruthy();
@@ -214,7 +214,7 @@ describe('ScheduleList contract', () => {
 
     render(<ScheduleList />);
     await screen.findByText('Nightly Import');
-    await userEvent.click(screen.getByRole('button', { name: /📥 Download/ }));
+    await userEvent.click(screen.getByRole('button', { name: /📥 Risultati/ }));
 
     await waitFor(() =>
       expect(schedulesMock.listScheduleRuns).toHaveBeenCalledWith('sch-1'),
@@ -222,7 +222,7 @@ describe('ScheduleList contract', () => {
     expect(await screen.findByText('output.csv')).toBeInTheDocument();
     expect(screen.getByText(/Storico esecuzioni/i)).toBeInTheDocument();
     const runDownloadBtn = screen.getByRole('button', {
-      name: /Scarica output di questa esecuzione/i,
+      name: /Scarica il risultato di questa esecuzione/i,
     });
     await userEvent.click(runDownloadBtn);
 

@@ -76,6 +76,20 @@
 }
 .plen-page__theme-opt--on { background: var(--plen-surface); color: var(--plen-text); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2); }
 
+/* Pulsante «?» della guida scorciatoie (UI-4, U28). */
+.plen-page__shortcuts {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--plen-border-hi);
+  background: var(--plen-surface-2);
+  color: var(--plen-text-sub);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.plen-page__shortcuts:hover { color: var(--plen-blue); border-color: var(--plen-blue); }
+
 .plen-page__body {
   flex: 1;
   min-width: 0;

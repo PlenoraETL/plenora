@@ -16,6 +16,7 @@ import '../styles/AdminSystemStatusPage.css';
 import { useResource } from '../hooks/useResource';
 import { ResourceError } from '../components/common/ListState';
 import { formatDateTime as fmtDate, formatBytes as fmtBytes, formatNumber, formatTime } from '../utils/format';
+import { ICON } from '../utils/icons';
 const STATUS_LABELS = { ok: 'OK', warn: 'WARN', error: 'ERRORE', unknown: 'N/D' };
 const STATUS_ICONS = { ok: '✓', warn: '⚠', error: '✗', unknown: '?' };
 
@@ -73,8 +74,8 @@ function Card({ title, icon, data, children, linkLabel, onLink }) {
 }
 function BackupCard({ data, onLink }) {
   return (
-    <Card title="Backup DB" icon="💾" data={data}
-          linkLabel="Vedi Backup DB" onLink={onLink}>
+    <Card title="Backup del database" icon={ICON.backup} data={data}
+          linkLabel="Vedi i backup" onLink={onLink}>
       {data && (
         <>
           {data.last_modified && <div>Ultimo: <b>{fmtDate(data.last_modified)}</b></div>}
@@ -105,8 +106,8 @@ function VerifyRestoreCard({ data }) {
 
 function SchedulesCard({ data, onLink }) {
   return (
-    <Card title="Scheduler" icon="⏰" data={data}
-          linkLabel="Vedi Scheduler" onLink={onLink}>
+    <Card title="Pianificazioni" icon="⏰" data={data}
+          linkLabel="Vedi le pianificazioni" onLink={onLink}>
       {data && (
         <>
           {data.total_active != null && <div>Attivi: <b>{data.total_active}</b></div>}

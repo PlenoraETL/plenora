@@ -42,7 +42,7 @@ describe('sessione 6 frontend error handling lint', () => {
   it('ScheduleList: errore di caricamento con Riprova', () => {
     const src = readSrc('pages/ScheduleList.jsx');
     expect(src).toContain('useResource(');
-    expect(src).toContain('title="Schedule non caricati"');
+    expect(src).toContain('title="Pianificazioni non caricate"');
   });
 
   it('ScheduleList handleDelete branching su 404/409', () => {

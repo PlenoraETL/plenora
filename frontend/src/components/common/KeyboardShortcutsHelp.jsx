@@ -1,48 +1,36 @@
 /**
  * KeyboardShortcutsHelp.jsx — overlay guida scorciatoie da tastiera. #33.
  *
- * Rende SCOPRIBILI le shortcut sparse del FE (prima non c'era alcun help).
- * Si apre con `?` (Shift+/) globale o via evento `plenora:open-shortcuts`
- * (dalla Command Palette). Registro centralizzato qui sotto.
+ * Rende SCOPRIBILI le shortcut del FE. Si apre con `?` globale, con il
+ * pulsante «?» (components/common/ShortcutsButton) o con l'evento
+ * SHORTCUTS_EVENT (dalla palette Ctrl+K). Le righe vengono dalla tabella
+ * unica utils/shortcuts, la stessa che usano i gestori dei tasti (UI-4,
+ * U28): la guida e' completa per costruzione.
  */
 import React, { useState, useEffect } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { isShortcutBlocked, isTypingTarget } from '../../utils/dialogStack';
+import { SHORTCUTS, SHORTCUTS_EVENT, matchesShortcut } from '../../utils/shortcuts';
+import { ICON } from '../../utils/icons';
 import './KeyboardShortcutsHelp.css';
 
-// Registro scorciatoie. `keys` = sequenza di tasti mostrati come <kbd>.
-const SHORTCUTS = [
-  {
-    group: 'Globale',
-    items: [
-      { keys: ['⌘/Ctrl', 'K'], label: 'Apri la palette comandi (vai a…)' },
-      { keys: ['?'],            label: 'Mostra questa guida' },
-      { keys: ['Esc'],          label: 'Chiudi la finestra in primo piano (modale, palette o guida)' },
-    ],
-  },
-  {
-    group: 'Canvas (editor)',
-    items: [
-      { keys: ['Canc'],            label: 'Elimina il nodo o il collegamento selezionato (chiede conferma)' },
-      { keys: ['⌘/Ctrl', 'Z'],     label: 'Annulla (undo) l’ultima modifica' },
-      { keys: ['⌘/Ctrl', '⇧', 'Z'], label: 'Ripristina (redo)' },
-      { keys: ['⌘/Ctrl', 'Y'],     label: 'Ripristina (redo) — alternativa' },
-      { keys: ['⌘/Ctrl', 'S'],     label: 'Salva il progetto' },
-    ],
-  },
-];
+const GROUPS = [...new Set(SHORTCUTS.map(s => s.group))];
 
-const SHORTCUTS_EVENT = 'plenora:open-shortcuts';
+const Keys = ({ keys }) => (
+  <span className="kbd-help__keys">
+    {keys.map((k, j) => <kbd key={j} className="kbd-help__key">{k}</kbd>)}
+  </span>
+);
 
 export default function KeyboardShortcutsHelp() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const onKey = (e) => {
-      // `?` (Shift+/) quando non si sta scrivendo in un campo e nessuna
-      // finestra e' aperta (regola unica delle scorciatoie, utils/dialogStack).
+      // `?` quando non si sta scrivendo in un campo e nessuna finestra e'
+      // aperta (regola unica delle scorciatoie, utils/dialogStack).
       if (isTypingTarget(e.target) || isShortcutBlocked(e)) return;
-      if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+      if (matchesShortcut('help', e)) {
         e.preventDefault();
         setOpen((v) => !v);
       }
@@ -63,19 +51,18 @@ export default function KeyboardShortcutsHelp() {
       isOpen
       onClose={() => setOpen(false)}
       title="Scorciatoie da tastiera"
-      icon="⌨️"
+      icon={ICON.shortcuts}
       size="sm"
     >
       <div className="kbd-help">
-        {SHORTCUTS.map((g) => (
-          <div key={g.group} className="kbd-help__group">
-            <div className="kbd-help__group-title">{g.group}</div>
-            {g.items.map((it, i) => (
-              <div key={i} className="kbd-help__row">
-                <span className="kbd-help__keys">
-                  {it.keys.map((k, j) => <kbd key={j} className="kbd-help__key">{k}</kbd>)}
-                </span>
-                <span className="kbd-help__label">{it.label}</span>
+        {GROUPS.map((group) => (
+          <div key={group} className="kbd-help__group">
+            <div className="kbd-help__group-title">{group}</div>
+            {SHORTCUTS.filter(s => s.group === group).map((s) => (
+              <div key={s.id} className="kbd-help__row" data-shortcut={s.id}>
+                <Keys keys={s.keys} />
+                {s.altKeys && <><span className="kbd-help__or">o</span><Keys keys={s.altKeys} /></>}
+                <span className="kbd-help__label">{s.label}</span>
               </div>
             ))}
           </div>

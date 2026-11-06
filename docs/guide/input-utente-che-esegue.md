@@ -2,7 +2,7 @@
 
 <!-- Generato da frontend/src/utils/guides/utenteCheEsegue.js: è la stessa guida che si apre nell'app dal nodo «Input di progetto» (Guida completa). Modifica quel file e rigenera; non modificare questo a mano. -->
 
-Come mostrare a ogni utente solo i suoi dati: l'input «Utente che esegue» porta nella catena il nome utente di chi avvia l'Eseguibile.
+Come mostrare a ogni utente solo i suoi dati: l'input «Utente che esegue» porta nel progetto il nome utente di chi avvia l'Eseguibile.
 
 ## Cos'è
 
@@ -21,7 +21,7 @@ Il valore lo mette solo il server, con l'utente che ha fatto l'accesso. Nella fi
 
 Chi apre l'Eseguibile non può quindi farsi passare per un altro utente né vedere i dati di un altro: il filtro usa sempre il suo nome utente.
 
-> **Attenzione:** La sicurezza vale per il filtro che hai costruito: se la catena non usa davvero il valore (input non collegato, Join non interno), i dati non vengono filtrati. Prova sempre il risultato con un nome utente di prova.
+> **Attenzione:** La sicurezza vale per il filtro che hai costruito: se il progetto non usa davvero il valore (input non collegato, Join non interno), i dati non vengono filtrati. Prova sempre il risultato con un nome utente di prova.
 
 ## Configurazione passo passo (esempio)
 
@@ -29,7 +29,7 @@ Esempio reale: gli utenti hanno nomi come `E0041` e i dati hanno una colonna ist
 
 1. Apri il progetto Manipola e aggiungi un nodo «Input di progetto».
 2. In «Tipo» scegli «Utente che esegue».
-3. In «Come entra nella catena» scegli «Sorgente: tabella di una riga». Lascia il nome della colonna `utente` (o scegline un altro).
+3. In «Come entra nel progetto» scegli «Sorgente: tabella di una riga». Lascia il nome della colonna `utente` (o scegline un altro).
 4. In «Nome utente di prova» scrivi un nome utente vero, per esempio `E0041`: serve per Anteprima, Valida ed Esegui di prova.
 5. Collega il nodo a un passo Formula che crea la colonna `istituto` con la formula qui sotto: da `E0041` ottiene `004_IS`.
 6. Aggiungi un Join interno (tipo «Inner (solo corrispondenze)») tra i dati principali e il risultato della Formula, sulla colonna istituto dei dati e sulla colonna `istituto` della Formula.
@@ -43,7 +43,7 @@ La formula prende i caratteri dal secondo al quarto del nome utente (`004` da `E
 
 > **Attenzione:** Il nome utente, dopo i passi, deve avere ESATTAMENTE la forma dei dati: stesse cifre, stessi zeri iniziali, stesse maiuscole. Se non corrisponde, il Join interno non trova righe e il risultato è vuoto.
 
-Al posto della sorgente puoi collegare l'input direttamente a un parametro, quando i dati contengono già il nome utente così com'è (per esempio una colonna `owner`): in «Come entra nella catena» lascia «Valore di un parametro» e collega l'input al filtro o al passo.
+Al posto della sorgente puoi collegare l'input direttamente a un parametro, quando i dati contengono già il nome utente così com'è (per esempio una colonna `owner`): in «Come entra nel progetto» lascia «Valore di un parametro» e collega l'input al filtro o al passo.
 
 ## Provare dall'editor: Anteprima, Valida, Esegui di prova
 
@@ -62,9 +62,9 @@ Quando il risultato di prova è giusto, pubblica il progetto come Eseguibile. Da
 
 Il nome utente di prova non entra nell'Eseguibile: vale solo nell'editor.
 
-## Pianificazioni e catene
+## Pianificazioni e progetti collegati
 
-Una Pianificazione o una catena di progetti parte senza una persona che la avvia: non c'è un utente, quindi un progetto con «Utente che esegue» si ferma con un messaggio che lo spiega. Non si usa il nome utente di prova. Per questi progetti usa l'Eseguibile.
+Una Pianificazione o un progetto avviato da un altro progetto parte senza una persona che la avvia: non c'è un utente, quindi un progetto con «Utente che esegue» si ferma con un messaggio che lo spiega. Non si usa il nome utente di prova. Per questi progetti usa l'Eseguibile.
 
 ## Errori comuni
 

@@ -5,22 +5,22 @@
 
 /* ── Token dark ── */
 .cm {
-  --cm-bg:        #07090F;
-  --cm-surface:   #0C0F18;
-  --cm-surface-2: #111525;
-  --cm-surface-3: #171C2E;
-  --cm-border:    rgba(255,255,255,0.06);
-  --cm-border-hi: rgba(255,255,255,0.11);
-  --cm-text:      #DDE4F2;
-  --cm-text-sub:  #7D8BA8;
-  --cm-text-dim:  #5A6B8A;
+  --cm-bg:        var(--plen-bg);
+  --cm-surface:   var(--plen-surface);
+  --cm-surface-2: var(--plen-surface-2);
+  --cm-surface-3: var(--plen-surface-3);
+  --cm-border:    var(--plen-border);
+  --cm-border-hi: var(--plen-border-hi);
+  --cm-text:      var(--plen-text);
+  --cm-text-sub:  var(--plen-text-sub);
+  --cm-text-dim:  var(--plen-text-dim);
   --cm-shadow:    0 14px 44px rgba(0,0,0,0.55);
-  --cm-blue:      #4B8BFF;
-  --cm-blue-mid:  #2563EB;
+  --cm-blue:      var(--plen-blue);
+  --cm-blue-mid:  var(--plen-blue-mid);
   --cm-blue-dim:  rgba(75,139,255,0.10);
-  --cm-ok:    #34D399;
-  --cm-warn:  #FBBF24;
-  --cm-err:   #F87171;
+  --cm-ok:    var(--plen-ok);
+  --cm-warn:  var(--plen-warn);
+  --cm-err:   var(--plen-err);
   --cm-sidebar-w: 220px;
   --cm-topbar-h:  56px;
   --cm-font-d: 'Syne',    'Trebuchet MS', sans-serif;
@@ -30,19 +30,7 @@
 
 /* ── Token light ── */
 [data-theme='light'] .cm {
-  --cm-bg:        #EFF2F9;
-  --cm-surface:   #FFFFFF;
-  --cm-surface-2: #E8EDF8;
-  --cm-surface-3: #D8E0F0;
-  --cm-border:    rgba(0,0,0,0.07);
-  --cm-border-hi: rgba(0,0,0,0.13);
-  --cm-text:      #0B1120;
-  --cm-text-sub:  #4A5678;
-  --cm-text-dim:  #5F6E8C;
   --cm-shadow:    0 8px 32px rgba(0,0,0,0.09);
-  --cm-blue:      #2563EB;
-  --cm-blue-mid:  #1D4ED8;
-  --cm-err:       #DC2626;
 }
 
 .cm *, .cm *::before, .cm *::after {
@@ -104,7 +92,7 @@
 .cm__tabs { display: flex; gap: 4px; background: var(--cm-surface-2); border: 1px solid var(--cm-border); border-radius: 10px; padding: 4px; margin-bottom: 22px; width: fit-content; }
 .cm__tab { padding: 6px 18px; border-radius: 7px; font-size: 12px; font-weight: 600; font-family: var(--cm-font-m); color: var(--cm-text-sub); cursor: pointer; border: none; background: transparent; display: flex; align-items: center; gap: 7px; }
 .cm__tab--active { background: var(--cm-surface); color: var(--cm-text); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
-.cm__tab-count { background: var(--cm-surface-3); border-radius: 8px; padding: 1px 7px; font-size: 10px; }
+.cm__tab-count { background: var(--cm-surface-3); border-radius: 8px; padding: 1px 7px; font-size: 11px; }
 .cm__tab--active .cm__tab-count { background: var(--cm-blue-dim); color: var(--cm-blue); }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -120,7 +108,7 @@
 .cm__table { width: 100%; border-collapse: collapse; }
 .cm__table th {
   text-align: left; padding: 11px 18px;
-  font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--cm-text-dim); font-family: var(--cm-font-m);
   background: var(--cm-surface-2); border-bottom: 1px solid var(--cm-border);
 }
@@ -132,12 +120,12 @@
 .cm__conn-name     { font-size: 13px; font-weight: 600; color: var(--cm-text); }
 .cm__conn-desc     { font-size: 11px; color: var(--cm-text-dim); margin-top: 2px; }
 .cm__conn-detail   { font-size: 11.5px; color: var(--cm-text-sub); font-family: var(--cm-font-m); }
-.cm__conn-detail-sub { font-size: 10px; color: var(--cm-text-dim); font-family: var(--cm-font-m); margin-top: 2px; }
+.cm__conn-detail-sub { font-size: 11px; color: var(--cm-text-dim); font-family: var(--cm-font-m); margin-top: 2px; }
 
 .cm__type-badge {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 10px; border-radius: 6px;
-  font-size: 10px; font-weight: 700; font-family: var(--cm-font-m);
+  font-size: 11px; font-weight: 700; font-family: var(--cm-font-m);
   letter-spacing: 0.05em; border: 1px solid; white-space: nowrap;
 }
 
@@ -149,7 +137,7 @@
    MODAL
 ───────────────────────────────────────────────────────────────────────── */
 .cm__modal-field { margin-bottom: 16px; }
-.cm__modal-label { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cm-text-dim); font-family: var(--cm-font-m); margin-bottom: 7px; }
+.cm__modal-label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cm-text-dim); font-family: var(--cm-font-m); margin-bottom: 7px; }
 .cm__modal-input {
   width: 100%; padding: 9px 12px;
   background: var(--cm-surface-2); border: 1px solid var(--cm-border-hi);

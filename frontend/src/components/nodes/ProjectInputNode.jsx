@@ -91,7 +91,7 @@ function IdentityHelp({ sourceAllowed, onOpenGuide }) {
         corrisponde il risultato è vuoto.
       </p>
       <p>
-        Pianificazioni e catene si bloccano (nessun utente). Dall’editor «Esegui» diventa un’esecuzione di
+        Pianificazioni e progetti collegati si bloccano (nessun utente). Dall’editor «Esegui» diventa un’esecuzione di
         prova con il nome utente di prova.
       </p>
       <button type="button" {...READ_ONLY_SAFE} className="nodrag pin__help-link" onClick={onOpenGuide}>
@@ -357,7 +357,7 @@ function ProjectInputNode({ id, data }) {
               <GuideModal guide={UTENTE_CHE_ESEGUE_GUIDE} isOpen={guideOpen} onClose={() => setGuideOpen(false)} />
               {sourceAllowed && (
                 <label className="pin__field">
-                  <span>Come entra nella catena</span>
+                  <span>Come entra nel progetto</span>
                   <select
                     className="nodrag"
                     value={asSource ? 'source' : 'parameter'}

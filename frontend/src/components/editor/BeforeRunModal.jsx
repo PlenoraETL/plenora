@@ -166,7 +166,7 @@ function TestRunNotice({ username, problem, recalculateIgnored = false }) {
           {' '}Il risultato si scarica una volta dalla finestra di esecuzione: non diventa l&apos;Output del
           progetto, non aggiorna chi lo usa come sorgente e non avvia Carica. Non ricalcola i progetti a monte:
           usa il loro risultato salvato e, se manca o non è aggiornato, si ferma e chiede di eseguire prima il
-          progetto a monte. Pianificazioni e catene restano bloccate: per gli utenti veri pubblica il progetto
+          progetto a monte. Pianificazioni e progetti collegati restano bloccati: per gli utenti veri pubblica il progetto
           come Eseguibile.
           {recalculateIgnored && (
             <>

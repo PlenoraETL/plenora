@@ -7,32 +7,32 @@
 
 /* ── Token dark (default) ── */
 .pl {
-  --pl-bg:        #07090F;
-  --pl-surface:   #0C0F18;
-  --pl-surface-2: #111525;
-  --pl-surface-3: #171C2E;
-  --pl-border:    rgba(255,255,255,0.06);
-  --pl-border-hi: rgba(255,255,255,0.11);
-  --pl-text:      #DDE4F2;
-  --pl-text-sub:  #7D8BA8;
-  --pl-text-dim:  #5A6B8A;
+  --pl-bg:        var(--plen-bg);
+  --pl-surface:   var(--plen-surface);
+  --pl-surface-2: var(--plen-surface-2);
+  --pl-surface-3: var(--plen-surface-3);
+  --pl-border:    var(--plen-border);
+  --pl-border-hi: var(--plen-border-hi);
+  --pl-text:      var(--plen-text);
+  --pl-text-sub:  var(--plen-text-sub);
+  --pl-text-dim:  var(--plen-text-dim);
   --pl-shadow:    0 14px 44px rgba(0,0,0,0.55);
 
-  --pl-blue:      #4B8BFF;
-  --pl-blue-mid:  #2563EB;
+  --pl-blue:      var(--plen-blue);
+  --pl-blue-mid:  var(--plen-blue-mid);
   --pl-blue-dim:  rgba(75,139,255,0.10);
-  --pl-estrai:    #34C17A;
+  --pl-estrai:    var(--plen-estrai);
   --pl-estrai-dim:    rgba(52,193,122,0.09);
   --pl-estrai-border: rgba(52,193,122,0.22);
-  --pl-manipola:  #9B6DFF;
+  --pl-manipola:  var(--plen-manipola);
   --pl-manipola-dim:    rgba(155,109,255,0.09);
   --pl-manipola-border: rgba(155,109,255,0.22);
   --pl-arricch:   #F5A623;
   --pl-arricch-dim:    rgba(245,166,35,0.09);
   --pl-arricch-border: rgba(245,166,35,0.22);
-  --pl-ok:    #34D399;
-  --pl-warn:  #FBBF24;
-  --pl-err:   #F87171;
+  --pl-ok:    var(--plen-ok);
+  --pl-warn:  var(--plen-warn);
+  --pl-err:   var(--plen-err);
 
   --pl-sidebar-w: 220px;
   --pl-topbar-h:  56px;
@@ -44,20 +44,8 @@
 
 /* ── Token light ── */
 [data-theme='light'] .pl {
-  --pl-bg:        #EFF2F9;
-  --pl-surface:   #FFFFFF;
-  --pl-surface-2: #E8EDF8;
-  --pl-surface-3: #D8E0F0;
-  --pl-border:    rgba(0,0,0,0.07);
-  --pl-border-hi: rgba(0,0,0,0.13);
-  --pl-text:      #0B1120;
-  --pl-text-sub:  #4A5678;
-  --pl-text-dim:  #5F6E8C;
   --pl-shadow:    0 8px 32px rgba(0,0,0,0.09);
-  --pl-blue:      #2563EB;
-  --pl-blue-mid:  #1D4ED8;
   --pl-blue-dim:  rgba(37,99,235,0.10);
-  --pl-err:       #DC2626;
 }
 
 /* Smooth theme transitions */
@@ -120,7 +108,7 @@
   color: white; border-radius: 50%;
   width: 14px; height: 14px;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700;
+  font-size: 11px; font-weight: 700;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -192,7 +180,7 @@
   color: var(--pl-text); margin-bottom: 4px;
 }
 .pl__stat-label {
-  font-size: 10px; color: var(--pl-text-dim);
+  font-size: 11px; color: var(--pl-text-dim);
   letter-spacing: 0.08em; text-transform: uppercase;
   font-family: var(--pl-font-m);
 }
@@ -278,7 +266,7 @@
 .pl__card-open:hover { text-decoration: underline; }
 
 .pl__card-mod {
-  font-size: 9px; font-weight: 600;
+  font-size: 11px; font-weight: 600;
   letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--pl-text-dim); font-family: var(--pl-font-m);
   flex-shrink: 0; padding-top: 2px;
@@ -298,7 +286,7 @@
 }
 
 .pl__meta-key {
-  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--pl-text-dim); font-family: var(--pl-font-m); margin-bottom: 3px;
 }
 .pl__meta-val { font-size: 12px; font-weight: 500; color: var(--pl-text-sub); }
@@ -313,7 +301,7 @@
 /* Status dot */
 .pl__status {
   display: inline-flex; align-items: center; gap: 5px;
-  font-size: 10.5px; color: var(--pl-text-dim);
+  font-size: 11px; color: var(--pl-text-dim);
   font-family: var(--pl-font-m);
 }
 .pl__status::before {
@@ -633,7 +621,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-family: var(--pl-font-m);
   background: var(--pl-blue-dim);
   color: var(--pl-blue);
@@ -657,7 +645,7 @@
   border: 1px dashed var(--pl-border-hi);
   color: var(--pl-text-dim);
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--pl-font-m);
   padding: 1px 8px;
   cursor: pointer;
@@ -666,7 +654,7 @@
 .pl__tag-input {
   width: 90px;
   font: inherit;
-  font-size: 10.5px;
+  font-size: 11px;
   font-family: var(--pl-font-m);
   background: var(--pl-bg);
   color: var(--pl-text);

@@ -50,7 +50,7 @@
 .ppanel__checks { display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow: auto; padding: 2px 0; }
 .ppanel__radios { display: flex; flex-direction: column; gap: 4px; }
 .ppanel__check { display: flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; }
-.ppanel__tag { font-size: 10.5px; padding: 1px 6px; border-radius: 5px; color: var(--plen-text-dim, #8a93a6); background: var(--plen-surface-2, #f3f5fa); }
+.ppanel__tag { font-size: 11px; padding: 1px 6px; border-radius: 5px; color: var(--plen-text-dim, #8a93a6); background: var(--plen-surface-2, #f3f5fa); }
 .ppanel__tag--warn { color: var(--plen-warn, #b45309); background: var(--plen-warn-bg, #fef3c7); }
 .ppanel__chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .ppanel__chip {

@@ -2,14 +2,14 @@
 
 .esw-overlay {
   /* Token dark default */
-  --esw-surface:      #1a1f28;
-  --esw-surface-2:    rgba(0,0,0,0.2);
-  --esw-surface-3:    rgba(0,0,0,0.3);
-  --esw-border:       rgba(255,255,255,0.1);
+  --esw-surface:      var(--plen-surface);
+  --esw-surface-2:    var(--plen-surface-2);
+  --esw-surface-3:    var(--plen-surface-3);
+  --esw-border:       var(--plen-border);
   --esw-border-soft:  rgba(255,255,255,0.05);
-  --esw-text:         #e6e6e6;
-  --esw-text-sub:     #999;
-  --esw-text-dim:     #666;
+  --esw-text:         var(--plen-text);
+  --esw-text-sub:     var(--plen-text-sub);
+  --esw-text-dim:     var(--plen-text-dim);
   --esw-input-bg:     rgba(0,0,0,0.3);
   --esw-input-border: rgba(255,255,255,0.1);
   --esw-ghost-hover:  rgba(255,255,255,0.05);
@@ -31,14 +31,7 @@
 /* Override per tema light */
 [data-theme='light'] .esw-overlay,
 .pl[data-theme-local='light'] .esw-overlay {
-  --esw-surface:      #FFFFFF;
-  --esw-surface-2:    #F4F6FB;
-  --esw-surface-3:    #E8EDF8;
-  --esw-border:       rgba(0,0,0,0.10);
   --esw-border-soft:  rgba(0,0,0,0.06);
-  --esw-text:         #0B1120;
-  --esw-text-sub:     #4A5678;
-  --esw-text-dim:     #96A3BE;
   --esw-input-bg:     #F4F6FB;
   --esw-input-border: rgba(0,0,0,0.10);
   --esw-ghost-hover:  rgba(0,0,0,0.04);
@@ -420,6 +413,8 @@
   color: var(--esw-text-sub);
 }
 .esw-btn--ghost:hover { background: var(--esw-ghost-hover); color: var(--esw-text); }
+/* File modello delle colonne attese (UI-4, U14). */
+.esw-template-btn { margin: -8px 0 18px; font-size: 13px; }
 
 .esw-btn--primary {
   background: linear-gradient(135deg, #7c3aed, #6d28d9);
@@ -573,7 +568,7 @@
 .esw-run__file-picker > span:last-child { display: grid; gap: 3px; }
 .esw-run__file-picker strong { color: var(--plen-text, #DDE4F2); font-size: 12.5px; }
 .esw-run__file-picker small,
-.esw-run__selection-summary { color: var(--plen-text-dim, #7D8BA8); font-size: 10.5px; }
+.esw-run__selection-summary { color: var(--plen-text-dim, #7D8BA8); font-size: 11px; }
 .esw-run__selection-summary { margin-top: 7px; }
 
 .esw-run__file {
@@ -588,7 +583,7 @@
 .esw-run__file-name > span { color: var(--plen-text-sub, #7D8BA8); }
 .esw-run__file-name > div { display: grid; gap: 2px; min-width: 0; }
 .esw-run__file-name strong { overflow: hidden; color: var(--plen-text, #DDE4F2); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-.esw-run__file-name small { color: var(--plen-text-dim, #7D8BA8); font-size: 9.5px; }
+.esw-run__file-name small { color: var(--plen-text-dim, #7D8BA8); font-size: 11px; }
 
 .esw-run__analyze {
   flex: 0 0 auto;
@@ -598,7 +593,7 @@
   background: var(--plen-surface-2, #111525);
   color: var(--plen-text, #DDE4F2);
   cursor: pointer;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
 }
 .esw-run__analyze:hover:not(:disabled) { border-color: var(--plen-blue, #4B8BFF); color: var(--plen-blue, #4B8BFF); }
@@ -609,14 +604,14 @@
   border-top: 1px solid var(--plen-border, rgba(255,255,255,0.07));
   background: rgba(52,193,122,0.035);
 }
-.esw-run__analysis-summary { gap: 7px; color: var(--plen-text-sub, #7D8BA8); font-size: 10.5px; }
+.esw-run__analysis-summary { gap: 7px; color: var(--plen-text-sub, #7D8BA8); font-size: 11px; }
 .esw-run__analysis-summary strong { color: var(--plen-text, #DDE4F2); }
 .esw-run__analysis-summary > span:last-child { margin-left: auto; }
 .esw-run__check { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: rgba(52,193,122,0.14); color: var(--plen-ok, #34D399); }
 
 .esw-run__mapping { display: grid; gap: 7px; margin-top: 11px; }
 .esw-run__mapping label { display: grid; grid-template-columns: minmax(110px, 0.8fr) minmax(180px, 1.2fr); align-items: center; gap: 10px; }
-.esw-run__mapping label > span { color: var(--plen-err, #F87171); font-size: 10px; }
+.esw-run__mapping label > span { color: var(--plen-err, #F87171); font-size: 11px; }
 .esw-run__mapping code { color: var(--plen-text-sub, #7D8BA8); font-family: var(--plen-font-mono, monospace); }
 .esw-run__fixed-format { display: flex; align-items: center; min-height: 39px; padding: 0 11px; border: 1px solid var(--plen-border, rgba(255,255,255,0.07)); border-radius: 7px; color: var(--plen-text-sub, #7D8BA8); font: 700 12px var(--plen-font-mono, monospace); }
 

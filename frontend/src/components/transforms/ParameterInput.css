@@ -29,7 +29,7 @@
 }
 
 .parameter-input__schema-badge {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -68,7 +68,7 @@
   padding: 3px 5px;
   background: rgba(139, 92, 246, .08);
   color: var(--color-text-primary);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .runtime-binding__handle {
@@ -171,7 +171,7 @@
 }
 
 .parameter-input__expression-help {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-gray-400);
   padding: 4px;
   background: var(--color-bg-secondary);
@@ -380,7 +380,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-slate-500);
 }
 
@@ -488,7 +488,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-slate-500);
 }
 
@@ -778,7 +778,7 @@
 }
 
 .rename-list-input__csv-hint {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-text-muted);
   line-height: 1.5;
 }
@@ -787,7 +787,7 @@
   background: rgba(0, 0, 0, 0.06);
   padding: 1px 4px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .rename-list-input__csv-textarea {
@@ -815,7 +815,7 @@
 }
 
 .rename-list-input__csv-error {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-danger-dark);
   background: var(--color-danger-light);
   border: 1px solid #ef9a9a;
@@ -864,7 +864,7 @@
 }
 
 .column-order-input__count {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-slate-400);
 }
 
@@ -920,7 +920,7 @@
 }
 
 .column-order-input__pos {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-slate-400);
   font-weight: 600;
   min-width: 16px;
@@ -938,7 +938,7 @@
 }
 
 .column-order-input__type {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-slate-400);
   background: var(--color-gray-50);
   padding: 1px 5px;
@@ -966,7 +966,7 @@
   border-radius: 2px;
   background: transparent;
   cursor: pointer;
-  font-size: 8px;
+  font-size: 11px;
   padding: 0;
   display: flex;
   align-items: center;

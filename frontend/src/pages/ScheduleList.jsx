@@ -25,19 +25,13 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { toastApiError } from '../utils/toastApiError';
 import '../styles/ScheduleList.css';
+import { describeCron } from '../utils/cron';
 import { requestErrorMessage, backendMessage } from '../utils/errorMessages';
 import { formatDateTime as formatDate, formatBytes as formatSize, formatElapsed as getElapsed } from '../utils/format';
 import VirtualList from '../components/common/VirtualList';
-const formatCron = (cron) => {
-  if (!cron) return '';
-  const map = {
-    '0 * * * *':'Ogni ora','*/30 * * * *':'Ogni 30 min','*/15 * * * *':'Ogni 15 min',
-    '0 0 * * *':'Ogni giorno a mezzanotte','0 3 * * *':'Ogni notte alle 03:00',
-    '0 6 * * *':'Ogni mattina alle 06:00','0 0 * * 1':'Ogni lunedì a mezzanotte',
-    '0 0 1 * *':'Il primo del mese',
-  };
-  return map[cron] || cron;
-};
+// Il cron in parole dalla regola unica (utils/cron, UI-4 U31); un valore
+// che la regola non legge si mostra com'e'.
+const formatCron = (cron) => (cron ? (describeCron(cron) || cron) : '');
 // Tempo trascorso che si aggiorna da solo: solo questa etichetta si
 // ridisegna ogni secondo, non l'intera lista (Fase 5 T2, R4.16).
 function Elapsed({ since }) {
@@ -107,7 +101,7 @@ function ScheduleList() {
   const [activeFilter,   setActiveFilter]   = useState('all');
   const [showWizard,     setShowWizard]     = useState(false);
   const [editingId,      setEditingId]      = useState(null);
-  const downloads = useDownload({ onError: (message) => toast.error(`Download non riuscito: ${message}`) });
+  const downloads = useDownload({ onError: (message) => toast.error(`Scaricamento non riuscito: ${message}`) });
 
   const activeIds = schedules
     .filter(s => s.runtime?.status === 'running' || s.runtime?.status === 'queued')
@@ -157,7 +151,7 @@ function ScheduleList() {
   };
   const handleDelete = async (id, desc) => {
     const ok = await confirmModal.confirm({
-      title: 'Elimina schedule',
+      title: 'Elimina la pianificazione',
       message: `Eliminare "${desc || id}"?`,
       confirmText: 'Elimina',
       variant: 'danger',
@@ -173,7 +167,7 @@ function ScheduleList() {
       // messaggi user-friendly + auto-refresh quando appropriato.
       const status = e?.response?.status;
       if (status === 404) {
-        toast.warning('Schedule gia\' eliminato (404). Aggiorno la lista.');
+        toast.warning('La pianificazione era già stata eliminata. Aggiorno la lista.');
         loadData();
         return;
       }
@@ -258,8 +252,8 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
   });
 
   if (loading) return (
-    <PageLayout className="sl" title="Scheduler">
-      <div className="sl__loading-inner"><div className="sl__loading-icon">⬡</div>Caricamento schedule...</div>
+    <PageLayout className="sl" title="Pianificazioni">
+      <div className="sl__loading-inner"><div className="sl__loading-icon">⬡</div>Caricamento delle pianificazioni…</div>
     </PageLayout>
   );
 
@@ -267,12 +261,12 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
     <PageLayout
       className="sl"
       bare
-      title={projectFilter ? 'Scheduler (filtrato)' : 'Scheduler'}
+      title={projectFilter ? 'Pianificazioni (filtrate)' : 'Pianificazioni'}
       actions={(
         <>
           {projectFilter && <button type="button" className="sl__btn sl__btn--ghost" onClick={() => navigate('/schedules')}>Mostra tutti</button>}
           {can.createSchedule(user) && (
-            <button type="button" className="sl__btn sl__btn--primary" onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Nuovo Schedule</button>
+            <button type="button" className="sl__btn sl__btn--primary" onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Nuova pianificazione</button>
           )}
         </>
       )}
@@ -282,20 +276,20 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
           <canvas ref={canvasRef} className="sl__hex-bg" />
 
           {resource.status === 'error' && (
-            <ResourceError resource={resource} title="Schedule non caricati" />
+            <ResourceError resource={resource} title="Pianificazioni non caricate" />
           )}
 
           {/* Beat health banner */}
           {beatHealth && beatHealth.status !== 'ok' && (
             <div className={`sl__banner sl__banner--${beatHealth.status === 'down' ? 'error' : 'warning'}`}>
-              {beatHealth.status === 'down' ? '🔴' : '🟡'} {beatHealth.status === 'down' ? 'Beat scheduler non attivo — gli schedule non verranno eseguiti automaticamente.' : beatHealth.message}
+              {beatHealth.status === 'down' ? '🔴' : '🟡'} {beatHealth.status === 'down' ? 'Il pianificatore non è attivo: le pianificazioni non partiranno da sole.' : beatHealth.message}
             </div>
           )}
 
           {/* Running banner */}
           {runningCount > 0 && (
             <div className="sl__banner sl__banner--running">
-              ⚡ {runningCount === 1 ? '1 schedule in esecuzione o in coda' : `${runningCount} schedule in esecuzione o in coda`} — aggiornamento automatico ogni 3s
+              ⚡ {runningCount === 1 ? '1 pianificazione in esecuzione o in coda' : `${runningCount} pianificazioni in esecuzione o in coda`} — aggiornamento automatico ogni 3s
             </div>
           )}
 
@@ -332,18 +326,18 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
           {resource.status === 'error' && !resource.hasData ? null : filteredSchedules.length === 0 ? (
             <EmptyState
               icon={activeFilter === 'all' ? '⏰' : filterConfigs[activeFilter]?.icon}
-              title={activeFilter === 'all' ? (projectFilter ? 'Nessuno schedule per questo progetto' : 'Nessuno schedule configurato') : `Nessuno schedule ${filterConfigs[activeFilter]?.label?.toLowerCase()}`}
-              text={activeFilter === 'all' ? 'Crea uno schedule per eseguire le pipeline automaticamente' : 'Cambia filtro o crea un nuovo schedule'}
+              title={activeFilter === 'all' ? (projectFilter ? 'Nessuna pianificazione per questo progetto' : 'Nessuna pianificazione') : `Nessuna pianificazione: ${filterConfigs[activeFilter]?.label?.toLowerCase()}`}
+              text={activeFilter === 'all' ? 'Crea una pianificazione per eseguire i progetti in automatico' : 'Cambia filtro o crea una nuova pianificazione'}
               action={activeFilter === 'all'
-                ? (can.createSchedule(user) && <button type="button" className="sl__btn sl__btn--primary" onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Crea il primo schedule</button>)
+                ? (can.createSchedule(user) && <button type="button" className="sl__btn sl__btn--primary" onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Crea la prima pianificazione</button>)
                 : <button type="button" className="sl__btn sl__btn--ghost" onClick={() => setActiveFilter('all')}>Mostra tutti</button>}
             />
           ) : (
             <div className="sl__list">
-              <div className="sl__list-count">{filteredSchedules.length} schedule{activeFilter !== 'all' ? ' '+filterConfigs[activeFilter]?.label?.toLowerCase() : ''}</div>
+              <div className="sl__list-count">{filteredSchedules.length === 1 ? '1 pianificazione' : `${filteredSchedules.length} pianificazioni`}{activeFilter !== 'all' ? ' '+filterConfigs[activeFilter]?.label?.toLowerCase() : ''}</div>
               {/* Oltre la soglia solo le righe visibili, altezze misurate: log ed
                   esecuzioni aperte non si tagliano (UI-2, V9: common/VirtualList). */}
-              <VirtualList label="Schedulazioni" items={filteredSchedules} itemKey={s => s.id} estimatedItemHeight={120} gap={10} maxHeight={720} renderItem={s => (
+              <VirtualList label="Pianificazioni" items={filteredSchedules} itemKey={s => s.id} estimatedItemHeight={120} gap={10} maxHeight={720} renderItem={s => (
                 <ScheduleCard
                   schedule={s}
                   canManage={can.manageSchedule(user, s)}
@@ -417,7 +411,7 @@ function ScheduleCard({ schedule, canManage, isRunning, runStartTime, logs, runs
                   checked={!!isEnabled}
                   onChange={onToggle}
                   disabled={isOrphan}
-                  aria-label={isEnabled ? 'Disabilita schedule' : 'Abilita schedule'}
+                  aria-label={isEnabled ? 'Disattiva la pianificazione' : 'Attiva la pianificazione'}
                 />
                 <span className="sl__toggle-slider" />
               </label>
@@ -461,14 +455,14 @@ function ScheduleCard({ schedule, canManage, isRunning, runStartTime, logs, runs
             </button>
             {lastExec && (
               <button type="button" className={`sl__btn sl__btn--sm sl__btn--ghost${runs ? ' sl__btn--active' : ''}`} onClick={onToggleRuns}>
-                📥 {runs ? 'Chiudi' : 'Download'}
+                📥 {runs ? 'Chiudi' : 'Risultati'}
               </button>
             )}
           </div>
           {canManage && (
             <div className="sl__card-actions-right">
-              <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={onEdit} aria-label="Modifica schedule">✏️</button>
-              <button type="button" className="sl__btn sl__btn--sm sl__btn--danger" onClick={onDelete} aria-label="Elimina schedule">🗑</button>
+              <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={onEdit} aria-label="Modifica la pianificazione">✏️</button>
+              <button type="button" className="sl__btn sl__btn--sm sl__btn--danger" onClick={onDelete} aria-label="Elimina la pianificazione">🗑</button>
             </div>
           )}
         </div>
@@ -507,7 +501,7 @@ function ScheduleCard({ schedule, canManage, isRunning, runStartTime, logs, runs
               <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={onDownload}>⬇ Scarica ultimo</button>
             </div>
             {runs.length === 0 ? (
-              <div className="sl__runs-empty">Nessun run archiviato. Esegui lo schedule per generare output.</div>
+              <div className="sl__runs-empty">Nessun risultato archiviato. Esegui la pianificazione per ottenerne uno.</div>
             ) : (
               <div className="sl__runs-list">
                 {runs.map((run, i) => (
@@ -518,7 +512,7 @@ function ScheduleCard({ schedule, canManage, isRunning, runStartTime, logs, runs
                     <span className="sl__run-ts">{formatDate(run.timestamp)}</span>
                     <span className="sl__run-files">{run.files.map(f => f.name).join(', ')}</span>
                     <span className="sl__run-size">{formatSize(run.files.reduce((s,f) => s+f.size_bytes, 0))}</span>
-                    <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={() => onDownloadRun(run.timestamp)} aria-label="Scarica output di questa esecuzione">📥</button>
+                    <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={() => onDownloadRun(run.timestamp)} aria-label="Scarica il risultato di questa esecuzione">📥</button>
                   </div>
                 ))}
               </div>
@@ -550,10 +544,10 @@ function StatusBar({ schedule, isRunning, runStartTime, getElapsed }) {
       <div className="sl__statusbar sl__statusbar--running">
         <div className="sl__statusbar-left">
           <span className="sl__statusbar-dot sl__statusbar-dot--running" />
-          Pipeline in esecuzione...
+          Progetto in esecuzione…
           {runStartTime && <span className="sl__statusbar-elapsed">(<Elapsed since={runStartTime} />)</span>}
         </div>
-        {runtime?.current_task_id && <span className="sl__statusbar-task">Task: {runtime.current_task_id.slice(0,8)}…</span>}
+        {runtime?.current_task_id && <span className="sl__statusbar-task">Esecuzione: {runtime.current_task_id.slice(0,8)}…</span>}
       </div>
     );
   }

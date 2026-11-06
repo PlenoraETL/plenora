@@ -7,15 +7,20 @@
  *
  * Responsabilità:
  *  - Logo Plenora con dark/light awareness
- *  - Workspace section (Dashboard + scroll alle sezioni Estrai/Manipola/...)
+ *  - sezione Progetti (dashboard + scroll alle sezioni Estrai/Manipola/...)
  *  - Sistema section (link alle pagine /connections, /files, ecc.)
  *  - Footer utente con avatar + nome + ruolo (REALE) + logout
  *  - Pannello Admin (solo se can.manageUsers)
  *  - Highlight dell'item attivo via location.pathname
  *
- * Le voci del workspace (Estrai/Manipola/Arricchisci/Eseguibili) navigano
+ * Le voci dei tipi di progetto (Estrai/Manipola/Arricchisci) navigano
  * sempre alla dashboard "/" e poi scrollano alla sezione corrispondente
  * (via hash). ProjectList ascolta location.hash e fa lo scroll smooth.
+ *
+ * Voci, nomi, icone e descrizioni dalla tabella unica utils/navItems, la
+ * stessa della palette Ctrl+K (UI-4, U23). La barra si chiude a sole icone
+ * (UI-4, U26: a 1366 px lascia spazio al contenuto); la scelta resta in
+ * questo browser (hooks/useStoredState).
  *
  * Nessuna prop (Fase 5 T7, L12): i badge sono gli stessi su ogni pagina (oggi
  * solo i ticket attivi, letti qui); prima comparivano solo sulla pagina che
@@ -28,13 +33,16 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSignOut } from '../hooks/useSignOut';
-import { can, role } from '../utils/permissions';
+import { role } from '../utils/permissions';
 import { getTicketsCounts } from '../api/tickets';
 import { useResource } from '../hooks/useResource';
+import { useStoredState, LAYOUT_KEYS } from '../hooks/useStoredState';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
 import PlenoraLogo from './common/PlenoraLogo';
 import { enumLabel } from '../utils/format';
+import { visibleNavItems } from '../utils/navItems';
+import { ICON } from '../utils/icons';
 import './AppSidebar.css';
 function Logo() {
   const { theme } = useTheme();
@@ -47,32 +55,19 @@ function Logo() {
     />
   );
 }
-// Le sezioni della dashboard (workspace) sono identificate da hash:
-//   /#estrai, /#manipola, /#arricchisci, /#eseguibili
+// Le sezioni della dashboard sono identificate da hash:
+//   /#estrai, /#manipola, /#arricchisci
 // ProjectList ascolta location.hash e scrolla all'id `pl-section-<hash>`.
 
-const WORKSPACE_ITEMS = [
-  { key: 'dashboard',   label: 'Dashboard',   path: '/',              dot: '' },
-  { key: 'estrai',      label: 'Estrai',      path: '/#estrai',       dot: 'estrai' },
-  { key: 'manipola',    label: 'Manipola',    path: '/#manipola',     dot: 'manipola' },
-  { key: 'arricchisci', label: 'Arricchisci', path: '/#arricchisci',  dot: 'arricchisci' },
-  { key: 'eseguibili',  label: 'Eseguibili',  path: '/eseguibili',    dot: 'eseguibili' },
-];
+const SECTION_LABELS = { progetti: 'Progetti', sistema: 'Sistema' };
+const asBoolean = (v) => v === true;
 
-const SYSTEM_ITEMS = [
-  { key: 'connections',  label: 'Connessioni',  path: '/connections' },
-  { key: 'apis',         label: 'API Esterne',  path: '/external-connectors' },
-  { key: 'datasources',  label: 'Data Source',  path: '/datasources' },
-  { key: 'files',        label: 'File Manager', path: '/files' },
-  { key: 'schedules',    label: 'Scheduler',    path: '/schedules' },
-  { key: 'logs',         label: 'Log Viewer',   path: '/logs' },
-  { key: 'tickets',      label: 'Ticket',       path: '/tickets',             countKey: 'tickets' },
-];
 export default function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const [showPwdModal, setShowPwdModal] = useState(false);
+  const [collapsed, setCollapsed] = useStoredState(LAYOUT_KEYS.appSidebarCollapsed, false, asBoolean);
 
   // Badge ticket: count attivi visibili all'utente (self/group/global
   // a seconda del ruolo, enforcement backend). Aggiornato ogni 60s dall'hook
@@ -86,156 +81,85 @@ export default function AppSidebar() {
 
   const counts = { tickets: ticketsActiveCount || undefined };
 
-  // Per le voci workspace l'highlight si basa sul fatto che siamo sulla
-  // dashboard e l'hash corrisponde. Per il sistema basta confrontare il
-  // pathname.
-  const isWorkspaceActive = (item) => {
-    if (item.key === 'dashboard') {
-      return location.pathname === '/' && (location.hash === '' || location.hash === '#');
-    }
-    if (!item.path.startsWith('/#')) return location.pathname === item.path;
-    return location.pathname === '/' && location.hash === `#${item.key}`;
+  // Voce attiva: per le sezioni della dashboard (/#tipo) contano pagina e
+  // hash; la dashboard senza hash e' «Dashboard»; per le altre il
+  // percorso.
+  const isActive = (item) => {
+    if (item.path === '/') return location.pathname === '/' && (location.hash === '' || location.hash === '#');
+    if (item.path.startsWith('/#')) return location.pathname === '/' && location.hash === item.path.slice(1);
+    return location.pathname === item.path;
   };
-  const isSystemActive = (item) => location.pathname === item.path;
 
   // Uscita volontaria: una sola via (hooks/useSignOut).
   const handleLogout = useSignOut();
 
+  const navButton = (item) => {
+    const active = isActive(item);
+    const count = item.countKey ? counts[item.countKey] : null;
+    return (
+      <button
+        type="button"
+        key={item.key}
+        className={`app-sidebar__item${active ? ' app-sidebar__item--active' : ''}`}
+        aria-current={active ? 'page' : undefined}
+        title={collapsed ? `${item.label} — ${item.hint}` : item.hint}
+        onClick={() => navigate(item.path)}
+      >
+        {collapsed
+          ? <span className="app-sidebar__item-icon" aria-hidden="true">{item.icon}</span>
+          : <span className={`app-sidebar__dot${item.dot ? ` app-sidebar__dot--${item.dot}` : ''}`} />}
+        <span className="app-sidebar__item-label">{item.label}</span>
+        {count != null && <span className="app-sidebar__count">{count}</span>}
+      </button>
+    );
+  };
+
   return (
-    <nav className="app-sidebar">
+    <nav className={`app-sidebar${collapsed ? ' app-sidebar--collapsed' : ''}`} aria-label="Navigazione">
 
       {/* Logo */}
       <div className="app-sidebar__logo">
-        <Logo />
-        <div className="app-sidebar__sub">GeoData Platform</div>
+        {!collapsed && <Logo />}
+        <button
+          type="button"
+          className="app-sidebar__collapse"
+          onClick={() => setCollapsed(c => !c)}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Apri la barra laterale' : 'Chiudi la barra laterale (resta solo con le icone)'}
+          aria-label={collapsed ? 'Apri la barra laterale' : 'Chiudi la barra laterale'}
+        >
+          {collapsed ? '»' : '«'}
+        </button>
       </div>
 
       {/* Voci di navigazione */}
       <div className="app-sidebar__nav">
-
-        <div className="app-sidebar__nav-label">Workspace</div>
-        {WORKSPACE_ITEMS.map(item => {
-          const active = isWorkspaceActive(item);
-          return (
-            <button
-              type="button"
-              key={item.key}
-              className={`app-sidebar__item${active ? ' app-sidebar__item--active' : ''}`}
-              aria-current={active ? 'page' : undefined}
-              onClick={() => navigate(item.path)}
-            >
-              <span className={`app-sidebar__dot${item.dot ? ` app-sidebar__dot--${item.dot}` : ''}`} />
-              {item.label}
-            </button>
-          );
-        })}
-
-        <div className="app-sidebar__nav-label" style={{ marginTop: 8 }}>Sistema</div>
-        {SYSTEM_ITEMS.map(item => {
-          const active = isSystemActive(item);
-          const count = item.countKey ? counts[item.countKey] : null;
-          return (
-            <button
-              type="button"
-              key={item.key}
-              className={`app-sidebar__item${active ? ' app-sidebar__item--active' : ''}`}
-              aria-current={active ? 'page' : undefined}
-              onClick={() => navigate(item.path)}
-            >
-              <span className="app-sidebar__dot" />
-              {item.label}
-              {count != null && <span className="app-sidebar__count">{count}</span>}
-            </button>
-          );
-        })}
+        {Object.entries(SECTION_LABELS).map(([section, label], i) => (
+          <React.Fragment key={section}>
+            <div className="app-sidebar__nav-label" style={i ? { marginTop: 8 } : undefined}>{label}</div>
+            {visibleNavItems(user, section).map(navButton)}
+          </React.Fragment>
+        ))}
       </div>
 
       {/* Footer utente */}
       <div className="app-sidebar__footer">
-        {can.manageUsers(user) && (
+        {visibleNavItems(user, 'admin').map(item => (
           <button
             type="button"
+            key={item.key}
             className="app-sidebar__user-row app-sidebar__user-row--admin"
-            onClick={() => navigate('/admin/users')}
-            title="Gestione utenti e gruppi"
+            aria-current={isActive(item) ? 'page' : undefined}
+            onClick={() => navigate(item.path)}
+            title={item.hint}
           >
-            <div className="app-sidebar__avatar app-sidebar__avatar--admin">⚙️</div>
+            <div className="app-sidebar__avatar app-sidebar__avatar--admin" aria-hidden="true">{item.icon}</div>
             <div className="app-sidebar__user-info">
-              <div className="app-sidebar__user-name">Admin Panel</div>
-              <div className="app-sidebar__user-role">utenti &amp; gruppi</div>
+              <div className="app-sidebar__user-name">{item.label}</div>
+              <div className="app-sidebar__user-role">{item.sub}</div>
             </div>
           </button>
-        )}
-        {role.isSuperadmin(user) && (
-          <button
-            type="button"
-            className="app-sidebar__user-row app-sidebar__user-row--admin"
-            onClick={() => navigate('/admin/task-runtime')}
-            title="Code RabbitMQ, worker e task attivi"
-          >
-            <div className="app-sidebar__avatar app-sidebar__avatar--admin">MQ</div>
-            <div className="app-sidebar__user-info">
-              <div className="app-sidebar__user-name">Code e Worker</div>
-              <div className="app-sidebar__user-role">RabbitMQ · superadmin</div>
-            </div>
-          </button>
-        )}
-        {role.isSuperadmin(user) && (
-          <button
-            type="button"
-            className="app-sidebar__user-row app-sidebar__user-row--admin"
-            onClick={() => navigate('/admin/object-storage')}
-            title="Explorer object storage runtime"
-          >
-            <div className="app-sidebar__avatar app-sidebar__avatar--admin">S3</div>
-            <div className="app-sidebar__user-info">
-              <div className="app-sidebar__user-name">Object Storage</div>
-              <div className="app-sidebar__user-role">file runtime · superadmin</div>
-            </div>
-          </button>
-        )}
-        {role.isSuperadmin(user) && (
-          <button
-            type="button"
-            className="app-sidebar__user-row app-sidebar__user-row--admin"
-            onClick={() => navigate('/admin/system-status')}
-            title="Dashboard stato sistema"
-          >
-            <div className="app-sidebar__avatar app-sidebar__avatar--admin">📊</div>
-            <div className="app-sidebar__user-info">
-              <div className="app-sidebar__user-name">Stato Sistema</div>
-              <div className="app-sidebar__user-role">overview · superadmin</div>
-            </div>
-          </button>
-        )}
-        {role.isSuperadmin(user) && (
-          <button
-            type="button"
-            className="app-sidebar__user-row app-sidebar__user-row--admin"
-            onClick={() => navigate('/admin/backups')}
-            title="Backup database su S3"
-          >
-            <div className="app-sidebar__avatar app-sidebar__avatar--admin">💾</div>
-            <div className="app-sidebar__user-info">
-              <div className="app-sidebar__user-name">Backup DB</div>
-              <div className="app-sidebar__user-role">S3 · solo superadmin</div>
-            </div>
-          </button>
-        )}
-        {role.isSuperadmin(user) && (
-          <button
-            type="button"
-            className="app-sidebar__user-row app-sidebar__user-row--admin"
-            onClick={() => navigate('/admin/runtime-config')}
-            title="Configurazione runtime"
-          >
-            <div className="app-sidebar__avatar app-sidebar__avatar--admin">⚙️</div>
-            <div className="app-sidebar__user-info">
-              <div className="app-sidebar__user-name">Config Runtime</div>
-              <div className="app-sidebar__user-role">read-only · superadmin</div>
-            </div>
-          </button>
-        )}
+        ))}
         <div className="app-sidebar__user-row">
           <div className="app-sidebar__avatar">
             {(user?.username || 'U').slice(0, 2).toUpperCase()}
@@ -250,15 +174,16 @@ export default function AppSidebar() {
             onClick={() => setShowPwdModal(true)}
             title="Cambia password"
           >
-            🔑
+            {ICON.password}
           </button>
           <button
             type="button"
             className="app-sidebar__logout-btn"
             onClick={handleLogout}
-            title="Logout"
+            title="Esci"
+            aria-label="Esci"
           >
-            ⎋
+            {ICON.logout}
           </button>
         </div>
       </div>

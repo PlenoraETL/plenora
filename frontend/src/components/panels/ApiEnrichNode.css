@@ -65,7 +65,7 @@
 .api-enrich-node__label {
   display: block;
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -95,7 +95,7 @@
 
 .api-enrich-node__api-method {
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: #F5A623;
 }
@@ -117,7 +117,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 .api-enrich-node__fixed-name { font-weight: 700; color: var(--plen-text-sub, #7D8BA8); }
 .api-enrich-node__fixed-value { color: var(--plen-text-dim, #3F4D68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -141,7 +141,7 @@
 
 .api-enrich-node__param-badge {
   font-family: var(--plen-font-mono);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   padding: 1px 4px;
   border-radius: 3px;
@@ -160,7 +160,7 @@
 
 .api-enrich-node__param-name {
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-sub, #7D8BA8);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -179,7 +179,7 @@
   background: var(--plen-surface-2, #111525);
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
   border-radius: 5px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-family: var(--plen-font-mono);
   color: var(--plen-text, #DDE4F2);
   outline: none;
@@ -194,7 +194,7 @@
 
 /* ── Hint text (sotto campi opzionali) ─────────────────────────── */
 .api-enrich-node__hint {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--plen-text-sub, #7D8BA8);
   margin-top: 4px;
   line-height: 1.4;
@@ -202,7 +202,7 @@
 }
 .api-enrich-node__hint code {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   background: rgba(255,255,255,0.04);
   padding: 1px 4px;
   border-radius: 3px;
@@ -217,7 +217,7 @@
 }
 .api-enrich-node__output-title {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--plen-ok, #34D399);
   margin-bottom: 5px;
@@ -226,7 +226,7 @@
 
 .api-enrich-node__output-chip {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   padding: 2px 7px;
   border-radius: 99px;
   background: rgba(52,193,122,0.10);
@@ -250,7 +250,7 @@
 
 .api-enrich-node__input-title {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   margin-bottom: 5px;
 }
@@ -263,7 +263,7 @@
 }
 .api-enrich-node__input-chip {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   padding: 2px 6px;
   background: var(--plen-surface-3, #171C2E);
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.10));
@@ -276,7 +276,7 @@
 [data-theme='light'] .api-enrich-node__input-chip { background: #E8EDF8; border-color: rgba(0,0,0,0.08); color: #4A5568; }
 .api-enrich-node__input-more {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   padding: 2px 5px;
 }
@@ -289,7 +289,7 @@
   padding: 5px 9px;
   border-radius: 6px;
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   margin-top: 2px;
 }
 .api-enrich-node__status--valid {
@@ -334,7 +334,7 @@
 /* ── Executable mode specifics ────────────────────────────────── */
 .api-enrich-node__exec-badge {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: #9B6DFF;
   padding: 3px 9px;
@@ -390,7 +390,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   padding: 4px 0;
 }
@@ -409,7 +409,7 @@
   padding: 7px 9px;
   cursor: pointer;
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -421,7 +421,7 @@
   background: rgba(245,166,35,0.04);
   color: var(--plen-text-sub, #7D8BA8);
 }
-.api-enrich-node__advanced-arrow { font-size: 8px; }
+.api-enrich-node__advanced-arrow { font-size: 11px; }
 
 .api-enrich-node__advanced-body {
   padding: 8px 9px 10px;
@@ -445,7 +445,7 @@
 
 .api-enrich-node__adv-badge {
   font-family: var(--plen-font-mono);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   padding: 1px 7px;
   border-radius: 8px;
@@ -544,7 +544,7 @@
 
 /* Hint italico sotto i mapping params (template syntax). */
 .api-enrich-node__params-hint {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--pl-text-sub, #888);
   margin-top: 6px;
   line-height: 1.45;
@@ -594,7 +594,7 @@
   padding: 0 4px;
 }
 .api-enrich-node__file-field-success {
-  font-size: 10px;
+  font-size: 11px;
   color: #4ade80;
   font-family: monospace;
 }
@@ -604,7 +604,7 @@
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 11px;
   cursor: pointer;
   text-align: center;
 }
@@ -614,10 +614,10 @@
 }
 .api-enrich-node__file-field-input--hidden { display: none; }
 .api-enrich-node__file-field-format-hint {
-  font-size: 9px;
+  font-size: 11px;
   color: #64748b;
 }
 .api-enrich-node__file-field-error {
-  font-size: 9px;
+  font-size: 11px;
   color: #f87171;
 }

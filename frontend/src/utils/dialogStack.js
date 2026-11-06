@@ -13,6 +13,7 @@
  *   - la regola "c'e' una finestra aperta" (`isShortcutBlocked`) usata da
  *     TUTTE le scorciatoie globali (Ctrl+K, ?, Ctrl+Z/Y, Ctrl+S, Canc, "/").
  */
+import { matchesShortcut } from './shortcuts';
 
 const FOCUSABLE_SELECTOR = [
   'a[href]:not([disabled])',
@@ -51,7 +52,7 @@ function trapTab(entry, e) {
 function onKeyDown(e) {
   const top = stack[stack.length - 1];
   if (!top) return;
-  if (e.key === 'Escape') {
+  if (matchesShortcut('close', e)) {
     // Gia' usato da un controllo dentro la finestra (menu, campo in modifica).
     if (e.defaultPrevented) return;
     e.preventDefault();

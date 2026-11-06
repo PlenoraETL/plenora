@@ -72,7 +72,7 @@
 }
 
 .carica-arcgis-node__label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--cn-accent);
   text-transform: uppercase;
@@ -101,7 +101,7 @@
 }
 
 .carica-arcgis-node__hint {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #7A849A);
   line-height: 1.3;
 }
@@ -126,7 +126,7 @@
   padding: 4px 0;
 }
 .carica-arcgis-node__toggle {
-  font-size: 9px;
+  font-size: 11px;
   opacity: 0.7;
 }
 
@@ -134,7 +134,7 @@
 .carica-arcgis-node__schema-info {
   display: flex;
   gap: 10px;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #7A849A);
   padding: 4px 6px;
   background: var(--cn-accent-dim);
@@ -262,7 +262,7 @@
 
 /* ── Auto info ─────────────────────────────────────────────────── */
 .carica-arcgis-node__auto-info {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--plen-text-dim, #7A849A);
   text-align: center;
   padding-top: 4px;

@@ -11,13 +11,16 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import {
-  normalizeOpenApi, buildConnectionPayloads, needsBaseUrl, IMPORT_AUTH_OPTIONS, IMPORTABLE_METHODS, IMPORT_LIMITS, PAYLOAD_FIELDS,
+  normalizeOpenApi, loadOpenApi, buildConnectionPayloads, needsBaseUrl, IMPORT_AUTH_OPTIONS, IMPORTABLE_METHODS, IMPORT_LIMITS, PAYLOAD_FIELDS,
 } from '../../src/utils/openapiImport';
 import { sourceFiles, stripComments } from '../helpers/sourceScan.js';
 
 const DIR = path.resolve(import.meta.dirname, '../fixtures/openapi-import');
+// js-yaml si carica al bisogno (UI-4 V3b): la UI passa da loadOpenApi.
+beforeAll(() => loadOpenApi('{"openapi": "3.0.0", "paths": {}}'));
+
 const read = (name) => fs.readFileSync(path.join(DIR, name), 'utf-8');
 
 // Riassunto confrontabile: «posizione:nome:tipo» (! = obbligatorio), «percorso>colonna:tipo».
@@ -48,7 +51,7 @@ const PETSTORE_V2 = {
   format: 'swagger-2.0',
   baseUrl: 'https://petstore.swagger.io/v2',
   auth: { type: 'api_key', key_name: 'api_key', key_value: '', location: 'header' },
-  candidates: ['petstore_auth:OAuth2 senza flusso password o client credentials', 'api_key:api_key'],
+  candidates: ['petstore_auth:OAuth2 senza le modalità password o client credentials', 'api_key:api_key'],
   warnings: [],
   endpoints: [
     { id: 'POST /pet', server: 'https://petstore.swagger.io/v2',
@@ -76,7 +79,7 @@ const PETSTORE_V3 = {
   format: 'openapi-3.0',
   baseUrl: V3,
   auth: { type: 'api_key', key_name: 'api_key', key_value: '', location: 'header' },
-  candidates: ['petstore_auth:OAuth2 senza flusso password o client credentials', 'api_key:api_key'],
+  candidates: ['petstore_auth:OAuth2 senza le modalità password o client credentials', 'api_key:api_key'],
   warnings: [],
   endpoints: [
     { id: 'PUT /pet', server: V3,

@@ -72,7 +72,7 @@ export default function RunsTab({ live = false, projectNames = null }) {
       {/* Mini stats */}
       <div className="lv__stats lv__stats--3col">
         <div className="lv__stat lv__stat--total">
-          <div className="lv__stat-label">Run Totali</div>
+          <div className="lv__stat-label">Esecuzioni totali</div>
           <div className="lv__stat-val">{total}</div>
           <div className="lv__stat-sub">con i filtri attuali</div>
         </div>

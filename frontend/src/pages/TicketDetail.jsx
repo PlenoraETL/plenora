@@ -120,7 +120,7 @@ export default function TicketDetail() {
         await uploadAttachment(id, file);
         toast.success(`Allegato "${file.name}" caricato`);
       } catch (err) {
-        toastApiError(toast, err, `Errore upload ${file.name}`);
+        toastApiError(toast, err, `Caricamento non riuscito: ${file.name}`);
       }
     }
     if (fileInputRef.current) fileInputRef.current.value = '';

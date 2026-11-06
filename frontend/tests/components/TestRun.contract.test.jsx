@@ -197,7 +197,7 @@ describe('4. the test run is recognizable afterwards', () => {
     render(<BeforeRunModal
       request={{ id: 1, mode: 'manipola', inputDefinitions: [], user: null, values: {}, testRun: { username: 'prova', problem: null } }}
       onLaunch={() => {}} onCancel={() => {}} />);
-    expect(screen.getByText(/Pianificazioni e catene restano/)).toBeInTheDocument();
+    expect(screen.getByText(/Pianificazioni e progetti collegati restano/)).toBeInTheDocument();
   });
 });
 

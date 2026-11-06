@@ -165,8 +165,8 @@ describe('ScheduleList', () => {
 
     render(<ScheduleList />);
 
-    expect(await screen.findByText(/beat scheduler non attivo/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 schedule in esecuzione/i)).toBeInTheDocument();
+    expect(await screen.findByText(/pianificatore non è attivo/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 pianificazione in esecuzione/i)).toBeInTheDocument();
     expect(screen.getByText('Queued Job')).toBeInTheDocument();
     expect(screen.getByText('dest_table (replace)')).toBeInTheDocument();
   });
@@ -187,9 +187,9 @@ describe('ScheduleList', () => {
     render(<ScheduleList />);
     await screen.findByText('Nightly Import');
     expect(screen.queryByRole('button', { name: /esegui ora/i })).toBeNull();
-    expect(screen.queryByRole('checkbox', { name: /abilita schedule|disabilita schedule/i })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /attiva la pianificazione|disattiva la pianificazione/i })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Modifica schedule' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Elimina schedule' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Elimina la pianificazione' })).toBeNull();
     expect(screen.getByRole('button', { name: /log/i })).toBeInTheDocument();
   });
 });

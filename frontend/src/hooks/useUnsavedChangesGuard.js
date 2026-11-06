@@ -22,60 +22,23 @@ import { useCallback, useEffect } from 'react';
 import useCanvasStore from '../store/useCanvasStore';
 import { hasUnsavedChanges } from '../store/saveState';
 import { useConfirmOrDeny } from '../context/ConfirmContext';
+import { confirmLeave, registerLeaveProbe } from '../utils/leaveGuard';
 
 const UNSAVED_MESSAGE = 'Hai modifiche non salvate. Vuoi davvero uscire?';
 
-/** Il dialog di OGNI uscita con modifiche non salvate. */
-export const LEAVE_DIALOG = {
-  title: 'Modifiche non salvate',
-  message: 'Ci sono modifiche non salvate. Se esci ora restano nella copia di sicurezza di questo browser '
-    + 'e potrai ripristinarle riaprendo il progetto, ma non sono sul server: '
-    + 'non le vede nessun altro e non vengono eseguite.',
-  confirmText: 'Esci senza salvare',
-  cancelText: "Resta nell'editor",
-  variant: 'warning',
-};
+// La regola e il dialog vivono in utils/leaveGuard (senza lo store del
+// canvas, UI-4 V1): qui l'editor montato registra la sua domanda.
 
-// Editor montati (il guard di navigazione agisce solo con un editor aperto).
-let activeEditors = 0;
-
-export const isLeaveGuardActive = () => activeEditors > 0;
-
-/** Regola UNICA: c'e' qualcosa da perdere uscendo dall'editor? */
-const hasSomethingToLose = () => (
-  isLeaveGuardActive() && hasUnsavedChanges(useCanvasStore.getState())
-);
-
-/**
- * Regola del blocker: si chiede solo cambiando pagina (non per query o hash)
- * e solo con modifiche non salvate.
- */
-export function shouldBlockNavigation({ currentLocation, nextLocation }) {
-  if (!currentLocation || !nextLocation) return false;
-  if (currentLocation.pathname === nextLocation.pathname) return false;
-  // Verso /login si va solo a sessione chiusa (uscita volontaria gia'
-  // confermata da hooks/useSignOut, o 401): nessuna seconda domanda.
-  if (nextLocation.pathname === '/login') return false;
-  return hasSomethingToLose();
-}
-
-/**
- * Chiede (dialog del progetto) se c'e' qualcosa da perdere.
- * @param {(cfg: object) => Promise<boolean>} confirm
- * @returns {Promise<boolean>} true = si puo' uscire
- */
-export async function confirmLeave(confirm) {
-  if (!hasSomethingToLose()) return true;
-  return Boolean(await confirm(LEAVE_DIALOG));
-}
+const editorHasUnsaved = () => hasUnsavedChanges(useCanvasStore.getState());
 
 export function useUnsavedChangesGuard() {
   const confirm = useConfirmOrDeny();
 
   useEffect(() => {
-    activeEditors += 1;
+    // Una domanda per montaggio (closure nuova: due editor non si tolgono a vicenda).
+    const unregister = registerLeaveProbe(() => editorHasUnsaved());
     const handler = (event) => {
-      if (!hasUnsavedChanges(useCanvasStore.getState())) return undefined;
+      if (!editorHasUnsaved()) return undefined;
       event.preventDefault();
       // I browser moderni ignorano la stringa custom (mostrano un messaggio
       // generico) ma `returnValue` resta il modo standard per attivare il
@@ -85,7 +48,7 @@ export function useUnsavedChangesGuard() {
     };
     window.addEventListener('beforeunload', handler);
     return () => {
-      activeEditors = Math.max(0, activeEditors - 1);
+      unregister();
       window.removeEventListener('beforeunload', handler);
     };
   }, []);

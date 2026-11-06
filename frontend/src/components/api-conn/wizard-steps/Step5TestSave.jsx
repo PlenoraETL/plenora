@@ -101,7 +101,7 @@ export default function Step5TestSave({
               {formData.output_mapping.length > 0 && (
                 <div className="acm__selected-fields">
                   <div className="acm__wlabel">Campi selezionati ({formData.output_mapping.length})</div>
-                  <div className="acm__field-hint acm__field-hint--mb-sm"><strong>path nella risposta</strong> → <strong>nome colonna</strong> in output. Un campo che è una lista può generare più righe.</div>
+                  <div className="acm__field-hint acm__field-hint--mb-sm"><strong>path nella risposta</strong> → <strong>nome colonna</strong> nel risultato. Un campo che è una lista può generare più righe.</div>
                   {formData.output_mapping.map((m,i)=>(
                     <div key={i} className="acm__selected-row">
                       <span className="acm__selected-path">{m.path}</span>

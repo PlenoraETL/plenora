@@ -40,7 +40,7 @@ describe('downloadTaskOutput 410 Gone gestito (sessione 6 P1)', () => {
     await expect(downloadTaskOutput('task-1')).rejects.toMatchObject({
       code: 'TASK_OUTPUT_GONE',
       status: 410,
-      message: expect.stringContaining('retention'),
+      message: expect.stringContaining('conservazione'),
     });
   });
 

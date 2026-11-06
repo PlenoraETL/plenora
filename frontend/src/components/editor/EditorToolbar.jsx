@@ -16,6 +16,8 @@ import PlenoraLogo from '../common/PlenoraLogo';
 import { ColumnSyncBadge } from '../common/ColumnStatusNote';
 import { term } from '../../utils/glossary';
 import { isShortcutBlocked } from '../../utils/dialogStack';
+import { matchesShortcut } from '../../utils/shortcuts';
+import ShortcutsButton from '../common/ShortcutsButton';
 import './EditorToolbar.css';
 import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 
@@ -60,7 +62,7 @@ function OverflowMenu({ items }) {
     listRef.current?.querySelector('[role="menuitem"]:not(:disabled)')?.focus();
     const outside = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
     // Esc chiude il menu, non una finestra aperta sopra (regola unica, utils/dialogStack).
-    const esc = (e) => { if (e.key === 'Escape' && !isShortcutBlocked(e)) { e.preventDefault(); setOpen(false); buttonRef.current?.focus(); } };
+    const esc = (e) => { if (matchesShortcut('close', e) && !isShortcutBlocked(e)) { e.preventDefault(); setOpen(false); buttonRef.current?.focus(); } };
     document.addEventListener('mousedown', outside);
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', esc); };
@@ -189,6 +191,7 @@ export default function EditorToolbar({
           </button>
         )}
         <OverflowMenu items={[...menuItems, ...themeItems]} />
+        <ShortcutsButton className="etb-btn etb-btn--icon" />
       </div>
     </header>
   );

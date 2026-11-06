@@ -32,6 +32,7 @@ import { useBusy } from '../hooks/useBusy';
 import { ResourceError } from '../components/common/ListState';
 import '../styles/ProjectList.css';
 import { projectEditorPath } from '../utils/projectRoutes';
+import { projectTypeChip } from '../utils/projectTypes';
 import { formatDateTime } from '../utils/format';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
@@ -136,7 +137,7 @@ function ProjectList() {
       const detail = err?.response?.data?.detail;
       const errorCode = err?.code || (detail && typeof detail === 'object' ? detail.error : null);
       if (err?.response?.status === 500 && errorCode === 'project_cleanup_partial') {
-        const cleanupMsg = humanizeErrorMessage(err, 'cleanup parziale');
+        const cleanupMsg = humanizeErrorMessage(err, 'pulizia incompleta');
         toast.error(
           `Impossibile eliminare "${name}": ${cleanupMsg}. Ritenta o contatta admin.`,
           10000
@@ -314,7 +315,7 @@ function ProjectList() {
       data-theme-local={theme}
       bare
       title={section ? DASHBOARD_SECTIONS[section] : 'Dashboard'}
-      subtitle={section ? 'Progetti di questa sezione — «Dashboard» nella barra laterale per tutti' : null}
+      subtitle={section ? 'Progetti di questa sezione — «Dashboard» nella barra laterale per vederli tutti' : null}
       actions={(
         <>
             <SearchField
@@ -395,7 +396,7 @@ function ProjectList() {
               { val: arricchisciProjects.length,                    label: 'Arricchisci', accent: 'var(--pl-arricch)',  to: '/#arricchisci' },
               { val: eseguibili.length,                             label: 'Eseguibili',  accent: 'var(--pl-blue)',     to: '/eseguibili' },
               { val: connections.length + arcgisConnections.length, label: 'Connessioni', accent: 'var(--pl-blue)',     to: '/connections' },
-              { val: activeSchedules.length,                        label: 'Schedule attivi', accent: 'var(--pl-estrai)', to: '/schedules' },
+              { val: activeSchedules.length,                        label: 'Pianificazioni attive', accent: 'var(--pl-estrai)', to: '/schedules' },
               { val: apiConnections.length,                         label: 'API Esterne', accent: 'var(--pl-manipola)', to: '/external-connectors' },
               { val: files.length,                                  label: 'File',        accent: 'var(--pl-arricch)',  to: '/files' },
             ].filter(t => t.val > 0);
@@ -428,7 +429,7 @@ function ProjectList() {
 {showSection('estrai') && <ProjectSection
             id="pl-section-estrai"
             chipClass="pl__chip--estrai"
-            chipLabel="↓ Estrai"
+            chipLabel={projectTypeChip('estrai')}
             subtitle="Estrazione da sorgenti SQL e GIS"
             onNew={() => openModalForType('estrai')}
             canCreate={canCreateProj}
@@ -445,7 +446,7 @@ function ProjectList() {
                   project={project}
                   runStatus={runStatusFor(project.id)}
                   accentClass="pl__card-accent--estrai"
-                  modLabel="↓ Estrai"
+                  modLabel={projectTypeChip('estrai')}
                   meta={[
                     { key: 'Connessione', val: conn ? conn.name : 'N/A', ok: !!conn },
                     { key: 'Creato',      val: formatDateTime(project.created_at) },
@@ -464,14 +465,14 @@ function ProjectList() {
 {showSection('manipola') && <ProjectSection
             id="pl-section-manipola"
             chipClass="pl__chip--manipola"
-            chipLabel="⚙ Manipola"
+            chipLabel={projectTypeChip('manipola')}
             subtitle="Trasformazione e join spaziale"
             onNew={() => openModalForType('manipola')}
             canCreate={canCreateProj}
             empty={shownManipola.length === 0}
             emptyIcon="⚙"
             emptyTitle={emptyFor('Manipola').title}
-            emptyText={emptyFor('Manipola', 'Crea un pipeline di trasformazione').text}
+            emptyText={emptyFor('Manipola', 'Crea un progetto che trasforma i dati').text}
           >
             <VirtualList {...CARD_GRID} label="Progetti Manipola" items={shownManipola} renderItem={(project) => {
               const srcProjects = getSourceProjects(project.id);
@@ -484,7 +485,7 @@ function ProjectList() {
                   project={project}
                   runStatus={runStatusFor(project.id)}
                   accentClass="pl__card-accent--manipola"
-                  modLabel="⚙ Manipola"
+                  modLabel={projectTypeChip('manipola')}
                   meta={[
                     { key: 'Sorgenti', val: `${srcCount} progett${srcCount !== 1 ? 'i' : 'o'}` },
                     { key: 'Creato',   val: formatDateTime(project.created_at) },
@@ -503,14 +504,14 @@ function ProjectList() {
 {showSection('arricchisci') && <ProjectSection
             id="pl-section-arricchisci"
             chipClass="pl__chip--arricchisci"
-            chipLabel="◈ Arricchisci"
-            subtitle="API enrichment geospaziale"
+            chipLabel={projectTypeChip('arricchisci')}
+            subtitle="Arricchimento da API, anche geografico"
             onNew={() => openModalForType('arricchisci')}
             canCreate={canCreateProj}
             empty={shownArricchisci.length === 0}
             emptyIcon="◈"
             emptyTitle={emptyFor('Arricchisci').title}
-            emptyText={emptyFor('Arricchisci', 'Crea un nuovo pipeline di arricchimento').text}
+            emptyText={emptyFor('Arricchisci', 'Crea un progetto che arricchisce i dati con API esterne').text}
           >
             <VirtualList {...CARD_GRID} label="Progetti Arricchisci" items={shownArricchisci} renderItem={(project) => (
               <ProjectCard
@@ -518,9 +519,9 @@ function ProjectList() {
                 project={project}
                 runStatus={runStatusFor(project.id)}
                 accentClass="pl__card-accent--arricchisci"
-                modLabel="◈ Arricchisci"
+                modLabel={projectTypeChip('arricchisci')}
                 meta={[
-                  { key: 'API', val: 'Enrichment' },
+                  { key: 'API', val: 'Arricchimento' },
                   { key: 'Creato', val: formatDateTime(project.created_at) },
                 ]}
                 scheduleCount={getScheduleCount(project.id)}

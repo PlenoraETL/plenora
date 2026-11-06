@@ -201,3 +201,21 @@ export function optionLabel(options, value) {
   const hit = (options || []).find(o => o?.value === value);
   return hit?.label || String(value);
 }
+
+/**
+ * Ora locale di un fuso come { y, m, d, h, min } (UI-4, U31: prossime
+ * esecuzioni di un cron). Fuso non valido o assente = quello del browser.
+ */
+export function wallClockIn(date, timeZone) {
+  let parts;
+  try {
+    parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: timeZone || undefined, year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
+    }).formatToParts(date);
+  } catch {
+    return wallClockIn(date, undefined);
+  }
+  const get = (t) => Number(parts.find(p => p.type === t)?.value);
+  return { y: get('year'), m: get('month'), d: get('day'), h: get('hour'), min: get('minute') };
+}

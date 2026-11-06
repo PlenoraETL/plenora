@@ -5,7 +5,7 @@
 .colstatus__tag { display: inline-flex; align-items: center; gap: 5px; line-height: 1.5; }
 .colstatus__tag--pending { color: var(--plen-blue, #2563eb); background: var(--plen-blue-bg, #eef3ff); }
 .colstatus__tag--error { color: var(--plen-err, #b91c1c); background: var(--plen-err-bg, #fdecec); }
-.colstatus__retry { padding: 0 4px; font-size: 10.5px; line-height: 1.4; color: inherit; text-decoration: underline; }
+.colstatus__retry { padding: 0 4px; font-size: 11px; line-height: 1.4; color: inherit; text-decoration: underline; }
 .colstatus__dot {
   width: 6px; height: 6px; border-radius: 50%; flex: none;
   background: currentColor; opacity: 0.75;

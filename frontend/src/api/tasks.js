@@ -60,8 +60,8 @@ export const downloadTaskOutput = async (taskId, filename = null) => {
   } catch (err) {
     if (err?.response?.status === 410) {
       const customErr = new Error(
-        "Il file di output non è più disponibile: scaduto per la policy di retention. " +
-        "Esegui nuovamente il task per generare un nuovo output."
+        "Il file del risultato non è più disponibile: è scaduto il tempo di conservazione. " +
+        "Esegui di nuovo per ottenere un nuovo risultato."
       );
       customErr.code = 'TASK_OUTPUT_GONE';
       customErr.status = 410;

@@ -52,7 +52,7 @@ export default function RunDetail({ runId, live = false }) {
         <button
           className={`lv__run-dtab${tab === 'steps' ? ' lv__run-dtab--on' : ''}`}
           onClick={() => setTab('steps')}>
-          Steps {steps.length > 0 && <span className="lv__run-dtab-badge">{steps.length}</span>}
+          Passi {steps.length > 0 && <span className="lv__run-dtab-badge">{steps.length}</span>}
         </button>
         <button
           className={`lv__run-dtab${tab === 'logs' ? ' lv__run-dtab--on' : ''}`}
@@ -64,7 +64,7 @@ export default function RunDetail({ runId, live = false }) {
       {tab === 'steps' && (
         <div className="lv__run-steps">
           {steps.length === 0 ? (
-            <div className="lv__run-steps-empty">Nessuno step registrato</div>
+            <div className="lv__run-steps-empty">Nessun passo registrato</div>
           ) : steps.map((s, i) => {
             const isOk  = s.status === 'success';
             const color = MODULE_COLORS[s.module] || '#6B7280';
@@ -88,7 +88,7 @@ export default function RunDetail({ runId, live = false }) {
       {tab === 'logs' && (
         <div className="lv__run-logs">
           {logs.length === 0 ? (
-            <div className="lv__run-steps-empty">Nessun log tecnico per questa run</div>
+            <div className="lv__run-steps-empty">Nessun log tecnico per questa esecuzione</div>
           ) : (
             <table className="lv__table lv__run-logs-table">
               <thead>

@@ -25,7 +25,7 @@ export default function MappingsPanel({
     <div className="response-config-builder__panel">
       <div className="response-config-builder__section-header">
         <h4>📋 Campi da estrarre</h4>
-        <p>Rinomina le colonne di output se necessario</p>
+        <p>Rinomina le colonne del risultato se serve</p>
       </div>
 
       {/* Iterate On */}

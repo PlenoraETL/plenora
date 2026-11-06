@@ -9,21 +9,22 @@
  */
 import React from 'react';
 import { pressable } from '../../../utils/pressable';
+import { ICON } from '../../../utils/icons';
 
 const CATEGORIES_NEW = [
   { id:'geocoding',  label:'Geocoding',   icon:'🌍' },
   { id:'routing',    label:'Routing',     icon:'🚗' },
   { id:'catasto',    label:'Catasto',     icon:'🏠' },
-  { id:'datasource', label:'Data Source', icon:'📁' },
+  { id:'datasource', label:'Data Source', icon:ICON.datasource },
   { id:'custom',     label:'Custom',      icon:'⚙️' },
 ];
 
 const CONNECTION_TYPES = [
-  { id:'template',   label:'Da Template',     icon:'🍪', desc:'Template pre-configurato' },
+  { id:'template',   label:'Da modello',      icon:'🍪', desc:'Modello già configurato' },
   { id:'manual',     label:'Manuale',         icon:'✏️', desc:'URL e parametri manuali' },
   { id:'openapi',    label:'OpenAPI',         icon:'📋', desc:'Schema OpenAPI/Swagger' },
-  { id:'rest_file',  label:'Processore File', icon:'📦', desc:'API REST con file in input e output' },
-  { id:'datasource', label:'Data Source',     icon:'📁', desc:'SharePoint, FTP, S3…' },
+  { id:'rest_file',  label:'Processore File', icon:'📦', desc:'API REST che riceve un file e ne restituisce un altro' },
+  { id:'datasource', label:'Data Source',     icon:ICON.datasource, desc:'SharePoint, FTP, S3…' },
 ];
 
 export default function Step0ChooseType({ formData, setFormData }) {
@@ -32,8 +33,8 @@ export default function Step0ChooseType({ formData, setFormData }) {
       <div className="acm__wlabel">Tipo API</div>
       <div className="acm__type-cards">
         {[
-          {v:'enricher',icon:'🔄',label:'Arricchitore',desc:'Chiamata per ogni riga del dataset',ex:'Geocoding, lookup, validazione'},
-          {v:'generator',icon:'📥',label:'Generatore',desc:'Chiamata singola, genera nuovo dataset',ex:'POI, meteo, cataloghi'},
+          {v:'enricher',icon:'🔄',label:'Arricchitore',desc:'Una chiamata per ogni riga della tabella',ex:'Geocoding, lookup, validazione'},
+          {v:'generator',icon:'📥',label:'Generatore',desc:'Una sola chiamata, crea una tabella nuova',ex:'POI, meteo, cataloghi'},
         ].map(t=>(
           <div key={t.v} className={`acm__type-card${formData.api_type===t.v?' acm__type-card--on':''}`} {...pressable(()=>setFormData({...formData,api_type:t.v}))}>
             <div className="acm__type-card-icon">{t.icon}</div>

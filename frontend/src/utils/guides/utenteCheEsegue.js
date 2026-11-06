@@ -23,7 +23,7 @@ export const IDENTITY_EXAMPLE = Object.freeze({
 export const UTENTE_CHE_ESEGUE_GUIDE = Object.freeze({
   slug: 'input-utente-che-esegue',
   title: 'Input «Utente che esegue»',
-  intro: "Come mostrare a ogni utente solo i suoi dati: l'input «Utente che esegue» porta nella catena il nome utente di chi avvia l'Eseguibile.",
+  intro: "Come mostrare a ogni utente solo i suoi dati: l'input «Utente che esegue» porta nel progetto il nome utente di chi avvia l'Eseguibile.",
   sections: [
     {
       title: "Cos'è",
@@ -42,7 +42,7 @@ export const UTENTE_CHE_ESEGUE_GUIDE = Object.freeze({
       blocks: [
         { p: "Il valore lo mette solo il server, con l'utente che ha fatto l'accesso. Nella finestra «Prima di avviare» si vede in sola lettura e non si può cambiare; se qualcuno provasse a inviarne uno diverso, la richiesta viene rifiutata." },
         { p: "Chi apre l'Eseguibile non può quindi farsi passare per un altro utente né vedere i dati di un altro: il filtro usa sempre il suo nome utente." },
-        { note: "La sicurezza vale per il filtro che hai costruito: se la catena non usa davvero il valore (input non collegato, Join non interno), i dati non vengono filtrati. Prova sempre il risultato con un nome utente di prova." },
+        { note: "La sicurezza vale per il filtro che hai costruito: se il progetto non usa davvero il valore (input non collegato, Join non interno), i dati non vengono filtrati. Prova sempre il risultato con un nome utente di prova." },
       ],
     },
     {
@@ -52,7 +52,7 @@ export const UTENTE_CHE_ESEGUE_GUIDE = Object.freeze({
         { ol: [
           'Apri il progetto Manipola e aggiungi un nodo «Input di progetto».',
           'In «Tipo» scegli «Utente che esegue».',
-          'In «Come entra nella catena» scegli «Sorgente: tabella di una riga». Lascia il nome della colonna `utente` (o scegline un altro).',
+          'In «Come entra nel progetto» scegli «Sorgente: tabella di una riga». Lascia il nome della colonna `utente` (o scegline un altro).',
           'In «Nome utente di prova» scrivi un nome utente vero, per esempio `E0041`: serve per Anteprima, Valida ed Esegui di prova.',
           'Collega il nodo a un passo Formula che crea la colonna `istituto` con la formula qui sotto: da `E0041` ottiene `004_IS`.',
           'Aggiungi un Join interno (tipo «Inner (solo corrispondenze)») tra i dati principali e il risultato della Formula, sulla colonna istituto dei dati e sulla colonna `istituto` della Formula.',
@@ -61,7 +61,7 @@ export const UTENTE_CHE_ESEGUE_GUIDE = Object.freeze({
         { code: "utente.str.slice(1, 4) + '_IS'" },
         { p: 'La formula prende i caratteri dal secondo al quarto del nome utente (`004` da `E0041`) e aggiunge `_IS`.' },
         { note: 'Il nome utente, dopo i passi, deve avere ESATTAMENTE la forma dei dati: stesse cifre, stessi zeri iniziali, stesse maiuscole. Se non corrisponde, il Join interno non trova righe e il risultato è vuoto.' },
-        { p: "Al posto della sorgente puoi collegare l'input direttamente a un parametro, quando i dati contengono già il nome utente così com'è (per esempio una colonna `owner`): in «Come entra nella catena» lascia «Valore di un parametro» e collega l'input al filtro o al passo." },
+        { p: "Al posto della sorgente puoi collegare l'input direttamente a un parametro, quando i dati contengono già il nome utente così com'è (per esempio una colonna `owner`): in «Come entra nel progetto» lascia «Valore di un parametro» e collega l'input al filtro o al passo." },
       ],
     },
     {
@@ -86,9 +86,9 @@ export const UTENTE_CHE_ESEGUE_GUIDE = Object.freeze({
       ],
     },
     {
-      title: 'Pianificazioni e catene',
+      title: 'Pianificazioni e progetti collegati',
       blocks: [
-        { p: "Una Pianificazione o una catena di progetti parte senza una persona che la avvia: non c'è un utente, quindi un progetto con «Utente che esegue» si ferma con un messaggio che lo spiega. Non si usa il nome utente di prova. Per questi progetti usa l'Eseguibile." },
+        { p: "Una Pianificazione o un progetto avviato da un altro progetto parte senza una persona che la avvia: non c'è un utente, quindi un progetto con «Utente che esegue» si ferma con un messaggio che lo spiega. Non si usa il nome utente di prova. Per questi progetti usa l'Eseguibile." },
       ],
     },
     {

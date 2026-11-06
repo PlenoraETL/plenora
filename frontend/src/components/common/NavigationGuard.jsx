@@ -4,14 +4,14 @@
  *
  * Intercetta ogni cambio di pagina (link, navigate(), tasto Indietro/Avanti
  * del browser, Ctrl+K) con `useBlocker` e, se un editor ha modifiche non
- * salvate (regola unica: hooks/useUnsavedChangesGuard.shouldBlockNavigation),
+ * salvate (regola unica: utils/leaveGuard.shouldBlockNavigation),
  * chiede con il dialog del progetto (LEAVE_DIALOG). Esci = la navigazione
  * prosegue; Resta = annullata (anche il tasto Indietro torna dov'era).
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { useBlocker } from 'react-router-dom';
 import { useConfirmOrDeny } from '../../context/ConfirmContext';
-import { LEAVE_DIALOG, shouldBlockNavigation } from '../../hooks/useUnsavedChangesGuard';
+import { LEAVE_DIALOG, shouldBlockNavigation } from '../../utils/leaveGuard';
 
 export default function NavigationGuard() {
   const confirm = useConfirmOrDeny();

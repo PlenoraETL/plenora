@@ -18,7 +18,8 @@ import { createMemoryRouter, RouterProvider, Link, Outlet, useNavigate } from 'r
 import NavigationGuard from '../../src/components/common/NavigationGuard';
 import CommandPalette from '../../src/components/common/CommandPalette';
 import { ConfirmProvider } from '../../src/context/ConfirmContext';
-import { useUnsavedChangesGuard, LEAVE_DIALOG, isLeaveGuardActive } from '../../src/hooks/useUnsavedChangesGuard';
+import { useUnsavedChangesGuard } from '../../src/hooks/useUnsavedChangesGuard';
+import { LEAVE_DIALOG, isLeaveGuardActive } from '../../src/utils/leaveGuard';
 import { useSignOut } from '../../src/hooks/useSignOut';
 import { AuthProvider } from '../../src/context/AuthContext';
 import useCanvasStore from '../../src/store/useCanvasStore';

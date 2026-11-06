@@ -4,23 +4,23 @@
 ───────────────────────────────────────────────────────────────────────── */
 
 .tk-page {
-  --tk-bg:        #07090F;
-  --tk-surface:   #0C0F18;
-  --tk-surface-2: #111525;
-  --tk-surface-3: #171C2E;
-  --tk-border:    rgba(255,255,255,0.06);
-  --tk-border-hi: rgba(255,255,255,0.11);
-  --tk-text:      #DDE4F2;
-  --tk-text-sub:  #7D8BA8;
-  --tk-text-dim:  #3F4D68;
+  --tk-bg:        var(--plen-bg);
+  --tk-surface:   var(--plen-surface);
+  --tk-surface-2: var(--plen-surface-2);
+  --tk-surface-3: var(--plen-surface-3);
+  --tk-border:    var(--plen-border);
+  --tk-border-hi: var(--plen-border-hi);
+  --tk-text:      var(--plen-text);
+  --tk-text-sub:  var(--plen-text-sub);
+  --tk-text-dim:  var(--plen-text-dim);
   --tk-shadow:    0 14px 44px rgba(0,0,0,0.55);
 
-  --tk-blue:      #4B8BFF;
-  --tk-blue-mid:  #2563EB;
+  --tk-blue:      var(--plen-blue);
+  --tk-blue-mid:  var(--plen-blue-mid);
   --tk-blue-dim:  rgba(75,139,255,0.10);
-  --tk-ok:    #34D399;
-  --tk-warn:  #FBBF24;
-  --tk-err:   #F87171;
+  --tk-ok:    var(--plen-ok);
+  --tk-warn:  var(--plen-warn);
+  --tk-err:   var(--plen-err);
   --tk-purple: #9B6DFF;
   --tk-pink:   #EC4899;
 
@@ -30,21 +30,7 @@
 }
 
 [data-theme='light'] .tk-page {
-  --tk-bg:        #EFF2F9;
-  --tk-surface:   #FFFFFF;
-  --tk-surface-2: #E8EDF8;
-  --tk-surface-3: #D8E0F0;
-  --tk-border:    rgba(0,0,0,0.07);
-  --tk-border-hi: rgba(0,0,0,0.13);
-  --tk-text:      #0B1120;
-  --tk-text-sub:  #4A5678;
-  --tk-text-dim:  #96A3BE;
   --tk-shadow:    0 8px 32px rgba(0,0,0,0.09);
-  --tk-blue:      #2563EB;
-  --tk-blue-mid:  #1D4ED8;
-  --tk-err:       #DC2626;
-  --tk-warn:      #D97706;
-  --tk-ok:        #059669;
 }
 
 .tk-page *, .tk-page *::before, .tk-page *::after {
@@ -131,7 +117,7 @@
 }
 
 .tk-filters__row > span:first-child {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--tk-text-dim);
@@ -208,7 +194,7 @@
 .tk-list__table th {
   background: var(--tk-surface-2);
   font-family: var(--tk-font-m);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font-weight: 600;
@@ -230,7 +216,7 @@
   padding: 3px 10px;
   border-radius: 20px;
   font-family: var(--tk-font-m);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   border: 1px solid;
 }
@@ -246,7 +232,7 @@
   padding: 3px 10px;
   border-radius: 6px;
   font-family: var(--tk-font-m);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   background: var(--tk-surface-3);
   color: var(--tk-text-sub);
@@ -267,7 +253,7 @@
   padding: 3px 8px;
   border-radius: 4px;
   font-family: var(--tk-font-m);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -303,7 +289,7 @@
 
 .tk-detail__label {
   font-family: var(--tk-font-m);
-  font-size: 9px;
+  font-size: 11px;
   color: var(--tk-text-dim);
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -369,7 +355,7 @@
 .tk-detail__comments h3 {
   margin: 0 0 14px 0;
   font-family: var(--tk-font-m);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font-weight: 600;
@@ -525,18 +511,18 @@
 
 /* ── Modal (ha i propri token perché può aprirsi fuori da .tk-page) ── */
 .tk-modal__overlay {
-  --tk-bg:        #07090F;
-  --tk-surface:   #0C0F18;
-  --tk-surface-2: #111525;
-  --tk-surface-3: #171C2E;
-  --tk-border:    rgba(255,255,255,0.06);
-  --tk-border-hi: rgba(255,255,255,0.11);
-  --tk-text:      #DDE4F2;
-  --tk-text-sub:  #7D8BA8;
-  --tk-text-dim:  #3F4D68;
+  --tk-bg:        var(--plen-bg);
+  --tk-surface:   var(--plen-surface);
+  --tk-surface-2: var(--plen-surface-2);
+  --tk-surface-3: var(--plen-surface-3);
+  --tk-border:    var(--plen-border);
+  --tk-border-hi: var(--plen-border-hi);
+  --tk-text:      var(--plen-text);
+  --tk-text-sub:  var(--plen-text-sub);
+  --tk-text-dim:  var(--plen-text-dim);
   --tk-shadow:    0 14px 44px rgba(0,0,0,0.55);
-  --tk-blue:      #4B8BFF;
-  --tk-blue-mid:  #2563EB;
+  --tk-blue:      var(--plen-blue);
+  --tk-blue-mid:  var(--plen-blue-mid);
   --tk-blue-dim:  rgba(75,139,255,0.10);
   --tk-font-d: 'Syne',    'Trebuchet MS', sans-serif;
   --tk-font-b: 'Inter',   'Segoe UI', sans-serif;
@@ -553,17 +539,6 @@
 }
 
 [data-theme='light'] .tk-modal__overlay {
-  --tk-bg:        #EFF2F9;
-  --tk-surface:   #FFFFFF;
-  --tk-surface-2: #E8EDF8;
-  --tk-surface-3: #D8E0F0;
-  --tk-border:    rgba(0,0,0,0.07);
-  --tk-border-hi: rgba(0,0,0,0.13);
-  --tk-text:      #0B1120;
-  --tk-text-sub:  #4A5678;
-  --tk-text-dim:  #96A3BE;
-  --tk-blue:      #2563EB;
-  --tk-blue-mid:  #1D4ED8;
 }
 
 .tk-modal {
@@ -620,7 +595,7 @@
   flex-direction: column;
   gap: 6px;
   font-family: var(--tk-font-m);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font-weight: 600;

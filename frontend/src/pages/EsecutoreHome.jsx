@@ -55,12 +55,16 @@ function EseguibileCard({ item, onRun }) {
           <div className="esh__card-description">{item.description}</div>
         )}
         <div className="esh__card-meta">
+          {/* UI-4 (U14): con il modulo dinamico non ci sono colonne da
+              preparare: si compila un modulo (mai «0 colonne attese»). */}
           <span className="esh__card-meta-item">
-            📋 {item.expected_columns_count ?? 0} colonne attese
+            {item.expected_columns_count > 0
+              ? `📋 File con ${item.expected_columns_count} ${item.expected_columns_count === 1 ? 'colonna' : 'colonne'}`
+              : '📝 Modulo da compilare'}
           </span>
           {item.default_output_format && (
             <span className="esh__card-meta-item">
-              📄 Output: {item.default_output_format}
+              📄 Risultato: {item.default_output_format}
             </span>
           )}
         </div>
@@ -106,10 +110,10 @@ function EsecutoreHome() {
       const result = await cleanupTaskCompletely(taskId);
       if (result?.partialCleanup) {
         const detail = result.networkError
-          ? 'errore di rete durante la richiesta di cleanup'
-          : `step falliti: ${(result.failedSteps || []).join(', ') || 'sconosciuti'}`;
+          ? 'errore di rete durante la pulizia'
+          : `passaggi non riusciti: ${(result.failedSteps || []).join(', ') || 'sconosciuti'}`;
         toast.warning(
-          `Cleanup post-download parziale (${detail}). ` +
+          `Pulizia dopo lo scaricamento incompleta (${detail}). ` +
           `Alcuni dati dell'esecuzione potrebbero richiedere intervento ` +
           `dell'amministratore per la rimozione completa.`,
           8000,

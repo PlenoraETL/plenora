@@ -55,7 +55,7 @@ export default function TransformsPanel({
             return (
               <div key={idx} className="response-config-builder__transform-item">
                 <div className="response-config-builder__transform-row">
-                  <label>Colonna output:</label>
+                  <label>Colonna in uscita:</label>
                   <input
                     type="text"
                     value={t.column}

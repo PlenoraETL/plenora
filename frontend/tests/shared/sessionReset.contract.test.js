@@ -56,7 +56,9 @@ const NOT_USER_DATA = {
   'utils/errorReporting.js': 'client di Sentry registrato all\'avvio: uguale per ogni utente',
   'utils/session.js': 'il registro stesso',
   'utils/dialogStack.js': 'stack delle finestre aperte (Fase 5, T4): si svuota smontandole, nessun dato',
-  'hooks/useUnsavedChangesGuard.js': 'contatore degli editor montati (Fase 5, T4): si azzera smontandoli, nessun dato',
+  'utils/openapiImport.js': 'parser YAML caricato al bisogno (UI-4, V3b): la libreria, nessun dato',
+  'utils/editorChunks.js': 'tipi di editor già scaricati in anticipo (UI-4, V13): codice, nessun dato',
+  'utils/leaveGuard.js': 'domande degli editor montati (Fase 5, T4; UI-4 V1): si tolgono smontandoli, nessun dato',
   'store/typingAction.js': 'contatore delle sessioni di fuoco, WeakMap con chiave i campi e ultimo evento di digitazione (Fase 5, T5+T6): nessun dato dell utente',
 };
 

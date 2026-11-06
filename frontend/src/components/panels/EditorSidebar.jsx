@@ -9,6 +9,7 @@ import { ResourceError } from '../common/ListState';
 import FilesSidebar from './FilesSidebar';
 import { useAuth } from '../../context/AuthContext';
 import { useSignOut } from '../../hooks/useSignOut';
+import { ICON } from '../../utils/icons';
 
 function EditorSidebar({
   projects = [],
@@ -76,7 +77,7 @@ function EditorSidebar({
           className="editor-sidebar__logout"
           onClick={signOut}
           title="Esci"
-        >⏻</button>
+        >{ICON.logout}</button>
       </div>
 
     </div>

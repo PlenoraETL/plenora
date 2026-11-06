@@ -88,7 +88,7 @@
 /* Alias */
 .table-node__alias-display {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: #34C17A;
   cursor: pointer;
   padding: 1px 0;
@@ -117,7 +117,7 @@
 .table-node__add-alias-btn {
   margin-top: 3px;
   padding: 2px 7px;
-  font-size: 10px;
+  font-size: 11px;
   background: transparent;
   border: none;
   color: rgba(52,193,122,0.6);
@@ -169,7 +169,7 @@
 }
 .table-node__toggle-all-text {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   white-space: nowrap;
 }
@@ -228,7 +228,7 @@
 /* SRID badge */
 .table-node__column-srid-badge {
   font-family: var(--plen-font-mono);
-  font-size: 8.5px;
+  font-size: 11px;
   background: rgba(245,166,35,0.12);
   color: #F5A623;
   border-radius: 3px;
@@ -259,12 +259,12 @@
 .table-node__column-alias-arrow {
   font-family: var(--plen-font-mono);
   color: #34C17A;
-  font-size: 10px;
+  font-size: 11px;
 }
 .table-node__column-alias-input {
   width: 64px;
   padding: 2px 4px;
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--plen-font-mono);
   border: 1px solid #34C17A;
   border-radius: 3px;
@@ -277,7 +277,7 @@
 
 .table-node__column-alias {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   color: #34C17A;
   cursor: pointer;
   padding: 1px 4px;
@@ -288,7 +288,7 @@
 .table-node__column-alias:hover { background: rgba(52,193,122,0.1); }
 
 .table-node__column-add-alias {
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   cursor: pointer;
   padding: 1px 4px;
@@ -361,7 +361,7 @@
   background: #34C17A;
   color: #07090F;
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 9px;
@@ -390,7 +390,7 @@
   background: #9B6DFF;
   color: white;
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 9px;

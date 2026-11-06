@@ -300,7 +300,7 @@ function ResponseConfigBuilder({
               className={`response-config-builder__tab ${activeTab === 'preview' ? 'response-config-builder__tab--active' : ''}`}
               onClick={() => { setActiveTab('preview'); generatePreview(); }}
             >
-              👁️ Preview
+              👁️ Anteprima
             </button>
           </div>
 

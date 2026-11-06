@@ -125,7 +125,7 @@
   border-radius: 6px;
   cursor: pointer;
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -134,11 +134,11 @@
 }
 .carica-node__section-header:hover { background: var(--cn-accent-bdr); }
 
-.carica-node__toggle { font-size: 9px; }
+.carica-node__toggle { font-size: 11px; }
 
 .carica-node__label {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -389,7 +389,7 @@
 }
 .carica-node__preview-label {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--cn-accent);
   opacity: 0.7;
   flex-shrink: 0;
@@ -531,7 +531,7 @@
 
 .carica-conflict-modal__details-title {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -551,7 +551,7 @@
   text-align: left;
   font-weight: 700;
   color: var(--plen-text-dim, #3F4D68);
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }

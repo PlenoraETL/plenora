@@ -13,12 +13,13 @@
 import React from 'react';
 import { formatNumber } from '../../utils/format';
 import ConnectionTestStatus from '../connections/ConnectionTestStatus';
+import { ICON } from '../../utils/icons';
 
 const CATEGORY_ICONS = {
   geocoding:  '🌍',
   routing:    '🚗',
   catasto:    '🏠',
-  datasource: '📁',
+  datasource: ICON.datasource,
   custom:     '⚙️',
 };
 
@@ -36,7 +37,7 @@ function getApiIcon(api) {
   if (n.includes('osrm') || n.includes('rout')) return '🚗';
   if (n.includes('catasto') || n.includes('omi')) return '🏠';
   if (n.includes('model') || n.includes('ml')) return '🧠';
-  if (n.includes('sharepoint') || n.includes('ftp')) return '📁';
+  if (n.includes('sharepoint') || n.includes('ftp')) return ICON.datasource;
   return '⚙️';
 }
 
@@ -106,7 +107,7 @@ export default function ApiConnectionCard({
               </span>
               {api.connection_type && api.connection_type!=='manual' && (
                 <span className="acm__badge acm__badge--conn">
-                  {api.connection_type==='openapi'?'📋 OpenAPI':api.connection_type==='template'?'🍪 Template':api.connection_type==='datasource'?'📁 DataSource':null}
+                  {api.connection_type==='openapi'?`${ICON.openapi} OpenAPI`:api.connection_type==='template'?`${ICON.template} Modello`:api.connection_type==='datasource'?`${ICON.datasource} Data Source`:null}
                 </span>
               )}
               <span className={`acm__badge ${sc.badge}`}>

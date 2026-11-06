@@ -9,6 +9,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useOptionalConfirm } from '../context/ConfirmContext';
 import { isShortcutBlocked, isTypingTarget } from '../utils/dialogStack';
 import { canDeleteFromCanvas, requestCanvasDeletion } from '../utils/canvasDeletion';
+import { matchesShortcut } from '../utils/shortcuts';
 
 /**
  * Hook per gestire gli eventi tastiera sul canvas React Flow
@@ -76,19 +77,16 @@ export function useCanvasKeyboard(options) {
     const target = event.target;
     if (isTypingTarget(target) || isShortcutBlocked(event)) return;
 
-    // Undo/Redo (#24). Cmd/Ctrl+Z = undo; +Shift o Cmd/Ctrl+Y = redo.
-    if (event.metaKey || event.ctrlKey) {
-      const k = event.key.toLowerCase();
-      if (k === 'z') {
-        event.preventDefault();
-        if (event.shiftKey) onRedo?.(); else onUndo?.();
-        return;
-      }
-      if (k === 'y') {
-        event.preventDefault();
-        onRedo?.();
-        return;
-      }
+    // Undo/Redo (#24): tasti dalla tabella unica (utils/shortcuts, UI-4 U28).
+    if (matchesShortcut('undo', event)) {
+      event.preventDefault();
+      onUndo?.();
+      return;
+    }
+    if (matchesShortcut('redo', event)) {
+      event.preventDefault();
+      onRedo?.();
+      return;
     }
 
     // Gestisci Delete/Backspace: solo con il fuoco sul canvas (o su nessun
@@ -96,7 +94,7 @@ export function useCanvasKeyboard(options) {
     // Passi non deve cancellare il nodo selezionato (Fase 4, M6).
     const onCanvas = target === document.body || target === document.documentElement
       || Boolean(target.closest?.('.react-flow'));
-    if ((event.key === 'Delete' || event.key === 'Backspace') && onCanvas) {
+    if (matchesShortcut('delete', event) && onCanvas) {
       // Regola unica (utils/canvasDeletion): in sola lettura niente conferma
       // e niente cancellazione.
       if (!canDeleteFromCanvas()) return;

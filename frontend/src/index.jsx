@@ -25,8 +25,10 @@ installDraftHousekeeping();
 // #35: Sentry FE error tracking — attivo SOLO se VITE_SENTRY_DSN è configurato
 // a build-time. Senza DSN è un no-op totale: import dinamico, quindi il bundle
 // Sentry non viene nemmeno caricato. sendDefaultPii=false (GDPR-safe).
+// UI-4 (V3c): con la DSN si scarica DOPO il primo render, quando il browser
+// e' libero (requestIdleCallback, al massimo 3 s), non insieme all'app.
 const SENTRY_DSN = FRONTEND_ENV.sentryDsn;
-if (SENTRY_DSN) {
+function startErrorTracking() {
   import('@sentry/react')
     .then((Sentry) => {
       Sentry.init({
@@ -40,6 +42,9 @@ if (SENTRY_DSN) {
     })
     .catch(() => { /* tracking non bloccante: se Sentry non carica, l'app prosegue */ });
 }
+const whenIdle = (fn) => (typeof window.requestIdleCallback === 'function'
+  ? window.requestIdleCallback(fn, { timeout: 3000 })
+  : window.setTimeout(fn, 1500));
 
 async function bootstrap() {
   // #50: mock server dev (MSW) — opt-in via VITE_USE_MOCKS, import dinamico,
@@ -49,6 +54,7 @@ async function bootstrap() {
     await worker.start({ onUnhandledRequest: 'bypass' });
   }
   ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  if (SENTRY_DSN) whenIdle(startErrorTracking);
 }
 
 bootstrap();

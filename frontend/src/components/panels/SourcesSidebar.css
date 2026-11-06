@@ -90,7 +90,7 @@
 [data-theme='light'] .sources-sidebar__empty { background: #F4F7FD; }
 
 .sources-sidebar__empty-hint {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   font-style: normal;
   font-family: var(--plen-font-mono);
@@ -159,7 +159,7 @@
 
 .sources-sidebar__item-meta {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
 }
 
@@ -167,7 +167,7 @@
 .sources-sidebar__item-badge {
   flex-shrink: 0;
   font-family: var(--plen-font-mono);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   padding: 2px 5px;
   border-radius: 4px;
@@ -215,7 +215,7 @@
 [data-theme='light'] .ss-sec-hdr:hover { background: #F4F7FD; }
 
 .ss-sec-hdr__arrow {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   width: 12px;
   flex-shrink: 0;
@@ -235,7 +235,7 @@
 
 .ss-sec-hdr__count {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   background: var(--plen-surface-2, #111525);
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
@@ -258,7 +258,7 @@
   border-radius: 6px;
   color: var(--plen-text-dim, #3F4D68);
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   cursor: pointer;
   text-align: center;
   transition: all 0.12s;
@@ -307,7 +307,7 @@
 
 .editor-sidebar__user-email {
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
 }
 

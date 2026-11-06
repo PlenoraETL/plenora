@@ -184,13 +184,13 @@ describe('ResponseConfigBuilder — residuals', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Preview/i }));
+    await user.click(screen.getByRole('button', { name: /Anteprima/i }));
 
     expect(
-      await screen.findByText(/Preview risultato/i),
+      await screen.findByText(/Anteprima del risultato/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Aggiorna preview/i }),
+      screen.getByRole('button', { name: /Aggiorna l'anteprima/i }),
     ).toBeInTheDocument();
     // Config JSON dump visibile.
     expect(

@@ -3,7 +3,7 @@
 .kbd-help { display: flex; flex-direction: column; gap: 16px; }
 .kbd-help__group { display: flex; flex-direction: column; gap: 2px; }
 .kbd-help__group-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .08em;
@@ -29,3 +29,4 @@
   padding: 2px 7px;
 }
 .kbd-help__label { font-size: 13px; color: var(--color-text-secondary, #4b5563); }
+.kbd-help__or { font-size: 11px; color: var(--plen-text-dim); margin-left: -6px; }

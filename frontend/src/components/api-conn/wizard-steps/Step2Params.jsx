@@ -31,10 +31,10 @@ export default function Step2Params({
     <div className="acm__wstep-content">
 {formData.connection_type==='rest_file' ? (
         <>
-          <div className="acm__info-box">📦 Configura i campi multipart che invierai al servizio REST e il formato del file di output.</div>
+          <div className="acm__info-box">📦 Configura i campi multipart che invierai al servizio REST e il formato del file restituito.</div>
 
           <div className="acm__field-group">
-            <div className="acm__label">Estensione file di output *</div>
+            <div className="acm__label">Estensione del file restituito *</div>
             <input className="acm__input acm__input--mono acm__input--w-160"
               value={formData.response?.output_extension||'.zip'}
               onChange={e=>setFormData({...formData,response:{...(formData.response||{format:'binary_file'}),output_extension:e.target.value}})}
@@ -46,7 +46,7 @@ export default function Step2Params({
             <div className="acm__label">📎 File da inviare (multipart)</div>
             <div className="acm__field-hint acm__field-hint--mb-sm">
               <strong>Sorgente nodo</strong>: il file arriva dal file_source collegato via edge (il "file principale", uno solo per nodo).
-              <br/><strong>Extra (upload inline)</strong>: l'utente carica il file direttamente nel nodo canvas (es. Excel opzionale per il servizio IMDF).
+              <br/><strong>Extra (caricato nel nodo)</strong>: l'utente carica il file direttamente nel nodo canvas (es. Excel opzionale per il servizio IMDF).
             </div>
             <div className="acm__params-list">
               {(formData.request?.file_fields||[]).map((ff,i)=>(
@@ -59,7 +59,7 @@ export default function Step2Params({
                       value={ff.source||'node_input'}
                       onChange={e=>{const arr=[...(formData.request?.file_fields||[])]; arr[i]={...arr[i],source:e.target.value}; setFormData({...formData,request:{...(formData.request||{}),file_fields:arr}});}}>
                       <option value="node_input">Sorgente nodo (edge)</option>
-                      <option value="extra_input">Extra (upload inline)</option>
+                      <option value="extra_input">Extra (caricato nel nodo)</option>
                     </select>
                     <label className="acm__check-label-inline">
                       <input type="checkbox" checked={!!ff.required}
@@ -125,7 +125,7 @@ export default function Step2Params({
         </>
       ) : (
       <>
-      <div className="acm__info-box">{formData.api_type==='enricher'?<>📥 <strong>Mappato</strong> = il valore è preso da una <strong>colonna del dataset</strong> (diverso per ogni riga) &nbsp;|&nbsp; 📌 <strong>Fisso</strong> = valore <strong>costante</strong>, uguale per tutte le righe (es. <code>f=json</code>, <code>limit=100</code>). Supporta <code>{'{{NOW}}'}</code>/<code>{'{{TODAY}}'}</code>.</>:<>ℹ️ Parametri <strong>fissi</strong> inviati a ogni chiamata (costanti, uguali per tutte le righe generate). Supporta <code>{'{{NOW}}'}</code>/<code>{'{{TODAY}}'}</code>.</>}</div>
+      <div className="acm__info-box">{formData.api_type==='enricher'?<>📥 <strong>Mappato</strong> = il valore è preso da una <strong>colonna della tabella</strong> (diverso per ogni riga) &nbsp;|&nbsp; 📌 <strong>Fisso</strong> = valore <strong>costante</strong>, uguale per tutte le righe (es. <code>f=json</code>, <code>limit=100</code>). Supporta <code>{'{{NOW}}'}</code>/<code>{'{{TODAY}}'}</code>.</>:<>ℹ️ Parametri <strong>fissi</strong> inviati a ogni chiamata (costanti, uguali per tutte le righe generate). Supporta <code>{'{{NOW}}'}</code>/<code>{'{{TODAY}}'}</code>.</>}</div>
       <div className="acm__params-list">
         {formData.parameters.map((p,i)=>(
           <div key={i} className="acm__param-row">

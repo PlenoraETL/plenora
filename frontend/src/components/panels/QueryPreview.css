@@ -67,7 +67,7 @@
 }
 
 .query-preview__toggle-icon {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   flex-shrink: 0;
 }
@@ -82,7 +82,7 @@
 
 .query-preview__stats {
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
 }
 

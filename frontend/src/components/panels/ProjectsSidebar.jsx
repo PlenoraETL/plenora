@@ -6,13 +6,15 @@ import './SourcesSidebar.css';
 import React, { useState, useMemo } from 'react';
 import SearchField, { SearchEmpty } from '../common/SearchField';
 import { useSearch, useSearchPage } from '../../hooks/useSearch';
+import { projectType } from '../../utils/projectTypes';
+import { TERMS } from '../../utils/glossary';
 
 const PAGE_SIZE = 10;
 
 function ProjectsSidebar({
   projects = [],
   onDragStart,
-  title = "📊 Sorgenti Progetto",
+  title = `${TERMS.project_source.icon} Progetti`,
   subtitle = "Trascina un progetto nel canvas",
   emptyMessage = "Nessun progetto disponibile.",
   emptyHint = "Crea prima un progetto di tipo Estrai.",
@@ -32,8 +34,9 @@ function ProjectsSidebar({
     : projects), [projects, filterTypes]);
   const filteredProjects = useMemo(() => search.filter(typedProjects, p => [p.name]), [typedProjects, search.filter]);
 
-  const getProjectIcon = (t) => ({ manipola:'🔄', arricchisci:'🔗' }[t] || '📊');
-  const getProjectBadge = (t) => ({ manipola:'MANIPOLA', arricchisci:'ARRICCHISCI' }[t] || 'SQL');
+  // Icona e nome del tipo dalla tabella unica (UI-4, U24: Estrai non «SQL»).
+  const getProjectIcon = (t) => projectType(t).icon;
+  const getProjectBadge = (t) => projectType(t).label;
 
   const handleDragStart = (event, project) => {
     if (onDragStart) onDragStart(event, 'project_source', {

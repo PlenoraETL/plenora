@@ -499,8 +499,8 @@ const ManipolaEditorContent = () => {
     <EditorSidebar
       variant="manipola" projects={availableSources} files={availableFiles} onDragStart={onDragStart}
       sourcesLoading={sourcesLoading} sourcesError={sourcesError} onRetrySources={reloadSources}
-      projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto SQL nel canvas',
-        emptyMessage: 'Nessun progetto SQL disponibile.', emptyHint: 'Crea prima un progetto di tipo Estrai.',
+      projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto nel canvas: ne legge il risultato',
+        emptyMessage: 'Nessun progetto disponibile.', emptyHint: 'Crea prima un progetto Estrai, Manipola o Arricchisci.',
         filterTypes: ['estrai', 'manipola', 'arricchisci'], showSearch: true }}
       filesConfig={{ title: '📁 File Esterni', subtitle: 'Trascina un file nel canvas',
         emptyMessage: 'Nessun file disponibile.', uploadLink: '/files', uploadLinkText: 'Carica file esterni' }}
@@ -514,12 +514,12 @@ const ManipolaEditorContent = () => {
         {showVersions && (
           <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
         )}
-        <ExecutionModal {...executionModalProps(execution)} title={`${term('run').icon} Esecuzione del flusso Manipola`} projectType="manipola" />
+        <ExecutionModal {...executionModalProps(execution)} title={`${term('run').icon} Esecuzione del progetto Manipola`} projectType="manipola" />
         {preview.showModal && (
 <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
           data={preview.data} loading={preview.loading} error={preview.error}
           permissionRevoked={preview.permissionRevoked}
-          title={`${term('preview').name} del flusso Manipola`} projectType="manipola" disableGrouping />
+          title={`${term('preview').name} del progetto Manipola`} projectType="manipola" disableGrouping />
 )}
       </Suspense>
     </ModalErrorBoundary>

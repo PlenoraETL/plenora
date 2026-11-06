@@ -42,7 +42,7 @@
   color: var(--color-text-primary, #1f2937);
 }
 .cmdk__kbd {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--color-text-muted, #6b7280);
   background: var(--color-bg-tertiary, #f3f4f6);

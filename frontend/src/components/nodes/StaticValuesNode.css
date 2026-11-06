@@ -109,7 +109,7 @@
 
 .svn__value-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .svn__preview {
-  font-size: 10px;
+  font-size: 11px;
   color: #34D399;
   font-family: var(--plen-font-mono);
   padding-left: 2px;
@@ -125,7 +125,7 @@
   padding: 4px 5px;
   border-radius: 5px;
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
@@ -228,7 +228,7 @@
 .svn__variables-header {
   padding: 6px 11px;
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -261,7 +261,7 @@
 .svn__var-btn:hover { background: rgba(155,109,255,0.07); }
 .svn__var-btn:last-child { border-bottom: none; }
 .svn__var-name    { font-family: var(--plen-font-mono); font-size: 11px; color: #9B6DFF; font-weight: 500; }
-.svn__var-example { font-family: var(--plen-font-mono); font-size: 10px; color: var(--plen-text-dim, #3F4D68); }
+.svn__var-example { font-family: var(--plen-font-mono); font-size: 11px; color: var(--plen-text-dim, #3F4D68); }
 
 /* ── Schema output ──────────────────────────────────────────────── */
 .svn__schema {
@@ -277,7 +277,7 @@
 
 .svn__schema-label {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -289,7 +289,7 @@
 
 .svn__schema-tag {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   padding: 2px 7px;
   border-radius: 99px;
   font-weight: 500;

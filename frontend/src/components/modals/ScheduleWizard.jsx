@@ -14,17 +14,42 @@ import { toastApiError } from '../../utils/toastApiError';
 import * as codecs from '../../utils/fieldCodecs';
 import { formErrors, formPayload } from '../../utils/formSchema';
 import { DEFAULT_TIMEZONE, timezoneOptions } from '../../utils/timezones';
+import { describeCron, nextCronRuns, formatCronRun } from '../../utils/cron';
 import './ScheduleWizard.css';
 import { pressable } from '../../utils/pressable';
 
 const STEPS = [
-  { num: 1, label: 'Pipeline',     icon: '⬡' },
+  { num: 1, label: 'Progetto',     icon: '⬡' },
   { num: 2, label: 'Frequenza',    icon: '◷' },
   { num: 3, label: 'Esecuzione',   icon: '◈' },
   { num: 4, label: 'Destinazione', icon: '⬢' },
   { num: 5, label: 'Errori',       icon: '⟳' },
   { num: 6, label: 'Riepilogo',    icon: '◉' },
 ];
+
+/*
+ * UI-4 (U31): l'espressione in parole e le prossime 5 esecuzioni nel fuso
+ * scelto, calcolate qui (utils/cron, stessa regola dello scheduler): niente
+ * sito esterno per capire un cron.
+ */
+function CronPreview({ expression, timeZone }) {
+  const words = describeCron(expression);
+  if (!words) return null;
+  const runs = nextCronRuns(expression, { count: 5, timeZone });
+  return (
+    <div className="wiz-cron-preview" aria-live="polite">
+      <div className="wiz-cron-preview__words">{words}</div>
+      {runs.length ? (
+        <ol className="wiz-cron-preview__runs" aria-label="Prossime esecuzioni">
+          {runs.map(r => <li key={formatCronRun(r)}>{formatCronRun(r)}</li>)}
+        </ol>
+      ) : (
+        <div className="wiz-cron-preview__never">Questa espressione non capita nei prossimi anni.</div>
+      )}
+      <div className="wiz-hint">Orari nel fuso {timeZone || 'del browser'}.</div>
+    </div>
+  );
+}
 
 const CRON_PRESETS = [
   { label: 'Ogni 15 min',           value: '*/15 * * * *' },
@@ -67,7 +92,7 @@ const withDestination = (v) => Boolean(v.enable_destination);
  * non numerici o 0 scartati).
  */
 export const scheduleFields = ({ keepTimezone } = {}) => [
-  { name: 'project_id', step: 1, required: true, codec: codecs.text({ optional: false }), requiredMessage: 'Seleziona una pipeline' },
+  { name: 'project_id', step: 1, required: true, codec: codecs.text({ optional: false }), requiredMessage: 'Seleziona un progetto' },
   { name: 'cron_expression', step: 2, required: true, codec: codecs.cron() },
   { name: 'description', step: 2, codec: codecs.text() },
   { name: 'timezone', step: 2, required: true, codec: codecs.timezone({ keep: keepTimezone }) },
@@ -228,7 +253,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
       const payload = schedulePayload(form, fields);
       if (editId) await updateSchedule(editId, payload);
       else await createSchedule(payload);
-      toast.success(editId ? 'Schedule aggiornato' : 'Schedule creato');
+      toast.success(editId ? 'Pianificazione aggiornata' : 'Pianificazione creata');
       onCreated();
     } catch (e) {
       toastApiError(toast, e, 'Errore');
@@ -238,7 +263,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
   };
 
   if (loadingData) return (
-    <ModalWrapper isOpen={true} onClose={onClose} title="Schedule" size="lg" loading loadingText="Caricamento dati..." />
+    <ModalWrapper isOpen={true} onClose={onClose} title="Pianificazione" size="lg" loading loadingText="Caricamento dati..." />
   );
 
   const steps = [
@@ -248,7 +273,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
       content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
-                <div className="wiz-section__title">Seleziona la pipeline</div>
+                <div className="wiz-section__title">Scegli il progetto</div>
                 <div className="wiz-section__desc">Quale progetto verrà eseguito automaticamente?</div>
               </div>
               <div className="wiz-project-grid">
@@ -289,7 +314,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
             <div className="wiz-section">
               <div className="wiz-section__header">
                 <div className="wiz-section__title">Frequenza di esecuzione</div>
-                <div className="wiz-section__desc">Quanto spesso eseguire la pipeline?</div>
+                <div className="wiz-section__desc">Quanto spesso eseguire il progetto?</div>
               </div>
               <div className="wiz-field">
                 <div className="wiz-label">Preset</div>
@@ -304,10 +329,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                 </div>
               </div>
               <div className="wiz-field">
-                <div className="wiz-label">
-                  Espressione Cron
-                  <a href="https://crontab.guru/" target="_blank" rel="noreferrer" className="wiz-help-link">crontab.guru ↗</a>
-                </div>
+                <div className="wiz-label">Espressione cron</div>
                 <input type="text" aria-label="Espressione Cron"
                   className={`wiz-input wiz-input--mono${errors.cron_expression ? ' wiz-input--error' : ''}`}
                   value={form.cron_expression}
@@ -315,6 +337,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                   placeholder="0 3 * * *" />
                 <span className="wiz-hint">minuto · ora · giorno · mese · giorno_settimana</span>
                 {errors.cron_expression && <span className="wiz-error">{errors.cron_expression}</span>}
+                <CronPreview expression={form.cron_expression} timeZone={form.timezone} />
               </div>
               <div className="wiz-row">
                 <div className="wiz-field">
@@ -348,7 +371,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
               <label className="wiz-toggle-row">
                 <div className="wiz-toggle-row__content">
                   <div className="wiz-toggle-row__title">Usa cache risultati</div>
-                  <div className="wiz-toggle-row__desc">Riutilizza output precedente se la pipeline non è cambiata</div>
+                  <div className="wiz-toggle-row__desc">Riusa il risultato precedente se il progetto non è cambiato</div>
                 </div>
                 <div className={`wiz-toggle${form.use_cache ? ' wiz-toggle--on' : ''}`}
                   {...pressable(() => updateForm('use_cache', !form.use_cache))}>
@@ -369,7 +392,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                     </button>
                   ))}
                 </div>
-                <span className="wiz-hint">Se la pipeline è già in esecuzione, quante volte accodare prima di saltare</span>
+                <span className="wiz-hint">Se il progetto è già in esecuzione, quante volte accodare prima di saltare</span>
               </div>
             </div>
           ),
@@ -381,7 +404,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
             <div className="wiz-section">
               <div className="wiz-section__header">
                 <div className="wiz-section__title">Destinazione dati</div>
-                <div className="wiz-section__desc">Per default genera solo file output. Abilita per scrivere su database.</div>
+                <div className="wiz-section__desc">Di solito genera solo il file del risultato. Abilita per scrivere su database.</div>
               </div>
               <label className="wiz-toggle-row">
                 <div className="wiz-toggle-row__content">
@@ -441,8 +464,8 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                   )}
                   <div className="wiz-row">
                     <div className="wiz-field">
-                      <div className="wiz-label">Batch size</div>
-                      <input type="text" inputMode="numeric" aria-label="Batch size"
+                      <div className="wiz-label">Righe per blocco</div>
+                      <input type="text" inputMode="numeric" aria-label="Righe per blocco"
                         className={`wiz-input${errors.batch_size ? ' wiz-input--error' : ''}`} value={form.batch_size}
                         onChange={e => updateForm('batch_size', e.target.value)} />
                       <span className="wiz-hint">Da 100 a 50000</span>
@@ -516,7 +539,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
               </div>
               <div className="wiz-summary">
                 {[
-                  { title:'Pipeline', icon:'⬡', rows:[
+                  { title:'Progetto', icon:'⬡', rows:[
                     ['Progetto', <strong>{selectedProject?.name || '—'}</strong>],
                     ['Tipo', selectedProject?.project_type || '—'],
                   ]},
@@ -533,7 +556,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                     ['Connessione', selectedConnection?.name || '—'],
                     ['Tabella', <code>{form.schema_name ? `${form.schema_name}.` : ''}{form.table_name}</code>],
                     ['Modalità', form.write_mode],
-                  ] : [['Modalità', <span className="wiz-muted">Solo file output</span>]]},
+                  ] : [['Modalità', <span className="wiz-muted">Solo il file del risultato</span>]]},
                   { title:'Errori', icon:'⟳', rows:[
                     ['Retry', `${form.max_retries} (${form.retry_backoff_seconds}s)`],
                     ['Conflitti', form.append_conflicts],
@@ -561,13 +584,13 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     <Wizard
       isOpen
       onClose={onClose}
-      title={editId ? 'Modifica Schedule' : 'Nuovo Schedule'}
+      title={editId ? 'Modifica la pianificazione' : 'Nuova pianificazione'}
       icon={editId ? '✏️' : '⏰'}
       step={step - 1}
       onStepChange={(i) => setStep(i + 1)}
       steps={steps}
       onComplete={handleSubmit}
-      completeLabel={editId ? '💾 Salva Modifiche' : '✅ Crea Schedule'}
+      completeLabel={editId ? '💾 Salva le modifiche' : '✅ Crea la pianificazione'}
       busy={saving}
       dirty={userEdited || step > 1}
     />

@@ -121,14 +121,14 @@ describe('EseguibileExecuteWizard contract', () => {
       expect(analyzeEseguibileUploadMock).toHaveBeenCalledWith('exe-1', file);
     });
 
-    expect(await screen.findByText(/mappa le colonne/i)).toBeInTheDocument();
+    expect(await screen.findByText(/abbina le colonne del tuo file/i)).toBeInTheDocument();
     expect(screen.getByText(/2 righe/i)).toBeInTheDocument();
     const mappingSelects = screen.getAllByRole('combobox');
     expect(mappingSelects[0]).toHaveValue('city_name');
     expect(mappingSelects[1]).toHaveValue('zip_code');
 
     await user.click(screen.getByRole('button', { name: /^avanti/i }));
-    expect(await screen.findByText(/configura l'output ed esegui/i)).toBeInTheDocument();
+    expect(await screen.findByText(/scegli il risultato ed esegui/i)).toBeInTheDocument();
 
     const outputNameInput = screen.getByPlaceholderText(/enriched_addresses/i);
     await user.clear(outputNameInput);
@@ -219,10 +219,10 @@ describe('EseguibileExecuteWizard contract', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await user.click(screen.getByRole('button', { name: /avanti/i }));
-    expect(await screen.findByText(/mappa le colonne/i)).toBeInTheDocument();
+    expect(await screen.findByText(/abbina le colonne del tuo file/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^avanti/i }));
-    expect(await screen.findByText(/configura l'output ed esegui/i)).toBeInTheDocument();
+    expect(await screen.findByText(/scegli il risultato ed esegui/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /esegui/i }));
 
@@ -256,7 +256,7 @@ describe('EseguibileExecuteWizard contract', () => {
 
     expect(await screen.findByText(/unsupported xlsx schema/i)).toBeInTheDocument();
     expect(screen.getByText(/carica il file con i dati da processare/i)).toBeInTheDocument();
-    expect(screen.queryByText(/mappa le colonne/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/abbina le colonne del tuo file/i)).not.toBeInTheDocument();
   });
 
   it('preloads file-based defaults from metadata and locks the output extension to the inferred one', async () => {
@@ -293,10 +293,10 @@ describe('EseguibileExecuteWizard contract', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await user.click(screen.getByRole('button', { name: /avanti/i }));
-    expect(await screen.findByText(/mappa le colonne/i)).toBeInTheDocument();
+    expect(await screen.findByText(/abbina le colonne del tuo file/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^avanti/i }));
-    expect(await screen.findByText(/configura l'output ed esegui/i)).toBeInTheDocument();
+    expect(await screen.findByText(/scegli il risultato ed esegui/i)).toBeInTheDocument();
 
     expect(screen.getByText('.zip')).toBeInTheDocument();
     expect(screen.getByText(/determinato dal connettore finale/i)).toBeInTheDocument();
@@ -326,10 +326,10 @@ describe('EseguibileExecuteWizard contract', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await user.click(screen.getByRole('button', { name: /avanti/i }));
-    expect(await screen.findByText(/mappa le colonne/i)).toBeInTheDocument();
+    expect(await screen.findByText(/abbina le colonne del tuo file/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^avanti/i }));
-    expect(await screen.findByText(/configura l'output ed esegui/i)).toBeInTheDocument();
+    expect(await screen.findByText(/scegli il risultato ed esegui/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /esegui/i }));
 

@@ -215,7 +215,7 @@ const handleMultiLayerUpload = async () => {
       await loadFiles();
       resetUploadModal();
     } catch (err) {
-      setUploadError(humanizeErrorMessage(err, "Errore durante l'upload"));
+      setUploadError(humanizeErrorMessage(err, "Caricamento non riuscito"));
     } finally { setUploading(false); }
   };
 const handleNextStep = async () => {
@@ -264,7 +264,7 @@ const handleNextStep = async () => {
           try {
             await uploadFile(uploadFile_, uploadName, uploadDescription, null, null, null, null);
             await loadFiles(); resetUploadModal();
-          } catch (e) { setUploadError(humanizeErrorMessage(e, "Errore upload")); } finally { setUploading(false); }
+          } catch (e) { setUploadError(humanizeErrorMessage(e, "Caricamento non riuscito")); } finally { setUploading(false); }
         } else {
           setUploadError('Impossibile leggere le colonne del file');
         }
@@ -304,7 +304,7 @@ const handleUpload = async () => {
       }
       await loadFiles(); resetUploadModal();
     } catch (err) {
-      setUploadError(humanizeErrorMessage(err, "Errore durante l'upload"));
+      setUploadError(humanizeErrorMessage(err, "Caricamento non riuscito"));
     } finally { setUploading(false); }
   };
 

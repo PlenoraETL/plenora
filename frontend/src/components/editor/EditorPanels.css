@@ -1,0 +1,50 @@
+/* EditorPanels — barra laterale richiudibile e pannello ridimensionabile
+   degli editor (UI-4, U26). */
+
+.editor-side-frame {
+  position: relative;
+  display: flex;
+  flex: none;
+  height: 100%;
+  min-height: 0;
+}
+.editor-side-frame__content { display: flex; height: 100%; min-height: 0; }
+.editor-side-frame__content[hidden] { display: none; }
+.editor-side-frame__toggle {
+  position: absolute;
+  top: 8px;
+  right: -13px;
+  z-index: 6;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--plen-border-hi);
+  background: var(--plen-surface);
+  color: var(--plen-text-sub);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+.editor-side-frame__toggle:hover { color: var(--plen-blue); border-color: var(--plen-blue); }
+.editor-side-frame--collapsed {
+  width: 14px;
+  background: var(--plen-surface);
+  border-right: 1px solid var(--plen-border-hi);
+}
+.editor-side-frame--collapsed .editor-side-frame__toggle { right: -12px; }
+
+/* Maniglia del pannello del passo: invisibile senza pannello (e' l'ultimo
+   figlio del contenitore quando il pannello non c'e'). */
+.editor-panel-resizer {
+  flex: none;
+  width: 6px;
+  margin-right: -6px;
+  z-index: 5;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+}
+.editor-panel-resizer:hover,
+.editor-panel-resizer:focus-visible { background: var(--plen-blue-border); }
+.editor-panel-resizer:last-child { display: none; }

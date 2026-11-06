@@ -181,7 +181,7 @@ export default function LoginPage() {
             {[
               { key: 'estrai',      label: 'Estrai',      desc: 'Connetti DB, ArcGIS, file geospaziali' },
               { key: 'manipola',    label: 'Manipola',    desc: 'Spatial join, pivot, trasformazioni'   },
-              { key: 'arricchisci', label: 'Arricchisci', desc: 'API enrichment, geocoding, modelli ML' },
+              { key: 'arricchisci', label: 'Arricchisci', desc: 'Arricchimento da API, geocodifica, modelli ML' },
             ].map(m => (
               <div key={m.key} className="lp__module">
                 <span className={`lp__module-dot lp__module-dot--${m.key}`} />

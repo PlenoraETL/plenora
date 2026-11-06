@@ -56,7 +56,7 @@ describe('ScheduleWizard', () => {
     for (let i = 0; i < 5; i += 1) {
       await userEvent.click(screen.getByRole('button', { name: /avanti/i }));
     }
-    await userEvent.click(screen.getByRole('button', { name: /crea schedule/i }));
+    await userEvent.click(screen.getByRole('button', { name: /crea la pianificazione/i }));
 
     await waitFor(() => {
       expect(schedulesMock.createSchedule).toHaveBeenCalledTimes(1);

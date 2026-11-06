@@ -100,7 +100,7 @@ function TemplateCard({ template, onSelect }) {
 
           <button type="button" className="tlc__ol-btn"
             onClick={e => { e.stopPropagation(); onSelect(template); }}>
-            Usa questo template →
+            Usa questo modello →
           </button>
         </div>
       </div>
@@ -112,7 +112,7 @@ function TemplateLibraryModal({ onClose, onSelectTemplate }) {
   // Fase 5 T2: catalogo dall'hook comune (errore con il testo unico).
   const resource = useResource(async () => {
     const data = await getTemplates();
-    if (!data.success) throw new Error(data.error || 'Errore caricamento template');
+    if (!data.success) throw new Error(data.error || 'Modelli non caricati');
     return data.templates || [];
   }, { key: 'templates', errorMessage: (err) => humanizeError(err).message });
   const templates = useMemo(() => resource.data || [], [resource.data]);
@@ -129,14 +129,14 @@ function TemplateLibraryModal({ onClose, onSelectTemplate }) {
     <ModalWrapper
       isOpen={true}
       onClose={onClose}
-      title="Libreria Template"
-      subtitle="Template API predefiniti pronti all'uso"
+      title="Modelli di API"
+      subtitle="Connettori API già configurati, pronti all'uso"
       icon="🌐"
       size="lg"
     >
         {/* Toolbar */}
         <div className="tlm__toolbar">
-          <SearchField search={search} label="Cerca template" className="tlm__search" shown={filtered.length} total={templates.length} />
+          <SearchField search={search} label="Cerca un modello" className="tlm__search" shown={filtered.length} total={templates.length} />
           <div className="tlm__cats">
             {Object.entries(CATEGORIES).map(([id, cat]) => {
               const count = id === 'all' ? templates.length : templates.filter(t => t._meta?.category === id).length;
@@ -158,7 +158,7 @@ function TemplateLibraryModal({ onClose, onSelectTemplate }) {
           {loading ? (
             <div className="tlm__empty">
               <div className="tlm__spinner" />
-              <div>Caricamento template…</div>
+              <div>Caricamento modelli…</div>
             </div>
           ) : error ? (
             <div className="tlm__empty">
@@ -170,7 +170,7 @@ function TemplateLibraryModal({ onClose, onSelectTemplate }) {
           ) : filtered.length === 0 ? (
             <div className="tlm__empty">
               <div className="tlm__empty-icon">🔭</div>
-              <div>Nessun template in questa categoria</div>
+              <div>Nessun modello in questa categoria</div>
             </div>
           ) : (
             <div className="tlm__grid">

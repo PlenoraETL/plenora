@@ -69,7 +69,7 @@
 
 .execution-modal__task-status {
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   margin-top: 6px;
 }
@@ -176,7 +176,7 @@
 
 .execution-modal__stat-label {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -204,7 +204,7 @@
 
 .execution-modal__enrichment-stats-title {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -238,7 +238,7 @@
 
 .execution-modal__enrichment-stat-label {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   margin-top: 3px;
   font-family: var(--plen-font-body);
@@ -259,7 +259,7 @@
 .execution-modal__enrichment-avg-time {
   margin-top: 9px;
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   text-align: center;
 }
@@ -343,7 +343,7 @@
 
 .execution-modal__output-label {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -391,7 +391,7 @@
 
 .execution-modal__query-label {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -420,7 +420,7 @@
 
 .execution-modal__columns-label {
   font-family: var(--plen-font-mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -440,7 +440,7 @@
   border: 1px solid rgba(75,139,255,0.18);
   border-radius: 5px;
   font-family: var(--plen-font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--plen-blue, #4B8BFF);
 }
 
@@ -461,7 +461,7 @@
 
 .execution-modal__carica-title {
   font-family: var(--plen-font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;

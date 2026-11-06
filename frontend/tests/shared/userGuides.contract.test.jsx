@@ -70,7 +70,7 @@ describe('2. the guide says what the system does', () => {
       'Configurazione passo passo (esempio)',
       "Provare dall'editor: Anteprima, Valida, Esegui di prova",
       'Pubblicare come Eseguibile',
-      'Pianificazioni e catene',
+      'Pianificazioni e progetti collegati',
       'Errori comuni',
     ]);
     const all = text(UTENTE_CHE_ESEGUE_GUIDE);
