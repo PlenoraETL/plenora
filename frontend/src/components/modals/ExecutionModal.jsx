@@ -7,14 +7,13 @@
  */
 import React, { useMemo, useState } from 'react';
 import { downloadProjectFile } from '../../api/projects';
-import { getTicketsMeta } from '../../api/tickets';
 import { useAuth } from '../../context/AuthContext';
 import useCanvasStore from '../../store/useCanvasStore';
 import TicketCreateModal from '../TicketCreateModal';
 import TransferProgress from '../common/TransferProgress';
 import { failedStepOf, failureTicketDraft, runLogPath } from '../../utils/runFailure';
 import { useDownload } from '../../hooks/useDownload';
-import { useResource } from '../../hooks/useResource';
+import { useSharedResource } from '../../hooks/useSharedResource';
 import { saveBlob } from '../../utils/downloadBlob';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
@@ -62,7 +61,8 @@ function caricaTaskErrorText(t) {
  */
 function FailureReport({ draft, onClose }) {
   const { user } = useAuth();
-  const meta = useResource(getTicketsMeta, { key: 'tickets-meta' }).data || null;
+  // Categorie e gravita' dalla cache condivisa (UI-1, utils/sharedResources).
+  const meta = useSharedResource('ticketsMeta').data || null;
   return <TicketCreateModal meta={meta} user={user} initial={draft} onClose={onClose} onCreated={onClose} />;
 }
 

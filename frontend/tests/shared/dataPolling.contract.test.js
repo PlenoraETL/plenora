@@ -311,6 +311,7 @@ const TIMER_USES = {
   'components/ChangePasswordModal.jsx': 'chiusura della finestra dopo il messaggio di successo',
   'components/editor/BeforeRunModal.jsx': 'attesa dopo la digitazione prima della stima (debounce)',
   'components/editor/EditorShell.jsx': 'salvataggio al giro dopo e fine dell\'evidenziazione della vista',
+  'components/eseguibili/useEseguibileRun.js': 'file scaricato tolto dalla memoria dopo il tempo dichiarato (UI-3, U13)',
   'components/modals/PreviewModal.jsx': 'ridisegno della mappa Leaflet dopo l\'apertura',
   'components/nodes/StaticValuesNode.jsx': 'chiusura del suggerimento dopo il blur',
   'components/panels/QueryPreview.jsx': 'fine del segno «copiato»',
