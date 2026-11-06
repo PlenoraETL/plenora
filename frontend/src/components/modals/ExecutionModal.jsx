@@ -11,7 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import useCanvasStore from '../../store/useCanvasStore';
 import TicketCreateModal from '../TicketCreateModal';
 import TransferProgress from '../common/TransferProgress';
-import { failedStepOf, failureTicketDraft, runLogPath } from '../../utils/runFailure';
+import { editorStepsFor, failedStepOf, failureActions, failureMessage, failureTicketDraft, runLogPath } from '../../utils/runFailure';
 import { useDownload } from '../../hooks/useDownload';
 import { useSharedResource } from '../../hooks/useSharedResource';
 import { saveBlob } from '../../utils/downloadBlob';
@@ -66,6 +66,19 @@ function FailureReport({ draft, onClose }) {
   return <TicketCreateModal meta={meta} user={user} initial={draft} onClose={onClose} onCreated={onClose} />;
 }
 
+/**
+ * Utente della sessione o null: la finestra si apre anche fuori da
+ * AuthProvider (test, anteprime). useAuth e' chiamato sempre, nello stesso
+ * ordine: senza provider lancia e qui vale "nessun utente" (azioni spente).
+ */
+function useSessionUser() {
+  try {
+    return useAuth()?.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function ExecutionModal({
   isOpen,
   onClose,
@@ -99,11 +112,14 @@ function ExecutionModal({
 }) {
   const reportDownload = useDownload();
   const [reporting, setReporting] = useState(false);
-  // Il passo fallito tra i nodi dell'editor aperto (fuori dall'editor: nessuno).
+  // Il passo fallito tra i nodi dell'editor aperto sullo STESSO progetto
+  // (fuori dall'editor o con lo store di un altro progetto: nessuno, B-K6).
   const failedStep = useMemo(
-    () => (result && !result.success ? failedStepOf(result, useCanvasStore.getState().nodes) : null),
-    [result],
+    () => (result && !result.success ? failedStepOf(result, editorStepsFor(projectId, useCanvasStore.getState())) : null),
+    [result, projectId],
   );
+  // Azioni offerte solo a chi le puo' usare (l'esecutore non apre registro e ticket).
+  const actions = failureActions(useSessionUser(), { step: failedStep });
   const goToStep = (nodeId) => {
     const st = useCanvasStore.getState();
     onClose();
@@ -449,16 +465,16 @@ function ExecutionModal({
               <p className="execution-modal__error-message">
                 {taskStatus === 'revoked'
                   ? (result.message || 'Esecuzione annullata')
-                  : humanizeError(result).message}
+                  : failureMessage(result)}
               </p>
               {taskStatus !== 'revoked' && (
                 <div className="execution-modal__failure-actions">
-                  {failedStep && (
+                  {actions.goToStep && (
                     <ModalButton variant="secondary" onClick={() => goToStep(failedStep.id)}>Vai al passo</ModalButton>
                   )}
                   {/* In un'altra scheda: l'editor (o la finestra dell'Eseguibile) resta com'e'. */}
-                  <a className="execution-modal__log-link" href={logHref} target="_blank" rel="noreferrer">Apri il registro</a>
-                  <ModalButton variant="secondary" onClick={() => setReporting(true)}>Segnala il problema</ModalButton>
+                  {actions.openLog && <a className="execution-modal__log-link" href={logHref} target="_blank" rel="noreferrer">Apri il registro</a>}
+                  {actions.report && <ModalButton variant="secondary" onClick={() => setReporting(true)}>Segnala il problema</ModalButton>}
                 </div>
               )}
             </div>

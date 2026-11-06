@@ -22,6 +22,7 @@ import { ICON } from '../../src/utils/icons';
 import { TERMS } from '../../src/utils/glossary';
 import { NAV_ITEMS } from '../../src/utils/navItems';
 import { PROJECT_TYPES, projectType, projectTypeChip } from '../../src/utils/projectTypes';
+import { CANVAS_COMMANDS } from '../../src/components/editor/canvasCommands';
 import { PROJECT_EDITOR_ROUTES } from '../../src/utils/projectRoutes';
 import { SRC, sourceFiles, stripComments } from '../helpers/sourceScan.js';
 
@@ -33,6 +34,8 @@ const ENTRIES = [
   ...Object.entries(TERMS).map(([k, t]) => [`glossario:${k}`, t.icon]),
   ...NAV_ITEMS.map(i => [`navigazione:${i.key}`, i.icon]),
   ...Object.entries(PROJECT_TYPES).map(([k, t]) => [`tipo:${k}`, t.icon]),
+  // Conferma UI C-K4: anche i comandi del canvas (menu «⋯» degli editor).
+  ...CANVAS_COMMANDS.map(c => [`comando:${c.id}`, c.icon]),
 ];
 
 /*
@@ -57,6 +60,7 @@ const NO_LITERAL_ICONS = [
   'utils/glossary.js', 'utils/navItems.js', 'utils/projectTypes.js',
   'components/AppSidebar.jsx', 'components/common/CommandPalette.jsx',
   'components/common/KeyboardShortcutsHelp.jsx', 'components/panels/ProjectsSidebar.jsx',
+  'components/editor/canvasCommands.js',
 ];
 
 describe('icone: un\'icona = un significato', () => {
@@ -103,7 +107,8 @@ describe('icone: un significato = un\'icona', () => {
     const owners = (icon) => ENTRIES.filter(([, i]) => norm(i) === norm(icon)).map(([w]) => w);
     expect(owners('💾')).toEqual(['glossario:save']);
     expect(owners('📁')).toEqual([]); // «cartella»: non e' un'entita' delle tabelle
-    expect(owners('🔍')).toEqual([]); // «cerca»: non e' «Valida»
+    expect(owners('🔍')).toEqual(['comando:search']); // «cerca»: non e' «Valida» (C-K4: Cerca nel canvas, non 🔎)
+    expect(owners('📋')).toEqual(['glossario:connector_openapi']); // C-K4: «Incolla» non e' piu' 📋
     expect(TERMS.validate.icon).toBe(ICON.validate);
     expect(TERMS.output.icon).not.toBe(TERMS.datasource.icon);
   });

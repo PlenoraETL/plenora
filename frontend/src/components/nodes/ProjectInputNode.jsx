@@ -26,6 +26,7 @@ import { READ_ONLY_SAFE, useReadOnlyLock } from '../common/readOnlySafe';
 import GuideModal from '../common/GuideModal';
 import { IDENTITY_EXAMPLE, UTENTE_CHE_ESEGUE_GUIDE } from '../../utils/guides/utenteCheEsegue';
 import { useCanvasDerived } from '../../hooks/useCanvasDerived';
+import { shortcutText } from '../../utils/shortcuts';
 
 const INPUT_TYPES = Object.entries(INPUT_KIND_LABELS);
 
@@ -172,7 +173,7 @@ function ProjectInputNode({ id, data }) {
       edges: [edge],
       dialog: {
         title: 'Rimuovi collegamento',
-        message: `Rimuovere il collegamento di questo input a «${targetLabel}»? Il parametro torna al valore scritto nel passo. Puoi annullare con Ctrl+Z.`,
+        message: `Rimuovere il collegamento di questo input a «${targetLabel}»? Il parametro torna al valore scritto nel passo. Puoi annullare con ${shortcutText('undo')}.`,
         confirmText: 'Elimina',
         variant: 'danger',
       },

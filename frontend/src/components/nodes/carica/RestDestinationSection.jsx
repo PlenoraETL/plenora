@@ -13,6 +13,7 @@ import FieldInput from '../../common/FieldInput';
 import { integer } from '../../../utils/fieldCodecs';
 import { READ_ONLY_SAFE } from '../../common/readOnlySafe';
 import { pressable } from '../../../utils/pressable';
+import { shortcutText } from '../../../utils/shortcuts';
 
 // Fase 5 T5: numeri dal convertitore unico (utils/fieldCodecs).
 const REST_BATCH = integer({ min: 1, max: 10000 });
@@ -149,7 +150,7 @@ function RestDestinationSection({
         )}
         {replacedNotice && replacedNotice.length > 0 && secretNames.length === 0 && (
           <div className="carica-node__hint" role="status">
-            Intestazioni sostituite dal connettore: {replacedNotice.join(', ')}. Annulla (Ctrl+Z) per ripristinarle.
+            Intestazioni sostituite dal connettore: {replacedNotice.join(', ')}. Annulla ({shortcutText('undo')}) per ripristinarle.
           </div>
         )}
       </div>

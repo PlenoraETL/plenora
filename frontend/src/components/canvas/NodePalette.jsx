@@ -80,7 +80,7 @@ export function filterPalette(groups, query) {
 /** Gruppi con preferiti e recenti in cima (solo senza ricerca). */
 function withMemory(groups, memory) {
   const remembered = memoryGroups(groups, memory);
-  const hasRecent = remembered.some(g => g.label === 'Recenti');
+  const hasRecent = remembered.some(g => g.recent);
   return [...remembered, ...groups.filter(g => !(g.fallback && hasRecent))];
 }
 

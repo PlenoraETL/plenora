@@ -20,7 +20,7 @@ import { useOptionalToast } from '../../context/ToastContext';
 import { sourceFreshnessRows } from './SourceFreshnessNote';
 import { commandById, commandMenuItems, runCanvasCommand } from './canvasCommands';
 import { isShortcutBlocked } from '../../utils/dialogStack';
-import { matchesShortcut } from '../../utils/shortcuts';
+import { matchesShortcut, shortcutText } from '../../utils/shortcuts';
 import ShortcutsButton from '../common/ShortcutsButton';
 import './EditorToolbar.css';
 import { useCanvasDerived } from '../../hooks/useCanvasDerived';
@@ -183,8 +183,8 @@ export default function EditorToolbar({
         {/* P29 (Fase 5 T7): Annulla/Ripeti anche col mouse (stesse azioni di Ctrl+Z/Y). */}
         {!isReadOnly && (
           <div className="etb-seg" role="group" aria-label="Cronologia delle modifiche">
-            <button type="button" onClick={() => useCanvasStore.getState().undo()} disabled={!canUndo} title="Annulla (Ctrl+Z)" aria-label="Annulla">↶</button>
-            <button type="button" onClick={() => useCanvasStore.getState().redo()} disabled={!canRedo} title="Ripeti (Ctrl+Y)" aria-label="Ripeti">↷</button>
+            <button type="button" onClick={() => useCanvasStore.getState().undo()} disabled={!canUndo} title={`Annulla (${shortcutText('undo')})`} aria-label="Annulla">↶</button>
+            <button type="button" onClick={() => useCanvasStore.getState().redo()} disabled={!canRedo} title={`Ripeti (${shortcutText('redo')})`} aria-label="Ripeti">↷</button>
           </div>
         )}
       </div>

@@ -13,6 +13,11 @@ Manipola (Filtra).
   ``prepare_filter`` è nel corpus; il corpus usa davvero ogni operatore.
 - GRUPPI: SQL atteso e righe attese con più gruppi; gruppi vuoti ignorati;
   ``group`` non valido rifiutato con lo stesso messaggio ovunque.
+- NA (B-K1, ``dataframes.tabular.selection_mask``): con colonne nullable
+  (Int64/Float64/string/boolean con ``<NA>``) ogni operatore, in forma
+  singola, in un gruppo e in più gruppi, e il Condizionale danno l'esito
+  congelato da e05f8fea (``filter_nullable_golden.json``): un valore mancante
+  rende la condizione falsa, mai un'eccezione.
 """
 from __future__ import annotations
 
@@ -29,6 +34,8 @@ import generate_filter_groups_golden as generator
 from app.core.eseguibili.binding_capabilities import bindable_targets
 from app.core.estrai.query_generator import QueryGenerator
 from app.core.manipola.node_validator import ManipolaNodeValidator
+from app.core.dataframes.tabular import selection_mask
+from app.core.manipola.transforms import filtering
 from app.core.manipola.transforms.filtering import FILTER_OPERATORS, op_filter
 from app.core.projects.canvas_models import Edge, Filter, Node
 from app.shared.execution.condition_groups import condition_group, condition_groups
@@ -37,6 +44,9 @@ from app.shared.execution.schema_types import InferredSchema
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 GOLDEN = json.loads(generator.GOLDEN_PATH.read_text(encoding="utf-8"))
+NULLABLE_GOLDEN = json.loads(generator.NULLABLE_GOLDEN_PATH.read_text(encoding="utf-8"))
+_NULLABLE_CASES = {case["id"]: case for case in corpus.manipola_nullable_cases()}
+_NULLABLE_CONDITIONAL_CASES = {case["id"]: case for case in corpus.manipola_nullable_conditional_cases()}
 _ESTRAI_CASES = {case["id"]: case for case in corpus.estrai_filter_cases()}
 _CANVAS_CASES = {f"{case['db_type']}/{case['id']}": case for case in corpus.estrai_canvas_cases()}
 _MANIPOLA_CASES = {case["id"]: case for case in corpus.manipola_cases()}
@@ -257,3 +267,49 @@ def test_condition_groups_shape():
     assert condition_groups(items) == [[items[0], items[2]], [items[1], items[3]]]
     assert condition_groups([]) == [] and condition_groups(None) == []
     assert condition_group(Filter(column="a", operator="=", group=5)) == 5
+
+
+# ---------------------------------------------------------------- NA nelle maschere (B-K1)
+
+
+def test_nullable_corpus_covers_every_operator_dtype_and_form():
+    frame = corpus.manipola_nullable_frame()
+    assert {col: str(dtype) for col, dtype in frame.dtypes.items()} == corpus.NULLABLE_DTYPES
+    assert all(frame[col].isna().any() for col in frame.columns)
+    assert set(_NULLABLE_CASES) == set(NULLABLE_GOLDEN["filter"])
+    assert set(_NULLABLE_CONDITIONAL_CASES) == set(NULLABLE_GOLDEN["conditional"])
+    for form in ("single", "group1", "group1and", "groups2", "groups3"):
+        for column in corpus.NULLABLE_DTYPES:
+            for operator in FILTER_OPERATORS:
+                assert f"{form}/{column}/{operator}" in _NULLABLE_CASES
+    for column in corpus.NULLABLE_DTYPES:
+        for operator in corpus.CONDITIONAL_OPERATORS:
+            assert f"conditional/{column}/{operator}" in _NULLABLE_CONDITIONAL_CASES
+    # Il golden congela esiti riusciti: nessuno dei casi falliva con il codice di e05f8fea.
+    assert not [cid for cid, out in NULLABLE_GOLDEN["filter"].items() if "error" in out]
+
+
+@pytest.mark.parametrize("case_id", sorted(_NULLABLE_CASES))
+def test_manipola_filter_with_nullable_columns_equals_e05f8fea(case_id):
+    assert generator.manipola_nullable_outcome(filtering, _NULLABLE_CASES[case_id]) == NULLABLE_GOLDEN["filter"][case_id]
+
+
+@pytest.mark.parametrize("case_id", sorted(_NULLABLE_CONDITIONAL_CASES))
+def test_manipola_conditional_with_nullable_columns_equals_e05f8fea(case_id):
+    outcome = generator.manipola_nullable_conditional_outcome(filtering, _NULLABLE_CONDITIONAL_CASES[case_id])
+    assert outcome == NULLABLE_GOLDEN["conditional"][case_id]
+
+
+def test_selection_mask_is_the_single_na_rule():
+    nullable = pd.array([True, None, False], dtype="boolean")
+    assert selection_mask(pd.Series(nullable)).tolist() == [True, False, False]
+    assert selection_mask(pd.Series([True, None, float("nan")], dtype=object)).tolist() == [True, False, False]
+    assert selection_mask(pd.Series([True, False])).dtype == bool
+
+
+def test_filter_and_conditional_build_masks_only_through_selection_mask():
+    """Guardia: nessuna conversione a bool scritta a mano nel modulo dei filtri."""
+    import inspect
+    source = inspect.getsource(filtering)
+    assert "dtype=bool" not in source and "astype(bool)" not in source
+    assert source.count("selection_mask(") >= 3

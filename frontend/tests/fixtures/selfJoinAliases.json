@@ -1,0 +1,20 @@
+{
+  "_doc": "Alias automatico della stessa tabella ripetuta in Estrai (conferma UI B-K11): UNA regola, verificata dal frontend (utils/estraiJoins.selfJoinAlias, tests/shared/editorCommands.contract.test.js) e dal backend (core/estrai/query_aliases.with_unique_aliases, tests2/estrai/unit/test_estrai_alias_contract.py). `taken`: gli alias effettivi dei nodi gia' nel canvas (la tabella stessa compresa).",
+  "cases": [
+    { "table": "ordini", "taken": ["ordini"], "expected": "ordini_2" },
+    { "table": "ordini", "taken": ["ordini", "ordini_2"], "expected": "ordini_3" },
+    { "table": "dbo.Ordini Righe", "taken": ["dbo.Ordini Righe"], "expected": "Ordini_Righe_2" },
+    { "table": "2024", "taken": ["2024"], "expected": "t_2024_2" },
+    { "table": "EMP", "taken": ["EMP", "emp_2"], "expected": "EMP_3" },
+    { "table": "dbo.my-tab", "taken": ["dbo.my-tab"], "expected": "my_tab_2" },
+    { "table": "città", "taken": ["città"], "expected": "citta_2" },
+    { "table": "anagrafe.Società Partecipate", "taken": ["anagrafe.Società Partecipate"], "expected": "Societa_Partecipate_2" },
+    { "table": "Straße", "taken": ["Straße"], "expected": "Stra_e_2" },
+    { "table": "ñandú", "taken": ["ñandú"], "expected": "nandu_2" },
+    { "table": "Évènements", "taken": ["Évènements"], "expected": "Evenements_2" },
+    { "table": "日本", "taken": ["日本"], "expected": "___2" },
+    { "table": "àrea", "taken": ["àrea", "area_2"], "expected": "area_3" },
+    { "table": "_tmp", "taken": ["_tmp"], "expected": "_tmp_2" },
+    { "table": "9città", "taken": ["9città"], "expected": "t_9citta_2" }
+  ]
+}

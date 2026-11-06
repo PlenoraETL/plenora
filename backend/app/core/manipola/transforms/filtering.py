@@ -14,6 +14,7 @@ from app.core.dataframes.tabular import (
     coerce_numeric_series,
     false_boolean_series,
     is_numeric_series,
+    selection_mask,
     set_values_where_mask,
     unique_non_null_column_values,
 )
@@ -143,7 +144,7 @@ def _apply_group(df: DataFrame, group: JsonRows) -> tuple[Any, DataFrame]:
         column, operator, value = condition["column"], condition["operator"], condition.get("value")
         prepared = prepare_filter(frame, column, operator, value)
         mask, frame = _apply_condition(frame, column, operator, value, prepared)
-        positions = positions[np.asarray(mask, dtype=bool)]
+        positions = positions[mask]
     return positions, frame
 
 
@@ -151,6 +152,8 @@ def _apply_condition(df: DataFrame, column: str, operator: str, value: Any, prep
     """UNA condizione su ``df`` -> (maschera, righe selezionate con l'indice originale).
 
     Unica valutazione degli operatori per il filtro singolo e per i gruppi.
+    La maschera esce SEMPRE da :func:`selection_mask` (array NumPy ``bool``,
+    ``<NA>`` delle colonne nullable = falso, come ``df[mask]`` di prima).
     ``None`` per un operatore ignoto (solo il filtro singolo ci arriva: la
     lista ``conditions`` lo rifiuta in ``prepare_filter``).
     """
@@ -160,7 +163,7 @@ def _apply_condition(df: DataFrame, column: str, operator: str, value: Any, prep
 
     if operator in {"in", "not_in"}:
         mask = col.isin(prepared_values)
-        mask = ~mask if operator == "not_in" else mask
+        mask = selection_mask(~mask if operator == "not_in" else mask)
         return mask, df[mask]
 
     # Se la colonna è numerica e il valore è stringa, converti
@@ -208,6 +211,7 @@ def _apply_condition(df: DataFrame, column: str, operator: str, value: Any, prep
 
         # La selezione resta dentro il try come prima: un errore pandas nel
         # selezionare con la maschera e' lo stesso ValueError.
+        mask = selection_mask(mask)
         result = df[mask]
         logger.info(f"Filter: {len(df)} -> {len(result)} righe")
         return mask, result
@@ -278,8 +282,9 @@ def op_conditional(
             res = cond.get('result', '')
 
             try:
-                mask = _evaluate_condition(col_values, op, val)
-                match_count = mask.sum()
+                # Stessa regola dei NA del Filtra: valore mancante = non soddisfatta.
+                mask = selection_mask(_evaluate_condition(col_values, op, val))
+                match_count = int(mask.sum())
                 total_matched += match_count
                 set_values_where_mask(result, mask, output_column, res)
                 logger.info(f"Conditional:   {op} '{val}' -> '{res}' : {match_count} righe matchate")

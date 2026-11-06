@@ -94,7 +94,7 @@ import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 import { useOptionalConfirm } from '../../context/ConfirmContext';
 import { CanvasGraphContext } from '../canvas/CanvasGraphContext';
 import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
-import { withFlowEdgeLabels } from '../../utils/glossary';
+import { term, withFlowEdgeLabels } from '../../utils/glossary';
 import { isShortcutBlocked, isTypingTarget } from '../../utils/dialogStack';
 import { matchesShortcut } from '../../utils/shortcuts';
 import { requestCanvasDeletion } from '../../utils/canvasDeletion';
@@ -484,7 +484,7 @@ canvasConfig = EMPTY_OBJ,
               <Background {...backgroundProps} />
               <Controls>
                 {palette && !isReadOnly && (
-                  <ControlButton onClick={openPaletteFromSelection} title="Aggiungi un passo (/ o A)" aria-label="Aggiungi un passo">
+                  <ControlButton onClick={openPaletteFromSelection} title={term('add_step').description} aria-label="Aggiungi un passo">
                     ＋
                   </ControlButton>
                 )}

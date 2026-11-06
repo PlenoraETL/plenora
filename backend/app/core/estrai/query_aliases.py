@@ -24,6 +24,7 @@ uscita (``shared.execution.output_names``: ``ID``, ``ID_2``, ...).
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any, List
 
 
@@ -32,11 +33,28 @@ def effective_alias(node: Any) -> str:
     return getattr(node, "alias", None) or getattr(node, "table_name", None) or ""
 
 
-def _alias_base(node: Any) -> str:
-    """Base dell'alias automatico: nome tabella senza schema, solo ``\\w``."""
-    table = (getattr(node, "table_name", None) or "").rsplit(".", 1)[-1]
-    base = re.sub(r"\W", "_", table) or "t"
+_COMBINING_MARKS = re.compile("[̀-ͯ]")
+
+
+def alias_base(table_name: str | None) -> str:
+    """Base dell'alias automatico: UNA regola con il frontend.
+
+    ``frontend/src/utils/estraiJoins.selfJoinAliasBase``, casi condivisi in
+    ``frontend/tests/fixtures/selfJoinAliases.json`` (conferma UI, B-K11):
+    ultima parte del nome (senza schema); lettere accentate senza accento
+    (NFD, segni U+0300–U+036F tolti); ogni altro carattere fuori da
+    ``A-Z a-z 0-9 _`` diventa ``_`` (prima ``\\W`` Unicode: «città» restava
+    «città» qui e diventava «citt_» nel frontend); vuoto = ``t``; ``t_``
+    davanti a ciò che non comincia con una lettera ASCII o ``_``.
+    """
+    table = (table_name or "").rsplit(".", 1)[-1]
+    plain = _COMBINING_MARKS.sub("", unicodedata.normalize("NFD", table))
+    base = re.sub(r"[^A-Za-z0-9_]", "_", plain) or "t"
     return base if re.match(r"[A-Za-z_]", base) else f"t_{base}"
+
+
+def _alias_base(node: Any) -> str:
+    return alias_base(getattr(node, "table_name", None))
 
 
 def with_unique_aliases(table_nodes: List[Any]) -> List[Any]:
@@ -59,4 +77,4 @@ def with_unique_aliases(table_nodes: List[Any]) -> List[Any]:
     return out
 
 
-__all__ = ["effective_alias", "with_unique_aliases"]
+__all__ = ["alias_base", "effective_alias", "with_unique_aliases"]

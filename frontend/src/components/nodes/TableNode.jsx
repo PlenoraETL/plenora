@@ -206,6 +206,9 @@ const TableNode = memo(({ data, id }) => {
           <div className="table-node__empty-message">Nessuna colonna</div>
         ) : (
           // Tabelle larghe: oltre la soglia solo le righe visibili (UI-2, V9).
+          // A-K6: la lista che scorre e' di chi la usa, non del canvas: la rotella
+          // la fa scorrere (non zooma) e trascinare la barra non sposta il nodo.
+          <div className="table-node__columns nowheel nodrag">
           <VirtualList
             items={displayColumns} itemKey={column => column._origIndex}
             estimatedItemHeight={26} maxHeight={420} label="Colonne della tabella"
@@ -279,6 +282,7 @@ const TableNode = memo(({ data, id }) => {
             </div>
             )}
           />
+          </div>
         )}
 
         {/* Bottone espandi/collassa */}

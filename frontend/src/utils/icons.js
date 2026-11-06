@@ -50,6 +50,15 @@ export const ICON = Object.freeze({
   delete: '🗑',
   search: '🔍',
   shortcuts: '⌨️',
+  // Comandi del canvas (components/editor/canvasCommands, conferma UI C-K4):
+  // prima scritti a mano, con 📋 che voleva dire anche «API OpenAPI» e 🔎
+  // accanto al 🔍 di «Cerca».
+  select_all: '▣',
+  copy: '⧉',
+  paste: '📥',
+  duplicate: '⎘',
+  connect: '↦',
+  editor_guide: '❔',
   password: '🔑',
   logout: '⏻',
 

@@ -16,6 +16,7 @@ tabelle ripetute è in ``tests2/contracts/test_filter_groups_parity.py``
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -126,6 +127,24 @@ def test_cross_and_spatial_self_join():
 def test_automatic_alias_base_is_a_plain_identifier():
     nodes = with_unique_aliases([_src("a", table="dbo.my-tab"), _src("b", table="dbo.my-tab"), _src("c", table="1x"), _src("d", table="1x")])
     assert [effective_alias(n) for n in nodes] == ["dbo.my-tab", "my_tab_2", "1x", "t_1x_2"]
+
+
+_SHARED_ALIAS_CASES = json.loads(
+    (Path(__file__).resolve().parents[4] / "frontend" / "tests" / "fixtures" / "selfJoinAliases.json")
+    .read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", _SHARED_ALIAS_CASES, ids=lambda c: f"{c['table']}|{','.join(c['taken'])}")
+def test_automatic_alias_is_the_frontend_rule(case):
+    """B-K11: stessa base (accenti, schema, simboli) e stesso numero del frontend.
+
+    I nodi già nel canvas portano gli alias effettivi ``taken``; la tabella
+    aggiunta di nuovo (senza alias) riceve l'alias che il frontend propone.
+    """
+    present = [_src(f"n{i}", alias=alias, table=case["table"]) for i, alias in enumerate(case["taken"])]
+    nodes = with_unique_aliases([*present, _src("new", alias=None, table=case["table"])])
+    assert effective_alias(nodes[-1]) == case["expected"]
 
 
 def test_without_repeated_aliases_the_same_nodes_are_returned():

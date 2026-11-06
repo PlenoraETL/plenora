@@ -22,6 +22,7 @@
  */
 
 import { ICON } from './icons';
+import { shortcutText } from './shortcuts';
 
 /** Termini inglesi ammessi nel testo visibile (decisione dell'utente). */
 export const ALLOWED_ENGLISH = Object.freeze({
@@ -89,11 +90,11 @@ const T = {
   fill_values: { name: 'Riempi con i valori presenti', icon: ICON.fill_values, description: "Propone come righe da tradurre i valori che la colonna ha nei dati in ingresso" },
   preview: { name: 'Anteprima', icon: ICON.preview, description: 'Mostra le prime righe del risultato' },
   validate: { name: 'Valida', icon: ICON.validate, description: 'Controlla il canvas prima di eseguire' },
-  save: { name: 'Salva', icon: ICON.save, description: 'Salva (Ctrl+S)', busyName: 'Salvataggio…' },
+  save: { name: 'Salva', icon: ICON.save, description: `Salva (${shortcutText('save')})`, busyName: 'Salvataggio…' },
   versions: { name: 'Versioni', icon: ICON.versions, description: 'Versioni salvate del canvas' },
   run_history: { name: 'Cronologia esecuzioni', icon: ICON.run_history, description: 'Le esecuzioni passate di questo passo' },
   connections: { name: 'Connessioni', icon: ICON.connection, description: 'Gestione delle connessioni ai database' },
-  add_step: { name: 'Passo', icon: ICON.add, description: 'Aggiungi un passo (/ o A)' },
+  add_step: { name: 'Passo', icon: ICON.add, description: `Aggiungi un passo (${shortcutText('add_step')})` },
   delete_step: { name: 'Elimina passo', icon: ICON.delete, description: 'Elimina il passo e i suoi collegamenti' },
   schedule: { name: 'Pianificazione', icon: ICON.schedule, description: 'Esecuzioni automatiche programmate' },
   upload_file: { name: 'Carica un file', icon: ICON.file, description: 'Carica un file e aggiungilo al canvas senza uscire dall\'editor' },

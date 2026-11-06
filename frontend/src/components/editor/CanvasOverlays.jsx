@@ -23,13 +23,14 @@ import GuideModal from '../common/GuideModal';
 import EmptyState from '../common/EmptyState';
 import { nodeDescriptor, nodeIcon, nodeTitle } from '../canvas/nodeDescriptors';
 import { EDITOR_GUIDES, EMPTY_CANVAS_HINTS, guideSectionFor } from '../../utils/guides/editorGuides';
-import { commandById, commandForKey, runCanvasCommand, useCanvasUi } from './canvasCommands';
+import { canvasKeyDecision, commandById, commandForKey, runCanvasCommand, useCanvasUi } from './canvasCommands';
 import './CanvasOverlays.css';
 
 // Canvas caricato e vuoto (UI-2: dal grafo solo con useCanvasDerived).
 const emptyLoadedCanvas = (s) => (s.nodes || []).length === 0 && s.graphLoaded !== false;
 
-const onCanvasTarget = (t) => t === document.body || t === document.documentElement || Boolean(t?.closest?.('.react-flow'));
+const onFlowTarget = (t) => Boolean(t?.closest?.('.react-flow'));
+const onCanvasTarget = (t) => t === document.body || t === document.documentElement || onFlowTarget(t);
 const hasTextSelection = () => {
   try { return Boolean(window.getSelection?.()?.toString()); } catch { return false; }
 };
@@ -64,6 +65,12 @@ export default function CanvasOverlays({ mode, onConnect, onOpenPalette, canAdd 
       const t = e.target;
       if (!onCanvasTarget(t) || isTypingTarget(t) || isShortcutBlocked(e)) return;
       if ((id === 'copy' || id === 'select_all') && hasTextSelection()) return;
+      // B-K7: il tasto si prende solo se il comando parte (canvasKeyDecision).
+      const decision = canvasKeyDecision(id, useCanvasStore.getState(), { onFlow: onFlowTarget(t) });
+      if (!decision.take) {
+        if (decision.warn && toast) toast.warning(decision.warn);
+        return;
+      }
       e.preventDefault();
       const res = runCanvasCommand(id);
       if (res.message && toast) (res.ok ? toast.success : toast.warning)(res.message);

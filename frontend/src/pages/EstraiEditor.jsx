@@ -16,7 +16,7 @@ import CaricanNode from '../components/nodes/CaricanNode';
 import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
 import JoinEdgePanel from '../components/canvas/JoinEdgePanel';
-import { estraiJoinEdges, paletteJoinEnds, presentJoinEdges, relationJoinEnds, selfJoinAlias } from '../utils/estraiJoins';
+import { estraiJoinEdges, paletteJoinEnds, presentJoinEdges, relationJoinEnds, tableNodeAlias } from '../utils/estraiJoins';
 
 // Modali lazy-loaded — caricati solo quando l'utente li apre
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
@@ -219,9 +219,7 @@ function EstraiEditor() {
   const buildTableNode = useCallback((tableName, isView, position) => {
     const tableColumns = (isView ? views[tableName] : catalog[tableName]) || [];
     const present = nodesRef.current.filter(n => n.type === 'tableNode');
-    const alias = present.some(n => n.data?.table_name === tableName)
-      ? selfJoinAlias(tableName, present.map(n => n.data?.alias || n.data?.table_name))
-      : null;
+    const alias = tableNodeAlias({ table_name: tableName, alias: null }, present);
     return {
       id: `node_${Date.now()}`, type: 'tableNode', position,
       // Niente `label`: il titolo della tabella e' derivato da alias e nome

@@ -23,7 +23,6 @@ import { sinkFlags } from '../utils/canvasGraph';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import { executeEnrichmentAsync } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { can } from '../utils/permissions';
 import { useEditorData } from '../hooks/useEditorData';
 import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
@@ -72,6 +71,7 @@ import useEditorActions from '../components/editor/useEditorActions';
 import useCatalogAdd, { useResolvedSourceNames } from '../components/editor/useCatalogAdd';
 import { catalogConstraintNodes, catalogMenuItems, isCanvasEmpty, catalogPaletteItems, readSourceDrop, sourcePaletteGroups } from '../components/editor/editorNodeCatalog';
 import EditorFileUploadModal from '../components/editor/EditorFileUploadModal';
+import { useEditorFileUpload } from '../components/editor/editorUpload';
 
 /**
  * Costruisce una mappa nodeId → titolo per il raggruppamento colonne in
@@ -274,8 +274,8 @@ const ArricchisciEditorContent = () => {
     insertAfter: (node, afterId) => placeAfter(node, afterId, false),
   });
   const [showUpload, setShowUpload] = useState(false);
-  // U30: caricare un file dall'editor, con lo stesso permesso della pagina File.
-  const canUpload = can.uploadFile(user);
+  // U30: caricare un file dall'editor (regola unica: components/editor/editorUpload).
+  const { canUpload, onUploaded } = useEditorFileUpload({ user, project, isReadOnly, reloadSources, addSource, toast });
   // U9: nome delle sorgenti salvate col solo id (campo transitorio).
   useResolvedSourceNames(applyDerivedNodes, availableSources, availableFiles);
 
@@ -330,12 +330,6 @@ const ArricchisciEditorContent = () => {
   }, [screenToFlowPosition, addSource]);
 
   // U30: file caricato dall'editor -> nell'elenco delle sorgenti e nel canvas.
-  const onUploaded = useCallback(async (file) => {
-    await reloadSources?.();
-    if (file?.id) addSource('file_source', file);
-    toast.success(`File «${file?.name || ''}» caricato e aggiunto al canvas.`);
-  }, [reloadSources, addSource, toast]);
-
   // Uscite: chiede il guard unico (NavigationGuard + useBlocker).
   useUnsavedChangesGuard();
   const handleBack     = () => navigate('/');

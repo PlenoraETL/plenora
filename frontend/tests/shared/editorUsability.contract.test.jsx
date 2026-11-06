@@ -19,7 +19,7 @@ import { selfJoinAlias } from '../../src/utils/estraiJoins';
  *  - U19, U29: palette senza elenchi tagliati in silenzio, preferiti e recenti;
  *  - P29: alias della tabella aggiunta di nuovo.
  */
-afterEach(() => { cleanup(); try { window.localStorage.clear(); } catch { /* niente */ } });
+afterEach(() => { cleanup(); try { window.localStorage.clear(); window.sessionStorage.clear(); } catch { /* niente */ } });
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
 const SRC = path.join(REPO, 'frontend', 'src');
@@ -103,6 +103,8 @@ describe('U19, U29: the palette never cuts silently and remembers favorites and 
   });
 
   it('a pick becomes «Recenti» (replacing «Più usate»), a star makes it a favorite', () => {
+    // B-K10: la memoria della palette e' dell'utente della sessione.
+    window.sessionStorage.setItem('urby_user', JSON.stringify({ user_id: 'u1' }));
     const onPick = vi.fn();
     const { unmount } = render(<NodePalette open scope="test" groups={groups} onPick={onPick} onClose={() => {}} />);
     fireEvent.click(screen.getByText('ordini'));

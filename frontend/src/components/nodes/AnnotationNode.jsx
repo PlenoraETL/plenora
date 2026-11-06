@@ -10,6 +10,7 @@ import { NodeResizer } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useConfirmOrDeny } from '../../context/ConfirmContext';
 import { requestCanvasDeletion, useCanvasDeletion } from '../../utils/canvasDeletion';
+import { shortcutText } from '../../utils/shortcuts';
 import './AnnotationNode.css';
 
 const COLORS = [
@@ -125,7 +126,7 @@ function AnnotationNode({ id, data, selected }) {
                     nodes: [{ id, type: 'comment', data }],
                     dialog: {
                       title: 'Elimina gruppo',
-                      message: `Eliminare il gruppo${title ? ` «${title}»` : ''}? I passi restano nel canvas. Puoi annullare con Ctrl+Z.`,
+                      message: `Eliminare il gruppo${title ? ` «${title}»` : ''}? I passi restano nel canvas. Puoi annullare con ${shortcutText('undo')}.`,
                       confirmText: 'Elimina',
                       variant: 'danger',
                     },

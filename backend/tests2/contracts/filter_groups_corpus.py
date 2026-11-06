@@ -221,3 +221,88 @@ def manipola_cases() -> list[dict[str, Any]]:
     cases.append({"id": "malformed/not-list", "params": {"conditions": {"column": "n"}}})
     cases.append({"id": "malformed/no-operator", "params": {"conditions": [{"column": "n"}]}})
     return cases
+
+
+# ---------------------------------------------------------------- colonne nullable (B-K1)
+#
+# Regola dei NA nelle maschere (06/11/2026, ``dataframes.tabular.selection_mask``):
+# una condizione su un valore mancante di una colonna nullable è FALSA, come
+# ``df[mask]`` di e05f8fea. Attese in ``filter_nullable_golden.json``, congelate
+# eseguendo il Filtra/Condizionale di e05f8fea (``generate_filter_groups_golden
+# --nullable``): forma singola e un gruppo = ``op_filter`` di allora; più gruppi
+# = unione, nell'ordine originale, delle righe di ogni gruppo filtrato a catena
+# con ``op_filter`` di allora (la semantica dichiarata dei gruppi O).
+
+NULLABLE_DTYPES = {"i": "Int64", "f": "Float64", "t": "string", "b": "boolean"}
+
+
+def manipola_nullable_frame() -> pd.DataFrame:
+    """Una colonna per dtype nullable, ognuna con valori mancanti (``<NA>``)."""
+    return pd.DataFrame({
+        "i": pd.array([1, None, 3, 4, None, 6, 3], dtype="Int64"),
+        "f": pd.array([1.5, None, 2.5, 3.0, None, 10.0, 2.5], dtype="Float64"),
+        "t": pd.array(["alfa", None, "Beta", "gamma", None, "alfa", "delta"], dtype="string"),
+        "b": pd.array([True, None, False, True, None, False, True], dtype="boolean"),
+    }, index=[20, 21, 22, 23, 24, 25, 26])
+
+
+# Per colonna: un valore per ogni operatore (``None`` dove l'operatore non lo legge).
+_NULLABLE_VALUES: dict[str, dict[str, Any]] = {
+    "i": {"==": 3, "!=": "3", ">": "2", ">=": 4, "<": "4", "<=": 3, "contains": "1", "startswith": "3",
+          "endswith": "4", "isnull": None, "notnull": None, "in": "1,3", "not_in": [1, 4]},
+    "f": {"==": 2.5, "!=": "2.5", ">": 2, ">=": "2.5", "<": "3", "<=": 10, "contains": ".5", "startswith": "1",
+          "endswith": "0", "isnull": None, "notnull": None, "in": "1.5,10", "not_in": [2.5]},
+    "t": {"==": "alfa", "!=": "alfa", ">": "b", ">=": "Beta", "<": "b", "<=": "beta", "contains": "AL",
+          "startswith": "a", "endswith": "a", "isnull": None, "notnull": None, "in": "alfa,gamma",
+          "not_in": ["alfa", None]},
+    "b": {"==": True, "!=": True, ">": False, ">=": True, "<": True, "<=": False, "contains": "True",
+          "startswith": "F", "endswith": "e", "isnull": None, "notnull": None, "in": "1", "not_in": [True]},
+}
+
+# Secondo gruppo dei casi a più gruppi, scelto su un'altra colonna con NA.
+_OTHER_GROUP = {"i": ("t", "==", "delta"), "f": ("b", "==", False), "t": ("i", ">", "5"), "b": ("f", "<", 2)}
+
+
+def manipola_nullable_cases() -> list[dict[str, Any]]:
+    """Ogni operatore × ogni colonna nullable: forma singola, un gruppo, più gruppi."""
+    cases = []
+    for column, values in _NULLABLE_VALUES.items():
+        for operator in MANIPOLA_OPERATORS:
+            value = values[operator]
+            condition = {"column": column, "operator": operator, "value": value}
+            other_column, other_operator, other_value = _OTHER_GROUP[column]
+            other = {"column": other_column, "operator": other_operator, "value": other_value}
+            cases.append({"id": f"single/{column}/{operator}",
+                          "params": {"column": column, "operator": operator, "value": value}})
+            cases.append({"id": f"group1/{column}/{operator}", "params": {"conditions": [condition]}})
+            # Un gruppo con due condizioni in E: la seconda vede le righe rimaste.
+            cases.append({"id": f"group1and/{column}/{operator}", "params": {"conditions": [other, condition]}})
+            cases.append({"id": f"groups2/{column}/{operator}", "params": {"conditions": [
+                {**condition, "group": 0}, {**other, "group": 1},
+            ]}})
+            cases.append({"id": f"groups3/{column}/{operator}", "params": {"conditions": [
+                {"column": "t", "operator": "isnull", "value": None, "group": 2},
+                {**condition, "group": 0},
+                {"column": "b", "operator": "==", "value": True, "group": 1},
+                {**other, "group": 0},
+            ]}})
+    return cases
+
+
+# Condizionale (CASE WHEN) sulle stesse colonne: ogni operatore di
+# ``_evaluate_condition`` su ogni colonna nullable.
+CONDITIONAL_OPERATORS = (
+    "==", "!=", ">", ">=", "<", "<=", "contains", "startswith", "endswith", "isnull", "notnull", "between",
+)
+
+
+def manipola_nullable_conditional_cases() -> list[dict[str, Any]]:
+    cases = []
+    for column, values in _NULLABLE_VALUES.items():
+        for operator in CONDITIONAL_OPERATORS:
+            value = "1,3" if operator == "between" else values[operator]
+            cases.append({"id": f"conditional/{column}/{operator}", "params": {
+                "column": column, "default_value": "N", "output_column": "esito",
+                "conditions": [{"operator": operator, "value": value, "result": "S"},
+                               {"operator": "isnull", "value": None, "result": "vuoto"}]}})
+    return cases

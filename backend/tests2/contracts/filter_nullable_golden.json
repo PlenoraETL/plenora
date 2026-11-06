@@ -1,0 +1,13799 @@
+{
+ "conditional": {
+  "conditional/b/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/b/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/b/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/b/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/b/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/b/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/b/between": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/b/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/b/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/b/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "S"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/b/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/b/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/f/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/f/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/f/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/f/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/f/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/f/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/f/between": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/f/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/f/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/f/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "S"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/f/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/f/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/i/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/i/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/i/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/i/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/i/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/i/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/i/between": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/i/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/i/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/i/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "S"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/i/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/i/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/t/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "S"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/t/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/t/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/t/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/t/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/t/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/t/between": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/t/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/t/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/t/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "S"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "N"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  },
+  "conditional/t/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "S"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "S"
+    ]
+   ]
+  },
+  "conditional/t/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b",
+    "esito"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean",
+    "str"
+   ],
+   "index": [
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true,
+     "S"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false,
+     "N"
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true,
+     "N"
+    ],
+    [
+     null,
+     null,
+     null,
+     null,
+     "vuoto"
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false,
+     "S"
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true,
+     "N"
+    ]
+   ]
+  }
+ },
+ "filter": {
+  "group1/b/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/b/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/b/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/b/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/b/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/b/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/b/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/b/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/b/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/b/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  "group1/b/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/b/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/b/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/f/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/f/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/f/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/f/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/f/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/f/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/f/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1/f/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/f/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/f/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  "group1/f/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/f/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/f/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1/i/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/i/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/i/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/i/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/i/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/i/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/i/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1/i/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1/i/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/i/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  "group1/i/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/i/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/i/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1/t/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/t/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/t/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/t/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/t/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/t/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/t/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/t/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/t/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1/t/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  "group1/t/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/t/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1/t/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/b/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/b/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/b/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/b/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ]
+   ]
+  },
+  "group1and/b/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ]
+   ]
+  },
+  "group1and/b/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ]
+   ]
+  },
+  "group1and/b/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ]
+   ]
+  },
+  "group1and/b/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ]
+   ]
+  },
+  "group1and/b/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ]
+   ]
+  },
+  "group1and/b/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/b/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/b/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ]
+   ]
+  },
+  "group1and/b/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/f/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/f/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ]
+   ]
+  },
+  "group1and/f/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/f/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ]
+   ]
+  },
+  "group1and/f/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/f/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/f/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/f/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/f/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/f/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/f/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/f/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/f/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/i/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/i/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1and/i/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1and/i/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1and/i/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1and/i/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/i/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/i/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/i/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1and/i/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/i/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1and/i/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "group1and/i/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/t/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/t/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/t/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/t/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/t/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/t/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/t/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/t/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/t/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/t/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/t/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "group1and/t/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "group1and/t/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/b/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/b/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/b/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/b/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/b/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/b/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/b/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/b/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/b/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/b/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  "groups2/b/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/b/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/b/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/f/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/f/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/f/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/f/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/f/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/f/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/f/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/f/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/f/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/f/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/f/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/f/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/f/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/i/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/i/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/t/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/t/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/t/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/t/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/t/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/t/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/t/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/t/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/t/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/t/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups2/t/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/t/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups2/t/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "groups3/b/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/b/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/f/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/i/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "groups3/t/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/b/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/b/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/b/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/b/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/b/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/b/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/b/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/b/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/b/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/b/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  "single/b/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/b/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/b/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/f/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/f/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/f/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/f/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/f/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/f/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/f/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "single/f/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0
+   ],
+   "values": [
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/f/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/f/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  "single/f/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/f/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/f/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "single/i/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/i/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/i/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/i/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/i/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/i/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/i/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "single/i/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "single/i/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/i/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  "single/i/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/i/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/i/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [],
+   "values": []
+  },
+  "single/t/!=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/t/<": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/t/<=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/t/==": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/t/>": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/t/>=": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/t/contains": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/t/endswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/t/in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  },
+  "single/t/isnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     null,
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  "single/t/not_in": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2
+   ],
+   "values": [
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/t/notnull": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     3,
+     2.5,
+     "Beta",
+     false
+    ],
+    [
+     4,
+     3.0,
+     "gamma",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ],
+    [
+     3,
+     2.5,
+     "delta",
+     true
+    ]
+   ]
+  },
+  "single/t/startswith": {
+   "columns": [
+    "i",
+    "f",
+    "t",
+    "b"
+   ],
+   "dtypes": [
+    "Int64",
+    "Float64",
+    "string",
+    "boolean"
+   ],
+   "index": [
+    0,
+    1
+   ],
+   "values": [
+    [
+     1,
+     1.5,
+     "alfa",
+     true
+    ],
+    [
+     6,
+     10.0,
+     "alfa",
+     false
+    ]
+   ]
+  }
+ }
+}

@@ -35,7 +35,29 @@ const ALL = EDITOR_MODES;
 
 const OUTPUT_TYPES = new Set(['result', 'resultNode']);
 const isOutput = (n) => OUTPUT_TYPES.has(n.type);
-const isArcgisLoad = (n) => n.type === 'carica_arcgis' || n.type === 'caricaArcgis';
+const isArcgisNodeType = (n) => n.type === 'carica_arcgis' || n.type === 'caricaArcgis';
+
+/**
+ * Destinazione di un nodo di caricamento: 'db' | 'arcgis' | 'rest' |
+ * 'datasource' | null (non e' un caricamento). STESSA regola del backend
+ * (core/carica/dispatch.select_carica_write_branch): in Manipola il nodo
+ * «Carica su database» con `dest_type: 'arcgis'` scrive su ArcGIS, quindi
+ * conta come «Carica su ArcGIS» (B-K11) e non come caricamento su database.
+ */
+export function loadDestination(n) {
+  if (isArcgisNodeType(n)) return 'arcgis';
+  if (n.type !== 'carica') return null;
+  const dest = n.data?.dest_type || 'db';
+  return dest === 'arcgis' || dest === 'rest' ? dest : 'db';
+}
+const isArcgisLoad = (n) => loadDestination(n) === 'arcgis';
+
+/**
+ * Nodi unici per progetto (Output e caricamenti di ogni destinazione): non
+ * si copiano ne' si duplicano (canvasCommands). Un caricamento REST o su
+ * ArcGIS fatto col nodo «Carica su database» resta un caricamento.
+ */
+export const isSingleUseNode = (n) => isOutput(n) || loadDestination(n) !== null;
 
 const outputData = (mode) => {
   const base = {
@@ -135,7 +157,7 @@ export const NODES = Object.freeze({
   },
   load_db: {
     idPrefix: 'carica',
-    editors: ALL, single: true, requires: 'output', present: (n) => n.type === 'carica', edgeKind: 'carica',
+    editors: ALL, single: true, requires: 'output', present: (n) => loadDestination(n) === 'db', edgeKind: 'carica',
     build: ({ mode }) => ({ type: 'carica', data: loadDbData(mode) }),
   },
   load_arcgis: {
@@ -284,12 +306,20 @@ export function sourcePaletteGroups({ projects = [], files = [] }) {
 }
 
 /**
- * Nome di un nodo sorgente salvato con il solo id (U9): risolto dal catalogo
- * delle sorgenti al caricamento in un campo TRANSITORIO (`_sourceName`, mai
- * salvato), cosi' il canvas non si riscrive e non risulta modificato. Con il
- * nome gia' giusto restituisce lo stesso array (nessun aggiornamento).
+ * Nome attuale di un nodo sorgente (U9, B-K9; regola in utils/sourceNames):
+ * risolto dal catalogo delle sorgenti nel campo TRANSITORIO `_sourceName`,
+ * cosi' il canvas non si riscrive e non risulta modificato.
+ *  - Ogni nodo sorgente si risolve contro l'elenco: trovato -> il nome del
+ *    catalogo; fuori dall'elenco -> `null` (risolto, nome sconosciuto: il
+ *    titolo usa la copia salvata). Un nodo risolto non riaccende la
+ *    risoluzione (`isUnresolvedSource`); un elenco nuovo ri-risolve tutti.
+ *  - Con i nomi gia' giusti restituisce lo stesso array (nessun aggiornamento).
+ *  - Al salvataggio la copia salvata (`project_name`/`file_name`) segue il
+ *    nome attuale (utils/canvasSerializer).
  */
 export function withResolvedSourceNames(nodes, { projects = [], files = [] }) {
+  // Nessun elenco arrivato: niente contro cui risolvere.
+  if (!projects.length && !files.length) return nodes;
   const projectNames = new Map(projects.map(p => [String(p.id), p.name]));
   const fileNames = new Map(files.map(f => [String(f.id), f.name]));
   let changed = false;
@@ -298,9 +328,14 @@ export function withResolvedSourceNames(nodes, { projects = [], files = [] }) {
     if (n.type === 'project_source' && n.data?.source_project_id != null) name = projectNames.get(String(n.data.source_project_id));
     else if (n.type === 'file_source' && n.data?.file_source_id != null) name = fileNames.get(String(n.data.file_source_id));
     else return n;
-    if (!name || n.data._sourceName === name) return n;
+    const resolved = name || null;
+    if (n.data._sourceName === resolved) return n;
     changed = true;
-    return { ...n, data: { ...n.data, _sourceName: name } };
+    return { ...n, data: { ...n.data, _sourceName: resolved } };
   });
   return changed ? next : nodes;
 }
+
+/** Nodo sorgente non ancora risolto contro l'elenco delle sorgenti. */
+export const isUnresolvedSource = (n) => (n.type === 'project_source' || n.type === 'file_source')
+  && n.data?._sourceName === undefined;

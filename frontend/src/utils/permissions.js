@@ -125,6 +125,10 @@ export const can = {
   manageTaskRuntime:   isSuperadmin,  // CARICA incerte: conferma / retry
   manageBackups:       isSuperadmin,
   seeTechnicalLogs:  isAdminOrAbove,  // tab "Log Tecnici" del LogViewer
+  // Azioni offerte dalla finestra di un'esecuzione fallita (conferma UI
+  // B-K6): l'esecutore non le ha (il backend risponde 403).
+  readRunLog:        isViewerOrAbove, // «Apri il registro» (scheda Esecuzioni)
+  createTicket:      isViewerOrAbove, // «Segnala il problema»
 };
 
 /**
@@ -179,6 +183,8 @@ export const CAPABILITY_BACKEND = Object.freeze({
     file: 'logs/router.py', fns: ['get_logs'], depends: 'require_not_esecutore', rule: 'role',
     stricter: 'scelta di interfaccia: il tab "Log Tecnici" si mostra solo agli admin; il backend filtra comunque per gruppo',
   },
+  readRunLog: { file: 'logs/runs_router.py', fns: ['get_runs', 'get_run'], depends: 'require_not_esecutore', rule: 'role' },
+  createTicket: { file: 'tickets/router.py', fns: ['create_ticket_endpoint'], depends: '_require_not_esecutore', rule: 'role' },
 });
 
 export default { can, role, ROLES };

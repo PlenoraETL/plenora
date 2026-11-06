@@ -1,4 +1,5 @@
 import { DERIVED_COLUMNS_TYPES, canonicalNodeType, joinEdgeFields, persistedNodeData, persistenceValue } from './nodeTypeRegistry';
+import { savedSourceName } from './sourceNames';
 import {
   dataFlowEdges,
   isParameterBindingEdge,
@@ -13,6 +14,10 @@ const savedColumn = (c) => Object.fromEntries(SAVED_COLUMN_KEYS
 function serializeNode(node, edges, derivedColumns) {
   const type = canonicalNodeType(node.type);
   const data = persistedNodeData(node);
+  // B-K9: il nome salvato di una sorgente segue il nome attuale del catalogo
+  // (campo transitorio `_sourceName`, utils/sourceNames).
+  const sourceName = savedSourceName(node);
+  if (sourceName) data[sourceName.field] = sourceName.name;
   // Colonne DERIVATE (Blocco A, regola 4): non sono nel nodo. Al salvataggio
   // si allegano dalla mappa del server (store/useColumnStore), perche' il
   // backend le legge ancora: mappa dei tipi al salvataggio dei file

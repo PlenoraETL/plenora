@@ -18,7 +18,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useCanvasDerived } from '../../hooks/useCanvasDerived';
 import { useToast } from '../../hooks/useToast';
-import { NODES, buildCatalogNode, buildSourceNode, withResolvedSourceNames } from './editorNodeCatalog';
+import { NODES, buildCatalogNode, buildSourceNode, isUnresolvedSource, withResolvedSourceNames } from './editorNodeCatalog';
 
 export default function useCatalogAdd(mode, getPosition, { insertAfter = null } = {}) {
   const toast = useToast();
@@ -50,18 +50,19 @@ export default function useCatalogAdd(mode, getPosition, { insertAfter = null } 
 }
 
 /**
- * U9: i nodi sorgente salvati col solo id prendono il nome dal catalogo
- * delle sorgenti dell'editor (campo transitorio `_sourceName`, applicato
- * come dato DERIVATO: niente modifica, niente salvataggio, niente Ctrl+Z).
- * Riparte quando arrivano le sorgenti o compare un nodo senza nome.
+ * U9, B-K9: i nodi sorgente prendono il nome attuale dal catalogo delle
+ * sorgenti dell'editor (campo transitorio `_sourceName`, applicato come dato
+ * DERIVATO: niente modifica, niente salvataggio, niente Ctrl+Z; regola in
+ * editorNodeCatalog.withResolvedSourceNames). Riparte quando arriva un
+ * elenco nuovo o compare un nodo non ancora risolto; un nodo fuori
+ * dall'elenco e' risolto (`null`) e non la riaccende.
  */
-const hasUnnamedSources = (s) => (s.nodes || []).some(n => (
-  (n.type === 'project_source' || n.type === 'file_source') && !n.data?._sourceName));
+const hasUnresolvedSources = (s) => (s.nodes || []).some(isUnresolvedSource);
 
 export function useResolvedSourceNames(applyDerivedNodes, projects, files) {
-  const unresolved = useCanvasDerived(hasUnnamedSources);
+  const unresolved = useCanvasDerived(hasUnresolvedSources);
   useEffect(() => {
-    if (!unresolved || (!projects?.length && !files?.length)) return;
+    if (!projects?.length && !files?.length) return;
     applyDerivedNodes(nodes => withResolvedSourceNames(nodes, { projects, files }));
   }, [applyDerivedNodes, projects, files, unresolved]);
 }

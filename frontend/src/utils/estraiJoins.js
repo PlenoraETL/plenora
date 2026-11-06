@@ -325,12 +325,36 @@ export function newJoinEdge({ source, target, join_type = newJoinType('estrai'),
  * alias che il backend assegna da solo ai canvas senza alias.
  */
 export function selfJoinAlias(tableName, takenAliases = []) {
-  // Come core/estrai/query_aliases: senza schema, solo \w, `t_` davanti a
-  // una cifra, confronto senza maiuscole.
-  let base = String(tableName || 'tabella').split('.').pop().replace(/[^A-Za-z0-9_]/g, '_') || 'tabella';
-  if (/^\d/.test(base)) base = `t_${base}`;
+  const base = selfJoinAliasBase(tableName);
   const taken = new Set([base, ...takenAliases].filter(Boolean).map(a => String(a).toLowerCase()));
   for (let n = 2; ; n += 1) if (!taken.has(`${base}_${n}`.toLowerCase())) return `${base}_${n}`;
+}
+
+/**
+ * Base dell'alias automatico, UNA regola con core/estrai/query_aliases
+ * (B-K11, casi condivisi in tests/fixtures/selfJoinAliases.json): ultima
+ * parte del nome (senza schema), lettere accentate senza accento
+ * (decomposizione NFD, segni U+0300–U+036F tolti), ogni altro carattere
+ * fuori da A-Z a-z 0-9 _ diventa `_`, vuoto = `t`, `t_` davanti a cio' che non
+ * comincia con una lettera ASCII o `_`.
+ */
+function selfJoinAliasBase(tableName) {
+  const last = String(tableName || '').split('.').pop();
+  const base = last.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9_]/g, '_') || 't';
+  return /^[A-Za-z_]/.test(base) ? base : `t_${base}`;
+}
+
+/**
+ * Alias di un nodo tabella che entra nel canvas (aggiunta, copia, duplicato:
+ * B-K3). `present`: i nodi tabella gia' nel canvas. Se la stessa tabella c'e'
+ * gia', o il suo alias effettivo (alias o nome) e' gia' preso, riceve
+ * l'alias libero `tabella_N`; altrimenti tiene il suo (anche nessuno).
+ */
+export function tableNodeAlias(data, present = []) {
+  const effective = (d) => String(d?.alias || d?.table_name || '').toLowerCase();
+  const own = effective(data);
+  const clash = present.some(n => n.data?.table_name === data?.table_name || (own && effective(n.data) === own));
+  return clash ? selfJoinAlias(data?.table_name, present.map(n => n.data?.alias || n.data?.table_name)) : (data?.alias ?? null);
 }
 
 /** Palette: la tabella nuova e' la sorgente, quella di partenza il target (come trascinando). */

@@ -11,11 +11,12 @@
  * Le scorciatoie vengono dalla tabella unica dei tasti (utils/shortcuts,
  * gruppo «Editor»): la guida non le riscrive a mano.
  */
-import { SHORTCUTS } from '../shortcuts';
+import { SHORTCUTS, shortcutParts } from '../shortcuts';
 
 // Tasti scritti come nella guida dei tasti, dalla stessa tabella (utils/shortcuts).
-const shortcutKeys = (s) => [s.keys, s.altKeys].filter(Boolean)
-  .map(k => k.join('+').replace('⌘/Ctrl', 'Ctrl')).join('` o `');
+const shortcutKeys = (s) => shortcutParts(s).join('` o `');
+// Il tasto principale di una scorciatoia in una frase della guida.
+const k = (id) => shortcutParts(id)[0];
 
 const shortcutsSection = () => ({
   id: 'scorciatoie',
@@ -115,9 +116,9 @@ const MANIPOLA_GUIDE = Object.freeze({
       title: 'Aggiungere e collegare i passi',
       nodeTypes: ['transform', 'multi_join'],
       blocks: [
-        { p: '«＋ Passo» (o `/`) apre «Cosa vuoi fare?»: cerca un\'operazione per nome o per scopo. Con un passo selezionato il nuovo passo nasce dopo di lui e, se dopo c’è già un altro passo, entra in mezzo.' },
+        { p: `«＋ Passo» (o \`${k('add_step')}\`) apre «Cosa vuoi fare?»: cerca un\'operazione per nome o per scopo. Con un passo selezionato il nuovo passo nasce dopo di lui e, se dopo c’è già un altro passo, entra in mezzo.` },
         { p: 'Le operazioni preferite (★) e quelle usate di recente compaiono in cima.' },
-        { p: 'Per collegare due passi trascina dal bordo destro al bordo sinistro, oppure seleziona il passo e premi `C`. «Duplica passo» (`Ctrl+D`) crea una copia con gli stessi ingressi; copia e incolla (`Ctrl+C`, `Ctrl+V`) copiano anche più passi con i loro collegamenti.' },
+        { p: `Per collegare due passi trascina dal bordo destro al bordo sinistro, oppure seleziona il passo e premi \`${k('connect')}\`. «Duplica passo» (\`${k('duplicate')}\`) crea una copia con gli stessi ingressi; copia e incolla (\`${k('copy')}\`, \`${k('paste')}\`) copiano anche più passi con i loro collegamenti.` },
       ],
     },
     FILTERS(false),

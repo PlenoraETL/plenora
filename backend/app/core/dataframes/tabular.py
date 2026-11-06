@@ -503,6 +503,23 @@ def set_cell_value(df: pd.DataFrame, index: Any, column: str, value: Any) -> Non
     df.at[index, column] = value
 
 
+def selection_mask(mask: Any) -> np.ndarray:
+    """REGOLA UNICA dei valori mancanti in una maschera di selezione: NA = falso.
+
+    Un confronto su una colonna nullable (``Int64``, ``Float64``, ``string``,
+    ``boolean``) dà una maschera ``boolean`` con ``<NA>`` dove il valore manca.
+    ``df[mask]`` e ``df.loc[mask, ...]`` di pandas trattano ``<NA>`` come
+    ``False``; ``np.asarray(mask, dtype=bool)`` invece fallisce
+    (``ValueError``/``TypeError``). Chi costruisce una maschera per Filtra o
+    Condizionale la passa da qui: un array NumPy ``bool`` lungo quanto le righe,
+    con ``<NA>``/``None``/``NaN`` a ``False`` (riga non selezionata).
+    """
+    series = mask if isinstance(mask, pd.Series) else pd.Series(mask)
+    if series.dtype == bool:
+        return series.to_numpy(dtype=bool)
+    return series.astype(object).where(series.notna(), False).to_numpy(dtype=bool)
+
+
 def set_values_where_mask(
     df: pd.DataFrame,
     mask: Any,
@@ -1390,6 +1407,7 @@ __all__ = [
     "rename_duplicate_columns",
     "row_indices_where_column_in",
     "set_cell_value",
+    "selection_mask",
     "set_values_where_mask",
     "sort_rows_reset_index",
     "series_null_ratio",

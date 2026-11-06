@@ -2,23 +2,35 @@
  * paletteMemory — preferiti e recenti della palette «Cosa vuoi fare?»
  * (UI-3, U29). Prima «Più usate» era una lista fissa uguale per tutti.
  *
- * Per editor (`scope`: estrai, manipola, arricchisci, ...) e per browser:
- * comodita' della persona, non dati del progetto. Ogni lettura e scrittura
- * e' protetta (finestra privata, dati del sito bloccati): senza memoria la
- * palette funziona come prima.
+ * Per editor (`scope`: estrai, manipola, arricchisci, ...) e PER UTENTE
+ * (conferma UI B-K10: prima per browser, quindi chi entrava dopo sullo
+ * stesso computer vedeva preferiti e recenti, nomi di tabelle compresi,
+ * dell'utente precedente). La chiave porta lo user_id della sessione, come
+ * le copie di sicurezza (utils/localDrafts.currentDraftUser); senza utente
+ * la palette non ricorda niente. Come le copie di sicurezza restano
+ * all'uscita (sono di quell'utente e tornano al suo prossimo accesso); le
+ * chiavi per browser di prima si tolgono alla prima lettura.
+ * Ogni lettura e scrittura e' protetta (finestra privata, dati del sito
+ * bloccati): senza memoria la palette funziona come prima.
  *
  * Una voce si riconosce da `kind:id`; preferiti e recenti si risolvono
  * sulle voci ATTUALI dei gruppi, cosi' un'operazione o una tabella che non
  * esiste piu' sparisce da sola.
  */
-const KEY = (scope) => `plenora.palette.${scope}`;
+import { currentDraftUser } from '../../utils/localDrafts';
+
+const LEGACY_KEY = (scope) => `plenora.palette.${scope}`;
+export const paletteMemoryKey = (scope, user = currentDraftUser()) => (
+  scope && user ? `plenora.palette.user:${user}.${scope}` : null);
 const RECENT_MAX = 6;
 
 export const itemKey = (item) => `${item.kind || ''}:${item.id}`;
 
 function read(scope) {
   try {
-    const raw = window.localStorage.getItem(KEY(scope));
+    try { window.localStorage.removeItem(LEGACY_KEY(scope)); } catch { /* niente */ }
+    const key = paletteMemoryKey(scope);
+    const raw = key ? window.localStorage.getItem(key) : null;
     const parsed = raw ? JSON.parse(raw) : null;
     return {
       favorites: Array.isArray(parsed?.favorites) ? parsed.favorites.map(String) : [],
@@ -30,7 +42,9 @@ function read(scope) {
 }
 
 function write(scope, memory) {
-  try { window.localStorage.setItem(KEY(scope), JSON.stringify(memory)); } catch { /* memoria non disponibile */ }
+  const key = paletteMemoryKey(scope);
+  if (!key) return;
+  try { window.localStorage.setItem(key, JSON.stringify(memory)); } catch { /* memoria non disponibile */ }
 }
 
 export const readPaletteMemory = (scope) => (scope ? read(scope) : { favorites: [], recent: [] });
@@ -65,6 +79,6 @@ export function memoryGroups(groups, memory) {
   const favorites = resolve(memory.favorites);
   const recent = resolve(memory.recent).filter(i => !memory.favorites.includes(itemKey(i)));
   if (favorites.length) out.push({ label: 'Preferiti', items: favorites, onlyWhenEmpty: true, memory: true });
-  if (recent.length) out.push({ label: 'Recenti', items: recent, onlyWhenEmpty: true, memory: true });
+  if (recent.length) out.push({ label: 'Recenti', items: recent, onlyWhenEmpty: true, memory: true, recent: true });
   return out;
 }

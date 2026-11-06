@@ -19,6 +19,7 @@
 import { useCallback } from 'react';
 import useCanvasStore from '../store/useCanvasStore';
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
+import { shortcutText } from './shortcuts';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -37,7 +38,7 @@ export function deletionDialog({ nodes = [], edges = [] } = {}) {
   }
   return {
     title: 'Elimina dal canvas',
-    message: `${message} Puoi annullare con Ctrl+Z.`,
+    message: `${message} Puoi annullare con ${shortcutText('undo')}.`,
     confirmText: 'Elimina',
     variant: 'danger',
   };

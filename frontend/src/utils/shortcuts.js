@@ -106,6 +106,22 @@ export function matchesShortcut(id, event) {
   return Boolean(event) && s.match(event);
 }
 
+/**
+ * Tasti di una scorciatoia come si scrivono nei testi (titoli dei pulsanti,
+ * descrizioni del glossario, guide, messaggi): uno per combinazione,
+ * «Ctrl+S», «/», «Ctrl+⇧+Z». Unica fonte dei tasti nei testi (C-K11): nessun
+ * testo dell'app scrive i tasti a mano (tests/shared/shortcuts.contract).
+ * Accetta la riga o il suo id.
+ */
+export function shortcutParts(idOrRow) {
+  const s = typeof idOrRow === 'string' ? BY_ID.get(idOrRow) : idOrRow;
+  if (!s) throw new Error(`[shortcuts] scorciatoia non dichiarata: ${idOrRow}`);
+  return [s.keys, s.altKeys].filter(Boolean).map(k => k.join('+').replace('⌘/Ctrl', 'Ctrl'));
+}
+
+/** Tasti di una scorciatoia in un testo: «Ctrl+S», «/ o A». */
+export const shortcutText = (idOrRow) => shortcutParts(idOrRow).join(' o ');
+
 /** Evento che apre la guida (palette, pulsante «?»). */
 export const SHORTCUTS_EVENT = 'plenora:open-shortcuts';
 

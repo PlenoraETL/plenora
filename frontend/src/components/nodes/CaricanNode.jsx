@@ -22,6 +22,7 @@ import AutoRunNote from './carica/autoRunNote';
 import { restSecretHeaderNames, withoutSecretHeaders } from '../../utils/restSecrets';
 import './CaricanNode.css';
 import NodeHandle from '../canvas/NodeHandle';
+import { shortcutText } from '../../utils/shortcuts';
 
 const CaricanNode = memo(({ data, id }) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -77,7 +78,7 @@ const CaricanNode = memo(({ data, id }) => {
     if (newDestType === 'rest' && dbConfigured) {
       const ok = await confirm({
         title: 'Passare a REST?',
-        message: 'La destinazione database configurata (connessione, schema, tabella e corrispondenza delle colonne) viene tolta. Puoi annullare con Ctrl+Z.',
+        message: `La destinazione database configurata (connessione, schema, tabella e corrispondenza delle colonne) viene tolta. Puoi annullare con ${shortcutText('undo')}.`,
         confirmText: 'Passa a REST',
         variant: 'warning',
       });
