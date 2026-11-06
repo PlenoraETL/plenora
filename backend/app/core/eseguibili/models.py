@@ -213,6 +213,9 @@ class EseguibileSummary(BaseModel):
     project_type: ProjectType = "arricchisci"
     active_version: int = 1
     inputs_count: int = 1
+    # Si esegue con il modulo dinamico (la versione attiva ha un manifest):
+    # la stessa regola della finestra di esecuzione (UI conferma U14).
+    has_manifest: bool = False
     can_edit: Optional[bool] = None  # calcolato per l'utente corrente
     binding_warnings: List[BindingWarning] = Field(default_factory=list)
 

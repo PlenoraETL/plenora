@@ -103,12 +103,15 @@
 .pl__btn--sm { padding: 5px 10px; font-size: 11px; }
 
 .pl__btn--schedule { position: relative; }
+/* UI conferma C-K6: il numero sta nel badge (altezza dal testo, larghezza
+   minima che cresce con le cifre) e la coppia testo/riempimento e' dichiarata. */
 .pl__schedule-badge {
-  background: var(--pl-blue);
-  color: white; border-radius: 50%;
-  width: 14px; height: 14px;
+  background: var(--plen-fill-blue);
+  color: var(--plen-on-fill);
+  box-sizing: border-box;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 700;
+  font-size: 11px; font-weight: 700; line-height: 1;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -571,8 +574,9 @@
 .pl__qs-step--done { opacity: 0.7; }
 .pl__qs-step-badge {
   flex-shrink: 0;
-  width: 26px; height: 26px;
-  border-radius: 50%;
+  box-sizing: border-box;
+  min-width: 26px; height: 26px; padding: 0 4px;
+  border-radius: 13px;
   display: flex; align-items: center; justify-content: center;
   font-family: var(--pl-font-m);
   font-size: 13px; font-weight: 700;

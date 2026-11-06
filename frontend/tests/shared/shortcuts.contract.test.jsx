@@ -73,10 +73,10 @@ describe('i tasti fanno quello che dice la guida', () => {
   const k = (key, mods = {}) => ({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...mods });
   const CASES = {
     palette: [[k('k', { ctrlKey: true }), true], [k('K', { metaKey: true }), true], [k('k'), false]],
-    help: [[k('?', { shiftKey: true }), true], [k('/', { shiftKey: true }), true], [k('/'), false]],
+    help: [[k('?', { shiftKey: true }), true], [k('?'), true], [k('/', { shiftKey: true }), false], [k('/'), false]],
     close: [[k('Escape'), true], [k('Enter'), false]],
     save: [[k('s', { ctrlKey: true }), true], [k('S', { metaKey: true }), true], [k('s'), false]],
-    add_step: [[k('/'), true], [k('a'), true], [k('A'), true], [k('a', { ctrlKey: true }), false]],
+    add_step: [[k('/'), true], [k('/', { shiftKey: true }), true], [k('a'), true], [k('A'), true], [k('a', { ctrlKey: true }), false]],
     undo: [[k('z', { ctrlKey: true }), true], [k('z', { ctrlKey: true, shiftKey: true }), false]],
     redo: [[k('z', { ctrlKey: true, shiftKey: true }), true], [k('y', { ctrlKey: true }), true], [k('y'), false]],
     delete: [[k('Delete'), true], [k('Backspace'), true], [k('d'), false]],
@@ -85,7 +85,7 @@ describe('i tasti fanno quello che dice la guida', () => {
     paste: [[k('v', { ctrlKey: true }), true], [k('v'), false]],
     duplicate: [[k('d', { ctrlKey: true }), true], [k('d'), false]],
     search_canvas: [[k('f', { ctrlKey: true }), true], [k('f'), false]],
-    connect: [[k('c'), true], [k('C'), true], [k('c', { ctrlKey: true }), false]],
+    connect: [[k('c'), true], [k('C'), true], [k('C', { shiftKey: true }), true], [k('c', { ctrlKey: true }), false], [k('c', { ctrlKey: true, altKey: true }), false]],
     editor_guide: [[k('F1'), true], [k('1'), false]],
   };
 
@@ -95,6 +95,36 @@ describe('i tasti fanno quello che dice la guida', () => {
 
   it.each(Object.entries(CASES))('%s', (id, cases) => {
     for (const [event, expected] of cases) expect({ id, event, hit: matchesShortcut(id, event) }).toEqual({ id, event, hit: expected });
+  });
+
+  // UI conferma C-K3: i tasti si riconoscono dal carattere prodotto. Per
+  // due layout reali, cio' che arriva al browser premendo i tasti
+  // (event.key + modificatori): ogni pressione attiva AL PIU' una
+  // scorciatoia, e «/» e «?» quella giusta su entrambi.
+  const LAYOUTS = {
+    US: { '/': k('/'), '?': k('?', { shiftKey: true }), '7': k('7'), "'": k("'") },
+    IT: { '/': k('/', { shiftKey: true }), '?': k('?', { shiftKey: true }), '7': k('7'), "'": k("'") },
+  };
+  const ids = (event) => SHORTCUTS.filter(s => matchesShortcut(s.id, event)).map(s => s.id);
+
+  it.each(Object.keys(LAYOUTS))('tastiera %s: «/» aggiunge un passo, «?» apre la guida, mai entrambi', (layout) => {
+    const keys = LAYOUTS[layout];
+    expect(ids(keys['/'])).toEqual(['add_step']);
+    expect(ids(keys['?'])).toEqual(['help']);
+    expect(ids(keys['7'])).toEqual([]);
+  });
+
+  it('nessuna pressione attiva due scorciatoie (caratteri dei due layout x modificatori)', () => {
+    const chars = ['/', '?', '7', "'", 'a', 'A', 'c', 'C', 'k', 'z', 'y', 's', 'v', 'd', 'f',
+      'Escape', 'Delete', 'Backspace', 'F1'];
+    const MODS = [{}, { shiftKey: true }, { ctrlKey: true }, { metaKey: true }, { ctrlKey: true, shiftKey: true },
+      { altKey: true }, { ctrlKey: true, altKey: true }];
+    const clashes = [];
+    for (const c of chars) for (const m of MODS) {
+      const hit = ids(k(c, m));
+      if (hit.length > 1) clashes.push({ key: c, ...m, hit });
+    }
+    expect(clashes).toEqual([]);
   });
 
   it('un id non dichiarato e\' un errore di programmazione', () => {

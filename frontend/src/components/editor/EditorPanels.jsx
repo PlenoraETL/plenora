@@ -12,7 +12,7 @@
  *    (CSS: e' l'ultimo figlio del contenitore).
  * Le scelte restano in questo browser (hooks/useStoredState).
  */
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useStoredState, LAYOUT_KEYS } from '../../hooks/useStoredState';
 import './EditorPanels.css';
 
@@ -44,28 +44,50 @@ export function SidePanelFrame({ children }) {
   );
 }
 
+/*
+ * Trascinamento (UI conferma C-K8): UN gesto = UNA scrittura in memoria del
+ * browser. Durante il gesto la larghezza vive solo nello stato della pagina
+ * (`dragWidth`); si ricorda alla fine, qualunque sia la fine: rilascio
+ * (`pointerup`), gesto interrotto dal sistema (`pointercancel`: tocco preso
+ * dallo scorrimento, finestra che perde il fuoco) o cattura persa
+ * (`lostpointercapture`). Il puntatore e' catturato dalla maniglia
+ * (`setPointerCapture`): i movimenti arrivano anche fuori dalla maniglia, e
+ * smontandola a meta' gesto non resta nessun ascoltatore.
+ */
 export function PanelResizer() {
   const [width, setWidth] = useStoredState(LAYOUT_KEYS.editorPanelWidth, PANEL_WIDTH.initial, clampWidth);
+  const [dragWidth, setDragWidth] = useState(null);
   const ref = useRef(null);
+  const gestureRef = useRef(null); // { pointerId, startX, startW, last }
+  const shown = dragWidth ?? width;
 
   // La larghezza arriva al pannello come variabile CSS sul contenitore.
   useEffect(() => {
     const host = ref.current?.parentElement;
-    host?.style.setProperty('--node-inspector-width', `${width}px`);
-  }, [width]);
+    host?.style.setProperty('--node-inspector-width', `${shown}px`);
+  }, [shown]);
 
   const onPointerDown = useCallback((e) => {
     e.preventDefault();
-    const startX = e.clientX;
-    const startW = width;
-    const move = (ev) => setWidth(startW + (startX - ev.clientX));
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  }, [width, setWidth]);
+    gestureRef.current = { pointerId: e.pointerId, startX: e.clientX, startW: width, last: width };
+    try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* puntatore gia' rilasciato */ }
+    setDragWidth(width);
+  }, [width]);
+
+  const onPointerMove = useCallback((e) => {
+    const g = gestureRef.current;
+    if (!g || (g.pointerId != null && e.pointerId != null && e.pointerId !== g.pointerId)) return;
+    g.last = clampWidth(g.startW + (g.startX - e.clientX));
+    setDragWidth(g.last);
+  }, []);
+
+  const endGesture = useCallback(() => {
+    const g = gestureRef.current;
+    if (!g) return;
+    gestureRef.current = null;
+    setDragWidth(null);
+    if (g.last !== g.startW) setWidth(g.last);
+  }, [setWidth]);
 
   const onKeyDown = (e) => {
     if (e.key === 'ArrowLeft') { e.preventDefault(); setWidth(w => w + PANEL_WIDTH.step); }
@@ -81,10 +103,14 @@ export function PanelResizer() {
       aria-label="Larghezza del pannello del passo"
       aria-valuemin={PANEL_WIDTH.min}
       aria-valuemax={PANEL_WIDTH.max}
-      aria-valuenow={width}
+      aria-valuenow={shown}
       tabIndex={0}
       title="Trascina per allargare o stringere il pannello"
       onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endGesture}
+      onPointerCancel={endGesture}
+      onLostPointerCapture={endGesture}
       onKeyDown={onKeyDown}
     />
   );

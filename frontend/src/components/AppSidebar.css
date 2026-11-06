@@ -272,8 +272,9 @@ button.app-sidebar__user-row:hover { background: var(--plen-surface-2); }
 .app-sidebar--collapsed .app-sidebar__nav { padding: 12px 8px; }
 .app-sidebar--collapsed .app-sidebar__nav-label,
 .app-sidebar--collapsed .app-sidebar__item-label,
-.app-sidebar--collapsed .app-sidebar__user-info,
-.app-sidebar--collapsed .app-sidebar__icon-btn { display: none; }
+/* UI conferma C-K7: a barra chiusa si nascondono solo i TESTI, mai un comando
+   (Cambia password ed Esci restano, in colonna sotto l'avatar). */
+.app-sidebar--collapsed .app-sidebar__user-info { display: none; }
 .app-sidebar--collapsed .app-sidebar__item { justify-content: center; padding: 9px 0; }
 .app-sidebar--collapsed .app-sidebar__item-icon { font-size: 16px; }
 .app-sidebar--collapsed .app-sidebar__count { position: absolute; top: 0; right: 0; padding: 0 4px; min-width: 0; }

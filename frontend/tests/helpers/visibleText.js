@@ -30,6 +30,12 @@ const isTechString = (s) => {
   return tokens.length > 0 && tokens.every(isTechToken);
 };
 
+// Vocabolario dichiarato (utils/glossary): le parole SOSTITUITE e i nomi di
+// prima non sono testo mostrato, sono la tabella che il test usa per
+// cercarli (UI conferma U22: glossary.js ora e' nel perimetro del test).
+const VOCABULARY_DECLARATIONS = new Set(['CONCEPTS', 'ALLOWED_ENGLISH']);
+const VOCABULARY_KEYS = new Set(['replaces', 'formerNames', 'exactCase']);
+
 const calleeName = (c) => {
   if (!c) return '';
   if (c.type === 'Identifier') return c.name;
@@ -72,9 +78,13 @@ export function visibleTexts(file) {
       case 'MemberExpression':
         if (node.computed && node.property?.type === 'Literal') { walk(node.object, node, 'object', skip); return; }
         break;
+      case 'VariableDeclarator':
+        if (VOCABULARY_DECLARATIONS.has(node.id?.name)) return;
+        break;
       case 'Property':
         // Chiavi e valori di proprieta' tecniche (className, type, key...).
         if (!node.computed && TECH_ATTR.test(node.key?.name || node.key?.value || '')) return;
+        if (!node.computed && VOCABULARY_KEYS.has(node.key?.name || node.key?.value || '')) return;
         walk(node.value, node, 'value', skip);
         return;
       case 'JSXText':

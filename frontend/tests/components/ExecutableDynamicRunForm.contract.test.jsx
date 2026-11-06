@@ -139,7 +139,7 @@ describe('ExecutableDynamicRunForm — la finestra unica «Prima di avviare»', 
     // UI-3 (U13): scaricare non chiude; la pulizia parte alla chiusura.
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getAllByRole('button', { name: /^chiudi$/i }).at(-1));
-    await waitFor(() => expect(onAfterDownload).toHaveBeenCalledWith('task-9'));
+    await waitFor(() => expect(onAfterDownload).toHaveBeenCalledWith('task-9', { pageExit: false, active: false }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -150,7 +150,7 @@ describe('ExecutableDynamicRunForm — la finestra unica «Prima di avviare»', 
     await chooseAndAnalyze('a.csv', 'up-a');
     fireEvent.click(screen.getByRole('button', { name: /avvia l'esecuzione/i }));
     expect(await screen.findByText('Esecuzione completata!')).toBeInTheDocument();
-    expect(screen.getByText(/se la chiudi senza scaricarlo ti viene chiesto/)).toBeInTheDocument();
+    expect(screen.getByText(/se chiudi senza scaricarlo ti viene chiesto/)).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /^chiudi$/i }).at(-1));
     fireEvent.click(await screen.findByRole('button', { name: 'Resta qui' }));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Resta qui' })).toBeNull());
@@ -158,7 +158,7 @@ describe('ExecutableDynamicRunForm — la finestra unica «Prima di avviare»', 
     expect(onAfterDownload).not.toHaveBeenCalled();
     fireEvent.click(screen.getAllByRole('button', { name: /^chiudi$/i }).at(-1));
     fireEvent.click(await screen.findByRole('button', { name: 'Chiudi ed elimina' }));
-    await waitFor(() => expect(onAfterDownload).toHaveBeenCalledWith('task-9'));
+    await waitFor(() => expect(onAfterDownload).toHaveBeenCalledWith('task-9', { pageExit: false, active: false }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(downloadMock).not.toHaveBeenCalled();
   });
@@ -182,7 +182,7 @@ describe('ExecutableDynamicRunForm — la finestra unica «Prima di avviare»', 
     fireEvent.click(screen.getByRole('button', { name: /avvia l'esecuzione/i }));
     expect(await screen.findByText(/processore fermo/)).toBeInTheDocument();
     fireEvent.click(screen.getByText('Chiudi', { selector: 'button' }));
-    await waitFor(() => expect(onAfterDownload).toHaveBeenCalledWith('task-9'));
+    await waitFor(() => expect(onAfterDownload).toHaveBeenCalledWith('task-9', { pageExit: false, active: false }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

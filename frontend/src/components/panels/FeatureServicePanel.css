@@ -233,8 +233,8 @@
 }
 
 .fs-panel__item-badge {
-  background: var(--color-success);
-  color: white;
+  background: var(--plen-fill-ok);
+  color: var(--plen-on-fill);
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 10px;

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from typing import Any, Dict, List, Optional, Literal
 from datetime import datetime
 
+from app.core.scheduler import cron_schedule
 from app.core.scheduler.runtime_status import RuntimeStatus
 
 
@@ -453,3 +454,7 @@ class BeatHealthcheck(BaseModel):
     status: Literal["ok", "warning", "down", "unknown"] = "unknown"
     last_beat: Optional[datetime] = None
     message: str = ""
+    # Fuso in cui il beat valuta OGNI cron (BEAT_TIMEZONE): il fuso salvato
+    # nella pianificazione non lo cambia. Il wizard calcola qui le «prossime
+    # esecuzioni» (UI conferma C-K2); sempre presente, anche a beat giu'.
+    timezone: str = Field(default_factory=lambda: str(cron_schedule.beat_timezone()))

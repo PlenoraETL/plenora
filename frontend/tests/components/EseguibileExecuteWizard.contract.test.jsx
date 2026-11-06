@@ -171,7 +171,7 @@ describe('EseguibileExecuteWizard contract', () => {
     // Chiudere dopo lo scaricamento: pulizia dell'esecutore, nessuna domanda.
     await user.click(screen.getAllByRole('button', { name: /^chiudi$/i }).at(-1));
     await waitFor(() => {
-      expect(onAfterDownload).toHaveBeenCalledWith('task-1');
+      expect(onAfterDownload).toHaveBeenCalledWith('task-1', { pageExit: false, active: false });
       expect(onClose).toHaveBeenCalledTimes(1);
     });
   });

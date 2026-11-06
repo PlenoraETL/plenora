@@ -94,6 +94,9 @@ class EseguibileSummaryRow:
     project_type: str = "arricchisci"
     active_version: int = 1
     inputs_count: int = 1
+    # La versione attiva ha un manifest: si esegue con il modulo dinamico
+    # (stessa regola del dettaglio, ``manifest`` non nullo; UI conferma U14).
+    has_manifest: bool = False
     # Binding del manifest attivo e i SOLI nodi del canvas della versione che
     # ne sono bersaglio (per ``binding_warnings`` senza caricare il canvas).
     bindings: tuple[JsonObject, ...] = ()
@@ -253,6 +256,7 @@ def eseguibile_summary_row_from_db(row: Mapping[str, object]) -> EseguibileSumma
             if row.get("inputs_count") is not None
             else 1
         ),
+        has_manifest=bool(row.get("has_manifest")),
         bindings=_parse_json_objects(row.get("bindings")),
         binding_target_nodes=_parse_json_objects(row.get("binding_target_nodes")),
     )
@@ -391,6 +395,7 @@ def list_eseguibili(
                  e.created_by, e.created_at, e.updated_at, e.expected_columns,
                  e.project_type, COALESCE(v.version_number, 1) AS active_version,
                  COALESCE(jsonb_array_length(v.manifest->'inputs'), 1) AS inputs_count,
+                 (v.manifest IS NOT NULL) AS has_manifest,
                  v.manifest->'bindings' AS bindings,
                  (SELECT jsonb_agg(n.node)
                     FROM jsonb_array_elements(

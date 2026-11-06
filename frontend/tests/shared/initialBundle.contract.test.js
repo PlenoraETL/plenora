@@ -95,7 +95,7 @@ describe('librerie caricate al bisogno', () => {
 describe('editor precaricati e font', () => {
   it('ogni editor si carica dalla tabella unica (App.jsx e prefetch della dashboard)', () => {
     const app = stripComments(fs.readFileSync(path.join(SRC, 'App.jsx'), 'utf-8'));
-    for (const type of Object.keys(EDITOR_LOADERS)) expect(app).toContain(`React.lazy(EDITOR_LOADERS.${type})`);
+    for (const type of Object.keys(EDITOR_LOADERS)) expect(app).toContain(`lazyPage(EDITOR_LOADERS.${type})`);
     // Nessun altro import() degli editor fuori dalla tabella.
     const others = FILES.filter(f => f.file !== 'utils/editorChunks.js')
       .filter(f => /import\(\s*['"][./]+(?:pages\/)?(?:Estrai|Manipola|Arricchisci)Editor['"]/.test(stripComments(f.code)))

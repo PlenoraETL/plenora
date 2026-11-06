@@ -149,6 +149,39 @@ describe('barra laterale richiudibile (U26)', () => {
     await act(async () => {});
   });
 
+  // UI conferma C-K7: a barra chiusa si nascondono solo i testi, mai un
+  // comando («Cambia password» non si raggiungeva). Le classi nascoste si
+  // leggono dal CSS; ogni pulsante o link della barra chiusa e i suoi
+  // contenitori non ne hanno nessuna, e hanno un nome accessibile.
+  it('a barra chiusa ogni comando resta raggiungibile (nessun comando nascosto dal CSS)', async () => {
+    auth.user = { user_id: 1, username: 'u', role: 'admin' };
+    const css = stripComments(fs.readFileSync(path.join(SRC, 'components/AppSidebar.css'), 'utf-8'));
+    const hidden = new Set();
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/display\s*:\s*none/.test(m[2])) continue;
+      for (const sel of m[1].split(',')) {
+        const s = sel.trim().match(/^\.app-sidebar--collapsed\s+\.([\w-]+)$/);
+        if (s) hidden.add(s[1]);
+      }
+    }
+    expect(hidden.size).toBeGreaterThan(0);
+    mount(<AppSidebar />);
+    fireEvent.click(screen.getByRole('button', { name: /Chiudi la barra laterale/ }));
+    const nav = screen.getByRole('navigation');
+    const commands = [...nav.querySelectorAll('button, a[href]')];
+    expect(commands.length).toBeGreaterThan(5);
+    const unreachable = commands.filter((el) => {
+      for (let n = el; n && n !== nav; n = n.parentElement) {
+        if ([...n.classList].some(c => hidden.has(c))) return true;
+      }
+      return false;
+    }).map(el => el.getAttribute('aria-label') || el.title || el.textContent);
+    expect(unreachable).toEqual([]);
+    expect(commands.filter(el => !(el.getAttribute('aria-label') || el.title || el.textContent.trim()))).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Cambia password' })).toBeInTheDocument();
+    await act(async () => {});
+  });
+
   it('senza localStorage funziona lo stesso (stato della sola pagina)', async () => {
     auth.user = { user_id: 1, username: 'u', role: 'editor' };
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('bloccato'); });

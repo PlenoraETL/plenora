@@ -85,7 +85,8 @@ describe('contrasto AA dei colori del testo', () => {
       for (const m of code.matchAll(/(?<![-\w])color\s*:\s*['"]?var\((--plen-[\w-]+)/g)) used.add(m[1]);
     }
     expect(used.size).toBeGreaterThan(5);
-    expect([...used].filter(t => !TEXT_COLORS[t]).sort()).toEqual([]);
+    // Il testo su riempimento pieno ha la sua tabella (FILL_PAIRS, sotto).
+    expect([...used].filter(t => !TEXT_COLORS[t] && !FILL_PAIRS[t]).sort()).toEqual([]);
   });
 
   const cases = Object.entries(THEMES).flatMap(([theme, t]) => Object.entries(TEXT_COLORS).flatMap(([fg, surfaces]) => [
@@ -102,6 +103,58 @@ describe('contrasto AA dei colori del testo', () => {
     expect(contrast(rgba('#000000'), rgba('#FFFFFF'))).toBeCloseTo(21, 5);
     expect(contrast(rgba('#767676'), rgba('#FFFFFF'))).toBeCloseTo(4.54, 2);
     expect(contrast(over(rgba('rgba(0, 0, 0, 0.5)'), rgba('#FFFFFF')), rgba('#FFFFFF'))).toBeGreaterThan(3);
+  });
+});
+
+/*
+ * Testo su riempimento pieno (UI conferma C-K6): badge e contatori. Prima il
+ * bianco su --pl-blue (#4B8BFF, 3,3:1) non era controllato e il numero
+ * usciva da un cerchio di 14 px. Coppie dichiarate, AA nei due temi; ogni
+ * badge con testo bianco usa una coppia della tabella; un badge con altezza
+ * fissa ha larghezza minima (non fissa) e l'altezza contiene il testo.
+ */
+const FILL_PAIRS = { '--plen-on-fill': ['--plen-fill-blue', '--plen-fill-violet', '--plen-fill-ok'] };
+
+describe('testo su riempimento pieno (badge)', () => {
+  const pairs = Object.entries(THEMES).flatMap(([theme, t]) => Object.entries(FILL_PAIRS)
+    .flatMap(([fg, fills]) => fills.map(bg => [theme, fg, bg, t])));
+  it.each(pairs)('tema %s: %s su %s >= 4,5:1', (theme, fg, bg, t) => {
+    const ratio = contrast(rgba(t[fg]), rgba(t[bg]));
+    expect({ theme, fg, bg, ok: ratio >= AA, ratio: Number(ratio.toFixed(2)) }).toMatchObject({ theme, fg, bg, ok: true });
+  });
+
+  const rules = CSS.flatMap(({ file, code }) => {
+    const clean = code.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+    return [...clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(m => /badge/i.test(m[1]))
+      .map(m => ({ where: `${file}:${lineOf(clean, m.index + m[0].length - m[2].length)}`, selector: m[1].trim(), body: m[2] }));
+  });
+  const decl = (body, prop) => (new RegExp(`(?<![\\w-])${prop}\\s*:\\s*([^;]+)`).exec(body) || [])[1]?.trim() || null;
+
+  it('ogni badge con testo bianco o «on-fill» usa una coppia dichiarata', () => {
+    expect(rules.length).toBeGreaterThan(5);
+    const offenders = [];
+    for (const r of rules) {
+      const color = decl(r.body, 'color');
+      if (!color || !/^(white|#fff(fff)?|var\(--plen-on-fill\))$/i.test(color)) continue;
+      const fg = /--plen-on-fill/.test(color) ? '--plen-on-fill' : color;
+      const bg = (/var\((--[\w-]+)/.exec(decl(r.body, 'background') || decl(r.body, 'background-color') || '') || [])[1] || null;
+      if (!FILL_PAIRS[fg]?.includes(bg)) offenders.push(`${r.where} ${r.selector}: ${color} su ${bg}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('un badge di altezza fissa contiene il testo: larghezza minima, mai fissa', () => {
+    const offenders = [];
+    for (const r of rules) {
+      const height = Number((/^(\d+)px$/.exec(decl(r.body, 'height') || '') || [])[1]);
+      if (!height) continue;
+      const font = Number((/^(\d+)px$/.exec(decl(r.body, 'font-size') || '') || [])[1]) || 11;
+      if (decl(r.body, 'width')) offenders.push(`${r.where} ${r.selector}: width fissa`);
+      if (!decl(r.body, 'min-width')) offenders.push(`${r.where} ${r.selector}: senza min-width`);
+      if (height < font + 6) offenders.push(`${r.where} ${r.selector}: altezza ${height}px per testo di ${font}px`);
+    }
+    expect(offenders).toEqual([]);
   });
 });
 

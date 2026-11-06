@@ -54,7 +54,11 @@ function itemValid(item, field) {
   if (base === '*') return true;
   const bounds = base.split('-');
   if (bounds.length > 2) return false;
-  return bounds.every(b => b !== '' && valueOf(b, field) !== null);
+  if (!bounds.every(b => b !== '' && valueOf(b, field) !== null)) return false;
+  // `7-7` (domenica-domenica): croniter lo esegue OGNI giorno. Piu' stretti
+  // (dichiarato in cronCases.json): mai esecuzioni diverse dallo scheduler.
+  if (field === CRON_FIELDS[4] && bounds.length === 2 && bounds.every(b => valueOf(b, field) === 7)) return false;
+  return true;
 }
 
 function fieldValid(text, index) {
@@ -95,8 +99,12 @@ export const normalizeCron = (expression) => String(expression ?? '').trim().spl
  * croniter e il cron classico: con giorno del mese E giorno della settimana
  * entrambi ristretti basta uno dei due; `?` vale `*`; un intervallo
  * rovesciato (`30-10`, `FEB-JAN`) gira oltre il massimo; 7 = domenica.
- * Gli orari sono quelli del fuso della pianificazione (ora locale di quel
- * fuso; nei cambi d'ora un orario che non esiste non si corregge).
+ * Gli orari sono l'ora locale del fuso in cui lo SCHEDULER valuta il cron
+ * (`BEAT_TIMEZONE`, letto da GET /schedules/healthcheck → `timezone`; il
+ * fuso salvato nella pianificazione il beat non lo usa: UI conferma C-K2).
+ * Confronto per enumerazione con croniter (la regola del beat,
+ * `CronSchedule.next_runs`) su `tests/fixtures/cronRunsGolden.json`, anche
+ * nei fine settimana del cambio d'ora.
  */
 
 const DAY_NAMES = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
@@ -117,8 +125,11 @@ function expandField(text, field) {
     else {
       const [a, b] = base.split('-');
       from = valueOf(a, field);
-      // `5/15` = da 5 fino al massimo, ogni 15.
-      to = b !== undefined ? valueOf(b, field) : (stepText !== undefined ? field.max : from);
+      // `5/15` = da 5 fino al massimo, ogni 15. Nel giorno della settimana
+      // il massimo di `n/passo` e' il sabato (6), come croniter: MON/2 =
+      // lunedi', mercoledi', venerdi' (cronRunsGolden.json).
+      const stepMax = dow ? 6 : field.max;
+      to = b !== undefined ? valueOf(b, field) : (stepText !== undefined ? stepMax : from);
     }
     const span = to >= from ? to - from : to - from + size;
     for (let i = 0; i <= span; i += step) {
@@ -183,30 +194,73 @@ function dayMatches(p, y, m, d) {
 // Quanto avanti si cerca (un'espressione come «31 febbraio» non capita mai).
 const SEARCH_DAYS = 366 * 5;
 
+const MINUTE_MS = 60_000;
+const DAY_MS = 86_400_000;
+// Margine per l'ora ripetuta del ritorno all'ora solare (al massimo 2 ore
+// in qualunque fuso IANA): sotto questo margine un orario non puo' essere
+// dopo `from`.
+const SHIFT_MARGIN_MS = 2 * 3_600_000;
+
+/** Ora locale del fuso all'istante t, letta come UTC (ms, al minuto). */
+const wallMs = (t, timeZone) => {
+  const w = wallClockIn(new Date(t), timeZone);
+  return Date.UTC(w.y, w.m - 1, w.d, w.h, w.min);
+};
+
 /**
- * Prossime esecuzioni dopo `from`, come ora locale del fuso:
- * [{ y, m, d, h, min, weekday }] (vuoto se l'espressione non e' valida o
- * non capita nei prossimi anni).
+ * Istanti (ms) in cui l'orologio del fuso segna `wall` (ora locale letta
+ * come UTC): nessuno se l'orario manca (salto in avanti), due se si ripete
+ * (ritorno all'ora solare), come croniter.
+ */
+function instantsOf(wall, offsets, timeZone) {
+  return [...new Set(offsets.map(off => wall - off))]
+    .filter(t => wallMs(t, timeZone) === wall)
+    .sort((x, y) => x - y);
+}
+
+/**
+ * Prossime esecuzioni dopo `from` nel fuso dello scheduler (`timeZone`):
+ * [{ y, m, d, h, min, weekday, at }] in ora locale, `at` = istante in ms
+ * (vuoto se l'espressione non e' valida o non capita nei prossimi anni).
+ * Regola di croniter (CronSchedule.next_runs del beat): un orario che il
+ * cambio d'ora salta non c'e', uno che si ripete c'e' due volte.
  */
 export function nextCronRuns(expression, { from = new Date(), count = 5, timeZone } = {}) {
   const p = parseCron(expression);
   if (!p) return [];
-  const now = wallClockIn(from, timeZone);
+  const fromMs = from.getTime();
+  const nowWall = wallMs(fromMs, timeZone);
   const hours = [...p.hours].sort((a, b) => a - b);
   const minutes = [...p.minutes].sort((a, b) => a - b);
   const out = [];
-  const start = Date.UTC(now.y, now.m - 1, now.d);
-  for (let i = 0; i < SEARCH_DAYS && out.length < count; i += 1) {
-    const day = new Date(start + i * 86400000);
+  // Da ieri (ora locale): un cambio d'ora a mezzanotte sposta il giorno.
+  const start = Math.floor(nowWall / DAY_MS) * DAY_MS - DAY_MS;
+  for (let i = 0; i <= SEARCH_DAYS && out.length < count; i += 1) {
+    const dayStart = start + i * DAY_MS;
+    const day = new Date(dayStart);
     const y = day.getUTCFullYear(); const m = day.getUTCMonth() + 1; const d = day.getUTCDate();
-    if (!dayMatches(p, y, m, d)) continue;
+    if (dayStart + DAY_MS <= nowWall - SHIFT_MARGIN_MS || !dayMatches(p, y, m, d)) continue;
+    // Scostamenti del fuso intorno al giorno: uno solo = nessun cambio
+    // d'ora, l'istante e' l'ora locale meno lo scostamento.
+    const offsets = [...new Set([-DAY_MS, DAY_MS / 2, 2 * DAY_MS]
+      .map(dt => dayStart + dt)
+      .map(t => wallMs(t, timeZone) - Math.floor(t / MINUTE_MS) * MINUTE_MS))];
+    const steady = offsets.length === 1;
+    const runs = [];
     for (const h of hours) {
       for (const min of minutes) {
-        if (i === 0 && (h < now.h || (h === now.h && min <= now.min))) continue;
-        out.push({ y, m, d, h, min, weekday: day.getUTCDay() });
-        if (out.length === count) return out;
+        const wall = dayStart + (h * 60 + min) * MINUTE_MS;
+        if (wall < nowWall - SHIFT_MARGIN_MS) continue;
+        const at = steady ? [wall - offsets[0]] : instantsOf(wall, offsets, timeZone);
+        for (const t of at) {
+          if (t > fromMs) runs.push({ y, m, d, h, min, weekday: day.getUTCDay(), at: t });
+        }
+        if (steady && out.length + runs.length >= count) break;
       }
+      if (steady && out.length + runs.length >= count) break;
     }
+    runs.sort((x, z) => x.at - z.at);
+    out.push(...runs.slice(0, count - out.length));
   }
   return out;
 }

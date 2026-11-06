@@ -20,13 +20,14 @@ import {
 } from '../../api';
 import useDialog from '../../hooks/useDialog';
 import { useResource } from '../../hooks/useResource';
-import { resultKeepNote, useEseguibileRun } from './useEseguibileRun';
+import { useEseguibileRun } from './useEseguibileRun';
 import TransferProgress from '../common/TransferProgress';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { ResourceError } from '../common/ListState';
 import { requestErrorMessage } from '../../utils/errorMessages';
 import './EseguibileExecuteWizard.css';
 import ExecutableDynamicRunForm from './ExecutableDynamicRunForm';
+import { usesRunForm } from './runForm';
 import { initialOutputFormat, outputFormatOptions, DEFAULT_OUTPUT_FORMAT } from '../../constants/outputFormats';
 import { formatBytes } from '../../utils/format';
 import { downloadCsvTemplate } from '../../utils/csvTemplate';
@@ -60,7 +61,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
   // Stack unico delle finestre: durante l'esecuzione niente Esc, overlay o ×.
   // Con il manifest la finestra e' quella di ExecutableDynamicRunForm.
   const dialog = useDialog({
-    isOpen: !eseguibile?.manifest, onClose: close, ref: dialogRef, busy: executing,
+    isOpen: !usesRunForm(eseguibile), onClose: close, ref: dialogRef, busy: run.busy,
   });
 
   // Formato e nome di partenza quando arriva l'eseguibile. Se il flusso e'
@@ -144,7 +145,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
     ?.filter(c => c.required && !mapping[c.name])
     ?.map(c => c.name) || [];
 
-  if (eseguibile?.manifest) {
+  if (usesRunForm(eseguibile)) {
     return (
       <ExecutableDynamicRunForm
         eseguibile={eseguibile}
@@ -438,13 +439,18 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                     {run.downloadError && <div className="esw-error" role="alert">❌ {run.downloadError}</div>}
                     {/* U13/U17 (UI-3): avanzamento, riscaricamento e pulizia esplicita. */}
                     <TransferProgress progress={run.downloadProgress} verb="Scaricamento" />
-                    <p className="esw-hint">{resultKeepNote(run.downloaded)}</p>
+                    {/* B-K5: un solo stato del risultato (useEseguibileRun.resultState). */}
+                    <p className="esw-hint">{run.resultNote}</p>
                     <div className="esw-actions">
-                      <button type="button" className="esw-btn esw-btn--ghost" onClick={close}>Chiudi</button>
-                      <button type="button" className="esw-btn esw-btn--ghost" onClick={() => run.discard()} disabled={run.downloading}>🗑 Elimina il risultato</button>
-                      <button type="button" className="esw-btn esw-btn--primary" onClick={handleDownload} disabled={run.downloading}>
-                        {run.downloading ? 'Scaricamento…' : (run.downloaded ? '⬇ Scarica di nuovo' : '⬇ Scarica il risultato')}
-                      </button>
+                      <button type="button" className="esw-btn esw-btn--ghost" onClick={close} disabled={run.busy}>Chiudi</button>
+                      {run.canDownload && (
+                        <>
+                          <button type="button" className="esw-btn esw-btn--ghost" onClick={() => run.discard()} disabled={run.busy}>🗑 Elimina il risultato</button>
+                          <button type="button" className="esw-btn esw-btn--primary" onClick={handleDownload} disabled={run.busy}>
+                            {run.downloading ? 'Scaricamento…' : (run.downloaded ? '⬇ Scarica di nuovo' : '⬇ Scarica il risultato')}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ) : null}

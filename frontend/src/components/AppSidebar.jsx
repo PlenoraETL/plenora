@@ -177,6 +177,7 @@ export default function AppSidebar() {
             className="app-sidebar__icon-btn"
             onClick={() => setShowPwdModal(true)}
             title="Cambia password"
+            aria-label="Cambia password"
           >
             {ICON.password}
           </button>

@@ -11,7 +11,7 @@
  * tests/shared/asyncArchitecture.contract.test.js).
  */
 
-import http from './http';
+import http, { sendOnPageExit } from './http';
 import { downloadBlob } from '../utils/downloadBlob';
 import { downloadProgress } from '../utils/transferProgress';
 import { requestErrorMessage } from '../utils/errorMessages';
@@ -71,6 +71,23 @@ export const downloadTaskOutput = async (taskId, filename = null, { onProgress =
     }
     throw err;
   }
+};
+
+/**
+ * Pulizia dell'esecuzione quando la pagina si chiude (scheda, finestra,
+ * ricarica: `pagehide`), per l'esecutore (UI conferma B-K4). Stesse route
+ * della chiusura della finestra, con `fetch keepalive` (http.sendOnPageExit):
+ *  - esecuzione ancora in corso: prima l'annullamento (DELETE /tasks/{id}),
+ *    perche' il risultato non arrivi a nessuno; quello che il worker avesse
+ *    gia' scritto lo toglie la scadenza lato server (output degli Eseguibili
+ *    2 ore, beat `_cleanup_eseguibili_outputs`; oggetti S3 con lifecycle);
+ *  - poi la pulizia completa (DELETE /tasks/{id}/full-cleanup).
+ * @returns {boolean} true se la pulizia e' partita.
+ */
+export const releaseTaskOnPageExit = (taskId, { active = false } = {}) => {
+  const id = encodeURIComponent(taskId);
+  if (active) sendOnPageExit('DELETE', `/tasks/${id}`);
+  return sendOnPageExit('DELETE', `/tasks/${id}/full-cleanup`);
 };
 
 /**

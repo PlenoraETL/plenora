@@ -149,9 +149,30 @@ def test_router_serializes_summary_row_at_api_edge(monkeypatch) -> None:
         "project_type": "arricchisci",
         "active_version": 1,
         "inputs_count": 1,
+        "has_manifest": False,
         "binding_warnings": [],
         "can_edit": False,
     }
+
+
+def test_summary_has_manifest_is_the_detail_rule(monkeypatch) -> None:
+    """UI conferma U14: la card di /run sceglie modulo o file con la stessa
+    regola della finestra di esecuzione (dettaglio: ``manifest`` della
+    versione attiva non nullo), non con ``expected_columns_count``."""
+    captured: list[str] = []
+    monkeypatch.setattr(eseguibili_db, "_fetchall", lambda sql, *a, **k: captured.append(sql) or [])
+    eseguibili_db.list_eseguibili(group_id="grp-1")
+    assert "(v.manifest IS NOT NULL) AS has_manifest" in captured[0]
+    assert "LEFT JOIN eseguibile_versions v ON v.id = e.active_version_id" in captured[0]
+
+    with_manifest = eseguibili_db.eseguibile_summary_row_from_db(_db_row(has_manifest=True))
+    without = eseguibili_db.eseguibile_summary_row_from_db(_db_row(has_manifest=None))
+    assert (with_manifest.has_manifest, without.has_manifest) == (True, False)
+    assert eseguibili_router._summary_response(with_manifest, _user())["has_manifest"] is True
+    # Dettaglio: stessa colonna (manifest della versione attiva).
+    detail = eseguibili_db.eseguibile_row_from_db(_db_row(active_manifest='{"inputs": []}'))
+    assert detail.manifest is not None
+    assert eseguibili_db.eseguibile_row_from_db(_db_row()).manifest is None
 
 
 def test_create_from_project_returns_typed_eseguibile_row(monkeypatch) -> None:

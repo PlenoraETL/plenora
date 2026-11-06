@@ -174,4 +174,28 @@ http.interceptors.response.use(
   }
 );
 
+/**
+ * Richiesta che deve partire anche mentre la pagina si chiude (UI conferma
+ * B-K4: pulizia dell'esecutore chiudendo la scheda). axios non sopravvive
+ * alla chiusura; `fetch` con `keepalive` si', e parte SUBITO, nello stesso
+ * gestore di `pagehide` (niente interceptor asincroni). Stessa origine e
+ * stesso token di sessione delle altre chiamate (CSP invariata). Non si
+ * aspetta la risposta: la pagina non c'e' piu'.
+ * @returns {boolean} true se la richiesta e' partita.
+ */
+export function sendOnPageExit(method, url) {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (!token || typeof fetch !== 'function') return false;
+  try {
+    fetch(`${API_ENDPOINT}${url}`, {
+      method,
+      keepalive: true,
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => { /* la pagina si sta chiudendo: niente da mostrare */ });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default http;

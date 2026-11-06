@@ -683,6 +683,10 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
           }
         },
         "title": "BeatHealthcheck",
@@ -3682,6 +3686,11 @@
             "title": "Group Id",
             "type": "string"
           },
+          "has_manifest": {
+            "default": false,
+            "title": "Has Manifest",
+            "type": "boolean"
+          },
           "icon": {
             "anyOf": [
               {
@@ -4905,6 +4914,18 @@
           "column": {
             "title": "Column",
             "type": "string"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
           },
           "operator": {
             "enum": [
@@ -6137,6 +6158,17 @@
             ],
             "title": "File Mode"
           },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
           "file_offset": {
             "anyOf": [
               {
@@ -6712,6 +6744,17 @@
               }
             ],
             "title": "Preview Username"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
           },
           "provider_id": {
             "anyOf": [

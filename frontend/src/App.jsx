@@ -29,35 +29,37 @@ import NavigationGuard from './components/common/NavigationGuard';
 import { role, can } from './utils/permissions';
 import { loginRedirectState } from './utils/navigation';
 import { EDITOR_LOADERS } from './utils/editorChunks';
+// Pagine al bisogno: dopo un deploy ricaricano solo loro (UI conferma C-K1).
+import { lazyPage } from './utils/chunkReload';
 
 // Lazy loading: ogni pagina viene caricata solo quando la route viene visitata.
 // Riduce il bundle iniziale da ~1 chunk a chunk separati per pagina.
 // LoginPage è eager (prima pagina che l'utente vede).
 import LoginPage from './pages/LoginPage';
 
-const ProjectList          = React.lazy(() => import('./pages/ProjectList'));
+const ProjectList          = lazyPage(() => import('./pages/ProjectList'));
 // Editor: caricatori dalla tabella unica (prefetch dalla dashboard, UI-4 V13).
-const EstraiEditor         = React.lazy(EDITOR_LOADERS.estrai);
-const ManipolaEditor       = React.lazy(EDITOR_LOADERS.manipola);
-const ConnectionManager    = React.lazy(() => import('./pages/ConnectionManager'));
-const ApiConnectionManager = React.lazy(() => import('./pages/ApiConnectionManager'));
-const ArricchisciEditor    = React.lazy(EDITOR_LOADERS.arricchisci);
-const FileManager          = React.lazy(() => import('./pages/FileManager'));
-const ScheduleList         = React.lazy(() => import('./pages/ScheduleList'));
-const LogViewer            = React.lazy(() => import('./pages/LogViewer'));
-const DataSourceManager    = React.lazy(() => import('./pages/DataSourceManager'));
-const UserManager          = React.lazy(() => import('./pages/UserManager'));
-const AdminBackupsPage     = React.lazy(() => import('./pages/AdminBackupsPage'));
-const AdminSystemStatusPage = React.lazy(() => import('./pages/AdminSystemStatusPage'));
-const AdminRuntimeConfigPage = React.lazy(() => import('./pages/AdminRuntimeConfigPage'));
-const AdminObjectStoragePage = React.lazy(() => import('./pages/AdminObjectStoragePage'));
-const AdminTaskRuntimePage = React.lazy(() => import('./pages/AdminTaskRuntimePage'));
-const EseguibiliList       = React.lazy(() => import('./pages/EseguibiliList'));
-const EsecutoreHome        = React.lazy(() => import('./pages/EsecutoreHome'));
-const TicketsList          = React.lazy(() => import('./pages/TicketsList'));
-const TicketDetail         = React.lazy(() => import('./pages/TicketDetail'));
-const OpenProjectPage      = React.lazy(() => import('./pages/OpenProjectPage'));
-const NotFoundPage         = React.lazy(() => import('./pages/NotFoundPage'));
+const EstraiEditor         = lazyPage(EDITOR_LOADERS.estrai);
+const ManipolaEditor       = lazyPage(EDITOR_LOADERS.manipola);
+const ConnectionManager    = lazyPage(() => import('./pages/ConnectionManager'));
+const ApiConnectionManager = lazyPage(() => import('./pages/ApiConnectionManager'));
+const ArricchisciEditor    = lazyPage(EDITOR_LOADERS.arricchisci);
+const FileManager          = lazyPage(() => import('./pages/FileManager'));
+const ScheduleList         = lazyPage(() => import('./pages/ScheduleList'));
+const LogViewer            = lazyPage(() => import('./pages/LogViewer'));
+const DataSourceManager    = lazyPage(() => import('./pages/DataSourceManager'));
+const UserManager          = lazyPage(() => import('./pages/UserManager'));
+const AdminBackupsPage     = lazyPage(() => import('./pages/AdminBackupsPage'));
+const AdminSystemStatusPage = lazyPage(() => import('./pages/AdminSystemStatusPage'));
+const AdminRuntimeConfigPage = lazyPage(() => import('./pages/AdminRuntimeConfigPage'));
+const AdminObjectStoragePage = lazyPage(() => import('./pages/AdminObjectStoragePage'));
+const AdminTaskRuntimePage = lazyPage(() => import('./pages/AdminTaskRuntimePage'));
+const EseguibiliList       = lazyPage(() => import('./pages/EseguibiliList'));
+const EsecutoreHome        = lazyPage(() => import('./pages/EsecutoreHome'));
+const TicketsList          = lazyPage(() => import('./pages/TicketsList'));
+const TicketDetail         = lazyPage(() => import('./pages/TicketDetail'));
+const OpenProjectPage      = lazyPage(() => import('./pages/OpenProjectPage'));
+const NotFoundPage         = lazyPage(() => import('./pages/NotFoundPage'));
 
 /**
  * Rimando a /login che ricorda dove si voleva andare (R7.5), ma mai dopo

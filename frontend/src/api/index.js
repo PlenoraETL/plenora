@@ -114,7 +114,7 @@ export {
   restoreCanvasVersion,
 } from './projects';
 
-export { downloadTaskOutput, cleanupTaskCompletely } from './tasks';
+export { downloadTaskOutput, cleanupTaskCompletely, releaseTaskOnPageExit } from './tasks';
 
 export {
   listEseguibili,

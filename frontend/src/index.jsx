@@ -7,16 +7,12 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { FRONTEND_ENV } from './config/runtimeEnv';
-import { installChunkReload } from './utils/chunkReload';
 import { installDraftHousekeeping } from './utils/localDrafts';
 import { setErrorReporter } from './utils/errorReporting';
 // Font ospitati con l'app (P31), prima dei CSS che li usano.
 import './assets/fonts/fonts.css';
 import './styles/App.css';
 
-// Dopo un deploy: un editor della build vecchia non si trova piu' -> si
-// ricarica la pagina una volta invece della schermata di errore critico.
-installChunkReload();
 
 // Copie di sicurezza: pulizia globale delle scadute e segnale di vita della
 // scheda (utils/localDrafts).

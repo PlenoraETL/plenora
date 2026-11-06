@@ -20,6 +20,7 @@ export function prefetchProjectEditor(projectType) {
   const type = EDITOR_LOADERS[projectType] ? projectType : 'estrai';
   if (prefetched.has(type)) return;
   prefetched.add(type);
-  // Un errore qui non conta: il clic rifara' l'import (e chunkReload decide).
+  // Un errore qui non conta e non ricarica MAI la pagina (UI conferma C-K1):
+  // il clic rifara' l'import dalla rotta (utils/chunkReload.lazyPage decide).
   EDITOR_LOADERS[type]().catch(() => { prefetched.delete(type); });
 }

@@ -25,16 +25,34 @@ export const LEAVE_DIALOG = {
 // Domande degli editor montati (una per montaggio).
 const probes = new Set();
 
+/*
+ * Uscita gia' confermata (UI conferma C-K1): l'utente ha risposto «Esci
+ * senza salvare» per gli editor montati ADESSO. Vale finche' cambia l'insieme
+ * degli editor (uno nuovo montato, o uno smontato a navigazione finita): una
+ * risposta non copre l'editor successivo. La leggono la ricarica dopo un
+ * deploy (utils/chunkReload) e il prompt nativo di beforeunload
+ * (hooks/useUnsavedChangesGuard), che quindi non chiede due volte.
+ */
+let leaveConfirmed = false;
+
 /** Registra un editor montato; restituisce la funzione che lo toglie. */
 export function registerLeaveProbe(hasUnsaved) {
   probes.add(hasUnsaved);
-  return () => { probes.delete(hasUnsaved); };
+  leaveConfirmed = false;
+  return () => { probes.delete(hasUnsaved); leaveConfirmed = false; };
 }
 
 export const isLeaveGuardActive = () => probes.size > 0;
 
 /** Regola UNICA: c'e' qualcosa da perdere uscendo dall'editor? */
 const hasSomethingToLose = () => [...probes].some(p => p());
+
+/** L'utente ha confermato l'uscita dagli editor montati. */
+export const markLeaveConfirmed = () => { leaveConfirmed = true; };
+export const isLeaveConfirmed = () => leaveConfirmed;
+
+/** Uscire ora farebbe perdere qualcosa senza che l'utente lo abbia confermato? */
+export const mustAskBeforeLeaving = () => !leaveConfirmed && hasSomethingToLose();
 
 /**
  * Regola del blocker: si chiede solo cambiando pagina (non per query o hash)
@@ -56,5 +74,7 @@ export function shouldBlockNavigation({ currentLocation, nextLocation }) {
  */
 export async function confirmLeave(confirm) {
   if (!hasSomethingToLose()) return true;
-  return Boolean(await confirm(LEAVE_DIALOG));
+  const ok = Boolean(await confirm(LEAVE_DIALOG));
+  if (ok) markLeaveConfirmed();
+  return ok;
 }

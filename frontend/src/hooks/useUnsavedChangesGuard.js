@@ -22,7 +22,7 @@ import { useCallback, useEffect } from 'react';
 import useCanvasStore from '../store/useCanvasStore';
 import { hasUnsavedChanges } from '../store/saveState';
 import { useConfirmOrDeny } from '../context/ConfirmContext';
-import { confirmLeave, registerLeaveProbe } from '../utils/leaveGuard';
+import { confirmLeave, isLeaveConfirmed, registerLeaveProbe } from '../utils/leaveGuard';
 
 const UNSAVED_MESSAGE = 'Hai modifiche non salvate. Vuoi davvero uscire?';
 
@@ -38,7 +38,9 @@ export function useUnsavedChangesGuard() {
     // Una domanda per montaggio (closure nuova: due editor non si tolgono a vicenda).
     const unregister = registerLeaveProbe(() => editorHasUnsaved());
     const handler = (event) => {
-      if (!editorHasUnsaved()) return undefined;
+      // Uscita gia' confermata nel dialog del progetto (ricarica dopo un
+      // deploy, utils/chunkReload): nessuna seconda domanda (UI conferma C-K1).
+      if (isLeaveConfirmed() || !editorHasUnsaved()) return undefined;
       event.preventDefault();
       // I browser moderni ignorano la stringa custom (mostrano un messaggio
       // generico) ma `returnValue` resta il modo standard per attivare il

@@ -66,16 +66,22 @@ class CronSchedule:
     def expr(self) -> str:
         return self._expr
 
+    def next_runs(self, after: datetime, count: int = 1) -> list[datetime]:
+        """Prossimi ``count`` spari dopo ``after``, aware nella beat-timezone.
+
+        Regola UNICA del calcolo: la usa ``is_due`` (quando sparare) e la
+        fotografia ``frontend/tests/fixtures/cronRunsGolden.json`` con cui il
+        wizard confronta le «prossime esecuzioni» che mostra (UI conferma C-K2).
+        """
+        it = croniter(self._expr, _as_aware(after).astimezone(beat_timezone()))
+        return [it.get_next(datetime) for _ in range(max(0, int(count)))]
+
     def is_due(self, last_run_at: datetime, now: datetime) -> tuple[bool, float]:
-        tz = beat_timezone()
-        last_local = _as_aware(last_run_at).astimezone(tz)
-        now_local = _as_aware(now).astimezone(tz)
+        now_local = _as_aware(now).astimezone(beat_timezone())
         # Dovuto se il prossimo fire dopo l'ultimo run e' gia' passato.
-        next_after_last = croniter(self._expr, last_local).get_next(datetime)
-        is_due = next_after_last <= now_local
+        is_due = self.next_runs(last_run_at)[0] <= now_local
         # Attesa fino al prossimo fire dopo adesso.
-        next_after_now = croniter(self._expr, now_local).get_next(datetime)
-        remaining = (next_after_now - now_local).total_seconds()
+        remaining = (self.next_runs(now_local)[0] - now_local).total_seconds()
         return is_due, max(0.0, remaining)
 
     def __str__(self) -> str:

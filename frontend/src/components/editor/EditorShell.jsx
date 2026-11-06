@@ -319,13 +319,14 @@ canvasConfig = EMPTY_OBJ,
 
   // Riordina: layout automatico come azione utente (annullabile, salvata).
   // dagre si scarica solo al primo «Riordina» (UI-4 V2: fuori dal chunk
-  // dell'editor); un chunk mancante dopo un deploy lo gestisce chunkReload.
+  // dell'editor). Un chunk mancante dopo un deploy NON ricarica la pagina
+  // (utils/chunkReload, UI conferma C-K1): il clic successivo riprova.
   const handleAutoLayout = useCallback(() => {
     if (isReadOnly) return;
     import('../canvas/autoLayout').then(({ autoLayout }) => {
       editNodes(current => autoLayout(current, useCanvasStore.getState().edges));
       requestAnimationFrame(() => reactFlow.fitView({ padding: 0.15, duration: 300 }));
-    }).catch(() => { /* chunk non caricato: utils/chunkReload */ });
+    }).catch((err) => { console.warn('[EditorShell] Riordina non disponibile:', err); });
   }, [isReadOnly, editNodes, reactFlow]);
 
   // Titolo del passo da cui si apre la palette (ricalcolato col contenuto).

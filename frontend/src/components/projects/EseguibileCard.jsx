@@ -1,6 +1,7 @@
 import React from 'react';
 import ActionMenu from '../common/ActionMenu';
 import BindingWarnings from '../eseguibili/BindingWarnings';
+import { runInputSummary } from '../eseguibili/runForm';
 
 /**
  * Card di un singolo eseguibile (catena on-demand). Il nome ed
@@ -24,8 +25,9 @@ function EseguibileCard({ item, onExecute, onDelete, canManage = false }) {
         {canManage && <BindingWarnings warnings={item.binding_warnings} />}
         <div className="pl__card-meta">
           <div>
-            <div className="pl__meta-key">Colonne attese</div>
-            <div className="pl__meta-val">{item.expected_columns_count ?? '—'}</div>
+            {/* UI conferma U14: stessa regola della finestra (runForm). */}
+            <div className="pl__meta-key">Da preparare</div>
+            <div className="pl__meta-val">{runInputSummary(item)}</div>
           </div>
           <div>
             <div className="pl__meta-key">Output</div>

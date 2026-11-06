@@ -19,7 +19,10 @@ import { ALLOWED_ENGLISH, CONCEPTS } from '../../src/utils/glossary';
 import { visibleTexts } from '../helpers/visibleText.js';
 import { SRC, sourceFiles } from '../helpers/sourceScan.js';
 
-const FILES = sourceFiles(/\.jsx?$/).filter(f => f.file !== 'utils/glossary.js' && !f.file.startsWith('mocks/'));
+// Anche utils/glossary.js (UI conferma U22: prima escluso, e la descrizione
+// dell'Output diceva «flusso»): del glossario restano fuori solo le parole
+// sostituite e i nomi di prima (tests/helpers/visibleText, vocabolario).
+const FILES = sourceFiles(/\.jsx?$/).filter(f => !f.file.startsWith('mocks/'));
 const TEXTS = FILES.flatMap(f => visibleTexts(f.abs));
 
 /*
@@ -57,9 +60,15 @@ describe('termini: un concetto, un termine, in tutta l\'app', () => {
   it('il perimetro e\' tutta l\'app (pagine, componenti, messaggi)', () => {
     expect(FILES.length).toBeGreaterThan(250);
     expect(TEXTS.length).toBeGreaterThan(3000);
-    for (const f of ['pages/EsecutoreHome.jsx', 'components/AppSidebar.jsx', 'components/eseguibili/EseguibileExecuteWizard.jsx', 'pages/ScheduleList.jsx']) {
+    for (const f of ['pages/EsecutoreHome.jsx', 'components/AppSidebar.jsx', 'components/eseguibili/EseguibileExecuteWizard.jsx', 'pages/ScheduleList.jsx',
+      'utils/glossary.js', 'utils/navItems.js', 'utils/projectTypes.js', 'utils/shortcuts.js']) {
       expect(FILES.map(x => x.file)).toContain(f);
     }
+    // Del glossario si leggono nomi e descrizioni (anche delle operazioni),
+    // non il vocabolario delle parole sostituite.
+    const glossary = TEXTS.filter(t => t.file === 'utils/glossary.js');
+    expect(glossary.some(t => t.text === 'Il file finale del progetto')).toBe(true);
+    expect(glossary.some(t => /^(flusso|flussi|workflow)$/i.test(t.text))).toBe(false);
   });
 
   it('nessun termine sostituito nel testo visibile', () => {

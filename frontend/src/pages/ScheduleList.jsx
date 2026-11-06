@@ -371,6 +371,7 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
           onCreated={() => { setShowWizard(false); setEditingId(null); loadData(); }}
           editId={editingId}
           defaultProjectId={projectFilter}
+          schedulerTimeZone={health.data?.timezone}
         />
       )}
       <ConfirmDialog {...confirmModal} />

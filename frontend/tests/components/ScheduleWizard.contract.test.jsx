@@ -215,4 +215,28 @@ describe('ScheduleWizard', () => {
     expect(toastMock.error).toHaveBeenCalled();
     expect(schedulesMock.updateSchedule).not.toHaveBeenCalled();
   });
+
+  // UI conferma C-K2: le prossime esecuzioni nel fuso in cui il beat valuta
+  // il cron (BEAT_TIMEZONE), non in quello salvato nella pianificazione.
+  it('shows the next runs in the scheduler time zone and says the saved one does not move them', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 6, 9, 17, 30)));
+    try {
+      apiIndexMock.listProjects.mockResolvedValueOnce([{ id: 'proj-1', name: 'Project One', project_type: 'estrai' }]);
+      apiIndexMock.listConnections.mockResolvedValueOnce([]);
+      render(<ScheduleWizard onClose={vi.fn()} onCreated={vi.fn()} schedulerTimeZone="Asia/Tokyo" />);
+      await userEvent.click((await screen.findAllByText('Project One'))[0]);
+      await userEvent.click(screen.getByRole('button', { name: /avanti/i }));
+      expect(screen.getByText('Orari nel fuso in cui il server esegue le pianificazioni (Asia/Tokyo).')).toBeInTheDocument();
+      // 0 3 * * * a Tokyo: alle 18:17 del 6 la prossima e' il 7 alle 03:00.
+      const runs = screen.getByRole('list', { name: 'Prossime esecuzioni' });
+      expect(runs.firstChild.textContent).toBe('sabato 7 novembre 2026, 03:00');
+      // Fuso salvato (Europe/Rome) diverso da quello del beat: lo si dice.
+      expect(screen.getByRole('note').textContent).toMatch(/nel fuso Asia\/Tokyo: questo campo non sposta gli orari/);
+      await userEvent.selectOptions(screen.getByLabelText('Timezone'), 'Asia/Tokyo');
+      expect(screen.queryByRole('note')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -41,6 +41,13 @@
   --plen-err-bg:     rgba(248, 113, 113, 0.14);
   --plen-blue-bg:    rgba(75, 139, 255, 0.16);
   --plen-blue-border: rgba(75, 139, 255, 0.45);
+  /* Testo su riempimento pieno (badge e contatori, UI conferma C-K6): le
+     coppie testo/riempimento sono dichiarate e calcolate da
+     tests/shared/textContrast.contract.test.js (AA in entrambi i temi). */
+  --plen-on-fill:     #FFFFFF;
+  --plen-fill-blue:   #2563EB;
+  --plen-fill-violet: #7C3AED;
+  --plen-fill-ok:     #15803D;
 
   /* Layout */
   --plen-topbar:  52px;

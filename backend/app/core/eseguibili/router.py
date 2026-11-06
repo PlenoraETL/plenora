@@ -87,6 +87,7 @@ def _summary_response(
         "project_type": record.project_type,
         "active_version": record.active_version,
         "inputs_count": record.inputs_count,
+        "has_manifest": record.has_manifest,
         "binding_warnings": eseguibili_service.binding_warnings(
             list(record.bindings), {"nodes": list(record.binding_target_nodes)},
         ),

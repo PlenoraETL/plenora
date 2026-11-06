@@ -28,7 +28,7 @@ import { useAuth } from '../../context/AuthContext';
 import { can } from '../../utils/permissions';
 import ExecutionModal from '../modals/ExecutionModal';
 import { executionResult } from '../../hooks/useExecution';
-import { resultKeepNote, useEseguibileRun } from './useEseguibileRun';
+import { useEseguibileRun } from './useEseguibileRun';
 import { initialOutputFormat, outputFormatOptions } from '../../constants/outputFormats';
 import './EseguibileExecuteWizard.css';
 import { formatBytes, formatNumber } from '../../utils/format';
@@ -332,15 +332,15 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
       onCancel={run.task.isActive && state.taskId ? run.cancel : null}
       cancelling={state.cancelling}
       cancelError={state.cancelError}
-      onDownload={state.phase === 'success' ? () => run.download(`${base}.${outputFormat}`) : null}
+      onDownload={run.canDownload ? () => run.download(`${base}.${outputFormat}`) : null}
       downloading={run.downloading}
       downloadError={run.downloadError}
       // U13 (UI-3): scaricare non chiude, il file si riscarica dalla
       // finestra, chiudere senza scaricare chiede, «Elimina» e' esplicito.
       downloadProgress={run.downloadProgress}
       downloaded={run.downloaded}
-      downloadNote={state.phase === 'success' ? resultKeepNote(run.downloaded) : null}
-      onDiscard={state.phase === 'success' ? () => run.discard() : null}
+      downloadNote={run.resultNote}
+      onDiscard={run.canDownload ? () => run.discard() : null}
       projectName={eseguibile.name}
       backgroundable={false}
     />

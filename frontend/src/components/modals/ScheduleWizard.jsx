@@ -28,9 +28,11 @@ const STEPS = [
 ];
 
 /*
- * UI-4 (U31): l'espressione in parole e le prossime 5 esecuzioni nel fuso
- * scelto, calcolate qui (utils/cron, stessa regola dello scheduler): niente
- * sito esterno per capire un cron.
+ * UI-4 (U31): l'espressione in parole e le prossime 5 esecuzioni, calcolate
+ * qui (utils/cron, stessa regola dello scheduler): niente sito esterno per
+ * capire un cron. UI conferma C-K2: le esecuzioni sono nel fuso in cui il
+ * beat valuta OGNI cron (BEAT_TIMEZONE, GET /schedules/healthcheck →
+ * `timezone`), non nel fuso salvato nella pianificazione, che il beat non usa.
  */
 function CronPreview({ expression, timeZone }) {
   const words = describeCron(expression);
@@ -46,7 +48,7 @@ function CronPreview({ expression, timeZone }) {
       ) : (
         <div className="wiz-cron-preview__never">Questa espressione non capita nei prossimi anni.</div>
       )}
-      <div className="wiz-hint">Orari nel fuso {timeZone || 'del browser'}.</div>
+      <div className="wiz-hint">Orari nel fuso in cui il server esegue le pianificazioni ({timeZone}).</div>
     </div>
   );
 }
@@ -130,8 +132,10 @@ export function schedulePayload(form, fields) {
   };
 }
 
-function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = null }) {
+function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = null, schedulerTimeZone = null }) {
   const toast = useToast();
+  // Fuso del beat; finche' non e' noto, il predefinito del backend (lo stesso).
+  const schedulerTz = schedulerTimeZone || DEFAULT_TIMEZONE;
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   // Fase 5 T2: dati del modulo dall'hook comune (id di richiesta). Il
@@ -338,7 +342,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                   placeholder="0 3 * * *" />
                 <span className="wiz-hint">minuto · ora · giorno · mese · giorno_settimana</span>
                 {errors.cron_expression && <span className="wiz-error">{errors.cron_expression}</span>}
-                <CronPreview expression={form.cron_expression} timeZone={form.timezone} />
+                <CronPreview expression={form.cron_expression} timeZone={schedulerTz} />
               </div>
               <div className="wiz-row">
                 <div className="wiz-field">
@@ -356,6 +360,11 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                     {timezoneOptions(form.timezone).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                   {errors.timezone && <span className="wiz-error">{errors.timezone}</span>}
+                  {form.timezone && form.timezone !== schedulerTz && (
+                    <span className="wiz-hint" role="note">
+                      Il server esegue ogni pianificazione nel fuso {schedulerTz}: questo campo non sposta gli orari.
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

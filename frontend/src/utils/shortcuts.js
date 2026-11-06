@@ -14,6 +14,17 @@
 const mod = (e) => Boolean(e.ctrlKey || e.metaKey);
 const key = (e, k) => String(e.key || '').toLowerCase() === k;
 
+/*
+ * Regola dei tasti che scrivono un carattere (UI conferma C-K3): si
+ * riconoscono dal CARATTERE prodotto (`event.key`), mai dalla combinazione
+ * con cui lo si ottiene. Maiuscolo serve a produrre il carattere su un layout
+ * e non su un altro (`?` = Maiusc+/ sulla tastiera US, Maiusc+' su quella
+ * italiana; `/` = Maiusc+7 sulla italiana), quindi non conta; ⌘/Ctrl e Alt
+ * (anche AltGr, che arriva come Ctrl+Alt) lo escludono. Prima «/» italiano
+ * (Maiusc+7) apriva insieme la palette dei passi e la guida dei tasti.
+ */
+const typed = (...chars) => (e) => !mod(e) && !e.altKey && chars.includes(String(e.key || ''));
+
 export const SHORTCUTS = Object.freeze([
   // ── Ovunque ──────────────────────────────────────────────────────────
   {
@@ -24,7 +35,7 @@ export const SHORTCUTS = Object.freeze([
   {
     id: 'help', group: 'Ovunque', keys: ['?'],
     label: 'Mostra questa guida (anche dal pulsante «?»)',
-    match: (e) => e.key === '?' || (e.key === '/' && e.shiftKey),
+    match: typed('?'),
   },
   {
     id: 'close', group: 'Ovunque', keys: ['Esc'],
@@ -41,7 +52,7 @@ export const SHORTCUTS = Object.freeze([
   {
     id: 'add_step', group: 'Editor', keys: ['/'], altKeys: ['A'],
     label: 'Aggiungi un passo (con il fuoco sul canvas)',
-    match: (e) => !mod(e) && !e.altKey && (e.key === '/' || key(e, 'a')),
+    match: typed('/', 'a', 'A'),
   },
   {
     id: 'undo', group: 'Editor', keys: ['⌘/Ctrl', 'Z'],
@@ -88,7 +99,7 @@ export const SHORTCUTS = Object.freeze([
   {
     id: 'connect', group: 'Editor', keys: ['C'],
     label: 'Collega il nodo selezionato a un altro (da tastiera)',
-    match: (e) => !mod(e) && !e.altKey && !e.shiftKey && key(e, 'c'),
+    match: typed('c', 'C'),
   },
   {
     id: 'editor_guide', group: 'Editor', keys: ['F1'],

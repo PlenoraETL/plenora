@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useBlocker } from 'react-router-dom';
 import { useConfirmOrDeny } from '../../context/ConfirmContext';
-import { LEAVE_DIALOG, shouldBlockNavigation } from '../../utils/leaveGuard';
+import { LEAVE_DIALOG, markLeaveConfirmed, shouldBlockNavigation } from '../../utils/leaveGuard';
 
 export default function NavigationGuard() {
   const confirm = useConfirmOrDeny();
@@ -25,8 +25,9 @@ export default function NavigationGuard() {
     Promise.resolve(confirm(LEAVE_DIALOG)).then((ok) => {
       const current = blockerRef.current;
       if (!live || current.state !== 'blocked') return;
-      if (ok) current.proceed();
-      else current.reset();
+      // Uscita confermata: la ricarica dopo un deploy (utils/chunkReload) e il
+      // prompt di beforeunload non chiedono di nuovo (UI conferma C-K1).
+      if (ok) { markLeaveConfirmed(); current.proceed(); } else current.reset();
     });
     // eslint-disable-next-line consistent-return
     return () => { live = false; };

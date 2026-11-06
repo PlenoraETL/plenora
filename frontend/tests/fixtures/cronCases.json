@@ -46,7 +46,6 @@
     { "expr": "*/61 * * * *", "valid": true },
     { "expr": "* */24 * * *", "valid": true },
     { "expr": "0 0 */32 * *", "valid": true },
-    { "expr": "* * * * 7-7", "valid": true },
 
     { "expr": "", "valid": false },
     { "expr": "abc", "valid": false },
@@ -85,6 +84,7 @@
     { "expr": "0 0 * * 1#6", "valid": false },
     { "expr": "0 0 * * 1#2,3", "valid": false },
 
-    { "expr": "0 0 1-L * *", "valid": false, "stricter": true }
+    { "expr": "0 0 1-L * *", "valid": false, "stricter": true },
+    { "expr": "* * * * 7-7", "valid": false, "stricter": true, "why": "croniter lo esegue OGNI giorno (non solo la domenica): il frontend lo rifiuta invece di mostrare esecuzioni diverse da quelle dello scheduler" }
   ]
 }

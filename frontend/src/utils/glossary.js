@@ -64,7 +64,7 @@ const T = {
     formerNames: ['Unione', 'Multi Join', 'MultiJoin'],
   },
   api_enrich: { name: 'Arricchimento API', icon: ICON.api, description: 'Chiama una API per ogni riga' },
-  output: { name: 'Output', icon: ICON.output, description: 'Il file finale del flusso' },
+  output: { name: 'Output', icon: ICON.output, description: 'Il file finale del progetto' },
   load_db: {
     name: 'Carica su database', icon: ICON.load_db, description: "Scrive l'Output in una tabella o su un servizio REST",
     formerNames: ['Carica DB', 'CARICA DB', 'CARICA'],

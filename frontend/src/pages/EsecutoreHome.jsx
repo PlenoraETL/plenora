@@ -9,7 +9,11 @@
  * `cleanupTaskCompletely(taskId)` per rimuovere ogni traccia
  * dell'esecuzione dal server (results.db, log entries, file su disco,
  * record del task): dopo il download, alla chiusura senza download e con
- * un esito fallito o annullato (Fase 5 T2, R9.3: useEseguibileRun).
+ * un esito fallito o annullato (Fase 5 T2, R9.3: useEseguibileRun), alla
+ * scadenza della copia scaricata e chiudendo la scheda o il browser
+ * (`releaseTaskOnPageExit`, fetch keepalive; UI conferma B-K4). Cio' che
+ * non arriva al server (rete giu', browser chiuso di colpo) lo toglie la
+ * scadenza lato server degli output degli Eseguibili (2 ore).
  *
  * Route: /run
  * Accesso: solo utenti con role === 'esecutore'.
@@ -18,12 +22,13 @@
  * Top bar: logo + saluto + cambia password + logout. Niente altro.
  */
 import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { cleanupTaskCompletely } from '../api';
+import { cleanupTaskCompletely, releaseTaskOnPageExit } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useSignOut } from '../hooks/useSignOut';
 import { useToast } from '../hooks/useToast';
 import { useHexCanvas } from '../utils/hexCanvas';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
+import { runInputSummary, usesRunForm } from '../components/eseguibili/runForm';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
 import PlenoraLogo from '../components/common/PlenoraLogo';
@@ -58,11 +63,10 @@ function EseguibileCard({ item, onRun }) {
         )}
         <div className="esh__card-meta">
           {/* UI-4 (U14): con il modulo dinamico non ci sono colonne da
-              preparare: si compila un modulo (mai «0 colonne attese»). */}
+              preparare: si compila un modulo (mai «0 colonne attese»). La
+              scelta e' quella della finestra (runForm, dal manifest). */}
           <span className="esh__card-meta-item">
-            {item.expected_columns_count > 0
-              ? `📋 File con ${item.expected_columns_count} ${item.expected_columns_count === 1 ? 'colonna' : 'colonne'}`
-              : '📝 Modulo da compilare'}
+            {usesRunForm(item) ? '📝' : '📋'} {runInputSummary(item)}
           </span>
           {item.default_output_format && (
             <span className="esh__card-meta-item">
@@ -105,7 +109,14 @@ function EsecutoreHome() {
   // traccia dell'esecuzione" risultava violato senza segnalazione UI.
   // Post-fix: legge `partialCleanup` dal return strutturato e mostra
   // toast all'utente in caso di problemi, per trasparenza.
-  const handleAfterDownload = useCallback(async (taskId) => {
+  // UI conferma B-K4: chiudendo la scheda (`pageExit`) la pulizia parte con
+  // fetch keepalive (stesse route; con `active` prima l'annullamento): non
+  // c'e' una pagina a cui mostrare l'esito.
+  const handleAfterDownload = useCallback(async (taskId, { pageExit = false, active = false } = {}) => {
+    if (pageExit) {
+      releaseTaskOnPageExit(taskId, { active });
+      return;
+    }
     try {
       const result = await cleanupTaskCompletely(taskId);
       if (result?.partialCleanup) {
