@@ -53,7 +53,6 @@ def _neutralize_unrelated_tick_hooks(monkeypatch):
         "_cleanup_task_results",
         "_drain_task_dispatch_outbox",
         "_recover_runtime_leases",
-        "_ensure_optional_indexes",
     )
     for name in hook_names:
         monkeypatch.setattr(

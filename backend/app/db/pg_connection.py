@@ -268,19 +268,6 @@ def get_connection():
     return _get_pool().getconn()
 
 
-def connect_dedicated() -> psycopg.Connection:
-    """Connessione NUOVA fuori dal pool, in autocommit (stesso search_path).
-
-    Per le istruzioni che non possono stare in una transazione (CREATE INDEX
-    CONCURRENTLY, app/db/optional_indexes): chi la apre la chiude, quindi lo
-    stato di sessione che imposta non torna mai nel pool.
-    """
-    _load_pool_config()
-    conn = psycopg.connect(_DATABASE_URL, autocommit=True)
-    _configure_connection(conn)
-    return conn
-
-
 def put_connection(conn):
     """Rimette una connessione nel pool."""
     try:

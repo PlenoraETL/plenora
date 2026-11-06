@@ -236,11 +236,3 @@ def test_system_status_read_audit_is_sampled_with_config_window():
     assert 'audit_action(action="admin.system_status.read", sample_reads=True)' in src
     assert Settings.DEFAULTS["AUDIT_READ_SAMPLE_SECONDS"] > 0
 
-
-def test_log_runs_latest_by_project_indexes_are_declared():
-    # Semplificazione H5: indici facoltativi creati dal beat dopo l'avvio
-    # (app/db/optional_indexes), non piu' una migrazione.
-    from app.db.optional_indexes import OPTIONAL_INDEXES
-
-    assert OPTIONAL_INDEXES["idx_log_runs_project_ts_start"] == ("log_runs", "project_id, ts_start DESC")
-    assert OPTIONAL_INDEXES["idx_log_runs_group_project_ts_start"] == ("log_runs", "group_id, project_id, ts_start DESC")

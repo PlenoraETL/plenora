@@ -11,9 +11,8 @@ fallirebbe senza la correzione:
   destinazione, cosi' il client invalida il suo catalogo tabelle;
 - A-K10: la lista dei file a cursore (next_cursor dalle righe del DB, errore
   che propaga, nessun file saltato o ripetuto da un caricamento in mezzo);
-- A-K11: gli indici di log_runs non sono piu' una migrazione: li crea il beat
-  dopo l'avvio (semplificazione H5, app/db/optional_indexes; test in
-  tests2/contract/test_ui_semplificazione_h_contract.py);
+- A-K11: gli indici di log_runs non sono piu' una migrazione; tolti anche dal
+  beat dopo il quinto giro di lettura (J2): C25 resta aperta e dichiarata;
 - C-K10: i conteggi della dashboard indipendenti e senza can_edit per riga.
 """
 

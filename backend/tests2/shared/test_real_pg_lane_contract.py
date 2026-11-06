@@ -55,8 +55,9 @@ def _real_pg_tests():
 
 def test_every_real_postgres_test_carries_the_real_pg_mark():
     found = _real_pg_tests()
-    # Semplificazione H5/H6: tolti i 4 test del lock e del CONCURRENTLY all'avvio, aggiunti 2.
-    assert len(found) >= 5, found
+    # Semplificazione H5/H6: tolti i 4 test del lock e del CONCURRENTLY all'avvio, aggiunti 2;
+    # quinto giro (J2): tolti gli indici facoltativi dal beat e il loro test.
+    assert len(found) >= 4, found
     unmarked = [(f, n) for f, n, decs in found if not decs & {"real_pg_marks", "pytest.mark.real_pg"}]
     assert unmarked == []
 

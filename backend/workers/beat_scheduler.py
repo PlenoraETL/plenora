@@ -28,7 +28,6 @@ from app.core.scheduler.beat_schedule_config import beat_schedule_config
 from app import config as app_config
 from app.core.eseguibili import download_claim_store, output_store
 from app.core.orchestrator import task_cleanup
-from app.db import optional_indexes
 from app.core.io import object_storage as object_storage_module
 from app.core.scheduler.job_dispatcher import (
     SCHEDULE_PIPELINE_TASK_NAME,
@@ -207,7 +206,6 @@ class PlenoraBeatScheduler:
     _last_temp_orphan_cleanup: float = 0.0
     _last_storage_reconcile: float = 0.0
     _last_task_results_cleanup: float = 0.0
-    _last_optional_indexes: float = 0.0
 
     def tick(self, event_t: Optional[object] = None, **kwargs: object) -> float:
         """Tick del beat:
@@ -237,7 +235,6 @@ class PlenoraBeatScheduler:
         self._cleanup_task_results()
         self._drain_task_dispatch_outbox()
         self._recover_runtime_leases()
-        self._ensure_optional_indexes()
         # Gli schedule dovuti passano dal layer dispatch mantenendo la stessa
         # valutazione di scadenza di BeatEntry.is_due.
         return self._emit_due_via_dispatch()
@@ -1506,22 +1503,6 @@ class PlenoraBeatScheduler:
                 )
 
     # Persistenza su DB
-
-    def _ensure_optional_indexes(self) -> None:
-        """Ogni 10 minuti crea gli indici facoltativi mancanti (H5).
-
-        Fuori dall'avvio: un CREATE INDEX CONCURRENTLY che aspetta transazioni
-        aperte non blocca piu' il backend; qui rinuncia dopo pochi secondi e
-        riprova al giro dopo (app/db/optional_indexes).
-        """
-        now = _t.time()
-        if now - self._last_optional_indexes < 600:
-            return
-        self._last_optional_indexes = now
-        try:
-            optional_indexes.ensure_optional_indexes(_PG_CONNECTION_MODULE.connect_dedicated)
-        except Exception as e:
-            logger.warning(f"Indici facoltativi non verificati: {e}")
 
     def _cleanup_task_results(self) -> None:
         """Sweep TTL della tabella task_results.

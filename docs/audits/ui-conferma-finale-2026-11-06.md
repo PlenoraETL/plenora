@@ -85,3 +85,24 @@ Tutte le voci dell'elenco sopra sono chiuse o dichiarate. Regressioni trovate:
 Correzione (semplificazione, 06/11/2026): `docs/development/piano-fase5-2026-11.md`, sezione «UI conferma
 finale — semplificazione H1–H7». Tolti la coda e lo sweep delle pulizie, il percorso «fuori transazione»
 e il lock di sessione delle migrazioni, il ritorno con Esc/clic di VirtualList.
+
+## Quinto giro, su bec57a5a (06/11/2026): parti tolte dal deploy
+
+H1–H7 risultano chiuse. Il giro ha trovato J1–J6. Come stabilito prima del quinto giro, le voci che
+nascono da macchinario nuovo non si correggono ancora: le parti che le causano si tolgono dal deploy.
+
+- **J1 (A, deploy)**: con l'installer di bec57a5a, worker e beat partivano solo con `/ready` verde. Ma
+  `/ready` richiede gli heartbeat di worker e beat, quindi l'installer si bloccava da solo e la
+  produzione restava senza worker né beat. **Tolto**: `scripts/install-native.ps1` è tornato quello di
+  `e2bada1b`, già in produzione. Non serve più aspettare il backend, perché gli indici non si creano
+  più all'avvio.
+- **J2 (M)**: il beat costruiva gli indici facoltativi dentro il tick, senza un limite alla durata.
+  **Tolto**: `app/db/optional_indexes.py`, la chiamata nel beat e `pg_connection.connect_dedicated`.
+  **C25 resta aperta e dichiarata**: `/pipeline-runs/latest-by-project` senza indice dedicato, come
+  prima di UI-1.
+- **J3–J6 (B), dichiarate**:
+  - J3: dopo una pulizia parziale un nuovo tentativo può dare 404; il record scade dopo 24 ore.
+  - J4: «già pulito» quando record e metadati sono scaduti; i `log_runs` li toglie la retention.
+  - J5: un'eccezione non gestita nel recupero delle lease salta le pulizie richieste per gli altri task
+    di quel worker; le riprende il client all'apertura successiva di `/run`.
+  - J6: le chiavi scadute di `kv_store` non vengono tolte.

@@ -5,10 +5,9 @@ c916dc42». Un test per voce, che fallirebbe senza la correzione (le voci della
 pulizia H1/H2/H4 sono in tests2/orchestrator/unit/test_full_cleanup_order_contract.py):
 
 - H5: nessuna migrazione puo' aspettare all'avvio un CREATE INDEX
-  CONCURRENTLY (il runner non ha piu' il percorso «fuori transazione»); gli
-  indici facoltativi li crea il beat dopo l'avvio, con attese di pochi
-  secondi e riprova al giro dopo; l'installer avvia worker e beat solo col
-  backend pronto;
+  CONCURRENTLY (il runner non ha piu' il percorso «fuori transazione»).
+  Dopo il quinto giro (J1, J2) gli indici facoltativi nel beat e l'attesa di
+  /ready nell'installer sono stati tolti: l'installer e' quello di e2bada1b;
 - H6: le istanze che partono insieme si mettono in fila su un advisory lock
   di TRANSAZIONE (si rilascia da solo: niente unlock che possa fallire e
   lasciare il lock su una connessione del pool); chi arriva secondo trova
@@ -20,9 +19,7 @@ from __future__ import annotations
 import inspect
 import re
 import threading
-import time
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -49,115 +46,6 @@ def test_no_migration_builds_an_index_concurrently():
     src = inspect.getsource(mr)
     for gone in ("no-transaction", "lock_timeout", "pg_advisory_unlock", "pg_advisory_lock("):
         assert gone not in src, gone
-
-
-class _FakeIndexConn:
-    """Connessione finta: stato degli indici e istruzioni eseguite."""
-
-    def __init__(self, states, *, lock_fail=()):
-        self.states = dict(states)
-        self.lock_fail = set(lock_fail)
-        self.executed: list[str] = []
-        self.closed = False
-
-    def execute(self, stmt, params=()):
-        text = stmt.as_string(None) if hasattr(stmt, "as_string") else str(stmt)
-        self.executed.append(text)
-        if "pg_index" in text:
-            state = self.states.get(params[0], "missing")
-            row = None if state == "missing" else {"valid": state == "valid", "building": state == "building"}
-            return SimpleNamespace(fetchone=lambda: row)
-        if "CREATE INDEX" in text:
-            name = next(n for n in self.states if f'"{n}"' in text)
-            if name in self.lock_fail:
-                import psycopg
-                raise psycopg.errors.LockNotAvailable("canceling statement due to lock timeout")
-        return SimpleNamespace(fetchone=lambda: None)
-
-    def close(self):
-        self.closed = True
-
-
-def test_optional_indexes_create_what_is_missing_and_retry_on_a_busy_table():
-    from app.db import optional_indexes as oi
-
-    names = list(oi.OPTIONAL_INDEXES)
-    conn = _FakeIndexConn({names[0]: "invalid", names[1]: "missing"}, lock_fail={names[1]})
-    created = oi.ensure_optional_indexes(lambda: conn)
-    assert created == [names[0]]  # il secondo: lock non ottenuto, al giro dopo
-    assert conn.closed
-    assert conn.executed[0] == f"SET lock_timeout = '{oi.LOCK_TIMEOUT}'"
-    drop = next(i for i, t in enumerate(conn.executed) if "DROP INDEX CONCURRENTLY" in t)
-    create = next(i for i, t in enumerate(conn.executed) if "CREATE INDEX CONCURRENTLY" in t)
-    assert drop < create  # INVALID: si toglie, poi si ricrea
-
-
-def test_optional_indexes_leave_valid_and_building_ones_alone():
-    from app.db import optional_indexes as oi
-
-    names = list(oi.OPTIONAL_INDEXES)
-    conn = _FakeIndexConn({names[0]: "valid", names[1]: "building"})
-    assert oi.ensure_optional_indexes(lambda: conn) == []
-    assert not any("DROP" in t or "CREATE" in t for t in conn.executed)
-    assert conn.closed
-
-
-def test_the_beat_builds_optional_indexes_every_ten_minutes():
-    import workers.beat_scheduler as beat
-
-    calls: list = []
-    sched = SimpleNamespace(_last_optional_indexes=0.0)
-    with patch("app.db.optional_indexes.ensure_optional_indexes", side_effect=calls.append):
-        beat.PlenoraBeatScheduler._ensure_optional_indexes(sched)
-        beat.PlenoraBeatScheduler._ensure_optional_indexes(sched)  # entro 10 min: niente
-    assert len(calls) == 1
-    assert "self._ensure_optional_indexes()" in inspect.getsource(beat.PlenoraBeatScheduler.tick)
-
-
-def test_installer_starts_workers_and_beat_only_with_the_backend_ready():
-    text = (REPO_ROOT / "scripts" / "install-native.ps1").read_text(encoding="utf-8-sig")
-    start = text.index("# Avvio in ordine: backend")
-    block = text[start:text.index("Get-Service plenora-*", start)]
-    backend = block.index("Start-Service 'plenora-backend'")
-    ready = block.index("Wait-BackendReady")
-    workers = block.index("foreach ($id in $workerServiceIds")
-    assert backend < ready < workers
-    assert "'plenora-backend') + $workerServiceIds" not in block
-
-
-@real_pg_marks
-def test_optional_indexes_never_wait_long_and_recover_on_real_postgres(monkeypatch):
-    """Una transazione aperta su log_runs: il giro rinuncia in pochi secondi
-    (nessun errore); chiusa la transazione, il giro dopo toglie l'INVALID e
-    crea gli indici validi."""
-    from app.db import optional_indexes as oi
-
-    monkeypatch.setattr(oi, "LOCK_TIMEOUT", "1s")
-    with real_pg_schema() as conn:
-        schema = conn.execute("SELECT current_schema() AS s").fetchone()["s"]
-        conn.execute("CREATE TABLE log_runs (id text, project_id text, group_id text, ts_start timestamptz)")
-        connect = lambda: _real_pg.connect(search_path=schema)  # noqa: E731
-        blocker = _real_pg.connect(autocommit=False, search_path=schema)
-        try:
-            blocker.execute("INSERT INTO log_runs VALUES ('r', 'p', 'g', now())")  # transazione aperta
-            started = time.monotonic()
-            first = oi.ensure_optional_indexes(connect)
-            assert time.monotonic() - started < 15
-            assert first == []
-        finally:
-            blocker.rollback()
-            blocker.close()
-        second = oi.ensure_optional_indexes(connect)
-        rows = conn.execute(
-            "SELECT c.relname, i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
-            "JOIN pg_namespace ns ON ns.oid = c.relnamespace WHERE ns.nspname = %s "
-            "AND c.relname LIKE 'idx_log_runs%%' ORDER BY 1", (schema,),
-        ).fetchall()
-    assert sorted(second) == sorted(oi.OPTIONAL_INDEXES)
-    assert [(r["relname"], r["indisvalid"]) for r in rows] == [
-        ("idx_log_runs_group_project_ts_start", True),
-        ("idx_log_runs_project_ts_start", True),
-    ]
 
 
 # ── H6: lock di transazione, chi arriva secondo salta ──────────────────────

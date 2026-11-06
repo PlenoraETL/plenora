@@ -486,3 +486,15 @@ Limite dichiarato (H2): se la cancellazione dei metadati fallisce in silenzio (i
 Guardie invariate: broad-catch al budget (785), import locali sotto il tetto (gli import del beat sono in testa al modulo); la soglia minima del test di scoperta dei test su PG vero scende da 7 a 5 perche' 4 di quei test riguardavano il macchinario tolto (2 nuovi). Il worker legge la richiesta di pulizia solo per i task delle esecuzioni (`_RUN_BACKED_ACTORS`), non per beat e manutenzione.
 
 Verifiche (base `603a09e6`): frontend eslint pulito, vitest 206 file / 5.991 test passati, build; backend (comando completo delle cartelle tests2) 29.946 passati, 0 falliti, 61 saltati; test su PostgreSQL vero con `scripts/run_real_pg_tests.py --docker "wsl -e docker"`: 6 passati (tra cui i 2 nuovi: indici facoltativi con una transazione aperta, due istanze sulla stessa migrazione), container rimosso; snapshot OpenAPI rigenerato (descrizioni di 204/202/207 di full-cleanup).
+
+## UI — quinto giro di lettura e chiusura (06/11/2026)
+
+Il quinto giro (su `bec57a5a`) ha trovato J1 (installer bloccato da `/ready`, che richiede worker e
+beat) e J2 (indici costruiti nel tick del beat senza limite di durata). Le due parti sono state
+**tolte** invece di correggerle:
+- installer riportato a `e2bada1b`;
+- indici facoltativi tolti dal beat; C25 resta aperta.
+
+J3–J6 sono dichiarate in `docs/audits/ui-conferma-finale-2026-11-06.md`. Giri di lettura che hanno
+trovato difetti: 5, sotto il tetto di 6. Il ciclo si chiude qui; il collaudo dal vivo è il passo
+successivo.

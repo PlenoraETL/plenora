@@ -122,18 +122,6 @@ function Step($msg) { Write-Host "`n[STEP] $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "[OK]   $msg" -ForegroundColor Green }
 function Fail($msg) { Write-Host "[FAIL] $msg" -ForegroundColor Red; exit 1 }
 
-# /ready del backend (migrazioni applicate, gates verdi) entro 90 s: $true/$false.
-function Wait-BackendReady {
-    foreach ($i in 1..30) {
-        try {
-            $resp = Invoke-RestMethod 'http://127.0.0.1:5004/ready' -TimeoutSec 3
-            if ($resp.status -eq 'ready') { return $true }
-        } catch { }
-        Start-Sleep -Seconds 3
-    }
-    return $false
-}
-
 function New-RandomSecret {
     # 48 caratteri alfanumerici via RNG crittografico .NET. Il rejection
     # sampling evita il bias del semplice byte modulo 62.
@@ -1250,14 +1238,8 @@ $extraEnvXml$dependXml
         Install-WinSWService -Id $svc.id -Xml $xmlContent
     }
 
-    # Avvio in ordine: backend (fa le migrations) -> worker -> beat. Worker e
-    # beat partono solo col backend pronto (/ready: migrazioni applicate),
-    # cosi' non scrivono su colonne non ancora create (H5, 06/11/2026).
-    Start-Service 'plenora-backend'
-    if (-not (Wait-BackendReady)) {
-        Fail 'backend non ready entro 90s: controllare C:\plenora-services\plenora-backend\plenora-backend.err.log'
-    }
-    foreach ($id in $workerServiceIds + @('plenora-beat')) {
+    # Avvio in ordine: backend (fa le migrations) -> worker -> beat.
+    foreach ($id in @('plenora-backend') + $workerServiceIds + @('plenora-beat')) {
         Start-Service $id
         Start-Sleep -Seconds 5
     }
@@ -1296,7 +1278,15 @@ if (-not $SkipAdminBootstrap) {
     # Il seed richiede il backend healthy (migrations applicate): poll
     # /ready fino a 90s. Con -InstallServices il backend e' un servizio
     # gia' avviato; senza, deve essere su per altra via.
-    if (-not (Wait-BackendReady)) {
+    $ready = $false
+    foreach ($i in 1..30) {
+        try {
+            $resp = Invoke-RestMethod 'http://127.0.0.1:5004/ready' -TimeoutSec 3
+            if ($resp.status -eq 'ready') { $ready = $true; break }
+        } catch { }
+        Start-Sleep -Seconds 3
+    }
+    if (-not $ready) {
         Fail 'backend non ready entro 90s: avviare i servizi (-InstallServices) e rilanciare il bootstrap admin'
     }
 
@@ -1409,7 +1399,15 @@ if ($Production) {
 
     # Il boot in production e' fail-fast sui gates: se /ready non torna,
     # un gate ha bloccato — vedere plenora-backend.err.log.
-    if (-not (Wait-BackendReady)) {
+    $ready = $false
+    foreach ($i in 1..30) {
+        try {
+            $resp = Invoke-RestMethod 'http://127.0.0.1:5004/ready' -TimeoutSec 3
+            if ($resp.status -eq 'ready') { $ready = $true; break }
+        } catch { }
+        Start-Sleep -Seconds 3
+    }
+    if (-not $ready) {
         Fail 'backend non ready in production entro 90s: controllare C:\plenora-services\plenora-backend\plenora-backend.err.log (probabile gate fallito)'
     }
     Ok 'W5 completata: ENVIRONMENT=production, gates attivi, /ready verde'
