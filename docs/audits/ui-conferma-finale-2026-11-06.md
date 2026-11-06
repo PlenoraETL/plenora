@@ -55,3 +55,29 @@ Gravità: M media, B bassa.
   È lo stesso punto debole che aveva causato A-K1.
 - **B-K10**: le chiavi per utente restano dopo l'uscita; le vecchie chiavi si cancellano senza
   migrazione.
+
+## Giro successivo, su c916dc42 (06/11/2026)
+
+Tutte le voci dell'elenco sopra sono chiuse o dichiarate. Regressioni trovate:
+
+- **H1 (M, privacy)** `task_cleanup.py:196-201,281-287`: una pulizia 207 con `forget_task_result`
+  riuscito fa risultare il task PENDING. Lo sweep aspetta 3 ore e pulisce con `_RevokedView` senza
+  payload, quindi i passi falliti si saltano e la riga si toglie come «fatta».
+- **H2 (B)** `task_cleanup.py:234-239`, `api/tasks.js:109-120`, `EsecutoreHome.jsx:155`: le annotazioni
+  delle pulizie di uscita restano anche quando la keepalive è arrivata. A ogni apertura di `/run` si
+  rifanno fino a 50 full-cleanup su task già puliti: revoca, 5 s di attesa in un thread, riga in coda
+  per 3 ore, risposta 202.
+- **H3 (M)** `VirtualList.jsx:204`, `FileManager.jsx:388`, `ScheduleList.jsx:243`: `items` non è
+  memoizzato, quindi ogni render riporta la lista virtuale durante Ctrl+F; ScheduleList si aggiorna da
+  sola. Anche un `pointerdown` sulla barra di scorrimento la riporta virtuale.
+- **H4 (M)** `useEseguibileRun.js:62-68,109,113-115`: il dialog di uscita promette «l'esecuzione si
+  ferma e il risultato viene eliminato», ma allo smontaggio un task in corso non si annulla né si pulisce;
+  fuori da `/run` non si pulisce mai.
+- **H5 (M, deploy)** `install-native.ps1:1241-1245,1278-1289`, `MIGRATIONS_INDEX_WAIT_SECONDS=300`: i
+  worker partono 5 s dopo il backend senza aspettare `/ready`. Con transazioni lunghe, CREATE INDEX
+  CONCURRENTLY aspetta fino a 300 s, il controllo di prontezza (90 s) fallisce e WinSW riavvia il backend
+  in ciclo. Intanto il beat scrive l'heartbeat senza `timezone` e lo sweep fallisce.
+- **H6 (B)** `migrations_runner.py:125-137`: se `pg_advisory_unlock` fallisce con la connessione viva,
+  questa torna nel pool con il lock ancora preso.
+- **H7 (B)** `LazyWindow.jsx:71-75`: ExecutionModal si scarica solo all'apertura, quindi dopo un deploy
+  manca proprio all'avvio di un'esecuzione e compare la fallback.
