@@ -45,3 +45,27 @@ Server 172.16.28.6, utente admin. Progetti temporanei: `TEST_collaudo_UI` (Manip
   conferma non lo dice.
 - **L6 (B)** Ricerca nel canvas (Ctrl+F) e scelta «Collega a»: i nodi dello stesso tipo appaiono
   identici, senza il riassunto (condizione o alias). Il titolo del selettore è in maiuscolo («AC_2»).
+
+## `/run` (utente E0041)
+
+Funziona:
+- esecuzione con 6 righe, solo `004_IS`;
+- il risultato resta e la finestra lo spiega;
+- «Chiudi» senza scaricare chiede conferma;
+- «Resta qui» lascia il risultato;
+- «Chiudi ed elimina» fa una sola pulizia sul server (204);
+- non resta nessuna pulizia in coda.
+
+Non provati: lo scaricamento, che richiede il permesso dell'utente, e il file modello, che vale solo
+per gli Eseguibili a file.
+
+- **L4 (aggiornata)**: anche l'esecutore vede «Esecuzione pipeline...» e «Salvato 6 righe in …».
+- **L7 (B, privacy)**: nello stesso browser, da esecutore, si leggono in localStorage le copie di
+  sicurezza dei canvas dell'admin (`plenora:draft:admin:…`). Era una scelta dichiarata (le copie
+  restano all'uscita); da decidere se cancellarle all'uscita.
+
+## Pulizia
+
+Cancellati `TEST_collaudo_UI`, `TEST_collaudo_UI_estrai` e il file `collaudo_ui` (204). Restano, in
+attesa di una decisione dell'utente: l'Eseguibile `exec_6b96db2d8ed7`, il progetto
+`TEST_utente_che_esegue` e l'utente E0041.
