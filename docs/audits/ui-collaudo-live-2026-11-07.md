@@ -69,3 +69,21 @@ per gli Eseguibili a file.
 Cancellati `TEST_collaudo_UI`, `TEST_collaudo_UI_estrai` e il file `collaudo_ui` (204). Restano, in
 attesa di una decisione dell'utente: l'Eseguibile `exec_6b96db2d8ed7`, il progetto
 `TEST_utente_che_esegue` e l'utente E0041.
+
+## Conferma della correzione L1–L7 (67bc320f)
+
+L1–L7 sono chiuse. Restano questi residui, dichiarati e rimandati al prossimo giro:
+
+- **M1 (M, verificata non applicabile)**: con L3 un progetto che ha un ramo scollegato salva il risultato
+  dell'Output e non più l'ultimo passo calcolato. **Controllo in produzione (07/11, sola lettura):
+  19 progetti, tutti con l'Output, nessun ramo scollegato; i 2 Carica (`totale_immobili`,
+  `immobili_attivi_per_istituto`) sono collegati all'Output.** Nessun risultato cambia.
+- **M2 (B-M)**: l'anteprima dell'Output con un passo senza ingresso (dopo L5) dà ancora il messaggio
+  tecnico di `manipola/executor.py:851`; l'esecuzione resta bloccata da Valida.
+- **M3 (B-M)**: L7. Una scheda dello stesso utente in secondo piano da più di 5 minuti risulta chiusa
+  (timer rallentati da Chrome), quindi uscendo da un'altra scheda la sua copia di sicurezza si cancella.
+- **M4 (B)**: con l'Output non ancora collegato, Valida mostra un avviso «scollegato» per ogni nodo.
+- **M5 (B)**: L4. In `load_arcgis*` resta l'operazione grezza; `failed` riporta `{detail}` così com'è; i
+  messaggi dei Carica non passano da `withStepTitles`.
+- **M6 (B)**: un esito riuscito senza `rows_count` dice solo «Operazione eseguita con successo».
+- **M7 (B)**: `withStepTitles` sostituisce anche gli id brevi in forma di parola.
