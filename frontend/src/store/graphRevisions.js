@@ -26,9 +26,20 @@ export const REVISION_FIELDS = Object.freeze({
 
 export const INITIAL_REVISIONS = Object.freeze({ structureRev: 0, contentRev: 0, layoutRev: 0, selectionRev: 0 });
 
-/** Contatori da scrivere insieme a `patch` (nessuno se il grafo non cambia). */
+/**
+ * Contatori da scrivere insieme a `patch` (nessuno se il grafo non cambia).
+ *
+ * Collaudo live L2: caricare o togliere il grafo (`graphLoaded` cambia) e'
+ * un cambio di TUTTI i livelli, anche quando i nodi restano gli stessi (un
+ * progetto nuovo e' vuoto prima e dopo il caricamento): chi legge il grafo
+ * con useCanvasDerived si ricalcola. Prima la guida a canvas vuoto restava
+ * spenta su un progetto nuovo.
+ */
 export function revisionsFor(state, patch) {
   if (!patch || typeof patch !== 'object') return null;
+  if ('graphLoaded' in patch && Boolean(patch.graphLoaded) !== Boolean(state.graphLoaded)) {
+    return Object.fromEntries(Object.values(REVISION_FIELDS).map(f => [f, (state[f] || 0) + 1]));
+  }
   const nodesTouched = 'nodes' in patch && patch.nodes !== state.nodes;
   const edgesTouched = 'edges' in patch && patch.edges !== state.edges;
   if (!nodesTouched && !edgesTouched) return null;

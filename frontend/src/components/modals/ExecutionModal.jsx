@@ -11,7 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import useCanvasStore from '../../store/useCanvasStore';
 import TicketCreateModal from '../TicketCreateModal';
 import TransferProgress from '../common/TransferProgress';
-import { editorStepsFor, failedStepOf, failureActions, failureMessage, failureTicketDraft, runLogPath } from '../../utils/runFailure';
+import { editorStepsFor, failedStepOf, failureActions, failureMessage, failureTicketDraft, runLogPath, runSuccessText } from '../../utils/runFailure';
 import { useDownload } from '../../hooks/useDownload';
 import { useSharedResource } from '../../hooks/useSharedResource';
 import { saveBlob } from '../../utils/downloadBlob';
@@ -273,7 +273,7 @@ function ExecutionModal({
                 <p className="execution-modal__success-message">
                   {hasEnrichmentErrors 
                     ? `${totalErrors} righe su ${enrichmentStats.total_rows} hanno generato errori`
-                    : (result.message || 'Operazione eseguita con successo')
+                    : runSuccessText(result)
                   }
                 </p>
               </div>
@@ -465,7 +465,7 @@ function ExecutionModal({
               <p className="execution-modal__error-message">
                 {taskStatus === 'revoked'
                   ? (result.message || 'Esecuzione annullata')
-                  : failureMessage(result)}
+                  : failureMessage(result, editorStepsFor(projectId, useCanvasStore.getState()))}
               </p>
               {taskStatus !== 'revoked' && (
                 <div className="execution-modal__failure-actions">

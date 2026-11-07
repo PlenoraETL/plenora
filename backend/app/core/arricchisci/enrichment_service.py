@@ -5,6 +5,7 @@ Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 from app.shared.execution.api_mapping import mapping_destination
+from app.shared.execution.progress_messages import progress_text
 from app.shared.execution.runtime_bound_fields import with_runtime_static_parameters
 from app.core.dataframes.schema import record_column_names
 
@@ -263,9 +264,9 @@ class EnrichmentExecutor(
         """Aggiorna progress callback."""
         if self.progress_callback:
             percent = int((processed / total) * 100) if total > 0 else 0
-            message = (
-                f"{self.api_name}: {processed}/{total} "
-                f"({stats.success} OK, {stats.cached} cache, {stats.errors} errori)"
+            message = progress_text(
+                "enrich_calls", api=self.api_name, processed=processed, total=total,
+                success=stats.success, cached=stats.cached, errors=stats.errors,
             )
             self.progress_callback(percent, message)
 

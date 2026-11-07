@@ -24,7 +24,10 @@
  *    non cancella la copia precedente (ha la sua data) e l'editor lo dice.
  *  - Un progetto eliminato lascia una lapide: nessuna scheda puo' far
  *    rinascere la sua copia.
- *  - Uscita dall'account: la copia RESTA (e' di quell'utente e scade).
+ *  - Uscita dall'account scelta dall'utente (collaudo live L7): via le sue
+ *    copie (questa scheda e le schede chiuse), restano quelle delle sue altre
+ *    schede ancora aperte (mai cancellate da fuori). Sessione scaduta (401) o
+ *    browser chiuso di colpo: la copia RESTA (e' il suo scopo) e scade.
  *
  * TABELLA DELLE TRANSIZIONI (S = questa scheda, A = le altre schede/copie).
  * Stati di S: pulita | in sospeso (modifiche, pausa non ancora scaduta) |
@@ -48,7 +51,8 @@
  * | undo dopo ripristino       | come modifica: la copia propria segue, l'adottata resta    | nessuno                                        |
  * | scarta                     | copia propria/orfana: cancellata (confronta e cancella);   | copia di scheda aperta: solo nascosta          |
  * | uscita (pagehide/smontag.) | in sospeso -> scritta subito                               | nessuno                                        |
- * | 401 / uscita dall'account  | in sospeso -> scritta subito, PRIMA di togliere l'utente   | nessuno                                        |
+ * | 401                        | in sospeso -> scritta subito, PRIMA di togliere l'utente   | nessuno                                        |
+ * | uscita scelta dall'account | tolta, con le copie orfane dell'utente                     | copie di schede aperte: restano                |
  * | eliminazione progetto      | tutte le copie del progetto via + lapide                   | le schede aperte smettono di scrivere          |
  * | ripristino versione        | cancella la propria copia; annuncia il salvato             | restano; ricevono "salvato in un'altra scheda" |
  * | storage: salvato altrove   | resta; avviso; l'offerta aperta segna "salvato dopo"       | -                                              |
@@ -60,6 +64,7 @@
  * superata): utils/canvasVersion.js.
  */
 import { STORAGE_KEYS } from './browserStorage';
+import { registerSessionReset } from './session';
 // Chiavi dalla tabella unica (utils/browserStorage, conferma finale G8).
 const PREFIX = STORAGE_KEYS.draft.prefix;
 const TAB_PREFIX = STORAGE_KEYS.draftTab.prefix;
@@ -308,6 +313,25 @@ export function pruneDrafts(now = Date.now()) {
   keysWith(ls, DELETED_PREFIX).forEach(k => { const at = Number(ls.getItem(k)); if (!Number.isFinite(at) || now - at > MAX_AGE_MS) remove(ls, k); });
   keysWith(ls, TAB_PREFIX).forEach(k => { const at = Number(ls.getItem(k)); if (!Number.isFinite(at) || now - at > MAX_AGE_MS) remove(ls, k); });
 }
+
+/**
+ * Uscita scelta dall'utente (`STORAGE_KEYS.draft.logout === 'own'`): via le
+ * copie di `user` di questa scheda e delle schede chiuse; quelle delle sue
+ * altre schede aperte restano.
+ */
+function dropUserDrafts(user, myTab = currentTabId()) {
+  const ls = storage();
+  if (!ls || !user) return;
+  const prefix = `${PREFIX}${user}:`;
+  for (const k of keysWith(ls, prefix)) {
+    const tab = k.slice(prefix.length).split(':').slice(1).join(':');
+    if (draftOrigin(tab, myTab) !== 'open') remove(ls, k);
+  }
+}
+
+registerSessionReset('localDrafts', ({ reason, userId } = {}) => {
+  if (STORAGE_KEYS.draft.logout === 'own' && reason === 'logout' && userId) dropUserDrafts(userId);
+});
 
 let housekeeping = false;
 /** All'avvio dell'app (index.jsx): pulizia globale e segnale di vita della scheda. */

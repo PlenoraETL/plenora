@@ -25,7 +25,7 @@ def canvas_fixture():
               dict(id='bo', source='b', target='out', join_type='output')]))
 
 
-@pytest.mark.parametrize('node_id,expected', [('a', ['a']), ('b', ['a', 'b']), ('out', ['a', 'b', 'out']), (None, ['a', 'b', 'out', 'unused'])])
+@pytest.mark.parametrize('node_id,expected', [('a', ['a']), ('b', ['a', 'b']), ('out', ['a', 'b', 'out']), (None, ['a', 'b', 'out'])])
 def test_scoped_sql(monkeypatch, node_id, expected):
     canvas = canvas_fixture()
     before = canvas.model_dump_json()
@@ -61,7 +61,8 @@ def test_scoped_sql(monkeypatch, node_id, expected):
     visible.assert_called_once()
     assert canvas.model_dump_json() == before
     if node_id is None:
-        assert nodes is canvas.nodes and edges is canvas.edges
+        # Collaudo live L3: senza passo, solo cio' che arriva all'Output ('unused' no).
+        assert [n.id for n in nodes] == ['a', 'b', 'out'] and len(edges) == len(canvas.edges)
         assert set(result) == {'success', 'columns', 'rows', 'total_count', 'preview_count', 'truncated', 'query'}
 
 

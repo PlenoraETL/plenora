@@ -79,7 +79,7 @@ def test_rest_write_branch_delegates_to_carica_rest_boundary(monkeypatch) -> Non
     assert fake_client.request.call_args.kwargs["url"] == "https://api.example.com/items"
     assert fake_client.request.call_args.kwargs["method"] == "POST"
     assert progress_messages == [
-        "Preparazione scrittura REST...",
+        "Preparazione della scrittura REST...",
         "Scrittura REST...",
     ]
     assert committed_messages == ["REST completato: 2 righe scritte"]

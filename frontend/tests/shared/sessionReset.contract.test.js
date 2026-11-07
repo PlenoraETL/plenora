@@ -84,7 +84,7 @@ describe('fine sessione: registro unico (resetSession)', () => {
 
   it('il logout passa da resetSession e non da ascoltatori sparsi', () => {
     const auth = fs.readFileSync(path.join(srcRoot, 'context/AuthContext.jsx'), 'utf-8');
-    expect(auth).toMatch(/resetSession\(\)/);
+    expect(auth).toMatch(/resetSession\(\{ reason: /);
     const stray = collectSources(srcRoot)
       .filter((file) => /addLogoutListener|emitLogout\(/.test(fs.readFileSync(file, 'utf-8')))
       .map(rel);

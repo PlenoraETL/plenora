@@ -11,6 +11,7 @@ ref cross-tenant (``find_inaccessible_canvas_refs``) resta al boundary del route
 """
 
 from __future__ import annotations
+from dataclasses import replace
 from app.core.arricchisci.canvas_orchestrator import _merge_node_data
 from app.core.arricchisci.enrichment_service import build_enrichment_executor
 from app.core.arricchisci.request_preparation import prepare_api_request
@@ -27,6 +28,7 @@ from app.core.manipola.transform_ordering import incoming_edge_sort_key_for_node
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from app.core.projects.canvas_access import find_orphan_processing_nodes
+from app.core.projects.canvas_preview_scope import run_canvas, unreached_node_ids
 from app.core.projects.schema_inference import SchemaInferenceService
 from app.core.projects.canvas_schema_preparation import infer_canvas_columns
 from app.core.projects.canvas_models import CanvasState
@@ -71,12 +73,48 @@ class _StaticCanvasService:
         return self._canvas
 
 
+#: Messaggio di un passo in un ramo che non arriva all'Output (collaudo live L3).
+UNREACHED_MESSAGE = "Questo passo non arriva all'Output: non viene eseguito e i suoi dati non finiscono nel risultato."
+
+
 def validate_canvas(
     canvas: Any, *, project_id: str = "", project_type: str | None = None,
     available_api_connection_ids: set | None = None,
     execution_context: Mapping | None = None,
 ) -> ValidationReport:
     """Valida un canvas. Ritorna un ``ValidationReport``.
+
+    Regola dei rami scollegati (collaudo live L3, la stessa dell'esecuzione:
+    ``canvas_preview_scope.run_canvas``): i passi che non arrivano all'Output
+    non si eseguono, quindi non bloccano. Ogni loro problema diventa un
+    avviso e ognuno ha l'avviso ``structure.unreached`` (salvo una sorgente
+    gia' segnalata come isolata).
+    """
+    issues = _canvas_issues(
+        canvas, project_id=project_id, project_type=project_type,
+        available_api_connection_ids=available_api_connection_ids,
+        execution_context=execution_context,
+    )
+    unreached = unreached_node_ids(canvas) if getattr(canvas, "nodes", None) is not None else set()
+    if unreached:
+        isolated = {i.node_id for i in issues if i.code == "SOURCE_ISOLATED"}
+        issues = [
+            replace(i, severity="warning") if i.node_id in unreached and i.severity == "error" else i
+            for i in issues
+        ] + [
+            Issue(node_id=str(node_id), severity="warning", code="structure.unreached",
+                  message=UNREACHED_MESSAGE, suggestion=None)
+            for node_id in sorted(unreached) if node_id not in isolated
+        ]
+    return ValidationReport(issues=tuple(issues))
+
+
+def _canvas_issues(
+    canvas: Any, *, project_id: str = "", project_type: str | None = None,
+    available_api_connection_ids: set | None = None,
+    execution_context: Mapping | None = None,
+) -> List[Issue]:
+    """Tutti i problemi del canvas, prima della regola dei rami scollegati.
 
     Strutturale (sempre) + per-nodo via i ``validate_node`` registrati al
     composition-root, scoperti con ``validator_for(node.type)`` — nessun
@@ -151,7 +189,7 @@ def validate_canvas(
     for orphan_id in find_orphan_processing_nodes(canvas):
         issues.append(Issue(
             node_id=str(orphan_id), severity="error", code="structure.orphan",
-            message=f"Nodo '{orphan_id}' richiede almeno un edge entrante",
+            message="Questo passo non ha ingressi: collegalo a un passo precedente o eliminalo.",
             suggestion=None,
         ))
 
@@ -168,7 +206,7 @@ def validate_canvas(
     # 6. Validazione per-nodo via registry (#D): schema/colonne/regole di motore.
     issues.extend(_validate_nodes(canvas, nodes, edges, node_ids, project_id))
 
-    return ValidationReport(issues=tuple(issues))
+    return issues
 
 
 # Edge verso questi target non sono join (sono output verso sink).
@@ -675,7 +713,8 @@ def validate_project_chain(
         execution_context=load_execution_context(project_id) if load_execution_context else None,
     ).issues)
 
-    for node in (getattr(canvas, "nodes", None) or []):
+    # Solo le sorgenti che l'esecuzione legge (regola dei rami scollegati).
+    for node in (getattr(run_canvas(canvas), "nodes", None) or []):
         if getattr(node, "type", None) != "project_source":
             continue
         data = getattr(node, "data", None) or {}

@@ -73,13 +73,17 @@ export function AuthProvider({ children }) {
         // mock / interceptor sincrono — ignora, procedi al clear locale.
       }
     }
+    // Chi esce (letto prima di toglierlo): all'uscita scelta si tolgono le
+    // sue copie di sicurezza (collaudo live L7, utils/browserStorage).
+    let exitingUserId = null;
+    try { exitingUserId = JSON.parse(sessionStorage.getItem(USER_KEY) || 'null')?.user_id ?? null; } catch { exitingUserId = null; }
     setToken(null);
     setUser(null);
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(USER_KEY);
     // Svuota TUTTI gli store e le cache dell'utente (registro unico,
     // utils/session): canvas, colonne, registry delle trasformazioni, ...
-    resetSession();
+    resetSession({ reason: expired ? 'expired' : 'logout', userId: exitingUserId != null ? String(exitingUserId) : null });
   }, []);
 
   // Registra handler 401 — client.js chiama authBus.onUnauthorized()

@@ -243,6 +243,7 @@ describe('codice morto', () => {
     'utils/taskOutcome.js:TASK_PHASES': 'fasi dei task: enumerate dal test dell\'esito',
     'components/common/VirtualList.jsx:LONG_LISTS': 'liste lunghe dichiarate (UI-2): enumerate dal test delle liste virtualizzate',
     'utils/canvasChange.js:GRAPH_CHANGE_TABLE': 'tabella dei livelli di modifica (UI-2): enumerata dal test delle firme',
+    'hooks/useCanvasDerived.js:GRAPH_FIELDS': 'campi dello store che un selettore del grafo puo\' leggere (collaudo live L2): enumerati dal test dei selettori',
   };
   const usage = exportUsage();
 

@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from typing import Dict, Any, List, Mapping, MutableMapping, Optional, Protocol, Sequence, Tuple
 
 from app.core.projects.canvas_models import CanvasState
-from app.core.projects.canvas_preview_scope import preview_canvas
+from app.core.projects.canvas_preview_scope import scoped_canvas
 from app.utils.logger import get_logger, append_step
 from app.core.auth import visibility as visibility_module
 from app.core.dataframes.frame_copy import copy_frame_for_update
@@ -566,8 +566,8 @@ class EstraiExecutor:
         logger.info(f"Preview ESTRAI: {project_id}", op="preview", project_id=project_id)
 
         node_id = (execution_context or {}).get("preview_node_id")
-        if node_id is not None:
-            canvas = preview_canvas(canvas, str(node_id), with_result=True)
+        # Passo scelto o, senza passo, solo cio' che arriva all'Output (L3).
+        canvas = scoped_canvas(canvas, node_id, with_result=True)
 
         result_node = next((n for n in canvas.nodes if n.type == "result"), None)
         if not result_node:

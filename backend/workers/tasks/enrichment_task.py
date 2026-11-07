@@ -6,6 +6,8 @@ Runs background execution while preserving backend runtime contracts.
 
 from app.core.projects.schema_inference import SchemaInferenceService
 from app.core.projects.canvas_models import CanvasState
+from app.shared.execution.progress_messages import progress_text
+from app.core.projects.canvas_preview_scope import run_canvas
 from app.shared.execution.api_mapping import mapping_destination
 
 import copy
@@ -259,7 +261,7 @@ def execute_enrichment_task(
     # Aggiorna stato: STARTED. Il checkpoint puo' osservare una revoca prima
     # dell'apertura delle run: gli input temporanei vanno comunque ripuliti.
     try:
-        update_task_progress(self, 0, "Inizializzazione...", task_id=task_id)
+        update_task_progress(self, 0, progress_text("enrich_start"), task_id=task_id)
     except TaskRevoked:
         _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
         cancel_executable_run()
@@ -461,8 +463,12 @@ def execute_enrichment_task(
             test_run=test_run is not None,
         )
 
-        nodes = canvas.get("nodes", [])
-        edges = canvas.get("edges", [])
+        # Regola unica (collaudo live L3, core/projects/canvas_preview_scope):
+        # si esegue solo cio' che arriva all'Output; i caricamenti leggono il
+        # canvas intero (partono solo se collegati all'Output).
+        run_scope = run_canvas(canvas)
+        nodes = run_scope.get("nodes", [])
+        edges = run_scope.get("edges", [])
 
         if not nodes:
             raise ValueError("Nessun nodo nel canvas")
@@ -470,7 +476,7 @@ def execute_enrichment_task(
         # non presidiato): la catena si blocca (shared/execution/runtime_identity).
         assert_identity_resolved(canvas)
 
-        update_task_progress(self, 5, "Caricamento dati...", task_id=task_id)
+        update_task_progress(self, 5, progress_text("enrich_loading"), task_id=task_id)
 
         # Carica API connections
         api_connections = {}
@@ -479,12 +485,12 @@ def execute_enrichment_task(
             if full_api:
                 api_connections[api["id"]] = full_api
         
-        update_task_progress(self, 10, "API caricate, inizio elaborazione...", task_id=task_id)
+        update_task_progress(self, 10, progress_text("enrich_ready"), task_id=task_id)
 
         # Congela gli id prima delle chiamate API sul canvas effettivamente eseguito.
         column_plan = []
         try:
-            typed_canvas = CanvasState.model_validate(canvas)
+            typed_canvas = CanvasState.model_validate(run_scope)
             inferred = SchemaInferenceService(
                 project_service_module.ProjectService(), api_configs=api_connections,
             ).infer_all_schemas(project_id, typed_canvas)
@@ -525,12 +531,12 @@ def execute_enrichment_task(
         # `run_enrichment_canvas`, fornendo l'enricher avanzato (`enrich_fn`)
         # e gli hook progress/snapshot. Il parallelo e' gestito dal runner
         # (`execute_parallel_enrichers`).
-        graph = CanvasGraph.from_canvas(canvas)
+        graph = CanvasGraph.from_canvas(run_scope)
 
-        _PROGRESS_MSG = {
-            "project_source": "Caricamento sorgente dati...",
-            "file_source": "Caricamento file...",
-            "staticValues": "Processamento valori statici...",
+        _PROGRESS_KEY = {
+            "project_source": "enrich_source_project",
+            "file_source": "enrich_source_file",
+            "staticValues": "enrich_static",
         }
 
         def _node_base_progress(node_id_: str) -> int:
@@ -544,7 +550,7 @@ def execute_enrichment_task(
             update_task_progress(
                 self,
                 _node_base_progress(node_id_),
-                _PROGRESS_MSG.get(node_type_, f"Esecuzione {node_type_}..."),
+                progress_text(_PROGRESS_KEY.get(node_type_, "enrich_step")),
                 task_id=task_id,
             )
 
@@ -729,7 +735,7 @@ def execute_enrichment_task(
         except canvas_orchestrator_module.CanvasRunError as _cre:
             raise _EarlyTaskReturn(_cre.payload)
 
-        update_task_progress(self, 90, "Salvataggio risultati...", task_id=task_id)
+        update_task_progress(self, 90, progress_text("enrich_saving"), task_id=task_id)
         
         # Trova output finale
         result_node = next((n for n in nodes if n.get("type") == "result"), None)
@@ -787,7 +793,7 @@ def execute_enrichment_task(
             update_task_progress(
                 self,
                 90,
-                "Finalizzazione output...",
+                progress_text("run_saving"),
                 task_id=task_id,
                 check_revocation=False,
             )
@@ -1047,7 +1053,7 @@ def execute_enrichment_task(
             update_task_progress(
                 self,
                 100,
-                "Completato!",
+                progress_text("done"),
                 task_id=task_id,
                 check_revocation=False,
             )
@@ -1080,7 +1086,7 @@ def execute_enrichment_task(
         update_task_progress(
             self,
             95,
-            "Finalizzazione output...",
+            progress_text("run_saving"),
             task_id=task_id,
             check_revocation=False,
         )
@@ -1152,7 +1158,7 @@ def execute_enrichment_task(
         update_task_progress(
             self,
             100,
-            "Completato!",
+            progress_text("done"),
             task_id=task_id,
             check_revocation=False,
         )
@@ -1282,7 +1288,7 @@ def execute_enrichment_task(
             update_task_progress(
                 self,
                 0,
-                f"Errore: {error_message}",
+                progress_text("failed", detail=error_message),
                 is_error=True,
                 task_id=task_id,
                 check_revocation=False,

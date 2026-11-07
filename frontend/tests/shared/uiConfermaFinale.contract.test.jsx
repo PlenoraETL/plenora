@@ -331,7 +331,7 @@ describe('G8 — una tabella delle chiavi di storage', () => {
       expect({ name, ok: String(row.key || row.prefix).startsWith('plenora:') }).toEqual({ name, ok: true });
       expect(['local', 'session']).toContain(row.area);
       expect(['browser', 'user']).toContain(row.owner);
-      expect(['keep', 'clear']).toContain(row.logout);
+      expect(['keep', 'clear', 'own']).toContain(row.logout);
       expect(row.why.length).toBeGreaterThan(15);
     }
     // Nessuna chiave di storage scritta a mano fuori dalla tabella.

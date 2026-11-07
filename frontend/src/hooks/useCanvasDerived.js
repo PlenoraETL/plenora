@@ -61,13 +61,20 @@ function createDerivedSelector(compute, { on = 'content', equal = shallowEqual, 
   };
 }
 
+/**
+ * I soli campi dello store che `compute` puo' leggere: quelli che fanno salire
+ * i contatori (nodes, edges, graphLoaded: store/graphRevisions) o che il
+ * selettore confronta da se' (projectId). Un altro campo non farebbe
+ * ricalcolare (collaudo live L2): lo vieta tests/shared/uiCollaudoLive.contract.
+ */
+export const GRAPH_FIELDS = Object.freeze(['nodes', 'edges', 'graphLoaded', 'projectId']);
+
 export function useCanvasDerived(compute, { on = 'content', deps = [] } = {}) {
   const computeRef = useRef(compute);
   computeRef.current = compute;
   const key = [].concat(on).join(',');
   // Un selettore nuovo solo quando cambiano livelli o dipendenze. `compute`
-  // legge solo il grafo (nodes, edges, projectId): gli altri campi dello
-  // store non fanno ricalcolare.
+  // legge solo GRAPH_FIELDS: gli altri campi dello store non fanno ricalcolare.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const select = useMemo(() => createDerivedSelector(s => computeRef.current(s), { on }), [key, ...deps]);
   return useCanvasStore(select);

@@ -12,17 +12,22 @@ import { buildResult, createIssue } from './canvasValidationContract';
 import { requestErrorMessage, asSentence } from './errorMessages';
 import { projectRunBlockReason } from './runtimeInputKinds';
 import { inputKindLabel } from './glossary';
+import { stepTitleOf, withStepTitles } from './stepTitles';
 
 /**
- * Mappa un singolo issue backend nel ValidationIssue FE.
+ * Mappa un singolo issue backend nel ValidationIssue FE. Collaudo live L4:
+ * il passo si nomina col suo titolo (nodeName e testo, utils/stepTitles),
+ * mai con l'id; il clic sulla riga porta al passo dal `node_id`.
  * @param {{node_id?: string, severity: string, code: string, message: string}} bi
+ * @param {Array} nodes  i nodi del canvas aperto
  */
-function backendIssueToFE(bi) {
+function backendIssueToFE(bi, nodes) {
   return createIssue({
     id: bi.code,
     severity: bi.severity,
-    message: bi.message,
+    message: withStepTitles(bi.message, nodes),
     nodeId: bi.node_id || undefined,
+    nodeName: stepTitleOf(bi.node_id, nodes) || undefined,
     source: 'backend',
   });
 }
@@ -31,10 +36,11 @@ function backendIssueToFE(bi) {
  * Converte `{valid, has_errors, issues:[...]}` in `CanvasValidationResult`.
  * `ok`/`bySeverity` sono ricomputati da `buildResult` (coerenti con has_errors).
  * @param {{issues?: Array}} data
+ * @param {Array} [nodes]  i nodi del canvas validato (titoli dei passi)
  * @returns {import('./canvasValidationContract').CanvasValidationResult}
  */
-export function backendReportToResult(data) {
-  const issues = Array.isArray(data?.issues) ? data.issues.map(backendIssueToFE) : [];
+export function backendReportToResult(data, nodes = []) {
+  const issues = Array.isArray(data?.issues) ? data.issues.map(bi => backendIssueToFE(bi, nodes)) : [];
   return buildResult(issues);
 }
 

@@ -17,6 +17,12 @@ import './CompactNode.css';
 
 const POSITION = { left: Position.Left, right: Position.Right, top: Position.Top };
 
+// Avvisi di un nodo dal grafo (utils/canvasGraph.analyzeCanvas).
+const NODE_WARNINGS = Object.freeze({
+  dangling: { short: 'non collegato all\'Output', title: 'Non collegato all\'Output: non viene eseguito e i suoi dati non finiscono nel risultato' },
+  inputless: { short: 'senza ingresso', title: 'Senza ingresso: collega un passo precedente o eliminalo; finché manca il progetto non si può eseguire' },
+});
+
 // Handle usati dagli edge collegati, per nodo, come stringa stabile (il
 // selettore restituisce una stringa: niente re-render a ogni drag). UI-2
 // (V5): la mappa di TUTTI i nodi si calcola una volta per array di archi;
@@ -85,8 +91,10 @@ function CompactNode({ id, type, data = {}, selected }) {
   const icon = nodeIcon(type, data);
   const summary = descriptor.summary(data);
   const problem = data.access_denied ? (data.access_denied_reason || 'Accesso negato') : null;
-  // Fase 4, M6: i dati di questo nodo non arrivano all'Output.
-  const dangling = useContext(CanvasGraphContext).dangling.has(id);
+  // Fase 4, M6 e collaudo live L3/L5: un avviso dal grafo. Un passo che non
+  // arriva all'Output non si esegue; uno senza ingresso non ha dati.
+  const graph = useContext(CanvasGraphContext);
+  const warning = graph.dangling.has(id) ? NODE_WARNINGS.dangling : graph.inputless?.has(id) ? NODE_WARNINGS.inputless : null;
 
   // Posizione verticale degli handle dello stesso lato, distribuiti.
   const sides = { left: [], right: [], top: [] };
@@ -140,13 +148,13 @@ function CompactNode({ id, type, data = {}, selected }) {
           </span>
         )}
         {problem && <span className="cnode__dot cnode__dot--error" title={problem} />}
-        {!problem && dangling && <span className="cnode__dot cnode__dot--warn" title="Non collegato all'Output: i suoi dati non finiscono nel risultato" />}
+        {!problem && warning && <span className="cnode__dot cnode__dot--warn" title={warning.title} />}
       </div>
       <div className="cnode__summary" title={summary}>{summary || ' '}</div>
       <div className="cnode__kind">
         {descriptor.kind(data)}
         {problem ? <span className="cnode__problem"> · {problem}</span> : null}
-        {!problem && dangling ? <span className="cnode__dangling"> · non collegato all&apos;Output</span> : null}
+        {!problem && warning ? <span className="cnode__dangling"> · {warning.short}</span> : null}
       </div>
       {canAddAfter && (
         <button

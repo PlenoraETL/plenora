@@ -18,6 +18,7 @@ from pathlib import PurePosixPath
 from typing import Any, Callable, Mapping, Optional, cast
 
 from typing_extensions import TypedDict
+from app.shared.execution.progress_messages import progress_text
 
 from app.shared.contracts.payloads import HeadersMap, JsonObject
 from app.utils.logger import get_logger
@@ -245,8 +246,8 @@ def execute_datasource_write(
 
     requested_format = (dest_format or '').strip().lower().lstrip('.')
     dest_format = normalize_export_format(dest_format)
-    progress(20, f'Serializzazione DataFrame ({dest_format})...')
-    progress(50, f'Scrittura su DataSource {datasource_id}...')
+    progress(20, progress_text("load_serializing", format=str(dest_format).upper()))
+    progress(50, progress_text("load_datasource"))
 
     try:
         ds_service = _get_datasource_service()
@@ -356,7 +357,7 @@ def execute_rest_write(
     user_id: Optional[str] = None,
 ) -> CaricaTaskResultPayload:
     """Coordinate REST write progress while the domain owns REST payload writes."""
-    progress(15, "Preparazione scrittura REST...")
+    progress(15, progress_text("load_rest_prepare"))
 
     try:
         parsed_config = parse_carica_rest_config(carica_node_data)
@@ -389,7 +390,7 @@ def execute_rest_write(
                 "total_rows": len(df),
             }
         sink_config = with_auth_headers(parsed_config.sink_config, auth_headers)
-        progress(25, "Scrittura REST...")
+        progress(25, progress_text("load_rest"))
         outcome = execute_carica_rest_write(
             df=df,
             config=sink_config,
@@ -485,7 +486,7 @@ def maybe_multilayer_arcgis_write(
 
     progress(
         10,
-        f"Bundle multi-layer: {len(artifact.layers)} layer. Avvio publish ArcGIS...",
+        progress_text("load_bundle", layers=len(artifact.layers)),
     )
 
     raw_op = carica_node_data.get("arcgis_operation") or "create_service"
@@ -551,7 +552,7 @@ def execute_arcgis_write(
     expected_group_id: Optional[str] = None,
 ) -> Mapping[str, object]:
     """Coordinate ArcGIS write progress while the domain owns provider writes."""
-    progress(15, "Preparazione scrittura ArcGIS...")
+    progress(15, progress_text("load_arcgis_prepare"))
 
     operation = carica_node_data.get("arcgis_operation", "add")
     request = arcgis_write_boundary_module.CaricaArcGISWriteRequest(
@@ -591,13 +592,13 @@ def execute_arcgis_write(
             "total_rows": len(df),
         }
 
-    progress(25, f"Scrittura ArcGIS ({operation})...")
+    progress(25, progress_text("load_arcgis", operation=operation))
 
     try:
         if operation == "create_service":
-            progress(30, f"Creazione servizio '{request.service_name}'...")
+            progress(30, progress_text("load_arcgis_service", service=request.service_name))
         else:
-            progress(30, f"Scrittura features ({operation})...")
+            progress(30, progress_text("load_arcgis_features", operation=operation))
 
         outcome = execute_carica_arcgis_write(
             df=df,

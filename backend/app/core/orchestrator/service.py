@@ -14,6 +14,7 @@ from app.core.estrai.query_generator import QueryGenerator
 from app.core.orchestrator import task_service as task_service_module
 from app.core.projects.service import ProjectService
 from app.core.projects.canvas_models import CanvasState
+from app.core.projects.canvas_preview_scope import run_canvas
 from app.core.resources import memory_guard
 from app.core.query_execution.query_executor import QueryExecutor
 from app.core.query_execution.query_streaming import execute_streaming_to_writer
@@ -280,23 +281,28 @@ class OrchestratorService:
             else {}
         )
 
+        # Regola unica (collaudo live L3): gli esecutori ricevono solo cio'
+        # che arriva all'Output; i rami scollegati non si eseguono e non
+        # bloccano. I caricamenti leggono il canvas intero (partono solo se
+        # collegati all'Output: carica_dispatcher).
+        run_scope = run_canvas(canvas)
         if project_type == "estrai":
             executor_result = self.estrai_executor.execute(
-                project_id, canvas, run_id=run_id,
+                project_id, run_scope, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
                 execution_context=execution_context,
                 **output_kwargs,
             )
         elif project_type == "manipola":
             executor_result = self.manipola_executor.execute(
-                project_id, canvas, force_recalculate, run_id=run_id,
+                project_id, run_scope, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
                 execution_context=execution_context,
                 **output_kwargs,
             )
         else:  # "arricchisci" — already validated by dispatch guard above
             executor_result = self.enrich_executor.execute(
-                project_id, canvas, force_recalculate, run_id=run_id,
+                project_id, run_scope, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
                 execution_context=execution_context,
             )

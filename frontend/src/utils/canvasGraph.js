@@ -104,7 +104,7 @@ function flowOrder({ byId, outs, ins }) {
 /**
  * Analisi completa del canvas.
  * @returns {{
- *   reaching: Set<string>, dangling: Set<string>,
+ *   reaching: Set<string>, dangling: Set<string>, inputless: Set<string>,
  *   lanes: Array<{ id, kind: 'source'|'join'|'fork', headId, stepIds: string[], lastId, addAfterId, dangling }>,
  *   laneOf: Map<string, object>, isEnd: (id) => boolean,
  * }}
@@ -128,6 +128,10 @@ export function analyzeCanvas(nodes, edges) {
   const dangling = new Set(hasOutput
     ? [...byId.keys()].filter(id => !reaching.has(id) && ['source', 'step'].includes(role(id)))
     : []);
+  // Collaudo live L5: un passo senza ingresso (la sua sorgente e' stata
+  // eliminata) non blocca il salvataggio; il canvas lo segna e Valida lo
+  // riporta (errore se arriva all'Output, avviso se no).
+  const inputless = new Set([...byId.keys()].filter(id => role(id) === 'step' && !(ins.get(id) || []).length));
 
   // Corsie: testa = nessun ingresso, piu' ingressi, o predecessore che si biforca.
   // Un ingresso da un parametro (Valori statici) non e' un altro ramo.
@@ -184,7 +188,7 @@ export function analyzeCanvas(nodes, edges) {
   // (un'uscita diretta verso un caricamento non conta).
   const isEnd = (id) => byId.has(id) && !(outs.get(id) || []).some(t => ['source', 'step', 'output'].includes(role(t)));
   return {
-    reaching, dangling, lanes, laneOf, isEnd,
+    reaching, dangling, inputless, lanes, laneOf, isEnd,
     /** Nodi a monte (i loro dati arrivano qui): mai destinazioni di "Collega" (ciclo). */
     ancestorsOf: (id) => walk(id, ins),
     /** Estremita' scollegate raggiungibili da qui (anche oltre un bivio). */

@@ -44,10 +44,16 @@ function freeTargetHandle(target, edges) {
 }
 const sourceHandleOf = (node) => nodeDescriptor(node.type).defaultHandles(node.data || {}).find(h => h.type === 'source')?.id ?? null;
 
-const nodeItem = (n) => ({
-  id: n.id, kind: 'node', label: nodeTitle(n.type, n.data), icon: nodeIcon(n.type, n.data),
-  desc: nodeDescriptor(n.type).kind?.(n.data || {}) || '',
-});
+// Collaudo live L6: seconda riga = il riassunto del nodo, lo stesso del
+// canvas (condizione, alias, nome del file...): due passi dello stesso tipo
+// si distinguono; senza riassunto, il tipo.
+export const nodeItem = (n) => {
+  const d = nodeDescriptor(n.type);
+  return {
+    id: n.id, kind: 'node', label: nodeTitle(n.type, n.data), icon: nodeIcon(n.type, n.data),
+    desc: d.summary?.(n.data || {}) || d.kind?.(n.data || {}) || '',
+  };
+};
 
 export default function CanvasOverlays({ mode, onConnect, onOpenPalette, canAdd }) {
   const toast = useOptionalToast();

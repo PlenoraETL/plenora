@@ -51,22 +51,39 @@ def _fetchall_on(conn):
 # ── A-K1 ────────────────────────────────────────────────────────────────────
 
 def _refs_sql() -> str:
-    import inspect
-
     from app.core.projects import db as projects_db
 
-    return inspect.getsource(projects_db.ProjectRepository.list_manipola_source_refs)
+    return projects_db.MANIPOLA_SOURCE_REFS_SQL
 
 
 def test_refs_query_never_calls_pg_input_is_valid_on_jsonb():
     """pg_input_is_valid(text, text): il primo argomento e' SEMPRE testo."""
     sql = _refs_sql()
     calls = re.findall(r"pg_input_is_valid\(([^,]+),\s*'jsonb'\)", sql)
-    assert calls, "la query deve ancora segnare i canvas non leggibili"
+    assert calls, "la query deve ancora segnare i canvas TEXT non leggibili"
     assert all(arg.strip().endswith("::text") for arg in calls), calls
-    # Il documento si costruisce dal testo (vale per jsonb e per text).
-    assert "canvas::text::jsonb" in sql
-    assert not re.search(r"\bcanvas::jsonb\b", sql)
+
+
+def test_refs_query_reads_a_jsonb_canvas_without_serializing_it():
+    """Collaudo live L1: con la colonna jsonb nessun canvas::text.
+
+    Il documento jsonb e' la colonna (ramo `pg_typeof(...) = 'jsonb'`); la
+    serializzazione e la rilettura restano solo nel ramo della colonna TEXT.
+    Prima ogni canvas passava da `canvas::text` + `pg_input_is_valid` +
+    `::jsonb` (154 ms contro 4 ms su 20 canvas da 75 kB).
+    """
+    import inspect
+
+    from app.core.projects import db as projects_db
+
+    sql = _refs_sql()
+    branches = re.findall(r"WHEN (.+?) THEN (.+?)\n", sql)
+    assert branches[0] == ("pg_typeof(canvas) = 'jsonb'::regtype", "canvas::jsonb"), branches
+    assert "::text" not in "".join(branches[0])
+    assert "pg_input_is_valid(canvas::text, 'jsonb')" in branches[1][0]
+    # Il metodo usa la query dichiarata, non una sua copia.
+    src = inspect.getsource(projects_db.ProjectRepository.list_manipola_source_refs)
+    assert "MANIPOLA_SOURCE_REFS_SQL" in src and "jsonb_array_elements" not in src
 
 
 @real_pg_marks
@@ -100,6 +117,59 @@ def test_manipola_source_refs_on_real_postgres(monkeypatch, column_type):
     assert refs["m2"].source_project_ids == () and refs["m2"].corrupted is False
     if column_type == "text":
         assert refs["m3"].corrupted is True
+
+
+def _big_canvas(i: int) -> str:
+    import json
+
+    nodes = [{
+        "id": f"t{i}_{n}", "type": "project_source" if n % 7 == 0 else "transform",
+        "data": {"source_project_id": f"s{n}" if n % 7 == 0 else None,
+                 "columns": [{"name": f"colonna_{c}", "type": "string", "alias": f"a_{c}"} for c in range(12)],
+                 "config": {"conditions": [{"column": "x", "op": "eq", "value": "y" * 20}]}},
+        "position": {"x": n, "y": n},
+    } for n in range(60)]
+    return json.dumps({"nodes": nodes, "edges": []})
+
+
+@real_pg_marks
+def test_manipola_source_refs_on_jsonb_are_not_slower_than_reading_the_canvases():
+    """Collaudo live L1: 20 canvas jsonb da ~75 kB.
+
+    La query delle sorgenti non e' piu' lenta del percorso di e2bada1b (canvas
+    interi letti e scorsi in Python). Con la query di 42563405 (canvas::text,
+    pg_input_is_valid, ::jsonb) era 9 volte piu' lenta (151 ms contro 16 ms).
+    """
+    import statistics
+    import time
+
+    from app.core.projects import db as projects_db
+
+    def median_ms(fn, rounds=9):
+        fn()
+        samples = []
+        for _ in range(rounds):
+            start = time.perf_counter()
+            fn()
+            samples.append(time.perf_counter() - start)
+        return statistics.median(samples) * 1000
+
+    with real_pg_schema() as conn:
+        conn.execute("CREATE TABLE projects (id text primary key, project_type text, canvas jsonb)")
+        ids = [f"m{i}" for i in range(20)]
+        for i, pid in enumerate(ids):
+            conn.execute("INSERT INTO projects VALUES (%s, 'manipola', %s)", (pid, _big_canvas(i)))
+        placeholders = ", ".join(["%s"] * len(ids))
+
+        def whole_canvases():
+            for row in conn.execute(f"SELECT id, canvas FROM projects WHERE id IN ({placeholders})", ids).fetchall():
+                [n for n in row["canvas"]["nodes"] if n.get("type") == "project_source"]
+
+        refs_ms = median_ms(lambda: conn.execute(
+            projects_db.MANIPOLA_SOURCE_REFS_SQL.format(placeholders=placeholders), ids).fetchall())
+        whole_ms = median_ms(whole_canvases)
+
+    assert refs_ms <= whole_ms, f"query delle sorgenti {refs_ms:.1f} ms, canvas interi {whole_ms:.1f} ms"
 
 
 # ── A-K2 (server): connessione di destinazione dei task di Carica ──────────

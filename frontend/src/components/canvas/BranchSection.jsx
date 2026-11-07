@@ -118,8 +118,8 @@ export default function BranchSection({ node, branchActions = {} }) {
     parts.push(
       <div key="dangling" className="ppanel__note branch-warn" role="status">
         {end
-          ? <>Il ramo <b>{derived.branchName}</b> non arriva all&apos;Output: i suoi dati non finiscono nel risultato.</>
-          : <>Questo passo fa parte del ramo <b>{derived.branchName}</b>, che non arriva all&apos;Output. Si collega dal suo ultimo passo.</>}
+          ? <>Il ramo <b>{derived.branchName}</b> non arriva all&apos;Output: non viene eseguito e i suoi dati non finiscono nel risultato.</>
+          : <>Questo passo fa parte del ramo <b>{derived.branchName}</b>, che non arriva all&apos;Output e non viene eseguito. Si collega dal suo ultimo passo.</>}
         {action}
       </div>,
     );

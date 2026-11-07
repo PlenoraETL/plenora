@@ -107,10 +107,9 @@ def test_list_projects_falls_back_to_canvas_when_targeted_query_fails(monkeypatc
 
 
 def test_targeted_refs_query_never_selects_the_canvas_column_into_python():
-    from app.core.projects.db import ProjectRepository
-    import inspect
+    from app.core.projects.db import MANIPOLA_SOURCE_REFS_SQL
 
-    src = inspect.getsource(ProjectRepository.list_manipola_source_refs)
+    src = MANIPOLA_SOURCE_REFS_SQL
     assert "jsonb_array_elements" in src
     assert "pg_input_is_valid" in src
     # Il SELECT finale restituisce solo id, segno di canvas corrotto e liste.

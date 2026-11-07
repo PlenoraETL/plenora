@@ -23,7 +23,7 @@ import { validateProjectCanvas } from '../../src/api/projects';
 import { BEFORE_RUN_REASONS, beforeRunReasons } from '../../src/utils/beforeRun';
 
 /**
- * Contract Blocco A, regola 5 (F3): UNA finestra «Prima di avviare» per i
+ * Contract Blocco A, regola 5 (F3): UNA finestra Â«Prima di avviareÂ» per i
  * tre editor, un solo percorso (editor/PipelineRunner). Si apre solo se
  * serve (input, stima di Arricchisci da confermare, avvisi, opzioni dello
  * staff); altrimenti Esegui parte con un clic. Ogni editor x ogni caso.
@@ -149,7 +149,7 @@ describe.each(Object.keys(EDITORS))('editor %s', (mode) => {
     st.setEditorActions({ onExecute });
     render(<PipelineRunner user={{ role: 'superadmin' }} />);
     await run();
-    const select = screen.getByLabelText(/intermediate_mode/);
+    const select = screen.getByLabelText(/Dati intermedi/);
     expect([...select.querySelectorAll('option')].map(o => o.value)).toEqual(['', 'metadata_only', 'full_artifact']);
     fireEvent.change(select, { target: { value: 'full_artifact' } });
     await act(async () => { fireEvent.click(launchBtn()); });
@@ -216,7 +216,7 @@ describe('Arricchisci: estimate, confirmation, blocking warnings, 409', () => {
   });
 });
 
-describe('failed estimate: Italian message and «Riprova» (also without runtime inputs)', () => {
+describe('failed estimate: Italian message and Â«RiprovaÂ» (also without runtime inputs)', () => {
   const FAILURES = {
     rete: [Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' }), /Impossibile contattare il server/],
     '4xx': [Object.assign(new Error('Request failed with status code 422'), { response: { status: 422, data: { detail: { error: 'validation_error', message: 'Colonna della chiave assente' } } } }), /Colonna della chiave assente/],
@@ -383,7 +383,7 @@ describe('enumeration: one window, one path', () => {
 });
 
 // UI-2 (06/11/2026, C18): una validazione RIUSCITA della stessa versione
-// salvata, fatta da poco, vale per Esegui e Anteprima; «Valida» chiede sempre.
+// salvata, fatta da poco, vale per Esegui e Anteprima; Â«ValidaÂ» chiede sempre.
 describe('validazione riusata (C18)', () => {
   const action = name => act(async () => { await useCanvasStore.getState().getEditorAction(name)(); });
 
@@ -399,7 +399,7 @@ describe('validazione riusata (C18)', () => {
     expect(validateProjectCanvas).toHaveBeenCalledTimes(1);
   });
 
-  it('«Valida» chiede sempre al server', async () => {
+  it('Â«ValidaÂ» chiede sempre al server', async () => {
     validateProjectCanvas.mockClear();
     openEditor('manipola');
     await action('onValidate');

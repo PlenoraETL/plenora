@@ -412,7 +412,7 @@ export default function BeforeRunModal({
         {isSuper && !testRun && (
           <section className="before-run__section" aria-label="Opzioni dello staff">
             <div className="before-run__row">
-              <label htmlFor="before-run-intermediate-mode" className="before-run__label">🔧 intermediate_mode (staff)</label>
+              <label htmlFor="before-run-intermediate-mode" className="before-run__label">🔧 Dati intermedi</label>
               <select
                 id="before-run-intermediate-mode"
                 className="before-run__field"

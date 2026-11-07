@@ -19,8 +19,9 @@ import { AuthProvider } from '../../src/context/AuthContext';
 import { authBus } from '../../src/utils/authBus';
 import {
   MAX_AGE_MS, currentDraftUser, draftKey, listDrafts, markProjectDeleted, pruneDrafts,
-  keepTabCopy, readDraft, serverCanvasReplaced, writeDraft,
+  currentTabId, keepTabCopy, readDraft, serverCanvasReplaced, touchTab, writeDraft,
 } from '../../src/utils/localDrafts';
+import { resetSession } from '../../src/utils/session';
 
 /**
  * Contract Blocco A, regola 8 (raccolta h.1-h.16): la copia di sicurezza
@@ -286,7 +287,7 @@ const DRAFT_TRANSITIONS = {
     expect(label(copyOf('B'))).toBe('b-smontata');
   },
 
-  "401 / uscita dall'account": async () => {
+  '401': async () => {
     const wrap = (el) => <MemoryRouter><AuthProvider>{el}</AuthProvider></MemoryRouter>;
     const A = openTab('A', { wrap });
     const B = openTab('B');
@@ -297,6 +298,26 @@ const DRAFT_TRANSITIONS = {
     // h.16: la copia resta (e' di quell'utente) e quella di B non cambia.
     expect(label(copyOf('A'))).toBe('a-401');
     expect(copyOf('B')).toBe(null);
+  },
+
+  "uscita scelta dall'account": async () => {
+    // Collaudo live L7: dopo la domanda sulle modifiche non salvate, uscendo
+    // si tolgono le copie di chi esce; quella della sua altra scheda ancora
+    // aperta resta (mai cancellata da fuori), come quelle degli altri utenti.
+    // A e' la scheda di questa pagina (quella da cui si esce).
+    const me = currentTabId();
+    const A = openTab(me);
+    const B = openTab('B');
+    A.edit('a-uscita'); A.pause();
+    B.edit('b-aperta'); B.pause();
+    closedCopy('chiusa', 'c-chiusa');
+    writeDraft('altro', P, 'X', { savedAt: Date.now(), nodes: [], edges: [] });
+    act(() => { touchTab('B'); });
+    act(() => { resetSession({ reason: 'logout', userId: U }); });
+    expect(copyOf(me)).toBe(null);
+    expect(copyOf('chiusa')).toBe(null);
+    expect(label(copyOf('B'))).toBe('b-aperta');
+    expect(readDraft('altro', P, 'X')).not.toBe(null);
   },
 
   'eliminazione progetto': async () => {

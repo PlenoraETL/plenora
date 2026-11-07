@@ -113,7 +113,7 @@ function IssueRow({ issue, onFocusNode }) {
       <div className="validation-modal__issue-content">
         <div className="validation-modal__issue-message">{issue.message}</div>
         {issue.nodeName && (
-          <div className="validation-modal__issue-node">Nodo: {issue.nodeName}</div>
+          <div className="validation-modal__issue-node">Passo: {issue.nodeName}</div>
         )}
       </div>
     </div>

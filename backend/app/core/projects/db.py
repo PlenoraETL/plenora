@@ -347,6 +347,56 @@ def _project_canvas_check_rows(
     return [ProjectCanvasCheckRow.from_mapping(row) for row in rows]
 
 
+
+# Sorgenti dei progetti Manipola (GET /projects; UI-1 C24, conferma A-K1, F9,
+# collaudo live L1). Regole:
+#  - la colonna `canvas` e' `jsonb` nelle migration (0000_bootstrap) e `TEXT`
+#    nello schema storico (`app/db/config_schema.sql`): `pg_typeof` sceglie
+#    riga per riga. Con jsonb il documento e' la colonna stessa (`canvas::jsonb`
+#    non converte nulla): nessuna serializzazione ne' rilettura del canvas.
+#    Prima (42563405) ogni canvas passava da `canvas::text` (serializzato),
+#    `pg_input_is_valid` (letto) e `::jsonb` (letto di nuovo): 154 ms contro
+#    18 ms su 20 canvas da 75 kB, misurati su PostgreSQL 17 (L1);
+#  - solo un canvas TEXT si controlla (`pg_input_is_valid(text, ...)`; la
+#    versione jsonb non esiste): illeggibile -> `corrupted`, la query non
+#    fallisce; un JSON che non e' un oggetto non ha nodi (nessuna sorgente);
+#  - costo lineare (F9): i nodi di ogni progetto si scorrono una volta, in un
+#    LATERAL con due aggregati FILTER.
+# `CASE` valuta solo il ramo scelto: con una colonna TEXT `canvas::jsonb` non
+# si esegue mai (verificato su PostgreSQL vero, colonne jsonb e text:
+# tests2/contract/test_ui_conferma_data_cache_contract.py).
+MANIPOLA_SOURCE_REFS_SQL = """
+    WITH p AS (
+        SELECT id,
+               CASE WHEN pg_typeof(canvas) = 'jsonb'::regtype THEN canvas::jsonb
+                    WHEN pg_input_is_valid(canvas::text, 'jsonb') THEN canvas::text::jsonb
+               END AS doc
+        FROM projects
+        WHERE project_type = 'manipola' AND id IN ({placeholders})
+    )
+    SELECT p.id,
+           p.doc IS NULL AS corrupted,
+           COALESCE(refs.source_project_ids, '[]'::jsonb) AS source_project_ids,
+           COALESCE(refs.file_source_ids, '[]'::jsonb) AS file_source_ids
+    FROM p
+    LEFT JOIN LATERAL (
+        SELECT jsonb_agg(COALESCE(node -> 'data' ->> 'source_project_id',
+                                  node ->> 'source_project_id'))
+                   FILTER (WHERE node ->> 'type' = 'project_source'
+                             AND COALESCE(node -> 'data' ->> 'source_project_id',
+                                          node ->> 'source_project_id', '') <> '')
+                   AS source_project_ids,
+               jsonb_agg(node ->> 'file_source_id')
+                   FILTER (WHERE node ->> 'type' = 'file_source'
+                             AND COALESCE(node ->> 'file_source_id', '') <> '')
+                   AS file_source_ids
+        FROM jsonb_array_elements(
+                 CASE WHEN jsonb_typeof(p.doc -> 'nodes') = 'array'
+                      THEN p.doc -> 'nodes' ELSE '[]'::jsonb END
+             ) AS node
+    ) AS refs ON true
+"""
+
 class ProjectRepository:
     """Repository boundary for project-owned SQL persistence."""
 
@@ -637,60 +687,14 @@ class ProjectRepository:
         GET /projects mostrava i progetti sorgente leggendo il canvas intero
         di ogni progetto visibile. Qui il DB estrae solo gli id dei nodi
         `project_source` e `file_source`: nessun canvas viaggia verso
-        l'applicazione. Un canvas non leggibile come JSON (pg_input_is_valid,
-        PostgreSQL 16+) e' segnato `corrupted` invece di far fallire la
-        query (un JSON che non e' un oggetto non ha nodi: nessuna sorgente,
-        come nel percorso di riserva).
-
-        La colonna `canvas` e' `jsonb` nelle migration (0000_bootstrap) e
-        `TEXT` nello schema storico (`app/db/config_schema.sql`): la query
-        passa SEMPRE da `canvas::text`, cosi' vale per entrambe
-        (`pg_input_is_valid(jsonb, ...)` non esiste: conferma UI A-K1,
-        verificata su PostgreSQL vero, test
-        `test_manipola_source_refs_on_real_postgres`).
-
-        Costo lineare (UI conferma finale F9): i nodi di OGNI progetto si
-        scorrono una volta sola, in un LATERAL con due aggregati FILTER; prima
-        due sottoquery correlate rileggevano tutti i nodi di tutti i progetti
-        per ognuno (N progetti x M nodi). Il testo del canvas si legge due
-        volte (`pg_input_is_valid` e il cast): e' il prezzo, lineare, del
-        riconoscere un canvas non leggibile senza una funzione plpgsql.
+        l'applicazione. La query e' `MANIPOLA_SOURCE_REFS_SQL` (regole li').
         """
         if not project_ids:
             return []
         ordered_ids = sorted(project_ids)
         placeholders = ", ".join(["%s"] * len(ordered_ids))
         rows = _fetchall(
-            f"""
-            WITH p AS (
-                SELECT id,
-                       CASE WHEN pg_input_is_valid(canvas::text, 'jsonb')
-                            THEN canvas::text::jsonb END AS doc
-                FROM projects
-                WHERE project_type = 'manipola' AND id IN ({placeholders})
-            )
-            SELECT p.id,
-                   p.doc IS NULL AS corrupted,
-                   COALESCE(refs.source_project_ids, '[]'::jsonb) AS source_project_ids,
-                   COALESCE(refs.file_source_ids, '[]'::jsonb) AS file_source_ids
-            FROM p
-            LEFT JOIN LATERAL (
-                SELECT jsonb_agg(COALESCE(node -> 'data' ->> 'source_project_id',
-                                          node ->> 'source_project_id'))
-                           FILTER (WHERE node ->> 'type' = 'project_source'
-                                     AND COALESCE(node -> 'data' ->> 'source_project_id',
-                                                  node ->> 'source_project_id', '') <> '')
-                           AS source_project_ids,
-                       jsonb_agg(node ->> 'file_source_id')
-                           FILTER (WHERE node ->> 'type' = 'file_source'
-                                     AND COALESCE(node ->> 'file_source_id', '') <> '')
-                           AS file_source_ids
-                FROM jsonb_array_elements(
-                         CASE WHEN jsonb_typeof(p.doc -> 'nodes') = 'array'
-                              THEN p.doc -> 'nodes' ELSE '[]'::jsonb END
-                     ) AS node
-            ) AS refs ON true
-            """,
+            MANIPOLA_SOURCE_REFS_SQL.format(placeholders=placeholders),
             tuple(ordered_ids),
         )
         return [

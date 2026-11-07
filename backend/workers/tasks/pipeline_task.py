@@ -12,6 +12,7 @@ from collections.abc import Mapping as _Mapping
 from typing import Any, Optional
 
 from app.shared.contracts.payloads import JsonObject
+from app.shared.execution.progress_messages import progress_text
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, get_steps
 from app.config import settings
 from app.core.auth import async_user_recheck as async_user_recheck_module
@@ -358,7 +359,7 @@ def execute_pipeline_task(
         run_id=run_id, project_id=project_id,
     )
     try:
-        _update_progress(self, 0, "Inizializzazione pipeline...")
+        _update_progress(self, 0, progress_text("run_start"))
     except TaskRevoked:
         # Il primo checkpoint precede sia i lookup di idempotenza sia
         # l'apertura delle run, ma gli input temporanei esistono gia'.
@@ -490,11 +491,11 @@ def execute_pipeline_task(
         raise
 
     try:
-        _update_progress(self, 5, "Caricamento configurazione...")
+        _update_progress(self, 5, progress_text("run_loading"))
         orchestrator = _build_orchestrator()
         executor_run_id = run_id if intermediate_run else None
 
-        _update_progress(self, 10, "Esecuzione pipeline...")
+        _update_progress(self, 10, progress_text("run_working"))
         if contract is not None:
             result = orchestrator.execute_pipeline_from_contract(
                 contract=contract,
@@ -536,7 +537,7 @@ def execute_pipeline_task(
                 _update_progress(
                     self,
                     0,
-                    f"Connessione persa: {message}",
+                    progress_text("connection_lost", detail=message),
                     check_revocation=False,
                 )
                 logger.warning(
@@ -555,7 +556,7 @@ def execute_pipeline_task(
                 _update_progress(
                     self,
                     0,
-                    f"Connessione al database persa. {message}",
+                    progress_text("connection_lost", detail=message),
                     check_revocation=False,
                 )
                 return _outcome({
@@ -636,7 +637,7 @@ def execute_pipeline_task(
         _update_progress(
             self,
             95,
-            "Finalizzazione output...",
+            progress_text("run_saving"),
             check_revocation=False,
         )
         executable_output = None
@@ -851,7 +852,7 @@ def preview_pipeline_task(
         expected_project_id=project_id,
     )
     logger.info(f"Task PREVIEW {task_id} avviato per progetto {project_id}")
-    _update_progress(self, 0, "Inizializzazione preview...")
+    _update_progress(self, 0, progress_text("preview_start"))
 
     # Re-check permessi al pickup tramite helper condiviso.
 
@@ -864,7 +865,7 @@ def preview_pipeline_task(
         return _revoked
 
     try:
-        _update_progress(self, 10, "Esecuzione preview...")
+        _update_progress(self, 10, progress_text("preview_working"))
         orchestrator = _build_orchestrator()
         if contract is not None:
             result = orchestrator.execute_preview_from_contract(
@@ -883,7 +884,7 @@ def preview_pipeline_task(
                 logger.error(f"[GESTITO] Task PREVIEW {task_id} fallito: {message}")
             return {"success": False, "task_id": task_id, "project_id": project_id, "error": message}
 
-        _update_progress(self, 100, "Preview completata")
+        _update_progress(self, 100, progress_text("preview_done"))
 
         try:
             import numpy as _np

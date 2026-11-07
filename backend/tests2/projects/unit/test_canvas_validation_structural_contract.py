@@ -277,14 +277,18 @@ def test_arricchisci_complete_no_structural_error():
 def test_arricchisci_node_isolated_error_for_enricher_warning_for_source():
     # 'e' (api_enrich) e 'iso' (source) non toccati da alcun edge → isolati.
     # api_enrich/result = error (rompono il flusso); source = warning.
+    # Collaudo live L3: con un Output, un api_enrich isolato non arriva
+    # all'Output, non si esegue e non blocca (avviso); senza Output resta errore.
     nodes = [_node("s", "file_source"), _node("e", "api_enrich"),
              _node("r", "result"), _node("iso", "file_source")]
     edges = [_edge("s", "r")]
     report = _validate(_canvas(nodes, edges), project_type="arricchisci")
     iso = {i.node_id: i for i in report.issues if i.code == "ARRICCHISCI_NODE_ISOLATED"}
-    assert iso["e"].severity == "error"
+    assert iso["e"].severity == "warning"
     assert iso["iso"].severity == "warning"
     assert "s" not in iso and "r" not in iso  # collegati → non isolati
+    no_output = _validate(_canvas([_node("s", "file_source"), _node("e", "api_enrich")], []), project_type="arricchisci")
+    assert {i.node_id: i.severity for i in no_output.issues if i.code == "ARRICCHISCI_NODE_ISOLATED"}["e"] == "error"
 
 
 def test_arricchisci_node_isolated_only_for_arricchisci():

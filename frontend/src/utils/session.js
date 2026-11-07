@@ -24,11 +24,16 @@ export function registeredSessionResets() {
   return [...resetters.keys()];
 }
 
-/** Svuota tutti i dati dell'utente in memoria. Un errore non ferma gli altri. */
-export function resetSession() {
+/**
+ * Svuota tutti i dati dell'utente in memoria. Un errore non ferma gli altri.
+ * `exit` (collaudo live L7): `{ reason: 'logout' | 'expired', userId }`
+ * dell'uscita, per chi deve distinguere l'uscita scelta dall'utente dalla
+ * sessione scaduta (le copie di sicurezza: utils/localDrafts).
+ */
+export function resetSession(exit = {}) {
   for (const [name, reset] of resetters) {
     try {
-      reset();
+      reset(exit);
     } catch (err) {
       console.error(`[session] svuotamento di "${name}" non riuscito:`, err);
     }

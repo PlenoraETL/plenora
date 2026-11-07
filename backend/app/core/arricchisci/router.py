@@ -1009,7 +1009,7 @@ def _preflight_enrichment(project_id: str, request: EnrichPreflightRequest, curr
         canvas = CanvasState(**request.canvas) if request.canvas is not None else _project_service.get_project_canvas(project_id)
         if canvas is None:
             raise HTTPException(404, "Canvas non trovato")
-        canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False)
+        canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user)
         contract, manifest = prepare_contract(PipelineExecutionContract(project_id=project_id,
             project_type=metadata.project_type, group_id=metadata.group_id, canvas=canvas.model_dump()), request.inputs,
             identity=identity, test_run=test_run)
@@ -1169,7 +1169,7 @@ def _launch_enrichment(
 
         try:
             if request.preparation_fingerprint is not None:
-                canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False)
+                canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user)
             base_contract = PipelineExecutionContract(
                 project_id=project_id,
                 project_type=metadata.project_type,

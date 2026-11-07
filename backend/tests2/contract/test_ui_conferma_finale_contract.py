@@ -31,7 +31,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 def test_manipola_source_refs_scan_the_nodes_once():
     from app.core.projects import db as projects_db
 
-    sql = inspect.getsource(projects_db.ProjectRepository.list_manipola_source_refs)
+    sql = projects_db.MANIPOLA_SOURCE_REFS_SQL
     assert "LEFT JOIN LATERAL" in sql and sql.count("FILTER (WHERE") == 2
     # Prima: CTE dei nodi riletta da due sottoquery correlate (N x M).
     assert not re.search(r"WHERE\s+n\.id\s*=\s*p\.id", sql)

@@ -8,7 +8,7 @@
 import { createContext } from 'react';
 
 const EMPTY = {
-  key: '', reaching: new Set(), dangling: new Set(), lanes: [], laneOf: new Map(), isEnd: () => false,
+  key: '', reaching: new Set(), dangling: new Set(), inputless: new Set(), lanes: [], laneOf: new Map(), isEnd: () => false,
   ancestorsOf: () => new Set(), danglingEndsFrom: () => [],
 };
 

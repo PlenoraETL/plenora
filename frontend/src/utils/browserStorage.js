@@ -9,9 +9,13 @@
  *    (chiave fissa o prefisso), con l'area (local / session), di chi e'
  *    (`browser` = preferenza del dispositivo; `user` = porta lo user_id della
  *    sessione nella chiave, chi entra dopo non la vede), cosa succede
- *    all'uscita dall'account (`logout`: keep / clear) e il motivo;
+ *    all'uscita dall'account (`logout`: keep / clear / own) e il motivo;
  *  - all'uscita (`resetSession`) si tolgono le righe `clear` (dati personali
  *    di memoria d'uso), di TUTTI gli utenti del browser;
+ *  - le righe `own` (collaudo live L7) si tolgono solo all'uscita SCELTA
+ *    dall'utente e solo per lui: le toglie il modulo che le conosce
+ *    (`clearedBy`, registrato in utils/session); con la sessione scaduta o
+ *    una chiusura improvvisa del browser restano (e' il loro scopo);
  *  - le chiavi vecchie (`legacy`) si spostano sulla chiave nuova alla prima
  *    lettura (migrazione una volta, poi si tolgono); quelle di proprietario
  *    sconosciuto (la palette per browser di prima di B-K10) si tolgono
@@ -43,8 +47,8 @@ export const STORAGE_KEYS = Object.freeze({
     why: 'preferiti e recenti della palette per utente: memoria d\'uso con nomi di tabelle, si toglie all\'uscita',
   }),
   draft: Object.freeze({
-    prefix: 'plenora:draft:', area: 'local', owner: 'user', logout: 'keep',
-    why: 'copie di sicurezza delle modifiche non salvate (utils/localDrafts): servono a non perdere lavoro, scadono in 14 giorni',
+    prefix: 'plenora:draft:', area: 'local', owner: 'user', logout: 'own', clearedBy: 'localDrafts',
+    why: 'copie di sicurezza delle modifiche non salvate (utils/localDrafts): servono a non perdere lavoro dopo una chiusura improvvisa, scadono in 14 giorni; all\'uscita scelta (dopo la domanda sulle modifiche non salvate) si tolgono quelle di chi esce, tranne quelle delle sue altre schede ancora aperte',
   }),
   draftTab: Object.freeze({
     prefix: 'plenora:tab:', area: 'local', owner: 'browser', logout: 'keep',
@@ -150,7 +154,7 @@ export function migrateLegacy(name, key, legacyKeys = [], drop = []) {
   } catch { /* storage non disponibile: la chiave nuova resta com'e' */ }
 }
 
-/** Uscita dall'account: via le righe `clear`, di tutti gli utenti del browser. */
+/** Uscita dall'account: via le righe `clear`, di tutti gli utenti del browser (le `own`: `clearedBy`). */
 function clearOnLogout() {
   for (const [name, row] of Object.entries(STORAGE_KEYS)) {
     if (row.logout !== 'clear') continue;

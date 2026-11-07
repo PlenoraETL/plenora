@@ -89,11 +89,12 @@ def test_query_generator_raises_on_orphan_join_node():
 # E. Canvas validator — orphan non-source nodes
 
 
-def test_canvas_put_rejects_orphan_transform_node():
-    """Un nodo transform senza edge incoming → 400 al PUT /canvas."""
-    from app.core.projects.router import update_project_canvas, CanvasWithPlugins
-    from app.core.projects.canvas_models import Node, Edge
-    from fastapi import HTTPException
+def test_canvas_put_accepts_orphan_transform_node():
+    """Collaudo live L5: un transform senza edge incoming non blocca il PUT
+    /canvas (prima 400 «nodi orfani: <id>»); lo segnala Valida
+    (structure.orphan, avviso se non arriva all'Output)."""
+    from app.core.projects.router import _prepare_canvas_for_owner, CanvasWithPlugins
+    from app.core.projects.canvas_models import CanvasState, Node, Edge
 
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = {"id": "p1", "group_id": "g1"}
@@ -113,11 +114,11 @@ def test_canvas_put_rejects_orphan_transform_node():
         role = "admin"; user_id = "u1"; username = "u"; group_id = "g1"
 
     with patch("app.core.projects.router._project_service", fake_svc):
-        with pytest.raises(HTTPException) as excinfo:
-            update_project_canvas("p1", body, _User())
-    assert excinfo.value.status_code == 400
-    assert "orfani" in excinfo.value.detail
-    assert "orphan" in excinfo.value.detail
+        prepared = _prepare_canvas_for_owner(
+            "p1", CanvasState(nodes=body.nodes, edges=body.edges),
+            fake_svc.get_project_metadata.return_value, _User(),
+        )
+    assert "orphan" in {n.id for n in prepared.nodes}
 
 
 def test_canvas_put_accepts_source_nodes_without_incoming_edges():

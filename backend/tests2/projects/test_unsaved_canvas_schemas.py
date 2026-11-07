@@ -217,16 +217,19 @@ def test_project_source_altro_gruppo_rifiutato_da_put_e_post(context, monkeypatc
     service.update_canvas.assert_not_called()
 
 
-def test_nodo_orfano_rifiutato_al_salvataggio_ma_non_negli_schemi(context):
-    """Il rifiuto dei nodi orfani e' una regola del SALVATAGGIO: mentre
-    l'utente ricollega i nodi gli schemi del resto del canvas si aggiornano."""
+def test_passo_senza_ingresso_non_blocca_salvataggio_ne_schemi(context):
+    """Collaudo live L5: un passo senza ingresso (sorgente eliminata) non
+    blocca il salvataggio; lo segnala Valida (structure.orphan). Prima il
+    PUT rispondeva 400 «Canvas contiene nodi orfani ...: <id>» e il lavoro
+    restava non salvato."""
     app, client, service, payload = context
     authenticate(app, "user")
     payload["edges"] = []
+    service.update_canvas.return_value = None
     put = client.put("/projects/p1/canvas", json=payload)
-    assert put.status_code == 400
-    assert "orfani" in put.json()["detail"]
+    assert "orfani" not in put.text
+    assert put.status_code != 400, put.text
+    service.update_canvas.assert_called_once()
     post = client.post("/projects/p1/schemas", json={"canvas": payload})
     assert post.status_code == 200
     assert [c["name"] for c in post.json()["schemas"]["source"]] == ["original"]
-    service.update_canvas.assert_not_called()

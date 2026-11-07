@@ -94,8 +94,9 @@ async function validateViaBackend(before, { reuse = false } = {}) {
   }
   try {
     const { projectId, canvasVersion } = useCanvasStore.getState();
-    const result = backendReportToResult(await validateProjectCanvas(projectId));
+    const report = await validateProjectCanvas(projectId);
     const st = useCanvasStore.getState();
+    const result = backendReportToResult(report, st.projectId === projectId ? st.nodes : []);
     if (st.projectId === projectId && st.canvasVersion === canvasVersion) {
       st.setLastValidation?.(result.isValid && canvasVersion ? { projectId, canvasVersion, at: Date.now(), result } : null);
     }

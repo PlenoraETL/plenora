@@ -737,15 +737,16 @@ def _assert_canvas_refs_visible_for_owner(
 
 def _prepare_canvas_for_owner(
     project_id: str, canvas: CanvasState, metadata: Any, current_user: CurrentUser,
-    *, for_save: bool, schema_call: Any = None,
+    *, schema_call: Any = None,
 ) -> CanvasState:
     """Prepara e verifica il canvas senza persistere modifiche al progetto.
 
     Stessa preparazione per il salvataggio (PUT /canvas) e per gli schemi di
     un canvas non salvato (POST /schemas): controllo dei riferimenti tra
-    gruppi e sincronizzazione con i contratti. Il rifiuto dei nodi orfani e'
-    una regola del SALVATAGGIO (for_save): mentre l'utente ricollega i nodi
-    gli schemi del resto del canvas devono continuare ad aggiornarsi.
+    gruppi e sincronizzazione con i contratti. Un passo senza ingresso NON
+    blocca il salvataggio (collaudo live L5, coerente con L3): Valida lo
+    segnala (errore se arriva all'Output, avviso se e' in un ramo che non ci
+    arriva) e la conferma di eliminazione del frontend lo dice prima.
 
     ``schema_call`` (UI-2, C15: SchemaInferenceService.begin_call): le
     colonne dell'Output si calcolano con la chiamata di inferenza che la
@@ -773,18 +774,6 @@ def _prepare_canvas_for_owner(
         logger.warning(
             f"sync output_contract canvas fallito per {project_id}: {exc}",
             exc_info=True,
-        )
-
-    orphans = _canvas_access.find_orphan_processing_nodes(canvas) if for_save else []
-    if orphans:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Canvas contiene nodi orfani (nessun edge incoming): "
-                f"{', '.join(orphans)}. Aggiungi almeno una relazione "
-                f"verso ciascuno di questi nodi, oppure rimuovili dal "
-                f"canvas prima di salvare."
-            ),
         )
 
     # Ricalcola le colonne senza modificare il contratto del risultato materializzato.
@@ -843,7 +832,7 @@ def update_project_canvas(
 
     canvas = CanvasState(nodes=body.nodes, edges=body.edges)
 
-    canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=True)
+    canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user)
     # Chi salva un riferimento a un connettore API deve poterlo usare e
     # l'endpoint REST deve avere la sua origine (carica.rest_auth).
     assert_canvas_rest_auth_usable(
@@ -954,7 +943,7 @@ def _infer_project_schemas(
     shared = canvas is not None and isinstance(_schema_service, schema_inference_module.SchemaInferenceService)
     call = _schema_service.begin_call() if shared else None
     if canvas is not None:
-        canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False, schema_call=call)
+        canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, schema_call=call)
     try:
         if call is not None:
             return _schema_service.infer_schemas_response(project_id, canvas=canvas, call=call)
@@ -980,7 +969,7 @@ def preview_project_query(
         raise HTTPException(400, "Anteprima della query disponibile solo per i progetti Estrai")
     canvas = _prepare_canvas_for_owner(
         project_id, CanvasState(nodes=body.canvas.nodes, edges=body.canvas.edges),
-        metadata, current_user, for_save=False,
+        metadata, current_user,
     )
     connection_id = getattr(metadata, "default_connection_id", None)
     return describe_estrai_query(
@@ -1049,7 +1038,7 @@ def distinct_node_values(project_id: str, node_id: str, body: DistinctRequest,
                          current_user: CurrentUser = Depends(require_not_esecutore)) -> JsonObject:
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
-    canvas = _prepare_canvas_for_owner(project_id, CanvasState(nodes=body.canvas.nodes, edges=body.canvas.edges), metadata, current_user, for_save=False)
+    canvas = _prepare_canvas_for_owner(project_id, CanvasState(nodes=body.canvas.nodes, edges=body.canvas.edges), metadata, current_user)
     # Anteprima dei valori: «Utente che esegue» = username di prova (runtime_identity).
     try:
         if identity_input_nodes(canvas):
@@ -1196,7 +1185,7 @@ def validate_project_canvas(
         selected_canvas = (CanvasState(nodes=body.canvas.nodes, edges=body.canvas.edges)
                            if body and body.canvas else _project_service.get_project_canvas(project_id))
         if body and body.canvas:
-            selected_canvas = _prepare_canvas_for_owner(project_id, selected_canvas, metadata, current_user, for_save=False)
+            selected_canvas = _prepare_canvas_for_owner(project_id, selected_canvas, metadata, current_user)
         manifest = None
         input_error = None
         input_error_code = "runtime_inputs.invalid"

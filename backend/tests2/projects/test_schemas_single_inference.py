@@ -115,7 +115,7 @@ def service(monkeypatch):
 def _reference(svc, canvas_dict):
     """Il percorso di prima: preparazione, poi una chiamata di inferenza nuova."""
     canvas = CanvasState.model_validate(deepcopy(canvas_dict))
-    prepared = projects._prepare_canvas_for_owner("p1", canvas, svc.get_project_metadata("p1"), USER, for_save=False)
+    prepared = projects._prepare_canvas_for_owner("p1", canvas, svc.get_project_metadata("p1"), USER)
     return SchemaInferenceService(svc).infer_schemas_response("p1", canvas=prepared)
 
 

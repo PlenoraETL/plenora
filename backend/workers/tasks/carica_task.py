@@ -6,6 +6,7 @@ Runs background execution while preserving backend runtime contracts.
 
 import time as _time
 import traceback
+from app.shared.execution.progress_messages import progress_text
 import uuid as _uuid
 from typing import Any, Mapping, Optional, cast
 
@@ -245,7 +246,7 @@ def execute_carica_task(
     intermediate_run_persisted = existing_intermediate_run is not None
     write_started = False
     try:
-        _update_progress(self, 0, "Inizializzazione CARICA...")
+        _update_progress(self, 0, progress_text("load_start"))
         write_branch = carica_dispatch.select_carica_write_branch(carica_node_data)
         target_lock_handle = _acquire_target_lock_or_return_busy(
             carica_node_data=carica_node_data,
@@ -257,10 +258,7 @@ def execute_carica_task(
         )
         if target_lock_handle is None:
             elapsed_ms = int((_time.time() - _run_start) * 1000)
-            message = (
-                "Destinazione CARICA gia' in scrittura da un altro task; "
-                "riprova al termine della run corrente."
-            )
+            message = progress_text("load_busy")
             _update_progress(self, -1, message)
             close_run(
                 run_id=run_id,
@@ -303,7 +301,7 @@ def execute_carica_task(
             ttl_seconds=_carica_target_lock_ttl_seconds(),
         )
 
-        _update_progress(self, 5, "Caricamento dati dal nodo Output...")
+        _update_progress(self, 5, progress_text("load_reading"))
 
         # Multi-layer (es. IMDF bundle): se l'artefatto upstream e' riconosciuto
         # da un adapter registrato, il sink ArcGIS scrive N layer in una-run,
@@ -369,7 +367,7 @@ def execute_carica_task(
             logger.info(f"DataFrame caricato: {len(df)} righe, {len(df.columns)} colonne")
             _update_progress(
                 self, 10,
-                f"Dati caricati: {len(df)} righe. Avvio scrittura..."
+                progress_text("load_read", rows=len(df)),
             )
 
             if write_branch == 'datasource':

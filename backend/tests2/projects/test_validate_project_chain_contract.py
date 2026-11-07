@@ -55,6 +55,9 @@ def test_single_project_no_upstream():
 def test_chain_aggregates_upstream_errors():
     # A ha un project_source → B; B è vuoto (CANVAS_EMPTY). Validare A trova l'errore di B.
     a_canvas = _canvas([_node("ps", "project_source", source_project_id="B"), _node("r", "result")])
+    # Collaudo live L3: si segue solo una sorgente che arriva all'Output.
+    a_canvas.edges = [MagicMock(source="ps", target="r", source_column="", target_column="",
+                                is_spatial=False, source_geom_column=None, target_geom_column=None, id="e")]
     b_canvas = _canvas([])  # vuoto → CANVAS_EMPTY
     report = validate_project_chain("A", _loader({
         "A": (a_canvas, "manipola"), "B": (b_canvas, "manipola"),

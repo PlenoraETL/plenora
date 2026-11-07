@@ -15,7 +15,9 @@
  */
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
 import { humanizeError } from './errorMessages';
+import { withStepTitles } from './stepTitles';
 import { can } from './permissions';
+import { formatNumber } from './format';
 
 /*
  * Conferma UI (B-K6), tre regole in piu':
@@ -40,10 +42,26 @@ export function failureActions(user, { step = null } = {}) {
   return { goToStep: Boolean(step), openLog: can.readRunLog(user), report: can.createTicket(user) };
 }
 
-/** Il messaggio di un'esecuzione fallita, come lo mostra la finestra. */
-export const failureMessage = (result) => humanizeError(result).message;
+/**
+ * Il messaggio di un'esecuzione fallita, come lo mostra la finestra: i passi
+ * del canvas aperto col loro titolo, mai l'id (collaudo live L4).
+ */
+export const failureMessage = (result, nodes = []) => withStepTitles(humanizeError(result).message, nodes);
 
 const quoted = (text) => [...String(text || '').matchAll(/[«"'“]([^»"'”]{2,80})[»"'”]/g)].map(m => m[1].trim());
+
+/**
+ * Il testo di un'esecuzione riuscita (collaudo live L4): dai dati strutturati
+ * dell'esito (righe, file), numeri formattati qui; mai il messaggio del
+ * backend («Salvato 238044 righe in …»).
+ */
+export function runSuccessText(result) {
+  const rows = result?.rows_count ?? result?.rows_processed;
+  const file = result?.output_file || null;
+  if (rows == null) return file ? `Risultato salvato in «${file}».` : 'Operazione eseguita con successo';
+  const what = Number(rows) === 1 ? '1 riga salvata' : `${formatNumber(rows)} righe salvate`;
+  return file ? `${what} in «${file}».` : `${what}.`;
+}
 
 /** { id, title } del passo fallito, o null. */
 export function failedStepOf(result, nodes = []) {

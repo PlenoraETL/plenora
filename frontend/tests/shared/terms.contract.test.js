@@ -12,7 +12,12 @@
  *     risultato».
  *  3. Le eccezioni sono dichiarate qui per file e parola, col motivo; una
  *     dichiarazione che non serve piu' fa fallire il test.
+ *  4. Collaudo live L4: anche i testi che il BACKEND manda all'interfaccia
+ *     durante un'esecuzione (tabella PROGRESS_MESSAGES di
+ *     backend/app/shared/execution/progress_messages.py, l'unica fonte dei
+ *     messaggi di avanzamento) passano per lo stesso glossario.
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { ALLOWED_ENGLISH, CONCEPTS } from '../../src/utils/glossary';
@@ -24,6 +29,13 @@ import { SRC, sourceFiles } from '../helpers/sourceScan.js';
 // sostituite e i nomi di prima (tests/helpers/visibleText, vocabolario).
 const FILES = sourceFiles(/\.jsx?$/).filter(f => !f.file.startsWith('mocks/'));
 const TEXTS = FILES.flatMap(f => visibleTexts(f.abs));
+
+// Testi di avanzamento del backend: le righe "chiave": "testo" della tabella.
+const PROGRESS_FILE = path.resolve(SRC, '../../backend/app/shared/execution/progress_messages.py');
+const PROGRESS_SOURCE = fs.readFileSync(PROGRESS_FILE, 'utf-8');
+const PROGRESS_TABLE = PROGRESS_SOURCE.slice(PROGRESS_SOURCE.indexOf('PROGRESS_MESSAGES'), PROGRESS_SOURCE.indexOf('\n})'));
+const BACKEND_TEXTS = [...PROGRESS_TABLE.matchAll(/^\s*"(\w+)":\s*"((?:[^"\\]|\\.)*)",?\s*$/gm)]
+  .map(m => ({ file: 'backend:progress_messages.py', line: m[1], text: m[2].replace(/\\'/g, "'") }));
 
 /*
  * Eccezioni: 'file' -> { parola: motivo }. Le pagine del superadmin
@@ -79,6 +91,18 @@ describe('termini: un concetto, un termine, in tutta l\'app', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('i testi di avanzamento del backend seguono lo stesso glossario (L4)', () => {
+    expect(BACKEND_TEXTS.length).toBeGreaterThan(25);
+    expect(BACKEND_TEXTS.some(t => t.line === 'run_working')).toBe(true);
+    const offenders = BACKEND_TEXTS
+      .map(t => ({ ...t, words: offendersOf(t) }))
+      .filter(t => t.words.length)
+      .map(t => `${t.line}: [${t.words.join(', ')}] ${t.text}`);
+    expect(offenders).toEqual([]);
+    // Nessun id nei testi: solo segnaposto per valori mostrati.
+    expect(BACKEND_TEXTS.filter(t => /\{\w*_?id\}/.test(t.text)).map(t => t.line)).toEqual([]);
+  });
+
   it('ogni eccezione dichiarata serve ancora', () => {
     const used = new Set();
     for (const t of TEXTS) {
@@ -97,6 +121,7 @@ describe('termini: un concetto, un termine, in tutta l\'app', () => {
     expect(at('Collega il Join all\'Output')).toEqual([]);
     expect(at('Task attivi', 'pages/AdminTaskRuntimePage.jsx')).toEqual([]);
     expect(at('Modalità UPSERT su {table} via API REST')).toEqual([]);
+    expect(at('Esecuzione pipeline...')).toEqual(['pipeline']);
     expect(path.basename(SRC)).toBe('src');
   });
 });
