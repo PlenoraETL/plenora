@@ -19,7 +19,7 @@ import PageLayout from '../components/common/PageLayout';
 import EmptyState from '../components/common/EmptyState';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
-import { humanizeError, requestErrorMessage } from '../utils/errorMessages';
+import { getErrorCode, humanizeError, requestErrorMessage } from '../utils/errorMessages';
 import { PASSWORD_MIN_LENGTH, passwordProblem } from '../utils/passwordRule';
 import '../styles/UserManager.css';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
@@ -307,9 +307,17 @@ function GroupModal({ onClose, onSave }) {
   );
 }
 // MODAL — Conferma eliminazione
-function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
+/**
+ * Conferma di eliminazione. `onDeactivate` (utenti, 09/11/2026): se il
+ * backend rifiuta perche' l'utente ha storico (409 `user_has_history`:
+ * esecuzioni, progetti, ticket che lo referenziano), il messaggio lo dice e
+ * si offre «Disattiva» (is_active=false con PUT /auth/users/{id}, gli stessi
+ * permessi della modifica).
+ */
+function ConfirmDeleteModal({ title, message, onClose, onConfirm, onDeactivate = null }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [hasHistory, setHasHistory] = useState(false);
   const handleConfirm = async () => {
     setLoading(true);
     setErrorMsg(null);
@@ -320,9 +328,19 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
       // fallita. Mostra il messaggio (axios error o nativo) inline.
       const msg = requestErrorMessage(e, 'Eliminazione fallita');
       setErrorMsg(msg);
+      setHasHistory(getErrorCode(e) === 'user_has_history');
       setLoading(false);
     }
   };
+  const handleDeactivate = async () => {
+    setLoading(true);
+    try { await onDeactivate(); onClose(); }
+    catch (e) {
+      setErrorMsg(requestErrorMessage(e, 'Disattivazione fallita'));
+      setLoading(false);
+    }
+  };
+  const offerDeactivate = hasHistory && Boolean(onDeactivate);
   return (
     <ModalWrapper
       isOpen={true}
@@ -334,9 +352,15 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
       footer={
         <>
           <ModalButton variant="secondary" onClick={onClose} disabled={loading}>Annulla</ModalButton>
-          <ModalButton variant="danger" onClick={handleConfirm} loading={loading}>
-            Elimina
-          </ModalButton>
+          {offerDeactivate ? (
+            <ModalButton variant="primary" onClick={handleDeactivate} loading={loading}>
+              Disattiva
+            </ModalButton>
+          ) : (
+            <ModalButton variant="danger" onClick={handleConfirm} loading={loading}>
+              Elimina
+            </ModalButton>
+          )}
         </>
       }
     >
@@ -493,6 +517,8 @@ export default function UserManager() {
   const handleCreateUser  = async (data) => { await createUser(data); toast.success(`Utente "${data.username}" creato`); loadData(); };
   const handleUpdateUser  = async (id, data) => { await updateUser(id, data); toast.success('Utente aggiornato'); loadData(); };
   const handleDeleteUser  = async (user) => { await deleteUser(user.id); toast.success(`Utente "${user.username}" eliminato`); loadData(); };
+  // Utente con storico (409 user_has_history): si disattiva invece di eliminarlo.
+  const handleDeactivateUser = async (user) => { await updateUser(user.id, { is_active: false }); toast.success(`Utente "${user.username}" disattivato`); loadData(); };
   const handleResetPassword = async (userId, newPassword) => { await resetPassword(userId, { new_password: newPassword }); toast.success('Password reimpostata'); };
   const handleCreateGroup = async (data) => { await createGroup(data); toast.success(`Gruppo "${data.name}" creato`); loadData(); };
   const handleDeleteGroup = async (group) => {
@@ -639,7 +665,8 @@ export default function UserManager() {
       {modalGroup && <GroupModal onClose={() => setModalGroup(false)} onSave={handleCreateGroup} />}
       {deleteTarget?.type === 'user' && (
         <ConfirmDeleteModal title="Elimina utente" message={`Sei sicuro di voler eliminare l'utente "${deleteTarget.item.username}"? L'operazione non è reversibile.`}
-          onClose={() => setDeleteTarget(null)} onConfirm={() => handleDeleteUser(deleteTarget.item)} />
+          onClose={() => setDeleteTarget(null)} onConfirm={() => handleDeleteUser(deleteTarget.item)}
+          onDeactivate={deleteTarget.item.is_active ? () => handleDeactivateUser(deleteTarget.item) : null} />
       )}
       {deleteTarget?.type === 'group' && (
         <ConfirmDeleteGroupModal group={deleteTarget.item} onClose={() => setDeleteTarget(null)} onConfirm={() => handleDeleteGroup(deleteTarget.item)} />

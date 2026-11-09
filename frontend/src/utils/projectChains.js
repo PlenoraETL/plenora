@@ -9,7 +9,8 @@
  *    componenti (una connessione usata da tutti farebbe una catena sola):
  *    si mostrano nella prima colonna di ogni catena che le usa. Titolo = il
  *    nodo piu' a valle (il finale con il cammino piu' lungo; a parita', il
- *    primo per nome). I progetti isolati (nessuno li usa, non pubblicati,
+ *    primo per nome), salvo il titolo personalizzato (`chain_title`, regola
+ *    in chainTitleOf). I progetti isolati (nessuno li usa, non pubblicati,
  *    non leggono altri progetti) vanno nella catena finale «Non usati da
  *    altri progetti»;
  *  - lineage: a monte e a valle (transitivi) di un nodo, per l'evidenza;
@@ -180,8 +181,54 @@ function chainDesc(cols, members) {
   return parts.join(' · ');
 }
 
-/** Il nodo piu' a valle: finale con il cammino piu' lungo, poi il primo per nome. */
-function chainTitleNode(graph, members) {
+/**
+ * Titolo personalizzato (09/11/2026). REGOLA dichiarata:
+ *  - si salva sul progetto «titolare» della catena: il nodo del titolo se e'
+ *    un progetto, se e' un Eseguibile il suo progetto sorgente (campo
+ *    `chain_title` dei metadati, PATCH /projects/{id});
+ *  - si legge dal progetto della catena con `chain_title` piu' a valle: il
+ *    titolare prima, poi il cammino piu' lungo, poi il nome. Cosi', se la
+ *    catena cambia nodo finale (un progetto nuovo legge il vecchio finale),
+ *    il titolo salvato sul vecchio finale resta: e' ancora nella catena;
+ *  - vuoto = titolo calcolato: si svuota il titolo su TUTTI i progetti della
+ *    catena che ne hanno uno (`titleSources`), altrimenti ne riapparirebbe
+ *    uno piu' a monte.
+ */
+function chainTitleOf(graph, members, head, depthOf) {
+  const owner = head.kind === 'project'
+    ? head
+    : directUps(graph, head.key).map((k) => graph.nodes.get(k)).find((n) => n?.kind === 'project' && members.includes(n)) || null;
+  const titled = members
+    .filter((m) => m.kind === 'project' && String(m.raw?.chain_title || '').trim())
+    .sort((a, b) => (b === owner) - (a === owner) || depthOf(b.key) - depthOf(a.key) || byName(a, b));
+  return {
+    custom: titled.length ? String(titled[0].raw.chain_title).trim() : null,
+    ownerKey: owner?.key || null,
+    sources: titled.map((m) => m.key),
+  };
+}
+
+/** Lunghezza massima del titolo personalizzato (CHAIN_TITLE_MAX del backend). */
+export const CHAIN_TITLE_MAX = 120;
+
+/**
+ * Le scritture che danno a `chain` il titolo `title` (regola in
+ * chainTitleOf): [{ projectId, chain_title }]. Un titolo sul progetto
+ * titolare; vuoto = svuotato su tutti i progetti della catena che ne hanno
+ * uno. Nessun titolare (Eseguibile senza progetto visibile): nessuna.
+ */
+export function chainTitleWrites(chain, title) {
+  const value = String(title || '').trim().slice(0, CHAIN_TITLE_MAX);
+  const idOf = (key) => key.slice(2);
+  if (!value) return (chain.titleSources || []).map((key) => ({ projectId: idOf(key), chain_title: '' }));
+  return chain.titleOwnerKey ? [{ projectId: idOf(chain.titleOwnerKey), chain_title: value }] : [];
+}
+
+/**
+ * Il nodo piu' a valle (`head`: finale con il cammino piu' lungo, poi il
+ * primo per nome) e la profondita' di ogni nodo nella catena.
+ */
+function chainDepths(graph, members) {
   const inside = new Set(members.map((m) => m.key));
   const depth = new Map();
   const depthOf = (key, visiting = new Set()) => {
@@ -197,12 +244,13 @@ function chainTitleNode(graph, members) {
   const sinks = members.filter((m) => !directDowns(graph, m.key).some((d) => inside.has(d)));
   const pool = sinks.length ? sinks : members;
   const max = Math.max(...pool.map((m) => depthOf(m.key)));
-  return pool.filter((m) => depthOf(m.key) === max).sort(byName)[0];
+  return { head: pool.filter((m) => depthOf(m.key) === max).sort(byName)[0], depthOf: (k) => depthOf(k) };
 }
 
 /**
- * Le catene: [{ id, title, titleKey, desc, columns, nodes (tutte le schede),
- * isolated }]. L'ordine e' quello del nome; orderChains mette davanti quelle
+ * Le catene: [{ id, title, titleKey, computedTitle, customTitle,
+ * titleOwnerKey, titleSources, desc, columns, nodes (tutte le schede),
+ * isolated }]. `title` = personalizzato (chainTitleOf) o calcolato. L'ordine e' quello del nome; orderChains mette davanti quelle
  * con qualcosa da guardare.
  */
 export function buildChains(graph) {
@@ -233,9 +281,11 @@ export function buildChains(graph) {
   for (const group of groups.values()) {
     if (group.length === 1 && group[0].kind === 'project') { isolated.push(group[0]); continue; }
     const columns = chainColumns(graph, group);
-    const head = chainTitleNode(graph, group);
+    const { head, depthOf } = chainDepths(graph, group);
+    const t = chainTitleOf(graph, group, head, depthOf);
     chains.push({
-      id: `chain:${head.key}`, title: head.name, titleKey: head.key,
+      id: `chain:${head.key}`, title: t.custom || head.name, titleKey: head.key,
+      computedTitle: head.name, customTitle: t.custom, titleOwnerKey: t.ownerKey, titleSources: t.sources,
       desc: chainDesc(columns, group), columns,
       nodes: [...columns.origin, ...columns.estrai, ...columns.transform, ...columns.published],
       isolated: false,
@@ -246,6 +296,7 @@ export function buildChains(graph) {
     const columns = chainColumns(graph, isolated);
     chains.push({
       id: ISOLATED_CHAIN_ID, title: 'Non usati da altri progetti', titleKey: null,
+      computedTitle: 'Non usati da altri progetti', customTitle: null, titleOwnerKey: null, titleSources: [],
       desc: 'Nessun progetto li legge e non sono pubblicati', columns,
       nodes: [...columns.origin, ...columns.estrai, ...columns.transform, ...columns.published],
       isolated: true,
@@ -426,7 +477,8 @@ export function filterChains(chains, { filter = 'all', matches = null, findings 
     if (filter === 'warn' && !c.nodes.some((n) => findings.byKey.has(n.key))) return false;
     if (filter === 'pub' && !c.columns.published.length) return false;
     if (filter === 'unused' && !c.isolated) return false;
-    return !matches || c.nodes.some((n) => matches(nodeSearchValues(n)));
+    // Il titolo personalizzato si cerca come i nomi delle schede.
+    return !matches || (c.customTitle && matches(c.customTitle)) || c.nodes.some((n) => matches(nodeSearchValues(n)));
   });
 }
 

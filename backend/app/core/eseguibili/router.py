@@ -48,6 +48,7 @@ from .models import (
     ExecutablePreflightRequest,
     EseguibileVersionSummary,
     EseguibileSourceStatus,
+    RepublishRequest,
 )
 
 logger = get_logger(__name__)
@@ -254,15 +255,22 @@ def list_eseguibile_versions(
 @audit_action(action="eseguibile.republish", target_param="eseguibile_id")
 def republish_eseguibile(
     eseguibile_id: str,
+    body: Optional[RepublishRequest] = None,
     current_user: CurrentUser = Depends(require_admin),
 ):
+    """Nuova versione dal progetto sorgente. Se toglierebbe o cambierebbe
+    input della versione attiva: 409 con i motivi, salvo
+    ``confirm_removed_inputs`` (ripubblicazione sicura, 09/11/2026)."""
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_group_access(record, current_user)
     try:
         updated = eseguibili_service.publish_new_version(
             eseguibile=record,
             created_by=current_user.user_id,
+            confirm_removed_inputs=bool(body and body.confirm_removed_inputs),
         )
+    except eseguibili_service.InputChangesNotConfirmed as exc:
+        raise HTTPException(status_code=409, detail=exc.message) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _details_response(updated, current_user)

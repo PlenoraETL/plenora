@@ -136,8 +136,13 @@ export const listEseguibileVersions = async (eseguibileId) => {
   return r.data;
 };
 
-export const republishEseguibile = async (eseguibileId) => {
-  const r = await http.post(`/eseguibili/${eseguibileId}/versions`);
+// Ripubblicazione sicura (09/11/2026): se la nuova versione toglie o cambia
+// input della versione attiva il backend la rifiuta (409) salvo conferma
+// esplicita (`confirmRemovedInputs`, dopo averli mostrati all'utente).
+export const republishEseguibile = async (eseguibileId, { confirmRemovedInputs = false } = {}) => {
+  const r = await http.post(`/eseguibili/${eseguibileId}/versions`, {
+    confirm_removed_inputs: Boolean(confirmRemovedInputs),
+  });
   return r.data;
 };
 

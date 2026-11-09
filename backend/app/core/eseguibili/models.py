@@ -198,6 +198,17 @@ class BindingWarning(BaseModel):
     motivo: str
 
 
+class InputChange(BaseModel):
+    """Un input della versione attiva che la ripubblicazione toglierebbe o
+    cambierebbe (regola unica ``service.input_changes``)."""
+
+    input_key: str
+    change: Literal["removed", "kind_changed", "binding_lost", "target_changed"]
+    target_node_id: Optional[str] = None
+    target_field: Optional[str] = None
+    motivo: str
+
+
 class EseguibileSummary(BaseModel):
     """Scheda compatta per la lista."""
     id: str
@@ -235,7 +246,22 @@ class EseguibileSourceStatus(BaseModel):
     state: Literal["same", "changed", "no_source", "no_version"]
     changed: Optional[bool] = None
     binding_problems: List[BindingWarning] = Field(default_factory=list)
+    # Ripubblicazione sicura (09/11/2026): input della versione attiva che la
+    # nuova versione toglierebbe o cambierebbe (``service.input_changes``);
+    # con almeno uno la ripubblicazione chiede conferma esplicita.
+    input_changes: List[InputChange] = Field(default_factory=list)
     publish_error: Optional[str] = None
+
+
+class RepublishRequest(BaseModel):
+    """POST /eseguibili/{id}/versions. ``confirm_removed_inputs``: chi
+    ripubblica ha visto e accetta gli input che la nuova versione toglie o
+    cambia (``EseguibileSourceStatus.input_changes``); senza, la
+    ripubblicazione che ne ha si rifiuta (409)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    confirm_removed_inputs: bool = False
 
 
 class EseguibileDetails(BaseModel):

@@ -30,6 +30,7 @@ from .models import (
     AnalyzeFileUploadResult,
     DetectedUploadColumn,
     ExecutableInputBinding,
+    ExecutableInputDefinition,
     ExecutableManifest,
     ExecutableRunResult,
     EseguibileExecutionResult,
@@ -38,7 +39,14 @@ from .models import (
 from .runtime import resolve_runtime_inputs
 from app.shared.execution.runtime_identity import RuntimeIdentity
 from app.shared.execution.runtime_bound_fields import runtime_bound_context
-from .manifest import binding_problems, compile_manifest, compile_project_inputs
+from .manifest import (
+    binding_problems,
+    canvas_nodes_by_id,
+    check_binding,
+    compile_manifest,
+    compile_project_inputs,
+)
+from app.shared.execution.runtime_input_kinds import is_server_injected
 from .storage import INTERNAL_ARTIFACT_PREFIX
 
 logger = get_logger(__name__)
@@ -226,8 +234,14 @@ def publish_new_version(
     *,
     eseguibile: eseguibili_db.EseguibileRow,
     created_by: str,
+    confirm_removed_inputs: bool = False,
 ) -> eseguibili_db.EseguibileRow:
-    """Ripubblica lo snapshot corrente del progetto sorgente."""
+    """Ripubblica lo snapshot corrente del progetto sorgente.
+
+    Ripubblicazione sicura (09/11/2026): se la nuova versione toglierebbe o
+    cambierebbe input della versione attiva (``input_changes``), si rifiuta
+    con :class:`InputChangesNotConfirmed` salvo ``confirm_removed_inputs``
+    (conferma esplicita di chi ripubblica)."""
 
     source_project_id = eseguibile.source_canvas_id
     if not source_project_id:
@@ -254,6 +268,9 @@ def publish_new_version(
         canvas=cloned_canvas,
         default_connection_id=getattr(proj, "default_connection_id", None),
     )
+    changes = input_changes(_active_manifest(eseguibile), manifest.inputs, manifest.bindings)
+    if changes and not confirm_removed_inputs:
+        raise InputChangesNotConfirmed(changes)
     manifest = hydrate_manifest_connection_options(
         manifest,
         group_id=eseguibile.group_id,
@@ -400,34 +417,164 @@ def source_changed_by_id(eseguibile_ids: Sequence[str]) -> Mapping[str, Optional
     }
 
 
+# Ripubblicazione sicura (09/11/2026) — REGOLA UNICA dell'anteprima e della
+# ripubblicazione: gli input della versione ATTIVA si confrontano con quelli
+# che avrebbe la nuova versione. Per ogni input della versione attiva:
+#   - ``removed``: non c'e' piu' nel progetto (chi esegue non lo da' piu': i
+#     campi a cui era collegato restano col valore salvato nel progetto, per
+#     un filtro = i dati senza quel filtro);
+#   - ``kind_changed``: cambia tipo (es. da «Utente che esegue» a testo: il
+#     valore non lo mette piu' il server, lo sceglie chi esegue);
+#   - ``binding_lost``: perde un collegamento e non ne ha altri;
+#   - ``target_changed``: un collegamento sparisce e ce ne sono altri (il
+#     valore va a un altro campo).
+# Gli input nuovi e i collegamenti aggiunti non contano (non tolgono nulla).
+# I collegamenti si confrontano canonici (``check_binding``, come li scrive
+# la pubblicazione). Con almeno una riga la ripubblicazione si rifiuta, salvo
+# conferma esplicita (``confirm_removed_inputs``).
+
+
+class InputChangesNotConfirmed(ValueError):
+    """La ripubblicazione toglierebbe o cambierebbe input della versione
+    attiva e chi ripubblica non l'ha confermato."""
+
+    def __init__(self, changes: list[JsonObject]) -> None:
+        self.changes = changes
+        self.message = (
+            "La nuova versione toglierebbe o cambierebbe input della versione attiva: "
+            + "; ".join(str(change["motivo"]) for change in changes)
+            + ". Ripubblica solo dopo averlo confermato."
+        )
+        super().__init__(self.message)
+
+
+def _active_manifest(eseguibile: eseguibili_db.EseguibileRow) -> object:
+    if not eseguibile.active_version_id:
+        return None
+    version = eseguibili_db.get_eseguibile_version(eseguibile.active_version_id, eseguibile_id=eseguibile.id)
+    return version.manifest if version is not None else None
+
+
+def _binding_key(binding: Mapping[str, object]) -> tuple[str, str, str]:
+    return (
+        str(binding.get("target_node_id") or ""),
+        str(binding.get("mode") or ""),
+        str(binding.get("target_field") or ""),
+    )
+
+
+def _target_text(key: tuple[str, str, str]) -> str:
+    node_id, _mode, field = key
+    return f"{node_id}.{field}" if field else node_id
+
+
+def input_changes(
+    published_manifest: object,
+    new_inputs: Sequence[ExecutableInputDefinition],
+    new_bindings: Sequence[ExecutableInputBinding],
+    canvas: Mapping[str, object] | None = None,
+) -> list[JsonObject]:
+    """Le righe della regola sopra. ``published_manifest`` e' il manifest
+    della versione attiva come salvato (letto con tolleranza: un manifest
+    vecchio o vuoto non da' righe); ``canvas``, se dato, rende canonici i
+    collegamenti nuovi non ancora verificati (anteprima)."""
+    if not isinstance(published_manifest, Mapping):
+        return []
+    old_inputs = [item for item in published_manifest.get("inputs") or [] if isinstance(item, Mapping)]
+    old_bindings = [item for item in published_manifest.get("bindings") or [] if isinstance(item, Mapping)]
+    nodes_by_id = canvas_nodes_by_id(canvas) if canvas is not None else None
+    new_by_key = {item.key: item for item in new_inputs}
+    new_targets: dict[str, set[tuple[str, str, str]]] = {}
+    for binding in new_bindings:
+        field = binding.target_field
+        if nodes_by_id is not None:
+            canonical, problem = check_binding(binding, nodes_by_id)
+            if problem is None:
+                field = canonical
+        new_targets.setdefault(binding.input_key, set()).add(
+            (binding.target_node_id, binding.mode, field or ""))
+    rows: list[JsonObject] = []
+
+    def row(key: str, change: str, motivo: str, target: tuple[str, str, str] | None = None) -> None:
+        rows.append({
+            "input_key": key,
+            "change": change,
+            "target_node_id": target[0] if target else None,
+            "target_field": (target[2] or None) if target else None,
+            "motivo": motivo,
+        })
+
+    for old in old_inputs:
+        key = str(old.get("key") or "")
+        if not key:
+            continue
+        old_targets = [_binding_key(b) for b in old_bindings if str(b.get("input_key") or "") == key]
+        new = new_by_key.get(key)
+        if new is None:
+            linked = ", ".join(_target_text(t) for t in old_targets)
+            what = "filtro" if any(t[2].startswith("filters.") for t in old_targets) else "valore"
+            row(key, "removed",
+                f"L'input «{key}» non c'è più nel progetto: chi esegue vedrebbe i dati senza quel "
+                f"{what}{f' (era collegato a {linked})' if linked else ''}")
+            continue
+        old_kind = str(old.get("kind") or "file")
+        if new.kind != old_kind:
+            extra = (
+                ": il valore non lo metterebbe più il server dall'utente che esegue, lo sceglierebbe chi esegue"
+                if is_server_injected(old_kind) and not is_server_injected(new.kind) else ""
+            )
+            row(key, "kind_changed", f"L'input «{key}» cambia tipo, da {old_kind} a {new.kind}{extra}")
+        current = new_targets.get(key, set())
+        for target in old_targets:
+            if target in current:
+                continue
+            if current:
+                others = ", ".join(sorted(_target_text(t) for t in current))
+                row(key, "target_changed",
+                    f"L'input «{key}» non sarebbe più collegato a {_target_text(target)} ma a {others}",
+                    target)
+            else:
+                row(key, "binding_lost",
+                    f"L'input «{key}» non sarebbe più collegato a {_target_text(target)}: quel campo "
+                    "userebbe il valore salvato nel progetto", target)
+    return rows
+
+
 def republish_preview(
     canvas: Mapping[str, object],
     *,
     project_type: str,
     source_project_id: str,
     default_connection_id: str | None,
-) -> tuple[list[JsonObject], str | None]:
+    published_manifest: object = None,
+) -> tuple[list[JsonObject], list[JsonObject], str | None]:
     """Cosa direbbe la ripubblicazione del canvas attuale, PRIMA di farla:
     TUTTI i binding degli input che non troverebbero il bersaglio (stessa
-    regola della pubblicazione, ``check_binding``, che li' si ferma al primo)
-    e l'eventuale altro rifiuto di ``compile_manifest``."""
+    regola della pubblicazione, ``check_binding``, che li' si ferma al primo),
+    gli input della versione attiva che la nuova versione toglierebbe o
+    cambierebbe (``input_changes``, la regola della ripubblicazione) e
+    l'eventuale altro rifiuto di ``compile_manifest``."""
     try:
-        _, bindings = compile_project_inputs(canvas, project_type)
+        inputs, bindings = compile_project_inputs(canvas, project_type)
     except ValueError as exc:
-        return [], str(exc)
+        return [], [], str(exc)
     problems = _problem_rows(binding_problems(bindings, canvas))
-    if problems:
-        return problems, None
-    try:
-        compile_manifest(
-            source_project_id=source_project_id,
-            project_type=project_type,
-            canvas=canvas,
-            default_connection_id=default_connection_id,
-        )
-    except ValueError as exc:
-        return [], str(exc)
-    return [], None
+    error: str | None = None
+    if not problems:
+        try:
+            manifest = compile_manifest(
+                source_project_id=source_project_id,
+                project_type=project_type,
+                canvas=canvas,
+                default_connection_id=default_connection_id,
+            )
+        except ValueError as exc:
+            error = str(exc)
+        else:
+            # Gli input del manifest compilato (compreso l'adattatore legacy).
+            inputs, bindings = manifest.inputs, manifest.bindings
+    changes = input_changes(published_manifest, inputs, bindings, canvas)
+    return problems, changes, error
 
 
 def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = None) -> JsonObject:
@@ -452,6 +599,7 @@ def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = 
         "state": "same",
         "changed": False,
         "binding_problems": [],
+        "input_changes": [],
         "publish_error": None,
     }
     if version is None:
@@ -465,13 +613,17 @@ def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = 
         return {**base, "state": "no_source", "changed": None}
     if not source_changed(version.canvas, canvas):
         return base
-    problems, error = republish_preview(
+    problems, changes, error = republish_preview(
         canvas,
         project_type=str(proj.project_type or "").lower(),
         source_project_id=str(source_id),
         default_connection_id=getattr(proj, "default_connection_id", None),
+        published_manifest=version.manifest,
     )
-    return {**base, "state": "changed", "changed": True, "binding_problems": problems, "publish_error": error}
+    return {
+        **base, "state": "changed", "changed": True, "binding_problems": problems,
+        "input_changes": changes, "publish_error": error,
+    }
 
 
 def source_status_for_project(

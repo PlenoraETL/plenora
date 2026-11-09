@@ -58,6 +58,19 @@
 .ch__chain-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
 .ch__chain-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--plen-text); overflow-wrap: anywhere; }
 .ch__chain-desc { font-size: 13px; color: var(--plen-text-sub); }
+/* Rinomina della catena (09/11/2026): matita accanto al titolo, campo al suo posto. */
+.ch__chain-edit {
+  border: 0;
+  background: none;
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--plen-text-sub);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.ch__chain-edit:hover, .ch__chain-edit:focus-visible { color: var(--plen-text); background: var(--plen-surface-2); }
+.ch__chain-rename { font-size: 15px; padding: 4px 8px; min-width: min(320px, 100%); }
 .ch__chain-warn {
   font-size: 12px;
   font-weight: 600;

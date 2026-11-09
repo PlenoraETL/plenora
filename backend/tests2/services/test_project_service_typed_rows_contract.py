@@ -276,6 +276,7 @@ def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
                 "updated_at": now,
                 "canvas_validated": False,
                 "tags": [],
+                "chain_title": None,
             }
         ]
     }
@@ -328,6 +329,7 @@ def test_project_service_create_project_uses_typed_post_write_row(monkeypatch):
         "updated_at": now,
         "canvas_validated": False,
         "tags": [],
+        "chain_title": None,
     }
 
 
@@ -369,6 +371,7 @@ def test_project_service_metadata_uses_typed_project_detail_row(monkeypatch):
         "updated_at": now,
         "canvas_validated": False,
         "tags": [],
+        "chain_title": None,
     }
 
 
@@ -416,6 +419,7 @@ def test_project_service_exposes_explicit_typed_row_serializers():
         "updated_at": now,
         "canvas_validated": False,
         "tags": [],
+        "chain_title": None,
     }
     assert detail_metadata.model_dump() == {
         "id": "p-detail",
@@ -428,6 +432,7 @@ def test_project_service_exposes_explicit_typed_row_serializers():
         "updated_at": now,
         "canvas_validated": False,
         "tags": [],
+        "chain_title": None,
     }
 
 
@@ -469,6 +474,7 @@ def test_project_service_get_project_converts_typed_row_at_public_compat_edge(
             "updated_at": None,
             "canvas_validated": False,
             "tags": [],
+            "chain_title": None,
         },
         "canvas": {"nodes": [], "edges": []},
         "id": "p1",

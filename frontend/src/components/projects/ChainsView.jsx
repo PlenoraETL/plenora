@@ -23,7 +23,7 @@ import { ICON } from '../../utils/icons';
 import { isShortcutBlocked, isTypingTarget } from '../../utils/dialogStack';
 import { matchesShortcut } from '../../utils/shortcuts';
 import {
-  COLUMNS, COLLAPSE_AT, buildGraph, buildChains, chainCounters, filterChains, lineage,
+  CHAIN_TITLE_MAX, COLUMNS, COLLAPSE_AT, buildGraph, buildChains, chainCounters, filterChains, lineage,
   nodeMeta, nodeTags, orderChains, relationOf, typeLabel, watchFindings, byName,
 } from '../../utils/projectChains';
 import { formatCount } from './useProjectListData';
@@ -65,7 +65,66 @@ function NodeCard({ node, meta, relation, warned, onPick }) {
   );
 }
 
-function ChainRow({ chain, selected, lin, findings, metas, expanded, onToggle, onPick }) {
+/**
+ * Titolo della catena, rinominabile (09/11/2026): matita -> campo; Invio o
+ * uscita dal campo salvano, Esc annulla; vuoto = titolo calcolato. Fino alla
+ * risposta (e al nuovo grafo) si vede il titolo scritto.
+ */
+function ChainTitle({ chain, onRename }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [pending, setPending] = useState(null);
+  useEffect(() => { setPending(null); }, [chain.title]);
+  const id = `ch-title-${chain.id}`;
+  const shown = pending ?? chain.title;
+  const commit = async () => {
+    setEditing(false);
+    const value = draft.trim();
+    if (value === (chain.customTitle || '') || (!chain.customTitle && value === chain.computedTitle)) return;
+    setPending(value || chain.computedTitle);
+    try {
+      await onRename(value);
+    } catch {
+      setPending(null);
+    }
+  };
+  if (editing) {
+    return (
+      <input
+        className="ch__rename ch__chain-rename"
+        aria-label="Titolo della catena"
+        value={draft}
+        placeholder={chain.computedTitle}
+        maxLength={CHAIN_TITLE_MAX}
+        autoFocus
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          else if (matchesShortcut('close', e)) { e.stopPropagation(); setEditing(false); }
+        }}
+      />
+    );
+  }
+  return (
+    <>
+      <h2 className="ch__chain-title" id={id} title={chain.customTitle ? `Titolo calcolato: ${chain.computedTitle}` : undefined}>{shown}</h2>
+      {onRename && (
+        <button
+          type="button"
+          className="ch__chain-edit"
+          aria-label={`Rinomina la catena «${shown}»`}
+          title="Rinomina la catena (vuoto = titolo calcolato)"
+          onClick={() => { setDraft(chain.customTitle || ''); setEditing(true); }}
+        >
+          ✎
+        </button>
+      )}
+    </>
+  );
+}
+
+function ChainRow({ chain, selected, lin, findings, metas, expanded, onToggle, onPick, onRename }) {
   const rel = (n) => relationOf(n.key, selected, lin);
   const cols = COLUMNS.map((c) => chain.columns[c.key]);
   const warned = chain.nodes.filter((n) => findings.byKey.has(n.key)).length;
@@ -111,7 +170,7 @@ function ChainRow({ chain, selected, lin, findings, metas, expanded, onToggle, o
   return (
     <section className="ch__chain" aria-labelledby={`ch-title-${chain.id}`}>
       <div className="ch__chain-head">
-        <h2 className="ch__chain-title" id={`ch-title-${chain.id}`}>{chain.title}</h2>
+        <ChainTitle chain={chain} onRename={onRename} />
         {chain.desc && <span className="ch__chain-desc">{chain.desc}</span>}
         {warned > 0 && <span className="ch__chain-warn">{warned} da guardare</span>}
       </div>
@@ -255,9 +314,11 @@ function Counters({ counters }) {
  * @param {Map} props.connections        id -> { name, kind } (database e ArcGIS)
  * @param {Map} props.fileNames          id -> nome del file
  * @param {(node) => object} props.actions azioni del nodo selezionato (open, run, history, ...)
+ * @param {(chain, graph) => ((title: string) => Promise)|null} [props.renameChain]
+ *   rinomina della catena (null = non si puo': permesso o catena senza progetto titolare)
  * @param {React.ReactNode} [props.empty] stato vuoto senza progetti
  */
-export default function ChainsView({ search, connections, fileNames, actions, empty = null }) {
+export default function ChainsView({ search, connections, fileNames, actions, renameChain = null, empty = null }) {
   const resource = useSharedResource('dashboardGraph');
   const raw = resource.data;
   const [selected, setSelected] = useState(null);
@@ -379,6 +440,7 @@ export default function ChainsView({ search, connections, fileNames, actions, em
                   expanded={expanded}
                   onToggle={toggle}
                   onPick={pick}
+                  onRename={renameChain && !chain.isolated ? renameChain(chain, graph) : null}
                 />
               )}
             />

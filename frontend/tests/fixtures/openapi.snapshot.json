@@ -3727,6 +3727,13 @@
             "title": "Eseguibile Id",
             "type": "string"
           },
+          "input_changes": {
+            "items": {
+              "$ref": "#/components/schemas/InputChange"
+            },
+            "title": "Input Changes",
+            "type": "array"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -5251,6 +5258,17 @@
             "title": "Canvas Corrupted",
             "type": "boolean"
           },
+          "chain_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain Title"
+          },
           "connections": {
             "items": {
               "$ref": "#/components/schemas/GraphConnectionRef"
@@ -5501,6 +5519,58 @@
           }
         },
         "title": "HavingCondition",
+        "type": "object"
+      },
+      "InputChange": {
+        "description": "Un input della versione attiva che la ripubblicazione toglierebbe o\ncambierebbe (regola unica ``service.input_changes``).",
+        "properties": {
+          "change": {
+            "enum": [
+              "removed",
+              "kind_changed",
+              "binding_lost",
+              "target_changed"
+            ],
+            "title": "Change",
+            "type": "string"
+          },
+          "input_key": {
+            "title": "Input Key",
+            "type": "string"
+          },
+          "motivo": {
+            "title": "Motivo",
+            "type": "string"
+          },
+          "target_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Field"
+          },
+          "target_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Node Id"
+          }
+        },
+        "required": [
+          "input_key",
+          "change",
+          "motivo"
+        ],
+        "title": "InputChange",
         "type": "object"
       },
       "LastBackupRunStatus": {
@@ -7999,8 +8069,19 @@
         "type": "object"
       },
       "ProjectDetailsUpdate": {
-        "description": "Aggiornamento metadati progetto (rename / descrizione / tag).",
+        "description": "Aggiornamento metadati progetto (rename / descrizione / tag / titolo\ndella catena della home: stringa vuota = titolo calcolato).",
         "properties": {
+          "chain_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain Title"
+          },
           "description": {
             "anyOf": [
               {
@@ -8106,6 +8187,19 @@
           "status"
         ],
         "title": "QueueStatus",
+        "type": "object"
+      },
+      "RepublishRequest": {
+        "additionalProperties": false,
+        "description": "POST /eseguibili/{id}/versions. ``confirm_removed_inputs``: chi\nripubblica ha visto e accetta gli input che la nuova versione toglie o\ncambia (``EseguibileSourceStatus.input_changes``); senza, la\nripubblicazione che ne ha si rifiuta (409).",
+        "properties": {
+          "confirm_removed_inputs": {
+            "default": false,
+            "title": "Confirm Removed Inputs",
+            "type": "boolean"
+          }
+        },
+        "title": "RepublishRequest",
         "type": "object"
       },
       "ResetPasswordRequest": {
@@ -14906,6 +15000,7 @@
         ]
       },
       "post": {
+        "description": "Nuova versione dal progetto sorgente. Se toglierebbe o cambierebbe\ninput della versione attiva: 409 con i motivi, salvo\n``confirm_removed_inputs`` (ripubblicazione sicura, 09/11/2026).",
         "operationId": "republish_eseguibile_api_eseguibili__eseguibile_id__versions_post",
         "parameters": [
           {
@@ -14918,6 +15013,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RepublishRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

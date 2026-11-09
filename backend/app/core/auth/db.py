@@ -23,6 +23,7 @@ from pydantic import (
     TypeAdapter,
 )
 from app.core.auth.exceptions import UsernameInvalidError, UsernameTakenError
+from app.core.auth import user_references as _user_references
 from app.db.pg_connection import unit_of_work
 from app.shared.contracts.auth import normalized_username, username_form_error
 from app.db.sql_safety import safe_set_clause
@@ -311,8 +312,19 @@ def update_user_password(user_id: str, password_hash: str) -> None:
     )
 
 
+def count_user_references(user_id: str) -> list[_user_references.UserReferenceCount]:
+    """Righe che referenziano l'utente senza ON DELETE, per tipo (regola e
+    tabella in ``app.core.auth.user_references``)."""
+    return _user_references.count_user_references(user_id, _fetchall)
+
+
 def delete_user(user_id: str) -> bool:
-    cur = _execute("DELETE FROM users WHERE id = %s", (user_id,))
+    """Cancella l'utente. Una chiave esterna violata (storico che lo
+    referenzia) diventa ``UserHasHistoryError``, mai un errore generico."""
+    try:
+        cur = _execute("DELETE FROM users WHERE id = %s", (user_id,))
+    except psycopg.errors.ForeignKeyViolation as exc:
+        raise _user_references.UserHasHistoryError(str(exc)) from exc
     return cur.rowcount > 0
 
 

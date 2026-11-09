@@ -165,11 +165,19 @@ describe('eseguibili api contract', () => {
     expect(httpMock.post).toHaveBeenNthCalledWith(
       1,
       '/eseguibili/exec-1/versions',
+      { confirm_removed_inputs: false },
     );
     expect(httpMock.post).toHaveBeenNthCalledWith(
       2,
       '/eseguibili/exec-1/versions/v-2/activate',
     );
+  });
+
+  it('republish manda la conferma esplicita degli input tolti solo se chiesta', async () => {
+    httpMock.post.mockResolvedValueOnce({ data: { active_version: 2 } });
+    const { republishEseguibile } = await import('../../src/api/eseguibili');
+    await republishEseguibile('exec-1', { confirmRemovedInputs: true });
+    expect(httpMock.post).toHaveBeenCalledWith('/eseguibili/exec-1/versions', { confirm_removed_inputs: true });
   });
 
 

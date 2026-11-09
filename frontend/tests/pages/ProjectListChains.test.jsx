@@ -225,4 +225,41 @@ describe('home per catene', () => {
     for (const c of cards) expect(c.tagName).toBe('BUTTON');
     expect(SC8.length).toBe(8);
   });
+
+  // Titoli delle catene modificabili (09/11/2026).
+  it('rinomina della catena: matita, Invio salva sul progetto titolare, Esc annulla, vuoto = calcolato', async () => {
+    const user = userEvent.setup();
+    apiMock.updateProject.mockResolvedValue({ metadata: {} });
+    await renderHome();
+    await user.click(screen.getByRole('button', { name: 'Rinomina la catena «Copia di SC_scheda_manipola»' }));
+    const field = screen.getByRole('textbox', { name: 'Titolo della catena' });
+    expect(field).toHaveAttribute('placeholder', 'Copia di SC_scheda_manipola');
+    await user.type(field, 'Scheda complesso{Enter}');
+    await waitFor(() => expect(apiMock.updateProject).toHaveBeenCalledWith('cscm', { chain_title: 'Scheda complesso' }));
+    // Fino al nuovo grafo si vede il titolo scritto.
+    expect(chainTitles()).toContain('Scheda complesso');
+
+    apiMock.updateProject.mockClear();
+    await user.click(screen.getByRole('button', { name: 'Rinomina la catena «immobili attivi per istituto»' }));
+    await user.type(screen.getByRole('textbox', { name: 'Titolo della catena' }), 'Non salvare{Escape}');
+    expect(screen.queryByRole('textbox', { name: 'Titolo della catena' })).toBeNull();
+    expect(apiMock.updateProject).not.toHaveBeenCalled();
+  });
+
+  it('titolo salvato: mostrato; svuotato torna quello calcolato', async () => {
+    const user = userEvent.setup();
+    apiMock.updateProject.mockResolvedValue({ metadata: {} });
+    const graph = { ...PRODUCTION_GRAPH, projects: PRODUCTION_GRAPH.projects.map((p) => (p.id === 'cscm' ? { ...p, chain_title: 'Scheda complesso' } : p)) };
+    mockData(graph);
+    await renderHome();
+    expect(chainTitles()).toContain('Scheda complesso');
+    expect(chainTitles()).not.toContain('Copia di SC_scheda_manipola');
+    await user.click(screen.getByRole('button', { name: 'Rinomina la catena «Scheda complesso»' }));
+    const field = screen.getByRole('textbox', { name: 'Titolo della catena' });
+    expect(field).toHaveValue('Scheda complesso');
+    await user.clear(field);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(apiMock.updateProject).toHaveBeenCalledWith('cscm', { chain_title: '' }));
+    expect(chainTitles()).toContain('Copia di SC_scheda_manipola');
+  });
 });

@@ -49,6 +49,9 @@ class ProjectMetadata(BaseModel):
     canvas_validated: bool = False
     # Tag liberi per organizzare i progetti nella dashboard (#10).
     tags: List[str] = Field(default_factory=list)
+    # Titolo personalizzato della catena della home di cui il progetto e' il
+    # nodo piu' a valle (09/11/2026); None = titolo calcolato.
+    chain_title: Optional[str] = None
 
     @field_validator("created_at", "updated_at", mode="before")
     @classmethod

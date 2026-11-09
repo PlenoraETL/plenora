@@ -119,6 +119,7 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "group_not_found",
     # 409 — conflict
     "username_already_exists",
+    "user_has_history",
     "group_id_already_exists",
     # 400 — validation auth-related
     "group_default_not_deletable",
@@ -229,7 +230,8 @@ def test_catalog_count_domain_seventy_three():
     # 73: +carica_rest_auth_unavailable (Fase 5 T1, R10.8).
     # 75: +runtime_identity_required, runtime_identity_client_value
     # (input «Utente che esegue»).
-    assert len(EXPECTED_DOMAIN_CODES) == 75
+    # 76: +user_has_history (eliminare un utente con storico: 409, 09/11/2026)
+    assert len(EXPECTED_DOMAIN_CODES) == 76
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 

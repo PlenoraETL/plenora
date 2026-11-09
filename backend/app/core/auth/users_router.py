@@ -12,7 +12,7 @@ schema generation con `TypeAdapter is not fully defined`.
 
 import uuid
 from collections.abc import Mapping
-from typing import Annotated
+from typing import Annotated, NoReturn
 from typing_extensions import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -36,6 +36,7 @@ from app.core.security.password_hashing import hash_password
 
 from app.core.auth import db as _groups_dal
 from app.core.auth import db as _users_dal
+from app.core.auth import user_references as _user_references
 
 
 __all__ = ["users_router"]
@@ -256,6 +257,15 @@ def reset_password(user_id: str, data: ResetPasswordRequest,
     return {"ok": True}
 
 
+def _raise_user_has_history(username: str, references: list[_user_references.UserReferenceCount]) -> NoReturn:
+    raise_typed_http(
+        error_codes.USER_HAS_HISTORY,
+        status_code=409,
+        message=_user_references.history_message(username, references),
+        details={"username": username, "references": references},
+    )
+
+
 @users_router.delete("/{user_id}", status_code=204)
 @audit_action(action="user.delete", target_param="user_id")
 def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)):
@@ -279,5 +289,14 @@ def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)
             )
         )
 
-    if not _users_dal.delete_user(user_id):
+    # Lo storico non si perde e non si riscrive (09/11/2026): con righe che
+    # referenziano l'utente senza ON DELETE, 409 con i conteggi per tipo.
+    references = _users_dal.count_user_references(user_id)
+    if references:
+        _raise_user_has_history(target.username, references)
+    try:
+        deleted = _users_dal.delete_user(user_id)
+    except _user_references.UserHasHistoryError:
+        _raise_user_has_history(target.username, [])
+    if not deleted:
         _disclosure.raise_disclosure(_disclosure.user_not_found())

@@ -10,6 +10,11 @@
  * mostra, nello stesso modo, nell'editor del progetto, nella lista degli
  * Eseguibili e nella finestra delle versioni (anteprima della
  * ripubblicazione).
+ *
+ * Ripubblicazione sicura (09/11/2026): l'anteprima elenca anche gli input
+ * della versione ATTIVA che la nuova versione toglierebbe o cambierebbe
+ * (`input_changes`, regola unica `eseguibili.service.input_changes`); la
+ * ripubblicazione li chiede confermati, uno per uno nella conferma.
  */
 import React from 'react';
 import { formatDateTime } from '../../utils/format';
@@ -56,8 +61,29 @@ export function RepublishPreview({ status }) {
           </ul>
         </>
       )}
+      <InputChangesList changes={status.input_changes} />
       {status.publish_error && <div>Ripubblicando: {status.publish_error}</div>}
     </div>
+  );
+}
+
+/** Input della versione attiva che la nuova versione toglierebbe o cambierebbe. */
+export const inputChanges = (status) => (status?.changed ? status.input_changes || [] : []);
+
+const INPUT_CHANGES_INTRO = 'Ripubblicando, la nuova versione toglierebbe o cambierebbe questi input della versione attiva:';
+
+/** Elenco con il motivo di ogni input tolto o cambiato (anteprima e conferma). */
+export function InputChangesList({ changes }) {
+  if (!changes?.length) return null;
+  return (
+    <>
+      <div>{INPUT_CHANGES_INTRO}</div>
+      <ul className="binding-warnings__list">
+        {changes.map(c => (
+          <li key={`${c.input_key}|${c.change}|${c.target_node_id || ''}|${c.target_field || ''}`}>{c.motivo}</li>
+        ))}
+      </ul>
+    </>
   );
 }
 

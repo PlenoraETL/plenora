@@ -62,6 +62,9 @@ class GraphProject(BaseModel):
     project_type: str = "estrai"
     default_connection_id: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
+    # Titolo personalizzato della catena di cui e' il nodo piu' a valle
+    # (PATCH /projects/{id} chain_title); None = titolo calcolato.
+    chain_title: Optional[str] = None
     connections: list[GraphConnectionRef] = Field(default_factory=list)
     source_project_ids: list[str] = Field(default_factory=list)
     file_source_ids: list[str] = Field(default_factory=list)
@@ -155,6 +158,7 @@ def build_dashboard_graph(
             project_type=str(_field(meta, "project_type") or "estrai"),
             default_connection_id=_field(meta, "default_connection_id") or None,
             tags=list(_field(meta, "tags") or []),
+            chain_title=_field(meta, "chain_title") or None,
             updated_at=_iso(_field(meta, "updated_at")),
         )
 

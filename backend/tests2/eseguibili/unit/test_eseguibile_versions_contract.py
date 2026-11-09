@@ -110,6 +110,12 @@ def test_republish_compiles_and_activates_new_snapshot(monkeypatch) -> None:
             default_connection_id=None,
         ),
     )
+    # Versione attiva: stesso input «file» (nessun input tolto o cambiato).
+    monkeypatch.setattr(
+        eseguibili_db,
+        "get_eseguibile_version",
+        lambda *_a, **_k: _version(version_number=1),
+    )
     created = _version()
     create_calls: list[dict] = []
     activated: list[tuple[str, str]] = []

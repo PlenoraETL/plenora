@@ -23,7 +23,7 @@ import ConfirmDialog from '../common/ConfirmDialog';
 import ListState, { ResourceError } from '../common/ListState';
 import { formatDateTime } from '../../utils/format';
 import { projectTypeChip } from '../../utils/projectTypes';
-import { RepublishPreview, republishBlocked } from './SourceStatus';
+import { InputChangesList, RepublishPreview, inputChanges, republishBlocked } from './SourceStatus';
 
 function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
   const toast = useToast();
@@ -59,15 +59,23 @@ function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
 
   const republish = async () => {
     if (busy) return;
+    // Ripubblicazione sicura: gli input tolti o cambiati si elencano nella
+    // conferma; confermando si manda la conferma esplicita al backend.
+    const changes = inputChanges(statusResource.data);
+    const base = 'Viene creata una nuova versione dallo stato attuale del progetto e diventa quella attiva: '
+      + 'le prossime esecuzioni la useranno. Le esecuzioni già avviate continuano con la loro versione.';
     const ok = await confirmModal.confirm({
       title: 'Ripubblicare dal progetto?',
-      message: 'Viene creata una nuova versione dallo stato attuale del progetto e diventa quella attiva: '
-        + 'le prossime esecuzioni la useranno. Le esecuzioni già avviate continuano con la loro versione.',
-      confirmText: 'Ripubblica',
-      variant: 'warning',
+      message: base,
+      details: changes.length ? <InputChangesList changes={changes} /> : null,
+      confirmText: changes.length ? 'Ripubblica comunque' : 'Ripubblica',
+      variant: changes.length ? 'danger' : 'warning',
     });
     if (!ok) return;
-    await runAction(() => republishEseguibile(eseguibile.id), (updated) => `Pubblicata la versione ${updated.active_version}`);
+    await runAction(
+      () => republishEseguibile(eseguibile.id, { confirmRemovedInputs: changes.length > 0 }),
+      (updated) => `Pubblicata la versione ${updated.active_version}`,
+    );
   };
 
   const activate = async (version) => {

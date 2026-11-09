@@ -178,4 +178,39 @@ describe('UserManager', () => {
     expect(screen.getByLabelText('Nome del gruppo da eliminare')).toBeDisabled();
     expect(screen.getByRole('button', { name: /elimina definitivamente/i })).toBeDisabled();
   });
+
+  // Lo storico non si perde (09/11/2026): l'esecutore E0071 ha lanciato un
+  // Eseguibile; il backend rifiuta l'eliminazione (409 user_has_history) e la
+  // pagina offre «Disattiva».
+  it('utente con storico: mostra il messaggio del backend e offre «Disattiva»', async () => {
+    listUsersMock.mockResolvedValue([
+      { id: 'u-e0071', username: 'E0071', role: 'esecutore', group_id: 'grp-1', is_active: true },
+    ]);
+    const message = "L'utente «E0071» ha 1 esecuzione registrata: per non perdere lo storico non si può eliminare. Disattivalo.";
+    usersApi.deleteUser.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: { error: 'user_has_history', message, details: { references: [{ count: 1 }] } } },
+    });
+    usersApi.updateUser.mockResolvedValue({ id: 'u-e0071', is_active: false });
+    render(<UserManager />);
+    expect(await screen.findByText('E0071')).toBeInTheDocument();
+    await userEvent.click(screen.getByTitle('Elimina'));
+    await userEvent.click(screen.getByRole('button', { name: /^elimina$/i }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^elimina$/i })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /^disattiva$/i }));
+    await waitFor(() => expect(usersApi.updateUser).toHaveBeenCalledWith('u-e0071', { is_active: false }));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Utente "E0071" disattivato'));
+  });
+
+  it('altro errore di eliminazione: nessun «Disattiva»', async () => {
+    usersApi.deleteUser.mockRejectedValue({ isAxiosError: true, response: { status: 500, data: { error: 'internal_error' } } });
+    render(<UserManager />);
+    expect(await screen.findByText('mario')).toBeInTheDocument();
+    await userEvent.click(screen.getByTitle('Elimina'));
+    await userEvent.click(screen.getByRole('button', { name: /^elimina$/i }));
+    await waitFor(() => expect(usersApi.deleteUser).toHaveBeenCalled());
+    expect(await screen.findByText(/errore interno/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^disattiva$/i })).toBeNull();
+  });
 });

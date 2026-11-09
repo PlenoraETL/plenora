@@ -11,7 +11,7 @@
  * Caso reale: binding cod_ist -> filters.1.value con un solo filtro.
  */
 import React from 'react';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { api, toastMock } = vi.hoisted(() => ({
@@ -94,6 +94,41 @@ describe('N1: anteprima della ripubblicazione', () => {
     await waitFor(() => expect(api.getEseguibileSourceStatus).toHaveBeenCalledWith('exec_2'));
     expect(screen.queryByText(SOURCE_CHANGED_BADGE, { exact: false })).toBeNull();
     expect(screen.getByRole('button', { name: 'Ripubblica dal progetto' })).not.toBeDisabled();
+  });
+});
+
+// Ripubblicazione sicura (09/11/2026): caso reale exec_37045e4c1d8f, l'input
+// cod_ist della versione attiva non c'e' piu' nel progetto sorgente.
+const REMOVED = {
+  input_key: 'cod_ist', change: 'removed', target_node_id: null, target_field: null,
+  motivo: "L'input «cod_ist» non c'è più nel progetto: chi esegue vedrebbe i dati senza quel filtro (era collegato a node_1784712505489.filters.1.value)",
+};
+
+describe('Ripubblicazione sicura: input della versione attiva tolti o cambiati', () => {
+  it("l'anteprima li elenca; la conferma li ripete e manda la conferma esplicita", async () => {
+    api.getEseguibileSourceStatus.mockResolvedValue(status(true, { input_changes: [REMOVED] }));
+    api.republishEseguibile.mockResolvedValue({ active_version: 2 });
+    render(<EseguibileVersionsModal eseguibile={{ id: 'exec_1', name: 'SC_A' }} onClose={() => {}} />);
+    expect(await screen.findByText(REMOVED.motivo)).toBeTruthy();
+    // Non e' un blocco (si puo' confermare), ma la conferma li elenca.
+    const button = screen.getByRole('button', { name: 'Ripubblica dal progetto' });
+    expect(button).not.toBeDisabled();
+    fireEvent.click(button);
+    expect(await screen.findByText('Ripubblicare dal progetto?')).toBeTruthy();
+    expect(screen.getAllByText(REMOVED.motivo)).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Ripubblica comunque' }));
+    await waitFor(() => expect(api.republishEseguibile).toHaveBeenCalledWith('exec_1', { confirmRemovedInputs: true }));
+  });
+
+  it('senza input tolti la ripubblicazione non manda la conferma', async () => {
+    api.getEseguibileSourceStatus.mockResolvedValue(status(true));
+    api.republishEseguibile.mockResolvedValue({ active_version: 2 });
+    render(<EseguibileVersionsModal eseguibile={{ id: 'exec_1', name: 'SC_A' }} onClose={() => {}} />);
+    await waitFor(() => expect(api.getEseguibileSourceStatus).toHaveBeenCalled());
+    await screen.findByText(SOURCE_CHANGED_BADGE, { exact: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Ripubblica dal progetto' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ripubblica' }));
+    await waitFor(() => expect(api.republishEseguibile).toHaveBeenCalledWith('exec_1', { confirmRemovedInputs: false }));
   });
 });
 

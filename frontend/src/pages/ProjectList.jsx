@@ -38,6 +38,7 @@ import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
 import VirtualList from '../components/common/VirtualList';
 import ChainsView from '../components/projects/ChainsView';
+import { chainTitleWrites } from '../utils/projectChains';
 import { STORAGE_KEYS, readJson, writeJson } from '../utils/browserStorage';
 import { requestRunOnOpen } from '../utils/pendingRun';
 import { invalidateShared } from '../utils/sharedResources';
@@ -352,6 +353,20 @@ function ProjectList() {
     const page = ORIGIN_PAGES[node.type];
     return page ? { open: () => navigate(page.path), openLabel: page.label } : {};
   };
+  // Titolo della catena (09/11/2026): sul progetto titolare, con il permesso
+  // di modificarne i metadati (regola e scritture in utils/projectChains).
+  const renameChain = (chain) => {
+    const owner = chain.titleOwnerKey ? projectById.get(chain.titleOwnerKey.slice(2)) : null;
+    if (!owner || !can.editProjectMeta(user, owner)) return null;
+    return async (title) => {
+      try {
+        await Promise.all(chainTitleWrites(chain, title).map((w) => updateProject(w.projectId, { chain_title: w.chain_title })));
+      } catch (err) {
+        toastApiError(toast, err, 'Errore rinomina della catena');
+        throw err;
+      }
+    };
+  };
   const emptyFor = (what, firstText) => (narrowed
     ? { title: `Nessun progetto ${what} con questi filtri`, text: 'Cambia o azzera la ricerca e i filtri.' }
     : { title: `Nessun progetto ${what}`, text: firstText });
@@ -460,6 +475,7 @@ function ProjectList() {
               connections={chainConnections}
               fileNames={fileNameById}
               actions={chainActions}
+              renameChain={renameChain}
               empty={projects.length === 0 && eseguibili.length === 0 ? (
                 <QuickStart
                   hasDataSource={connections.length + arcgisConnections.length + (counts.api_connections ?? 0) + (counts.datasources ?? 0) > 0}

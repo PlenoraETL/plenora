@@ -259,6 +259,12 @@ USERNAME_ALREADY_EXISTS = "username_already_exists"
 """409. Username gia' presente. Disclosure intenzionale (admin DEVE
 saperlo per gestione utenti). LEAKY_BY_DESIGN."""
 
+USER_HAS_HISTORY = "user_has_history"
+"""409. L'utente ha righe che lo referenziano senza ON DELETE (esecuzioni,
+progetti, ticket, ...): eliminarlo perderebbe o riscriverebbe lo storico.
+``details.references``: conteggi per tipo (tabella dichiarativa
+``app.core.auth.user_references.USER_REFERENCES``). Si disattiva invece."""
+
 GROUP_ID_ALREADY_EXISTS = "group_id_already_exists"
 """409. group_id gia' presente. LEAKY_BY_DESIGN."""
 
@@ -395,6 +401,7 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     GROUP_NOT_FOUND,
     # 409 — conflict
     USERNAME_ALREADY_EXISTS,
+    USER_HAS_HISTORY,
     GROUP_ID_ALREADY_EXISTS,
     # 400 — validation auth-related
     GROUP_DEFAULT_NOT_DELETABLE,

@@ -53,6 +53,10 @@ logger = get_logger(__name__)
 ResultMetadataPublicPayload = Mapping[str, object]
 
 
+# Titolo personalizzato della catena della home (09/11/2026).
+CHAIN_TITLE_MAX = 120
+
+
 class ProjectPublicPayload(TypedDict):
     metadata: Mapping[str, object]
     canvas: object
@@ -116,6 +120,7 @@ class ProjectService:
             updated_at=row.updated_at,
             canvas_validated=row.canvas_validated or False,
             tags=list(getattr(row, "tags", None) or []),
+            chain_title=getattr(row, "chain_title", None) or None,
         )
 
     @staticmethod
@@ -136,6 +141,7 @@ class ProjectService:
             updated_at=row.updated_at,
             canvas_validated=row.canvas_validated or False,
             tags=list(getattr(row, "tags", None) or []),
+            chain_title=getattr(row, "chain_title", None) or None,
         )
 
     def create_project(
@@ -181,8 +187,13 @@ class ProjectService:
         name: Optional[str] = None,
         description: Optional[str] = None,
         tags: Optional[list] = None,
+        chain_title: Optional[str] = None,
     ) -> Optional[ProjectMetadata]:
-        """Aggiorna nome, descrizione e/o tag del progetto.
+        """Aggiorna nome, descrizione, tag e/o titolo della catena.
+
+        ``chain_title``: None = non toccarlo; stringa vuota (anche solo spazi)
+        = torna al titolo calcolato (NULL); altrimenti il testo, al piu'
+        ``CHAIN_TITLE_MAX`` caratteri.
 
         Tocca solo i metadati: NON modifica il canvas né lo stato di
         validazione. Ritorna None se il progetto non esiste; i metadati
@@ -203,6 +214,8 @@ class ProjectService:
                     seen.add(s.lower())
                     clean.append(s)
             fields["tags"] = clean[:20]
+        if chain_title is not None:
+            fields["chain_title"] = chain_title.strip()[:CHAIN_TITLE_MAX] or None
         if not fields:
             return self.get_project_metadata(project_id)
         row = project_db.update_project_row(project_id, **fields)

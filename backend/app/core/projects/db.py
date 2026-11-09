@@ -197,6 +197,7 @@ class ProjectRow:
     description: str | None = None
     canvas_validated: bool = False
     tags: object | None = None
+    chain_title: str | None = None
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectRow":
@@ -212,6 +213,7 @@ class ProjectRow:
             description=_optional_str(row, "description"),
             canvas_validated=_optional_bool(row, "canvas_validated") or False,
             tags=_normalize_json_column(row, "tags", fallback=[]),
+            chain_title=_optional_str(row, "chain_title"),
         )
 
 
@@ -233,6 +235,7 @@ class ProjectDetailRow:
     retention_n: int | None = None
     canvas_validated: bool = False
     tags: object | None = None
+    chain_title: str | None = None
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectDetailRow":
@@ -253,6 +256,7 @@ class ProjectDetailRow:
             retention_n=_optional_int(row, "retention_n"),
             canvas_validated=_optional_bool(row, "canvas_validated") or False,
             tags=_normalize_json_column(row, "tags", fallback=[]),
+            chain_title=_optional_str(row, "chain_title"),
         )
 
 
@@ -613,7 +617,7 @@ class ProjectRepository:
         # Helper centralizzato per evitare drift fra i 4 SELECT del list.
         _COLS = (
             "id, group_id, name, project_type, connection_id, "
-            "created_at, updated_at, created_by, description, canvas_validated, tags"
+            "created_at, updated_at, created_by, description, canvas_validated, tags, chain_title"
         )
         predicates: list[str] = []
         params: list[object] = []

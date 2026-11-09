@@ -29,7 +29,9 @@ function ConfirmDialog({
     confirmText = 'Conferma',
     cancelText = 'Annulla',
     variant = 'default', // 'default' | 'danger' | 'warning'
-    icon = null
+    icon = null,
+    // Elenco o dettaglio sotto il messaggio (blocchi, fuori dal <p>).
+    details = null
   } = config;
 
   const getIcon = () => {
@@ -72,6 +74,7 @@ function ConfirmDialog({
       <div className="confirm-dialog__content">
         <span className="confirm-dialog__icon">{getIcon()}</span>
         <p className="confirm-dialog__message">{message}</p>
+        {details && <div className="confirm-dialog__details">{details}</div>}
       </div>
     </ModalWrapper>
   );

@@ -60,6 +60,7 @@ export const ERROR_MESSAGES = {
   datasource_in_use: { title: 'Datasource in uso', message: 'Non puoi eliminare questo datasource: è ancora usato da uno o più progetti.' },
   connection_duplicate_name: { title: 'Nome già esistente', message: 'Esiste già una connessione con questo nome. Scegline un altro.' },
   username_already_exists: { title: 'Username già in uso', message: 'Questo username è già in uso. Scegline un altro.' },
+  user_has_history: { title: 'Utente con storico', message: 'L’utente ha dati registrati (esecuzioni, progetti, ticket): per non perdere lo storico non si può eliminare. Disattivalo.' },
   group_id_already_exists: { title: 'Gruppo già esistente', message: 'Questo identificativo di gruppo è già in uso.' },
   group_default_not_deletable: { title: 'Operazione non consentita', message: 'Il gruppo “default” non può essere eliminato.' },
 

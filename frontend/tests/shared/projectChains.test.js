@@ -6,8 +6,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildGraph, buildChains, lineage, relationOf, watchFindings, orderChains, filterChains,
-  chainCounters, nodeMeta, nodeTags, WATCH_RULES, COLLAPSE_AT,
+  chainCounters, nodeMeta, nodeTags, WATCH_RULES, COLLAPSE_AT, chainTitleWrites,
 } from '../../src/utils/projectChains';
+import { invalidationsForWrite } from '../../src/utils/sharedInvalidations';
 import { requestRunOnOpen, takeRunOnOpen } from '../../src/utils/pendingRun';
 import { PRODUCTION_CONNECTIONS, productionGraph, SC8 } from '../fixtures/homeChainsGraph';
 
@@ -271,5 +272,60 @@ describe('«Esegui» dalla home (utils/pendingRun)', () => {
     expect(takeRunOnOpen('p1', 1000)).toBe(false);
     requestRunOnOpen('p1', 1000);
     expect(takeRunOnOpen('p1', 1000 + 60_001)).toBe(false);
+  });
+});
+
+// Titoli delle catene modificabili (09/11/2026). Regola dichiarata in
+// utils/projectChains (chainTitleOf): si salva sul progetto titolare (nodo
+// del titolo, o progetto sorgente se e' un Eseguibile) e si legge dal
+// progetto con `chain_title` piu' a valle (titolare, cammino, nome).
+describe('titolo personalizzato della catena', () => {
+  const chainOf = (projects, eseguibili = []) => buildChains(mini(projects, eseguibili)).find((c) => !c.isolated);
+
+  it('rinomina: il titolo salvato sul nodo finale si mostra; calcolato come riserva', () => {
+    const plain = chainOf([P('estr'), P('fine', 'manipola', { source_project_ids: ['estr'] })]);
+    expect([plain.title, plain.customTitle, plain.titleOwnerKey]).toEqual(['fine', null, 'p:fine']);
+    expect(chainTitleWrites(plain, '  Patrimonio  ')).toEqual([{ projectId: 'fine', chain_title: 'Patrimonio' }]);
+    const named = chainOf([P('estr'), P('fine', 'manipola', { source_project_ids: ['estr'], chain_title: 'Patrimonio' })]);
+    expect([named.title, named.computedTitle, named.customTitle]).toEqual(['Patrimonio', 'fine', 'Patrimonio']);
+  });
+
+  it('svuota: titolo calcolato, svuotato su tutti i progetti della catena che ne hanno uno', () => {
+    const chain = chainOf([
+      P('estr', 'estrai', { chain_title: 'Vecchio' }),
+      P('fine', 'manipola', { source_project_ids: ['estr'], chain_title: 'Nuovo' }),
+    ]);
+    expect(chain.title).toBe('Nuovo');
+    expect(chainTitleWrites(chain, '   ')).toEqual([
+      { projectId: 'fine', chain_title: '' }, { projectId: 'estr', chain_title: '' },
+    ]);
+    const cleared = chainOf([P('estr', 'estrai', { chain_title: '' }), P('fine', 'manipola', { source_project_ids: ['estr'], chain_title: null })]);
+    expect([cleared.title, cleared.customTitle]).toEqual(['fine', null]);
+  });
+
+  it('la catena cambia nodo finale: il titolo del vecchio finale non si perde', () => {
+    // Prima: «fine» e' il finale e ha il titolo. Poi un progetto nuovo lo legge.
+    const before = chainOf([P('estr'), P('fine', 'manipola', { source_project_ids: ['estr'], chain_title: 'Patrimonio' })]);
+    const after = chainOf([
+      P('estr'), P('fine', 'manipola', { source_project_ids: ['estr'], chain_title: 'Patrimonio' }),
+      P('nuovo', 'manipola', { source_project_ids: ['fine'] }),
+    ]);
+    expect(before.title).toBe('Patrimonio');
+    expect([after.titleKey, after.computedTitle, after.title]).toEqual(['p:nuovo', 'nuovo', 'Patrimonio']);
+    // Rinominare ora salva sul nuovo finale (titolare), che ha la precedenza.
+    expect(chainTitleWrites(after, 'Altro')).toEqual([{ projectId: 'nuovo', chain_title: 'Altro' }]);
+  });
+
+  it('nodo del titolo Eseguibile: titolare il suo progetto sorgente', () => {
+    const chain = chainOf([P('estr'), P('man', 'manipola', { source_project_ids: ['estr'], chain_title: 'Pubblico' })], [X('zz-ex', 'man')]);
+    expect([chain.titleKey, chain.titleOwnerKey, chain.title]).toEqual(['x:zz-ex', 'p:man', 'Pubblico']);
+  });
+
+  it('il titolo personalizzato si cerca; la modifica invalida il grafo della home', () => {
+    const graph = mini([P('estr'), P('fine', 'manipola', { source_project_ids: ['estr'], chain_title: 'Patrimonio' })]);
+    const chains = buildChains(graph);
+    const matches = (...values) => values.flat().some((v) => String(v || '').toLowerCase().includes('patrim'));
+    expect(filterChains(chains, { matches, findings: watchFindings(graph) }).map((c) => c.title)).toEqual(['Patrimonio']);
+    expect(invalidationsForWrite('patch', '/projects/fine')).toContain('dashboardGraph');
   });
 });
