@@ -85,6 +85,11 @@ class ExecutableInputDefinition(BaseModel):
     # Formula, variabile ``utente``), valutata dal server a ogni esecuzione
     # (shared/execution/runtime_identity, sezione TRASFORMAZIONE).
     transform: Optional[str] = Field(None, max_length=500)
+    # «Utente che esegue»: gli amministratori (admin, superadmin: ruolo letto
+    # dal server) possono scegliere il valore nel modulo; etichetta del campo
+    # (runtime_identity, sezione VALORE SCELTO DAGLI AMMINISTRATORI).
+    admin_override: bool = False
+    admin_override_label: Optional[str] = Field(None, max_length=160)
     order: int = Field(0, ge=0)
 
     @model_validator(mode="after")
@@ -117,6 +122,8 @@ class ExecutableInputDefinition(BaseModel):
             )
         if self.transform is not None and not is_server_injected(self.kind):
             raise ValueError("transform e' valido solo per un input impostato dal server")
+        if (self.admin_override or self.admin_override_label is not None) and not is_server_injected(self.kind):
+            raise ValueError("admin_override e' valido solo per un input impostato dal server")
         return self
 
 
@@ -209,10 +216,13 @@ class InputChange(BaseModel):
     cambierebbe (regola unica ``service.input_changes``)."""
 
     input_key: str
-    change: Literal["removed", "kind_changed", "binding_lost", "target_changed"]
+    change: Literal["removed", "kind_changed", "binding_lost", "target_changed", "admin_override_removed"]
     target_node_id: Optional[str] = None
     target_field: Optional[str] = None
     motivo: str
+    # ``False``: solo informazione (es. ``admin_override_removed``), la
+    # ripubblicazione non chiede conferma per questa riga.
+    blocking: bool = True
 
 
 class EseguibileSummary(BaseModel):

@@ -106,6 +106,40 @@ sorgente, e per ogni identita' (utente autenticato, nome di prova).
   valore inventato. Diverso dal caso «trasformato ma senza righe» (per
   esempio ``dmi_IS`` per ``admin``): il valore e' valido, il filtro non trova
   righe, il file e' vuoto.
+
+VALORE SCELTO DAGLI AMMINISTRATORI (09/11/2026)
+-----------------------------------------------
+L'input puo' dichiarare «Gli amministratori possono scegliere il valore»
+(``admin_override: true`` nel nodo e nella definizione del manifest, con
+l'etichetta del campo ``admin_override_label``). Regola unica, in
+:func:`resolve_identity_inputs` (:meth:`RuntimeIdentity.may_choose`):
+
+- chi esegue e' un utente autenticato (Eseguibile: avvio e stima) con ruolo
+  ``admin`` o ``superadmin`` (:data:`ADMIN_OVERRIDE_ROLES`, letto dal server
+  in ``RuntimeIdentity.authenticated(current_user)``, mai dal client) E
+  l'input ha ``admin_override`` -> puo' inviare un valore: non vuoto -> si
+  usa cosi' com'e' (NESSUNA trasformazione: e' gia' il valore finale), come
+  testo (:func:`chosen_value`: caratteri di controllo e spazi ai lati tolti,
+  al massimo :data:`ADMIN_OVERRIDE_MAX_LENGTH` caratteri, altrimenti
+  ``runtime_identity_override_invalid``); vuoto o assente -> regola normale
+  (nome utente + trasformazione);
+- ogni altro ruolo (esecutore, user, viewer), ogni altra identita' (prova,
+  anteprima, nessun utente) o input senza ``admin_override`` -> un valore
+  del client si rifiuta (``runtime_identity_client_value``), come sempre;
+- il valore scelto segue la stessa via del valore del server (segno
+  ``value_literal``: in Estrai solo «uguale» o «e' uno di», un solo
+  parametro SQL, mai una funzione SQL);
+- audit: il riepilogo della run porta ``overridden_by`` (lo username di chi
+  l'ha scelto) e ``value`` (:func:`identity_audit`).
+
+Nell'editor (anteprima, Valida, «Esegui di prova») chi modifica il progetto
+puo' scrivere nell'input un «valore di prova scelto»
+(:data:`PREVIEW_ADMIN_VALUE_FIELD`, letto solo con ``admin_override``; per
+la prova dal canvas SALVATO): si esegue con quel valore invece del nome
+utente di prova trasformato. E' lo stesso potere che chi modifica ha gia'
+con nome di prova e trasformazione; il nome utente di prova resta
+obbligatorio (e' chi «esegue» la prova). Non entra mai nel manifest; il
+riepilogo lo segna con ``test_value``.
 """
 
 from __future__ import annotations
@@ -113,9 +147,15 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
+import unicodedata
 
 from app.shared import error_codes
-from app.shared.contracts.auth import ROLES_ABOVE_VIEWER, CurrentUser, username_form_error
+from app.shared.contracts.auth import (
+    ROLES_ABOVE_VIEWER,
+    ROLES_ADMIN_OR_ABOVE,
+    CurrentUser,
+    username_form_error,
+)
 from app.shared.execution.runtime_input_kinds import (
     SOURCE_COLUMN_FIELD,
     is_server_injected,
@@ -141,6 +181,13 @@ DEFAULT_SOURCE_COLUMN = "utente"
 TRANSFORM_FIELD = "identity_transform"
 TRANSFORM_VARIABLE = "utente"
 TRANSFORM_MAX_LENGTH = 500
+# Valore scelto dagli amministratori (sezione VALORE SCELTO DAGLI
+# AMMINISTRATORI): campi del nodo e della definizione, ruoli, limite.
+ADMIN_OVERRIDE_FIELD = "admin_override"
+ADMIN_OVERRIDE_LABEL_FIELD = "admin_override_label"
+PREVIEW_ADMIN_VALUE_FIELD = "preview_admin_value"
+ADMIN_OVERRIDE_ROLES: tuple[str, ...] = ROLES_ADMIN_OR_ABOVE
+ADMIN_OVERRIDE_MAX_LENGTH = 200
 # Valutatore del motore della Formula: (espressione, {variabile: valore}) ->
 # valore della riga. Lo passa chi chiama (app.core).
 IdentityEvaluator = Callable[[str, Mapping[str, str]], Any]
@@ -193,6 +240,10 @@ class RuntimeIdentity:
     origin: IdentityOrigin
     username: str | None = None
     reason: AbsentReason = "unattended"
+    # Ruolo di chi esegue: solo per ``authenticated``, letto dal server.
+    role: str | None = None
+    # Valori di prova scelti nei nodi (anteprima e prova): ((chiave, valore), ...).
+    test_values: tuple[tuple[str, str], ...] = ()
 
     # REGOLA (correzione dopo la conferma, punto 3): le factory non
     # sollevano MAI. Ogni blocco (utente assente, nomi di prova diversi) nasce
@@ -212,7 +263,22 @@ class RuntimeIdentity:
             # Utente creato prima della regola: mai uno username che un
             # database potrebbe confrontare uguale a quello di un altro.
             return cls("absent", None, "username_invalid")
-        return cls("authenticated", username)
+        role = getattr(user, "role", None)
+        return cls("authenticated", username, role=role if isinstance(role, str) else None)
+
+    def may_choose(self, item: Any) -> bool:
+        """Chi esegue puo' inviare il valore di ``item`` (sezione VALORE
+        SCELTO DAGLI AMMINISTRATORI): utente autenticato admin/superadmin e
+        input con ``admin_override``."""
+        return (
+            self.origin == "authenticated"
+            and self.role in ADMIN_OVERRIDE_ROLES
+            and admin_override_enabled(item)
+        )
+
+    def test_value(self, key: str) -> Any:
+        """Valore di prova scelto nel nodo ``key`` (anteprima e prova)."""
+        return dict(self.test_values).get(key)
 
     @classmethod
     def project_run(cls) -> "RuntimeIdentity":
@@ -246,7 +312,12 @@ class RuntimeIdentity:
             return cls("absent", None, "preview_conflict")
         if not names:
             return cls("absent", None, missing)
-        return cls(origin, names.pop())
+        chosen = tuple(
+            (str(node_value(node, "input_key") or ""), str(node_value(node, PREVIEW_ADMIN_VALUE_FIELD)))
+            for node in identity_input_nodes(canvas)
+            if admin_override_enabled(node) and node_value(node, PREVIEW_ADMIN_VALUE_FIELD) is not None
+        )
+        return cls(origin, names.pop(), test_values=chosen)
 
 
 def _canvas_nodes(canvas: Any) -> list[Any]:
@@ -341,40 +412,107 @@ def transform_identity_value(
     return str(value)
 
 
+def admin_override_enabled(item: Any) -> bool:
+    """L'input (nodo o definizione del manifest) dichiara «Gli amministratori
+    possono scegliere il valore»: solo il valore ``True``."""
+    return node_value(item, ADMIN_OVERRIDE_FIELD) is True
+
+
+def admin_override_label(item: Any) -> str | None:
+    """Etichetta del campo per gli amministratori, ``None`` se assente."""
+    text = str(node_value(item, ADMIN_OVERRIDE_LABEL_FIELD) or "").strip()
+    return text or None
+
+
+def chosen_value(label: str, raw: Any) -> str | None:
+    """Valore scelto (da un amministratore o di prova) come testo: caratteri
+    di controllo e spazi ai lati tolti; ``None`` se vuoto (vale la regola
+    normale). Non testo o troppo lungo -> ``runtime_identity_override_invalid``."""
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise RuntimeIdentityError(
+            error_codes.RUNTIME_IDENTITY_OVERRIDE_INVALID,
+            f"Il valore scelto per l'input «{label}» ({KIND_LABEL}) deve essere un testo.",
+        )
+    text = "".join(ch for ch in raw if unicodedata.category(ch) != "Cc").strip()
+    if not text:
+        return None
+    if len(text) > ADMIN_OVERRIDE_MAX_LENGTH:
+        raise RuntimeIdentityError(
+            error_codes.RUNTIME_IDENTITY_OVERRIDE_INVALID,
+            f"Il valore scelto per l'input «{label}» ({KIND_LABEL}) supera "
+            f"{ADMIN_OVERRIDE_MAX_LENGTH} caratteri.",
+        )
+    return text
+
+
+class IdentityValues(dict):
+    """``{chiave: valore}`` degli input di tipo server, con le chiavi il cui
+    valore e' stato scelto (``overridden``: da un amministratore o di prova)."""
+
+    overridden: frozenset[str] = frozenset()
+
+
 def resolve_identity_inputs(
     definitions: Iterable[Any],
     *,
     identity: RuntimeIdentity,
     client_values: Mapping[str, Any],
     evaluate: IdentityEvaluator,
-) -> dict[str, str]:
+) -> IdentityValues:
     """Valori degli input di tipo server: ``{chiave: valore}``.
 
     ``definitions`` sono le definizioni del manifest (``key``, ``label``,
-    ``kind``, ``transform``). Un valore del client per una di queste chiavi
-    si rifiuta; senza utente si blocca con il motivo del percorso; con una
-    trasformazione il valore e' il suo risultato (``evaluate``, sezione
+    ``kind``, ``transform``, ``admin_override``). Un valore del client per
+    una di queste chiavi si rifiuta, salvo :meth:`RuntimeIdentity.may_choose`
+    (sezione VALORE SCELTO DAGLI AMMINISTRATORI); senza utente si blocca con
+    il motivo del percorso; un valore scelto non vuoto si usa com'e'; con
+    una trasformazione il valore e' il suo risultato (``evaluate``, sezione
     TRASFORMAZIONE), senza e' lo username.
     """
     targets = [item for item in definitions if is_server_injected(getattr(item, "kind", None))]
     for item in targets:
-        if item.key in client_values:
+        if item.key in client_values and not identity.may_choose(item):
             raise RuntimeIdentityError(
                 error_codes.RUNTIME_IDENTITY_CLIENT_VALUE,
                 f"Il valore dell'input «{item.label}» ({KIND_LABEL}) lo imposta il "
                 "server con l'utente che avvia: non si invia.",
             )
     if not targets:
-        return {}
+        return IdentityValues()
     if identity.username is None:
         raise missing_identity_error(targets[0].label, identity.reason)
-    return {
-        item.key: transform_identity_value(
+    chosen: dict[str, str] = {}
+    for item in targets:
+        if identity.may_choose(item):
+            raw = client_values.get(item.key)
+        elif identity.origin in ("preview", "test_run") and admin_override_enabled(item):
+            raw = identity.test_value(item.key)
+        else:
+            continue
+        value = chosen_value(str(item.label), raw)
+        if value is not None:
+            chosen[item.key] = value
+    values = IdentityValues({
+        item.key: chosen[item.key] if item.key in chosen else transform_identity_value(
             label=str(item.label), username=identity.username,
             expression=identity_transform(item), evaluate=evaluate,
         )
         for item in targets
-    }
+    })
+    values.overridden = frozenset(chosen)
+    return values
+
+
+def identity_audit(identity: RuntimeIdentity, values: Mapping[str, str], key: str) -> dict[str, Any]:
+    """Campi dell'audit (riepilogo della run) per un valore scelto: chi l'ha
+    scelto (amministratore) oppure il segno del valore di prova."""
+    if key not in getattr(values, "overridden", frozenset()):
+        return {}
+    if identity.origin == "authenticated":
+        return {"overridden_by": identity.username, "value": values[key]}
+    return {"test_value": True, "value": values[key]}
 
 
 def subject_for_test_run(identity: RuntimeIdentity) -> dict[str, str]:
@@ -493,6 +631,16 @@ def assert_identity_resolved(canvas: Any) -> None:
 
 
 __all__ = [
+    "ADMIN_OVERRIDE_FIELD",
+    "ADMIN_OVERRIDE_LABEL_FIELD",
+    "ADMIN_OVERRIDE_MAX_LENGTH",
+    "ADMIN_OVERRIDE_ROLES",
+    "IdentityValues",
+    "PREVIEW_ADMIN_VALUE_FIELD",
+    "admin_override_enabled",
+    "admin_override_label",
+    "chosen_value",
+    "identity_audit",
     "CLIENT_TRIGGERS",
     "DEFAULT_SOURCE_COLUMN",
     "TEST_RUN_NO_RECALCULATE_MESSAGE",

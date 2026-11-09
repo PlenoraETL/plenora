@@ -54,6 +54,10 @@ const DEFAULT_SOURCE_COLUMN = 'utente';
 // `utente`): la valuta il server a ogni esecuzione (backend
 // shared/execution/runtime_identity, sezione TRASFORMAZIONE).
 const IDENTITY_TRANSFORM = codecs.text({ empty: null, maxLength: 500 });
+// Valore scelto dagli amministratori (sezione VALORE SCELTO DAGLI
+// AMMINISTRATORI del backend): etichetta del campo e valore di prova.
+const ADMIN_OVERRIDE_LABEL = codecs.text({ empty: null, maxLength: 160 });
+const PREVIEW_ADMIN_VALUE = codecs.text({ empty: null, maxLength: 200 });
 
 /**
  * N4: le colonne attese si ricostruiscono dai NOMI conservando tipo e
@@ -236,6 +240,9 @@ function ProjectInputNode({ id, data }) {
           : {
             ...(node.data?.preview_username != null ? { preview_username: null } : {}),
             ...(node.data?.identity_transform != null ? { identity_transform: null } : {}),
+            ...(node.data?.admin_override != null ? { admin_override: null } : {}),
+            ...(node.data?.admin_override_label != null ? { admin_override_label: null } : {}),
+            ...(node.data?.preview_admin_value != null ? { preview_admin_value: null } : {}),
           }),
         ...(node.data?.as_source ? { as_source: false } : {}),
       },
@@ -459,6 +466,47 @@ function ProjectInputNode({ id, data }) {
                 Usato solo nell’editor: Anteprima, Valida ed esecuzione di prova (il risultato della prova
                 non diventa l’Output del progetto). Non entra nell’Eseguibile.
               </p>
+              <label className="pin__check nodrag">
+                <input
+                  type="checkbox"
+                  checked={data.admin_override === true}
+                  disabled={isReadOnly}
+                  onChange={event => update(event.target.checked
+                    ? { admin_override: true }
+                    : { admin_override: null, preview_admin_value: null })}
+                />
+                Gli amministratori possono scegliere il valore
+              </label>
+              {data.admin_override === true && (
+                <>
+                  <label className="pin__field">
+                    <span>Etichetta del campo per gli amministratori</span>
+                    <FieldInput
+                      className="nodrag"
+                      codec={ADMIN_OVERRIDE_LABEL}
+                      value={data.admin_override_label ?? null}
+                      onCommit={value => update({ admin_override_label: value ?? null })}
+                      placeholder="es. Istituto (solo amministratori)"
+                    />
+                  </label>
+                  <label className="pin__field">
+                    <span>Valore di prova scelto (facoltativo: Anteprima, Valida, Esegui di prova)</span>
+                    <FieldInput
+                      className="nodrag"
+                      codec={PREVIEW_ADMIN_VALUE}
+                      value={data.preview_admin_value ?? null}
+                      onCommit={value => update({ preview_admin_value: value ?? null })}
+                      placeholder="es. 004_IS"
+                    />
+                  </label>
+                  <p className="pin__binding-hint">
+                    Avviando l’Eseguibile, un amministratore o superamministratore vede un campo facoltativo:
+                    se lo compila, quel valore si usa così com’è (senza trasformazione) e resta nella cronologia
+                    dell’esecuzione; se lo lascia vuoto vale il suo nome utente. Gli altri ruoli non vedono il
+                    campo e non possono cambiare il valore. Il valore di prova vale solo nell’editor.
+                  </p>
+                </>
+              )}
             </>
           ) : (
           <label className="pin__field">

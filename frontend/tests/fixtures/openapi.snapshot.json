@@ -4253,6 +4253,23 @@
         "additionalProperties": false,
         "description": "Un input pubblico dichiarato da un nodo ``project_input``.",
         "properties": {
+          "admin_override": {
+            "default": false,
+            "title": "Admin Override",
+            "type": "boolean"
+          },
+          "admin_override_label": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Override Label"
+          },
           "connection_options": {
             "items": {
               "$ref": "#/components/schemas/ConnectionInputOption"
@@ -5604,12 +5621,18 @@
       "InputChange": {
         "description": "Un input della versione attiva che la ripubblicazione toglierebbe o\ncambierebbe (regola unica ``service.input_changes``).",
         "properties": {
+          "blocking": {
+            "default": true,
+            "title": "Blocking",
+            "type": "boolean"
+          },
           "change": {
             "enum": [
               "removed",
               "kind_changed",
               "binding_lost",
-              "target_changed"
+              "target_changed",
+              "admin_override_removed"
             ],
             "title": "Change",
             "type": "string"
@@ -6083,6 +6106,28 @@
         "additionalProperties": true,
         "description": "Nodo nel canvas visuale del progetto.\n\nTipologie supportate:\n    - source: tabella database (progetti ESTRAI)\n    - feature_source: layer ArcGIS Feature Service (progetti ESTRAI)\n    - result: nodo di output con formato e opzioni export\n    - project_source: riferimento a un altro progetto (MANIPOLA/ARRICCHISCI)\n    - file_source: file esterno caricato (MANIPOLA)\n    - transform: operazione di trasformazione (MANIPOLA)\n    - api_enrich: arricchimento via API esterna (ARRICCHISCI)\n    - staticValues: valori statici con supporto variabili template\n    - project_input: input file/scalare valorizzato a runtime da un eseguibile\n    - comment: annotazione/nota visuale nel canvas (non influenza il flusso dati)",
         "properties": {
+          "admin_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Override"
+          },
+          "admin_override_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Override Label"
+          },
           "aggregations": {
             "anyOf": [
               {
@@ -7337,6 +7382,17 @@
           },
           "position": {
             "$ref": "#/components/schemas/Position"
+          },
+          "preview_admin_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Admin Value"
           },
           "preview_username": {
             "anyOf": [

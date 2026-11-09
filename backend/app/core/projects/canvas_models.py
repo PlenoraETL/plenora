@@ -203,6 +203,12 @@ class Node(BaseModel):
     # ``utente``): entra nel manifest, la valuta il server
     # (runtime_identity, sezione TRASFORMAZIONE).
     identity_transform: Optional[str] = None
+    # Valore scelto dagli amministratori (runtime_identity, sezione VALORE
+    # SCELTO DAGLI AMMINISTRATORI): opzione, etichetta del campo e valore di
+    # prova dell'editor (mai nel manifest).
+    admin_override: Optional[bool] = None
+    admin_override_label: Optional[str] = None
+    preview_admin_value: Optional[str] = None
     order: Optional[int] = 0
 
     label: Optional[str] = None

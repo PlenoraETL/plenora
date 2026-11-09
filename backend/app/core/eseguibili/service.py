@@ -268,7 +268,10 @@ def publish_new_version(
         canvas=cloned_canvas,
         default_connection_id=getattr(proj, "default_connection_id", None),
     )
-    changes = input_changes(_active_manifest(eseguibile), manifest.inputs, manifest.bindings)
+    changes = [
+        change for change in input_changes(_active_manifest(eseguibile), manifest.inputs, manifest.bindings)
+        if change.get("blocking", True)
+    ]
     if changes and not confirm_removed_inputs:
         raise InputChangesNotConfirmed(changes)
     manifest = hydrate_manifest_connection_options(
@@ -427,7 +430,13 @@ def source_changed_by_id(eseguibile_ids: Sequence[str]) -> Mapping[str, Optional
 #     valore non lo mette piu' il server, lo sceglie chi esegue);
 #   - ``binding_lost``: perde un collegamento e non ne ha altri;
 #   - ``target_changed``: un collegamento sparisce e ce ne sono altri (il
-#     valore va a un altro campo).
+#     valore va a un altro campo);
+#   - ``admin_override_removed`` (SOLO INFORMAZIONE, ``blocking: false``):
+#     un input «Utente che esegue» perde «Gli amministratori possono
+#     scegliere il valore». Non cambia tipo (mai ``kind_changed``) e non
+#     allarga i dati di nessuno (gli amministratori tornano al proprio nome
+#     utente): si elenca senza chiedere conferma. Aggiungere l'opzione non si
+#     elenca (come un input nuovo: non toglie nulla).
 # Gli input nuovi e i collegamenti aggiunti non contano (non tolgono nulla).
 # I collegamenti si confrontano canonici (``check_binding``, come li scrive
 # la pubblicazione). Con almeno una riga la ripubblicazione si rifiuta, salvo
@@ -495,13 +504,15 @@ def input_changes(
             (binding.target_node_id, binding.mode, field or ""))
     rows: list[JsonObject] = []
 
-    def row(key: str, change: str, motivo: str, target: tuple[str, str, str] | None = None) -> None:
+    def row(key: str, change: str, motivo: str, target: tuple[str, str, str] | None = None,
+            *, blocking: bool = True) -> None:
         rows.append({
             "input_key": key,
             "change": change,
             "target_node_id": target[0] if target else None,
             "target_field": (target[2] or None) if target else None,
             "motivo": motivo,
+            "blocking": blocking,
         })
 
     for old in old_inputs:
@@ -524,6 +535,10 @@ def input_changes(
                 if is_server_injected(old_kind) and not is_server_injected(new.kind) else ""
             )
             row(key, "kind_changed", f"L'input «{key}» cambia tipo, da {old_kind} a {new.kind}{extra}")
+        elif is_server_injected(old_kind) and old.get("admin_override") is True and not new.admin_override:
+            row(key, "admin_override_removed",
+                f"L'input «{key}» non permette più agli amministratori di scegliere il valore: "
+                "anche loro useranno il proprio nome utente", blocking=False)
         current = new_targets.get(key, set())
         for target in old_targets:
             if target in current:

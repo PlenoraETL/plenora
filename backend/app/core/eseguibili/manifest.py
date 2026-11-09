@@ -13,7 +13,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.shared.contracts.payloads import JsonObject
-from app.shared.execution.runtime_identity import identity_source_column, identity_transform
+from app.shared.execution.runtime_identity import (
+    admin_override_enabled,
+    admin_override_label,
+    identity_source_column,
+    identity_transform,
+)
 from app.shared.execution.runtime_input_kinds import kind_spec, project_input_role
 
 from .binding_capabilities import canonical_binding_path
@@ -127,6 +132,12 @@ def _compile_project_input(
         ),
         order=int(data.get("order", order)),
         transform=transform,
+        # Valore scelto dagli amministratori (solo tipo server); il valore di
+        # prova del nodo (preview_admin_value) non entra mai nel manifest.
+        admin_override=admin_override_enabled(node) if server else False,
+        admin_override_label=(
+            admin_override_label(node) if server and admin_override_enabled(node) else None
+        ),
     )
 
     # Ruolo nel canvas: regola unica (runtime_input_kinds.project_input_role).

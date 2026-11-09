@@ -659,3 +659,31 @@ permesso dell'anteprima.
 Restano dichiarate:
 - **O3**: un'eccezione fuori dalle famiglie gestite nell'anteprima dà 500;
 - la vecchia `/execute` non risolve gli input, come prima.
+
+## Utente che esegue: valore scelto dagli amministratori (09/11/2026)
+
+Funzione nuova richiesta dall'utente. Sull'input «Utente che esegue» c'è l'opzione facoltativa «Gli amministratori possono scegliere il valore» (`admin_override: true` nel nodo e nella definizione del manifest, con l'etichetta del campo `admin_override_label`, es. «Istituto (solo amministratori)»).
+
+- **Regola unica** (`shared/execution/runtime_identity`, sezione VALORE SCELTO DAGLI AMMINISTRATORI; `RuntimeIdentity.may_choose`, applicata solo in `resolve_identity_inputs`): se chi esegue è un utente autenticato con ruolo `admin` o `superadmin` (`ADMIN_OVERRIDE_ROLES`; il ruolo lo legge il server in `RuntimeIdentity.authenticated(current_user)`, mai dal client) E l'input ha `admin_override` (solo il valore `true`), può inviare un valore. Un valore non vuoto si usa così com'è, senza trasformazione; un valore vuoto o assente segue la regola normale (nome utente + trasformazione). In ogni altro caso un valore del client riceve 400 `runtime_identity_client_value`, come prima: altri ruoli (esecutore, user, viewer), input senza l'opzione, anteprima, Valida, prova, percorsi senza utente.
+- **Valore come testo** (`chosen_value`): si tolgono i caratteri di controllo e gli spazi ai lati. Un valore che non è un testo, o che supera 200 caratteri (`ADMIN_OVERRIDE_MAX_LENGTH`), riceve 400 `runtime_identity_override_invalid` (codice nuovo del catalogo, 78).
+- **Stessa via del valore del server**: il valore scelto è un valore di `identity_values`, quindi riceve lo stesso segno `value_literal`. In Estrai vale solo con `=` o `IN` ed entra come un solo parametro SQL, mai come funzione SQL. Valgono anche la sorgente di Manipola e i parametri API.
+- **Audit**: `input_summary` dell'esecuzione ha `overridden_by: <username>` e `value` (`identity_audit`); con la regola normale non ci sono. L'impronta della stima cambia con il valore scelto, perché stima e avvio usano gli stessi input.
+- **Percorsi**: `/eseguibili/{id}/runs` e `/preflight` (unica identità `authenticated`).
+- **Editor**: Anteprima, Valida, valori distinti ed «Esegui di prova» accettano un «Valore di prova scelto» nel nodo (`preview_admin_value`), letto solo con `admin_override`. Per la prova viene dal canvas SALVATO e sostituisce il nome utente di prova trasformato. Il riepilogo lo segna con `test_value: true`. Non entra mai nel manifest.
+  - **Dichiarato**: il nome utente di prova resta obbligatorio, perché è chi «esegue» la prova.
+  - **Dichiarato**: chi modifica il progetto ha già lo stesso potere con nome di prova e trasformazione, quindi non c'è un controllo di ruolo in più.
+  - **Dichiarato**: come per `preview_username`, cambiare il valore di prova cambia il canvas del progetto rispetto alla versione pubblicata (N1).
+- **Frontend**:
+  - «Prima di avviare» degli Eseguibili: per admin e superadmin con un input `admin_override` il campo è facoltativo, con l'etichetta del manifest, il nome utente come segnaposto, la nota «Vuoto: si usa il tuo nome utente» e un massimo di 200 caratteri (`utils/beforeRun.canChooseIdentity`, `chosenIdentityInputs`). Il valore si invia solo se non è vuoto, e va a stima e avvio. Gli altri ruoli vedono la riga in sola lettura, come oggi. Nell'esecuzione di prova il campo non compare mai.
+  - Pannello dell'input: casella «Gli amministratori possono scegliere il valore», con etichetta e valore di prova. Togliere la casella toglie il valore di prova; cambiare tipo toglie tutti e tre.
+- **V1 (decisione)**: `input_changes` confronta tipo e collegamenti, quindi aggiungere o togliere l'opzione non è mai `kind_changed`.
+  - Togliere l'opzione si elenca come informazione: riga `admin_override_removed` con `blocking: false` (campo nuovo di `InputChange`, `true` di default). La ripubblicazione non chiede la conferma per questa riga, perché non allarga i dati di nessuno (gli amministratori tornano al proprio nome utente).
+  - L'interfaccia elenca queste righe a parte («Da sapere») e manda `confirm_removed_inputs` solo per le righe che bloccano.
+  - Aggiungere l'opzione o cambiare l'etichetta non si elenca: come un input nuovo, non toglie nulla.
+- **Guida**: sezione nuova «Amministratori che scelgono il valore» e frase in «Sicurezza» (`utils/guides/utenteCheEsegue.js`, `docs/guide/input-utente-che-esegue.md` rigenerato).
+
+Nessuna migrazione (i campi stanno nel canvas e nel manifest JSON); CSP e installer invariati. Snapshot OpenAPI rigenerato (`admin_override` e `admin_override_label` nella definizione, i tre campi nel nodo, `blocking` e `admin_override_removed` in `InputChange`). **Dichiarato**: un manifest pubblicato dopo questa modifica contiene `admin_override` e una versione precedente del backend, con `extra="forbid"`, non lo leggerebbe (nessun rollback previsto, come per `transform`).
+
+Test che falliscono senza la funzione: `backend/tests2/eseguibili/unit/test_identity_admin_override.py` (risoluzione, admin e superadmin, vuoto, testo e limiti, endpoint, impronta, SQL con bind per apici, `;`, `--`, `NOW()`, `GETDATE()`, virgole con IN, limiti degli operatori, manifest, editor, V1 e ripubblicazione non rifiutata), `frontend/tests/components/AdminOverride.contract.test.jsx` (modulo per ruolo, pannello, righe informative) e `userGuides.contract.test.jsx` (sezione nuova e regole del backend). I test di sicurezza passano anche senza la funzione, perché oggi rifiutano tutti, e restano come guardiani: esecutore, user o viewer con l'opzione → 400; admin senza l'opzione → 400; ruolo dichiarato dal client → 422; anteprima o prova con un valore del client → 400.
+
+Verifiche: frontend eslint pulito, vitest 214 file / 6.101 test passati, build; snapshot OpenAPI allineato; backend (comando completo delle cartelle tests2) 30.205 passati, 0 falliti, 61 saltati. Niente deploy, niente push.

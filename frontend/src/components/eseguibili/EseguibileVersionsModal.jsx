@@ -23,7 +23,9 @@ import ConfirmDialog from '../common/ConfirmDialog';
 import ListState, { ResourceError } from '../common/ListState';
 import { formatDateTime } from '../../utils/format';
 import { projectTypeChip } from '../../utils/projectTypes';
-import { InputChangesList, RepublishPreview, inputChanges, republishBlocked } from './SourceStatus';
+import {
+  InputChangesList, RepublishPreview, blockingInputChanges, inputChanges, republishBlocked,
+} from './SourceStatus';
 
 function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
   const toast = useToast();
@@ -62,18 +64,21 @@ function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
     // Ripubblicazione sicura: gli input tolti o cambiati si elencano nella
     // conferma; confermando si manda la conferma esplicita al backend.
     const changes = inputChanges(statusResource.data);
+    // Le righe solo informative (blocking: false, es. opzione degli
+    // amministratori tolta) si elencano ma non chiedono la conferma esplicita.
+    const blocking = blockingInputChanges(changes);
     const base = 'Viene creata una nuova versione dallo stato attuale del progetto e diventa quella attiva: '
       + 'le prossime esecuzioni la useranno. Le esecuzioni già avviate continuano con la loro versione.';
     const ok = await confirmModal.confirm({
       title: 'Ripubblicare dal progetto?',
       message: base,
       details: changes.length ? <InputChangesList changes={changes} /> : null,
-      confirmText: changes.length ? 'Ripubblica comunque' : 'Ripubblica',
-      variant: changes.length ? 'danger' : 'warning',
+      confirmText: blocking.length ? 'Ripubblica comunque' : 'Ripubblica',
+      variant: blocking.length ? 'danger' : 'warning',
     });
     if (!ok) return;
     await runAction(
-      () => republishEseguibile(eseguibile.id, { confirmRemovedInputs: changes.length > 0 }),
+      () => republishEseguibile(eseguibile.id, { confirmRemovedInputs: blocking.length > 0 }),
       (updated) => `Pubblicata la versione ${updated.active_version}`,
     );
   };

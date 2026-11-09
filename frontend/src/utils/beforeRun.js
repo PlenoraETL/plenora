@@ -31,7 +31,10 @@
  * chi e' collegato (Eseguibili) o con lo username di PROVA salvato
  * nell'input (esecuzione di prova dell'editor), ma non hanno valore, errore
  * ne' payload: il browser non li invia MAI (il server li rifiuterebbe), li
- * mette il server.
+ * mette il server. Eccezione (09/11/2026): negli Eseguibili un input con
+ * «Gli amministratori possono scegliere il valore» (`admin_override`) mostra
+ * agli admin e superadmin un campo facoltativo (canChooseIdentity): se non
+ * vuoto si manda (chosenIdentityInputs), vuoto vale il nome utente.
  */
 import { errorReason } from '../api/errors';
 import { role } from './permissions';
@@ -129,6 +132,32 @@ export const runInputs = (inputDefinitions = [], values = {}, { omitEmptyOptiona
       const { value, error } = runtimeInputCodec(d).parse(raw);
       return [d.input_key, error ? raw : value];
     }),
+);
+
+/** Lunghezza massima del valore scelto (backend ADMIN_OVERRIDE_MAX_LENGTH). */
+export const ADMIN_VALUE_MAX_LENGTH = 200;
+
+/**
+ * Valore scelto dagli amministratori («Utente che esegue» con
+ * `admin_override`, backend runtime_identity, sezione VALORE SCELTO DAGLI
+ * AMMINISTRATORI): solo admin e superadmin, solo negli Eseguibili (non
+ * nell'esecuzione di prova: chi la lancia passa `user = null`). Il server
+ * ricontrolla il ruolo: questa e' solo cio' che la finestra mostra.
+ */
+export const canChooseIdentity = (definition, user) => Boolean(
+  definition && isServerInjectedKind(definition.input_kind ?? definition.kind)
+  && definition.admin_override === true && role.isAdminOrAbove(user),
+);
+
+/**
+ * Payload dei valori scelti: solo per chi puo' sceglierli, solo se non
+ * vuoti (vuoto = non si manda: il server usa il nome utente).
+ */
+export const chosenIdentityInputs = (inputDefinitions = [], chosen = {}, user = null) => Object.fromEntries(
+  (inputDefinitions || [])
+    .filter(d => canChooseIdentity(d, user))
+    .map(d => [d.input_key, String(chosen?.[d.input_key] ?? '').trim()])
+    .filter(([, value]) => value !== ''),
 );
 
 /** Chiave degli input di una stima: la stima vale solo per quegli input. */

@@ -71,6 +71,7 @@ describe('2. the guide says what the system does', () => {
       'Filtrare nel database',
       "Provare dall'editor: Anteprima, Valida, Esegui di prova",
       'Pubblicare come Eseguibile',
+      'Amministratori che scelgono il valore',
       'Pianificazioni e progetti collegati',
       'Errori comuni',
     ]);
@@ -86,6 +87,18 @@ describe('2. the guide says what the system does', () => {
       .forEach(word => expect(body).toContain(word));
     [/TRASFORMAZIONE/, /runtime_identity_transform_failed/, /mai un\s+valore inventato/]
       .forEach(rule => expect(BACKEND_IDENTITY).toMatch(rule));
+  });
+
+  it('explains the value chosen by the administrators', () => {
+    const section = UTENTE_CHE_ESEGUE_GUIDE.sections.find(s => s.title === 'Amministratori che scelgono il valore');
+    const body = text({ intro: '', sections: [section] });
+    ['Gli amministratori possono scegliere il valore', 'Istituto (solo amministratori)', "così com'è",
+      'la trasformazione non si applica', 'Se lo lascia vuoto', 'non vedono il campo', 'chi ha scelto il valore',
+      '200 caratteri', 'Valore di prova scelto', 'solo come informazione']
+      .forEach(word => expect(body).toContain(word));
+    ['VALORE SCELTO DAGLI AMMINISTRATORI', 'ADMIN_OVERRIDE_MAX_LENGTH = 200', 'overridden_by',
+      'ADMIN_OVERRIDE_ROLES: tuple[str, ...] = ROLES_ADMIN_OR_ABOVE']
+      .forEach(rule => expect(BACKEND_IDENTITY).toContain(rule));
   });
 
   it('matches the backend rules it describes', () => {

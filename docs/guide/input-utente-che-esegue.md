@@ -19,7 +19,7 @@ Si può usare in due modi:
 
 Il valore lo mette solo il server, con l'utente che ha fatto l'accesso. Nella finestra «Prima di avviare» si vede in sola lettura e non si può cambiare; se qualcuno provasse a inviarne uno diverso, la richiesta viene rifiutata.
 
-Chi apre l'Eseguibile non può quindi farsi passare per un altro utente né vedere i dati di un altro: il filtro usa sempre il suo nome utente.
+Chi apre l'Eseguibile non può quindi farsi passare per un altro utente né vedere i dati di un altro: il filtro usa sempre il suo nome utente. L'unica eccezione la decide chi costruisce il progetto, ed è solo per gli amministratori (sezione «Amministratori che scelgono il valore»).
 
 > **Attenzione:** La sicurezza vale per il filtro che hai costruito: se il progetto non usa davvero il valore (input non collegato, Join non interno), i dati non vengono filtrati. Prova sempre il risultato con un nome utente di prova.
 
@@ -82,6 +82,21 @@ Nell'editor non c'è un utente che esegue: al suo posto si usa il nome utente di
 Quando il risultato di prova è giusto, pubblica il progetto come Eseguibile. Da quel momento ogni persona che lo apre lo esegue con il proprio nome utente: non deve scrivere nulla, la riga «Utente che esegue» in «Prima di avviare» mostra il suo nome e non si può cambiare.
 
 Il nome utente di prova non entra nell'Eseguibile: vale solo nell'editor.
+
+## Amministratori che scelgono il valore
+
+Un amministratore a volte deve vedere il risultato di un istituto preciso, per esempio `004_IS`, senza avere quel nome utente. Per permetterlo, nell'input spunta «Gli amministratori possono scegliere il valore» e scrivi l'etichetta del campo, per esempio «Istituto (solo amministratori)». Poi ripubblica l'Eseguibile.
+
+- Chi ha il ruolo amministratore o superamministratore, avviando l'Eseguibile, vede in «Prima di avviare» un campo facoltativo con quell'etichetta. Il ruolo lo controlla il server, non la pagina.
+- Se lo compila, il valore si usa così com'è: è già il valore finale (per esempio `004_IS`), la trasformazione non si applica. Si usano al massimo 200 caratteri; i caratteri di controllo e gli spazi all'inizio e alla fine si tolgono.
+- Se lo lascia vuoto, vale la regola normale: il suo nome utente, con la trasformazione.
+- Esecutori, utenti e visualizzatori non vedono il campo e non possono cambiare il valore: se provassero a inviarlo, la richiesta viene rifiutata. Lo stesso vale per tutti se l'opzione non è spuntata.
+- Il valore scelto segue la stessa strada del valore del server: nel filtro di Estrai entra come dato, solo con «uguale» o «è uno di».
+- La cronologia dell'esecuzione registra chi ha scelto il valore e quale valore ha usato.
+
+Nell'editor, con l'opzione spuntata, puoi scrivere anche un «Valore di prova scelto»: Anteprima, Valida ed Esegui di prova usano quel valore al posto del nome utente di prova trasformato. Il nome utente di prova serve comunque. Il valore di prova non entra nell'Eseguibile.
+
+> **Attenzione:** Togliere l'opzione e ripubblicare non chiede una conferma: la ripubblicazione lo elenca solo come informazione, perché da quel momento anche gli amministratori useranno il proprio nome utente.
 
 ## Pianificazioni e progetti collegati
 

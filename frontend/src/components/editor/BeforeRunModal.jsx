@@ -9,7 +9,10 @@
  *  - Input: i valori chiesti all'esecuzione (project_input non di tipo file).
  *    «Utente che esegue» (tipo impostato dal server) e' una riga in sola
  *    lettura con lo username di chi e' collegato: non si compila e non si
- *    invia, lo mette il server (utils/beforeRun).
+ *    invia, lo mette il server (utils/beforeRun). Eccezione: con
+ *    `admin_override`, admin e superadmin negli Eseguibili vedono un campo
+ *    facoltativo per scegliere il valore («Vuoto: si usa il tuo nome
+ *    utente»; utils/beforeRun.canChooseIdentity).
  *  - Esecuzione di prova (`request.testRun`, regola H del backend): sezione
  *    in cima con l'utente di prova (quello della stima del server, se c'e'),
  *    dove finisce il risultato e cosa non fa; senza username di prova o con
@@ -39,6 +42,7 @@ import { isServerInjectedKind } from '../../utils/runtimeInputKinds';
 import { useAuth } from '../../context/AuthContext';
 import { requestErrorMessage } from '../../utils/errorMessages';
 import {
+  ADMIN_VALUE_MAX_LENGTH, canChooseIdentity, chosenIdentityInputs,
   describeApiCalls, describeInputRows, initialInputValues, inputsComplete, inputsKey, needsPreflight,
   preflightBlocks, runInputErrors, runInputs,
 } from '../../utils/beforeRun';
@@ -126,6 +130,43 @@ function useSignedInUsername() {
   } catch {
     return null;
   }
+}
+
+// Utente collegato (null fuori da AuthProvider): ruolo per il valore scelto.
+function useSignedInUser() {
+  try {
+    return useAuth()?.user || null;
+  } catch {
+    return null;
+  }
+}
+
+// «Utente che esegue» con «Gli amministratori possono scegliere il valore»,
+// per admin e superadmin negli Eseguibili: campo facoltativo, il valore e'
+// gia' quello finale (nessuna trasformazione); vuoto = il proprio nome utente.
+function ChosenIdentityField({ definition, value, onChange, username }) {
+  const id = `before-run-input-${definition.input_key}`;
+  return (
+    <div className="before-run__row">
+      <label htmlFor={id} className="before-run__label">
+        {definition.admin_override_label || definition.label || definition.input_key}
+      </label>
+      <input
+        id={id}
+        className="before-run__field"
+        type="text"
+        value={value ?? ''}
+        maxLength={ADMIN_VALUE_MAX_LENGTH}
+        placeholder={username || ''}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <span className="before-run__hint">
+        Vuoto: si usa il tuo nome utente{definition.transform ? ' (con la trasformazione dell’input)' : ''}.
+        Un valore scritto qui si usa così com’è e resta nella cronologia dell’esecuzione.
+      </span>
+      {definition.description && <span className="before-run__hint">{definition.description}</span>}
+    </div>
+  );
 }
 
 // «Utente che esegue»: sola lettura, nessun valore inviato (il server usa
@@ -246,11 +287,15 @@ export default function BeforeRunModal({
 }) {
   const definitions = request?.inputDefinitions || [];
   const username = useSignedInUsername();
+  const signedIn = useSignedInUser();
+  // Valore scelto: mai nell'esecuzione di prova (vale il valore salvato nell'input).
+  const chooser = request?.testRun ? null : signedIn;
   const migration = request?.migration || [];
   // Esecuzione di prova senza un utente di prova valido: nessuna stima (si blocca prima).
   const withEstimate = Boolean(request) && migration.length === 0 && needsPreflight(request.mode) && typeof onPreflight === 'function'
     && !request.testRun?.problem;
   const [values, setValues] = useState({});
+  const [chosen, setChosen] = useState({});
   const [intermediateMode, setIntermediateMode] = useState('');
   const [touched, setTouched] = useState({});
   const [estimate, setEstimate] = useState({ key: null, data: null, error: null, loading: false });
@@ -261,6 +306,10 @@ export default function BeforeRunModal({
     if (!request) return;
     seq.current += 1;
     setValues(request.values || initialInputValues(request.inputDefinitions || []));
+    // Valore scelto ripreso dalla richiesta (finestra riaperta dopo la stima).
+    setChosen(Object.fromEntries((request.inputDefinitions || [])
+      .filter(d => isServerInjectedKind(d.input_kind))
+      .map(d => [d.input_key, String(request.values?.[d.input_key] ?? '')])));
     setIntermediateMode('');
     setTouched({});
     setEstimate({
@@ -273,8 +322,12 @@ export default function BeforeRunModal({
 
   const omitEmptyOptional = Boolean(request?.omitEmptyOptional);
   const inputs = useMemo(
-    () => ({ ...runInputs(definitions, values, { omitEmptyOptional }), ...(extraInputs || {}) }),
-    [definitions, values, omitEmptyOptional, extraInputs],
+    () => ({
+      ...runInputs(definitions, values, { omitEmptyOptional }),
+      ...chosenIdentityInputs(definitions, chosen, chooser),
+      ...(extraInputs || {}),
+    }),
+    [definitions, values, omitEmptyOptional, extraInputs, chosen, chooser],
   );
   const key = inputsKey(inputs);
   const inputErrors = runInputErrors(definitions, values);
@@ -384,7 +437,15 @@ export default function BeforeRunModal({
         {definitions.length > 0 && (
           <section className="before-run__section" aria-label="Input">
             <h3 className="before-run__heading">Input</h3>
-            {definitions.map(d => (isServerInjectedKind(d.input_kind) ? (
+            {definitions.map(d => (canChooseIdentity(d, chooser) ? (
+              <ChosenIdentityField
+                key={d.input_key}
+                definition={d}
+                value={chosen[d.input_key]}
+                username={username}
+                onChange={(v) => setChosen(cur => ({ ...cur, [d.input_key]: v }))}
+              />
+            ) : isServerInjectedKind(d.input_kind) ? (
               <IdentityField key={d.input_key} definition={d} username={testRun ? testUsername : username} testRun={Boolean(testRun)} />
             ) : (
               <InputField

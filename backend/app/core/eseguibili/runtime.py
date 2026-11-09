@@ -15,6 +15,7 @@ from app.core.files.service import file_source_service
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.runtime_identity import (
     RuntimeIdentity,
+    identity_audit,
     identity_source_column,
     identity_source_fields,
 )
@@ -319,7 +320,8 @@ def _resolve_into(
     nodes_by_id: dict[str, Any],
     bindings_by_key: dict[str, list[Any]],
     cleanup_ids: list[str],
-    identity_username: str | None = None,
+    identity: RuntimeIdentity | None = None,
+    server_values: Mapping[str, str] | None = None,
 ) -> JsonObject:
     """Applica gli input al canvas (in place). Ogni file materializzato entra
     in ``cleanup_ids`` appena creato: chi chiama lo elimina se qui si esce con
@@ -400,9 +402,12 @@ def _resolve_into(
         if is_server_injected(definition.kind):
             # Audit della run: per quale utente e' stata filtrata e, con una
             # trasformazione, con quale valore.
-            summary[definition.key]["username"] = identity_username
+            summary[definition.key]["username"] = identity.username if identity else None
             if definition.transform:
                 summary[definition.key]["value"] = scalar
+            # Valore scelto da un amministratore (o di prova): chi e quale.
+            if identity is not None and server_values is not None:
+                summary[definition.key].update(identity_audit(identity, server_values, definition.key))
 
     return summary
 
@@ -422,7 +427,9 @@ def resolve_runtime_inputs(
     esegue. Gli input «Utente che esegue» prendono SOLO il suo username,
     trasformato se l'input ha una trasformazione
     (``identity_transform.identity_values``): un valore del client si
-    rifiuta, senza utente la catena si blocca.
+    rifiuta (salvo un amministratore su un input con ``admin_override``,
+    che lo sceglie: stessa via del valore del server), senza utente la
+    catena si blocca.
     """
 
     expected_keys = {item.key for item in manifest.inputs}
@@ -464,7 +471,8 @@ def resolve_runtime_inputs(
             nodes_by_id=nodes_by_id,
             bindings_by_key=bindings_by_key,
             cleanup_ids=cleanup_ids,
-            identity_username=identity.username,
+            identity=identity,
+            server_values=server_values,
         )
 
         # I project_input scalari e i loro archi sono configurazione di authoring,

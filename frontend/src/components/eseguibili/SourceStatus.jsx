@@ -70,19 +70,37 @@ export function RepublishPreview({ status }) {
 /** Input della versione attiva che la nuova versione toglierebbe o cambierebbe. */
 export const inputChanges = (status) => (status?.changed ? status.input_changes || [] : []);
 
+/** Righe che chiedono la conferma esplicita (backend `blocking`, assente = si). */
+export const blockingInputChanges = (changes) => (changes || []).filter(c => c?.blocking !== false);
+
 const INPUT_CHANGES_INTRO = 'Ripubblicando, la nuova versione toglierebbe o cambierebbe questi input della versione attiva:';
+const INPUT_CHANGES_INFO = 'Da sapere (non serve una conferma):';
+
+const changeKey = (c) => `${c.input_key}|${c.change}|${c.target_node_id || ''}|${c.target_field || ''}`;
 
 /** Elenco con il motivo di ogni input tolto o cambiato (anteprima e conferma). */
 export function InputChangesList({ changes }) {
   if (!changes?.length) return null;
+  const blocking = blockingInputChanges(changes);
+  const info = changes.filter(c => c?.blocking === false);
   return (
     <>
-      <div>{INPUT_CHANGES_INTRO}</div>
-      <ul className="binding-warnings__list">
-        {changes.map(c => (
-          <li key={`${c.input_key}|${c.change}|${c.target_node_id || ''}|${c.target_field || ''}`}>{c.motivo}</li>
-        ))}
-      </ul>
+      {blocking.length > 0 && (
+        <>
+          <div>{INPUT_CHANGES_INTRO}</div>
+          <ul className="binding-warnings__list">
+            {blocking.map(c => <li key={changeKey(c)}>{c.motivo}</li>)}
+          </ul>
+        </>
+      )}
+      {info.length > 0 && (
+        <>
+          <div>{INPUT_CHANGES_INFO}</div>
+          <ul className="binding-warnings__list">
+            {info.map(c => <li key={changeKey(c)}>{c.motivo}</li>)}
+          </ul>
+        </>
+      )}
     </>
   );
 }
