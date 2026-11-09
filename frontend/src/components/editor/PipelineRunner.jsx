@@ -348,14 +348,22 @@ export default function PipelineRunner({ user = null }) {
   }, []);
 
   // «Esegui» chiesto dalla home per catene (utils/pendingRun): parte una
-  // volta, quando il canvas di quel progetto e' caricato, con lo stesso
-  // percorso del pulsante. Con una copia locale ripristinata (modifiche non
+  // volta, con l'azione del pulsante (runPipeline: salva, valida, «Prima di
+  // avviare»), solo quando il canvas di quel progetto e' stato caricato IN
+  // QUESTA APERTURA. Lo store tiene il canvas della visita precedente fino
+  // all'azzeramento (useCanvasCore, effetto di layout): il primo render lo
+  // vede ancora «caricato». Regola: ogni loadGraph crea un `savedGraph`
+  // nuovo; quello visto al primo render e' della visita precedente e non
+  // conta (P1, 09/11/2026). Con una copia locale ripristinata (modifiche non
   // salvate) non parte da solo: Esegui salverebbe modifiche non viste.
-  const loadedProjectId = useCanvasStore(s => (s.graphLoaded ? s.projectId : null));
+  const staleGraph = useRef(useCanvasStore.getState().savedGraph);
+  const loadedProjectId = useCanvasStore(s => (
+    s.graphLoaded && s.runReady && s.savedGraph && s.savedGraph !== staleGraph.current ? s.projectId : null
+  ));
   useEffect(() => {
     if (!loadedProjectId || !takeRunOnOpen(loadedProjectId)) return;
     if (hasUnsavedChanges(useCanvasStore.getState())) return;
-    ref.current.run();
+    ref.current.run();   // = l'azione runPipeline registrata qui sopra
   }, [loadedProjectId]);
 
   // "Vai al nodo": chiude la finestra e porta al nodo NELLA VISTA APERTA

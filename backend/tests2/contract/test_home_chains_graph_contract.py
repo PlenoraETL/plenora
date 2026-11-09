@@ -154,7 +154,7 @@ def test_graph_returns_nodes_and_links_without_canvas(monkeypatch):
         "id": "x-1", "name": "immobili attivi per istituto", "project_type": "manipola",
         "source_project_id": "m1", "inputs_count": 0, "has_manifest": True,
         "active_version": 2, "updated_at": "2026-11-08",
-        # N1: lo stesso campo della lista degli Eseguibili (SOURCE_CHANGED_SQL).
+        # N1: lo stesso campo della lista degli Eseguibili (service.source_changed, P2).
         "source_changed_since_publish": True,
     }]
     assert body["unavailable"] == []
@@ -185,6 +185,24 @@ def test_graph_part_failure_is_declared_and_others_stay(monkeypatch, part):
         assert len(body["eseguibili"]) == 1
     if part != "links":
         assert {p["id"]: p for p in body["projects"]}["m1"]["source_project_ids"] == ["e1"]
+
+
+def test_graph_without_projects_is_empty_and_projects_failure_fails_the_response(monkeypatch):
+    """P6: come dice la docstring del modulo — senza progetti la risposta e'
+    valida e vuota; la lettura dei progetti non e' una parte (`unavailable`)."""
+    from app.core.dashboard import graph as graph_mod
+    from app.core.projects import router as projects_routes
+
+    assert "senza progetti la risposta e' valida e vuota" in graph_mod.__doc__
+    assert "senza progetti la risposta e' un errore" not in graph_mod.__doc__
+    client, _ = _client(monkeypatch, _user())
+    projects_routes._project_service.list_projects.side_effect = (
+        lambda group_id, limit, offset: SimpleNamespace(projects=[]))
+    body = client.get("/api/dashboard/graph").json()
+    assert body["projects"] == [] and body["unavailable"] == []
+    projects_routes._project_service.list_projects.side_effect = RuntimeError("giu'")
+    with pytest.raises(RuntimeError):
+        client.get("/api/dashboard/graph")
 
 
 def test_graph_route_is_not_for_esecutori():

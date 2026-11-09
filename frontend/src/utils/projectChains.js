@@ -361,7 +361,8 @@ export const WATCH_RULES = Object.freeze([
     needs: ['eseguibili'],
     // N1 (Eseguibile pubblicato che non corrisponde piu' al suo progetto):
     // GET /dashboard/graph porta il campo della lista degli Eseguibili
-    // (eseguibili.db.SOURCE_CHANGED_SQL); null (non admin) = la regola tace.
+    // (confronto semantico eseguibili.service.source_changed, P2); null
+    // (chi non puo' ripubblicare l'Eseguibile, P7) = la regola tace.
     enabled: true,
     field: 'source_changed_since_publish',
     check(node) {

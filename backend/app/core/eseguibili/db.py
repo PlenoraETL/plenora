@@ -31,31 +31,15 @@ MANIFEST_PRESENT_SQL = "(COALESCE(v.manifest, '{}'::jsonb) NOT IN ('{}'::jsonb, 
 
 
 def canvas_fingerprint(canvas: object) -> str:
-    """Impronta di un canvas (N1, 09/11/2026): la stessa alla pubblicazione
-    (``eseguibile_versions.source_hash``) e nel confronto con il canvas attuale
-    del progetto sorgente (``service.source_status``). Un testo JSON si legge
-    prima (colonna storica TEXT)."""
+    """Impronta del canvas pubblicato (``eseguibile_versions.source_hash``).
+    Non decide se il progetto e' cambiato: quello e' il confronto semantico
+    ``service.source_changed`` (P2, 09/11/2026), che non guarda posizioni e
+    campi dell'interfaccia. Un testo JSON si legge prima (colonna TEXT)."""
     if isinstance(canvas, str):
         canvas = json.loads(canvas)
     return hashlib.sha256(
         json.dumps(canvas, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
-
-
-# N1: la versione attiva e' ancora il canvas attuale del progetto sorgente?
-# Calcolato in SQL per la lista (nessun canvas scaricato): confronto jsonb
-# semantico fra la copia congelata della versione e il canvas del progetto.
-# Equivale al confronto delle impronte (``canvas_fingerprint``: JSON con le
-# chiavi ordinate) salvo numeri scritti diversamente con lo stesso valore
-# (1 e 1.0). Colonna del progetto jsonb (produzione) o TEXT storico, come
-# ``projects.db.MANIPOLA_SOURCE_REFS_SQL``; un canvas TEXT illeggibile conta
-# come cambiato. NULL senza progetto sorgente o senza versione attiva.
-SOURCE_CHANGED_SQL = """(CASE
-        WHEN v.id IS NULL OR p.id IS NULL THEN NULL
-        WHEN pg_typeof(p.canvas) = 'jsonb'::regtype THEN v.canvas::jsonb IS DISTINCT FROM p.canvas::jsonb
-        WHEN pg_input_is_valid(p.canvas::text, 'jsonb') THEN v.canvas::jsonb IS DISTINCT FROM p.canvas::text::jsonb
-        ELSE true
-    END)"""
 
 
 def manifest_present(manifest: object) -> bool:
@@ -144,8 +128,6 @@ class EseguibileSummaryRow:
     # ne sono bersaglio (per ``binding_warnings`` senza caricare il canvas).
     bindings: tuple[JsonObject, ...] = ()
     binding_target_nodes: tuple[JsonObject, ...] = ()
-    # N1: progetto sorgente cambiato dopo la pubblicazione (SOURCE_CHANGED_SQL).
-    source_changed: bool | None = None
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -304,7 +286,6 @@ def eseguibile_summary_row_from_db(row: Mapping[str, object]) -> EseguibileSumma
         has_manifest=bool(row.get("has_manifest")),
         bindings=_parse_json_objects(row.get("bindings")),
         binding_target_nodes=_parse_json_objects(row.get("binding_target_nodes")),
-        source_changed=None if row.get("source_changed") is None else bool(row.get("source_changed")),
     )
 
 
@@ -452,10 +433,8 @@ def list_eseguibili(
                            FROM jsonb_array_elements(
                                 CASE WHEN jsonb_typeof(v.manifest->'bindings') = 'array'
                                      THEN v.manifest->'bindings' ELSE '[]'::jsonb END) AS b(binding))
-                 ) AS binding_target_nodes,
-                 {SOURCE_CHANGED_SQL} AS source_changed"""
-    join = (" LEFT JOIN eseguibile_versions v ON v.id = e.active_version_id "
-            " LEFT JOIN projects p ON p.id = e.source_canvas_id ")
+                 ) AS binding_target_nodes"""
+    join = " LEFT JOIN eseguibile_versions v ON v.id = e.active_version_id "
     if resource_ids is not None:
         if not resource_ids:
             return []
@@ -480,6 +459,37 @@ def list_eseguibili(
             (limit, offset),
         )
     return [eseguibile_summary_row_from_db(row) for row in rows]
+
+
+@dataclass(frozen=True)
+class EseguibileSourceCanvasesRow:
+    """N1/P5: i due canvas da confrontare (versione attiva, progetto sorgente)."""
+    id: str
+    version_canvas: object
+    project_canvas: object
+
+
+def list_source_canvases(eseguibile_ids: list[str]) -> list[EseguibileSourceCanvasesRow]:
+    """Canvas della versione attiva e del progetto sorgente degli Eseguibili
+    dati, in una query (P5: la lista li legge solo per le righe che l'utente
+    puo' ripubblicare). Senza versione attiva o progetto la riga manca. La
+    colonna del progetto puo' essere TEXT storico: la legge ``service``."""
+    if not eseguibile_ids:
+        return []
+    placeholders = ", ".join(["%s"] * len(eseguibile_ids))
+    rows = _fetchall(
+        "SELECT e.id, v.canvas AS version_canvas, p.canvas AS project_canvas "
+        "FROM eseguibili e JOIN eseguibile_versions v ON v.id = e.active_version_id "
+        "JOIN projects p ON p.id = e.source_canvas_id "
+        f"WHERE e.id IN ({placeholders})",
+        tuple(eseguibile_ids),
+    )
+    return [
+        EseguibileSourceCanvasesRow(
+            id=str(row["id"]), version_canvas=row["version_canvas"], project_canvas=row["project_canvas"],
+        )
+        for row in rows
+    ]
 
 
 def list_eseguibili_by_source(source_canvas_id: str) -> list[EseguibileSourceRefRow]:

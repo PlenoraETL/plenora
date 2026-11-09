@@ -14,7 +14,8 @@ Regole (come GET /dashboard/counts):
     GET /pipeline-runs/latest-by-project (`latest_runs_by_project`);
   - una parte per volta, indipendenti: una che fallisce e' elencata in
     `unavailable` ("links", "runs", "eseguibili", "schedules") e le altre
-    restano; senza progetti la risposta e' un errore (la home non ha senso).
+    restano. La lettura dei progetti non e' una parte: se fallisce, fallisce
+    la risposta; senza progetti la risposta e' valida e vuota (liste vuote).
 """
 
 from __future__ import annotations
@@ -88,8 +89,9 @@ class GraphEseguibile(BaseModel):
     active_version: int = 1
     updated_at: Optional[str] = None
     # N1: la versione attiva non corrisponde piu' al canvas del progetto
-    # sorgente; lo stesso campo della lista (eseguibili.db.SOURCE_CHANGED_SQL,
-    # calcolato in SQL, nessun canvas); None se la route non lo dice (non admin).
+    # sorgente; lo stesso campo della lista (confronto semantico
+    # eseguibili.service.source_changed, P2); None se la route non lo dice
+    # (chi non puo' ripubblicare l'Eseguibile, P7).
     source_changed_since_publish: Optional[bool] = None
 
 

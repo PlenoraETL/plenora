@@ -11,13 +11,14 @@ import copy
 import hashlib
 import json
 import uuid
-from typing import BinaryIO, Mapping, Optional, Sequence, Union
+from typing import BinaryIO, Callable, Mapping, Optional, Sequence, Union
 
 from app.utils.logger import get_logger
 from app.core.dataframes import frame_io as dataframe_frame_io
 from app.core.dataframes import tabular as dataframe_tabular
 from app.core.dataframes.export_writer import normalize_export_format
 from app.core.projects import access_context as project_access_context
+from app.core.projects.canvas_models import CanvasState
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.files import db as files_db
 from app.core.files.service import file_source_service
@@ -274,9 +275,6 @@ def publish_new_version(
 
 # N1 — l'Eseguibile corrisponde ancora al suo progetto?
 
-_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
-
-
 def _problem_rows(problems) -> list[JsonObject]:
     return [
         {
@@ -298,14 +296,86 @@ def _parsed_canvas(canvas: object) -> object:
     return canvas
 
 
-def version_fingerprint(version: eseguibili_db.EseguibileVersionRow) -> str:
-    """Impronta della versione: ``source_hash`` (``db.canvas_fingerprint`` alla
-    pubblicazione). Le versioni importate dalla migrazione del 16/07/2026
-    hanno un md5 del testo: per loro l'impronta si calcola, allo stesso modo,
-    sulla copia congelata della versione (il canvas allora pubblicato)."""
-    if _SHA256_HEX.fullmatch(str(version.source_hash or "")):
-        return str(version.source_hash)
-    return eseguibili_db.canvas_fingerprint(version.canvas)
+# P2 (09/11/2026) — confronto SEMANTICO, regola unica di lista, dettaglio,
+# editor e home: due canvas «uguali» se l'esecuzione li vede uguali. Entrambi
+# passano dal modello che legge l'esecuzione (``CanvasState``: tipi e valori
+# predefiniti normalizzati, degli archi solo i campi del modello); poi si
+# tolgono, DICHIARATI, i campi che non cambiano l'esecuzione:
+#   - nodi: posizione, dimensioni, selezione, trascinamento, misure e stile
+#     di React Flow (``EXECUTION_IGNORED_NODE_KEYS``, anche dentro ``data``),
+#     campi transitori dell'interfaccia (chiave che inizia con «_», anche
+#     dentro ``data``), le note (tipo ``comment``);
+#   - archi: l'id; i collegamenti doppi contano una volta (il caricamento
+#     dell'editor li toglie e li risalva da solo);
+#   - ordine di nodi, archi e chiavi; numeri interi scritti 1 o 1.0.
+# Le colonne delle sorgenti rilette dallo schema NON si tolgono: l'esecuzione
+# le legge (alias, visibilita', CRS); una rilettura uguale non cambia nulla,
+# una diversa e' un cambiamento vero.
+EXECUTION_IGNORED_NODE_KEYS = frozenset({
+    "position", "positionAbsolute", "width", "height", "measured", "selected",
+    "dragging", "resizing", "zIndex", "style", "className", "sourcePosition", "targetPosition",
+})
+
+
+def _plain(value: object) -> object:
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_plain(v) for v in value]
+    return value
+
+
+def _without_ui(fields: Mapping[str, object]) -> JsonObject:
+    return {
+        k: v for k, v in fields.items()
+        if k not in EXECUTION_IGNORED_NODE_KEYS and not str(k).startswith("_")
+    }
+
+
+def execution_view(canvas: object) -> JsonObject | None:
+    """Il canvas come lo vede l'esecuzione (regola sopra); None se illeggibile."""
+    canvas = _parsed_canvas(canvas)
+    if not isinstance(canvas, dict):
+        return None
+    try:
+        canvas = CanvasState.model_validate(canvas).model_dump(mode="json")
+    except (TypeError, ValueError):
+        pass  # canvas fuori schema: stesso confronto sul JSON com'e'
+    nodes = []
+    for node in canvas.get("nodes") or []:
+        if not isinstance(node, dict) or node.get("type") == "comment":
+            continue
+        view = _without_ui(node)
+        if isinstance(view.get("data"), dict):
+            view["data"] = _without_ui(view["data"])
+        nodes.append(_plain(view))
+    edges = {
+        json.dumps(_plain({k: v for k, v in edge.items() if k != "id"}), sort_keys=True, ensure_ascii=False)
+        for edge in canvas.get("edges") or [] if isinstance(edge, dict)
+    }
+    return {"nodes": sorted(nodes, key=lambda n: str(n.get("id"))), "edges": sorted(edges)}
+
+
+def source_changed(version_canvas: object, project_canvas: object) -> bool | None:
+    """La versione e il progetto differiscono per l'esecuzione? None se uno
+    dei due canvas manca o non si legge (non si sa: nessun avviso)."""
+    published, current = execution_view(version_canvas), execution_view(project_canvas)
+    if published is None or current is None:
+        return None
+    return published != current
+
+
+def source_changed_by_id(eseguibile_ids: Sequence[str]) -> Mapping[str, Optional[bool]]:
+    """``source_changed`` per piu' Eseguibili con una sola lettura dei canvas
+    (versione attiva e progetto sorgente); chi non ha l'una o l'altro manca."""
+    if not eseguibile_ids:
+        return {}
+    return {
+        row.id: source_changed(row.version_canvas, row.project_canvas)
+        for row in eseguibili_db.list_source_canvases(list(eseguibile_ids))
+    }
 
 
 def republish_preview(
@@ -340,7 +410,7 @@ def republish_preview(
 
 def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = None) -> JsonObject:
     """Regola unica N1: la versione attiva e il canvas attuale del progetto
-    sorgente hanno la stessa impronta (``db.canvas_fingerprint``)?
+    sorgente sono uguali per l'esecuzione (``source_changed``, P2)?
 
     ``state``: ``same`` | ``changed`` | ``no_source`` (Eseguibile senza
     progetto sorgente o progetto non piu' esistente) | ``no_version``. Con
@@ -371,7 +441,7 @@ def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = 
     canvas = _parsed_canvas(proj.canvas) if proj is not None else None
     if proj is None or not isinstance(canvas, dict):
         return {**base, "state": "no_source", "changed": None}
-    if eseguibili_db.canvas_fingerprint(canvas) == version_fingerprint(version):
+    if not source_changed(version.canvas, canvas):
         return base
     problems, error = republish_preview(
         canvas,
@@ -382,9 +452,11 @@ def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = 
     return {**base, "state": "changed", "changed": True, "binding_problems": problems, "publish_error": error}
 
 
-def source_status_for_project(project_id: str, *, group_id: str | None) -> list[JsonObject]:
-    """Gli Eseguibili pubblicati da ``project_id`` (solo quelli del gruppo, se
-    dato) con il loro stato N1; il canvas del progetto si legge una volta."""
+def source_status_for_project(
+    project_id: str, *, can_republish: Callable[[eseguibili_db.EseguibileRow], bool],
+) -> list[JsonObject]:
+    """Gli Eseguibili pubblicati da ``project_id`` che l'utente puo'
+    ripubblicare, con il loro stato N1; il canvas del progetto si legge una volta."""
     refs = eseguibili_db.list_eseguibili_by_source(project_id)
     if not refs:
         return []
@@ -392,7 +464,7 @@ def source_status_for_project(project_id: str, *, group_id: str | None) -> list[
     out: list[JsonObject] = []
     for ref in refs:
         record = eseguibili_db.get_eseguibile(ref.id)
-        if record is None or (group_id is not None and record.group_id != group_id):
+        if record is None or not can_republish(record):
             continue
         out.append(source_status(record, project=proj))
     return out

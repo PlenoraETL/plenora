@@ -134,6 +134,7 @@ def test_list_and_detail_expose_binding_warnings(stale):
                            active_version_id="v1")
     client, router_module = _client()
     with patch.object(router_module.eseguibili_db, "list_eseguibili", return_value=[summary]), \
+         patch.object(router_module.eseguibili_db, "list_source_canvases", return_value=[]), \
          patch.object(router_module.eseguibili_db, "get_eseguibile", return_value=detail), \
          patch.object(router_module, "visible_resource_ids", return_value={"e1"}), \
          patch.object(router_module, "assert_resource_visible", lambda *a, **kw: None), \

@@ -70,8 +70,11 @@ def _check_visible(eseguibile: object, user: CurrentUser) -> None:
 def _summary_response(
     record: eseguibili_db.EseguibileSummaryRow,
     user: CurrentUser,
+    source_changed: Mapping[str, Optional[bool]] | None = None,
 ) -> Mapping[str, object]:
-    """Serialize summary row at the API edge."""
+    """Serialize summary row at the API edge. ``source_changed``: lo stato N1
+    gia' calcolato per le righe che l'utente puo' ripubblicare."""
+    can_edit = compute_can_edit(record, user)
     data = {
         "id": record.id,
         "name": record.name,
@@ -89,13 +92,14 @@ def _summary_response(
         "active_version": record.active_version,
         "inputs_count": record.inputs_count,
         "has_manifest": record.has_manifest,
-        # N1: solo per chi puo' ripubblicare (l'esecutore non vede nulla in piu').
-        "source_changed": record.source_changed if user.role in ("admin", "superadmin") else None,
+        # N1/P7: solo per chi puo' ripubblicare (lo stesso predicato del
+        # pulsante «Pubblica nuova versione»: can_edit); per gli altri null.
+        "source_changed": (source_changed or {}).get(record.id) if can_edit else None,
         "binding_warnings": eseguibili_service.binding_warnings(
             list(record.bindings), {"nodes": list(record.binding_target_nodes)},
         ),
     }
-    data["can_edit"] = compute_can_edit(record, user)
+    data["can_edit"] = can_edit
     return data
 
 
@@ -138,7 +142,11 @@ def list_eseguibili(
             offset=offset,
         )
 
-    return [_summary_response(r, current_user) for r in rows]
+    # N1/P5: i canvas si leggono (una query) e si confrontano (P2) solo per
+    # le righe che l'utente puo' ripubblicare; l'esecutore non ne legge.
+    editable = [r.id for r in rows if compute_can_edit(r, current_user)]
+    changed = eseguibili_service.source_changed_by_id(editable)
+    return [_summary_response(r, current_user, changed) for r in rows]
 
 
 # CREATE (solo admin
@@ -183,10 +191,11 @@ def list_source_status(
     current_user: CurrentUser = Depends(require_admin),
 ) -> list[JsonObject]:
     """Gli Eseguibili pubblicati dal progetto, con lo stato rispetto al canvas
-    attuale (avviso nell'editor del progetto sorgente). Solo quelli del gruppo
-    dell'admin (tutti per il superadmin)."""
-    group_id = None if current_user.role == "superadmin" else current_user.group_id
-    return eseguibili_service.source_status_for_project(project_id, group_id=group_id)
+    attuale (avviso nell'editor del progetto sorgente). Solo quelli che
+    l'utente puo' ripubblicare (P7: stesso predicato della lista)."""
+    return eseguibili_service.source_status_for_project(
+        project_id, can_republish=lambda record: compute_can_edit(record, current_user),
+    )
 
 
 @router.get("/{eseguibile_id}/source-status", response_model=EseguibileSourceStatus)

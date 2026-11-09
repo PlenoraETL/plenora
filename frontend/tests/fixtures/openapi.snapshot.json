@@ -14314,7 +14314,7 @@
     },
     "/api/eseguibili/by-source/{project_id}": {
       "get": {
-        "description": "Gli Eseguibili pubblicati dal progetto, con lo stato rispetto al canvas\nattuale (avviso nell'editor del progetto sorgente). Solo quelli del gruppo\ndell'admin (tutti per il superadmin).",
+        "description": "Gli Eseguibili pubblicati dal progetto, con lo stato rispetto al canvas\nattuale (avviso nell'editor del progetto sorgente). Solo quelli che\nl'utente puo' ripubblicare (P7: stesso predicato della lista).",
         "operationId": "list_source_status_api_eseguibili_by_source__project_id__get",
         "parameters": [
           {

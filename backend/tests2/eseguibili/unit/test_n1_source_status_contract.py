@@ -7,12 +7,14 @@ attuale quel nodo ha un solo filtro. L'Eseguibile funziona con la sua copia
 congelata (versione = release, invariato), ma nulla lo diceva e la
 ripubblicazione falliva al primo binding rotto.
 
-REGOLA UNICA: impronta della versione attiva (``source_hash``, calcolata da
-``db.canvas_fingerprint`` alla pubblicazione) contro la stessa impronta del
-canvas attuale del progetto (``service.source_status``). Se cambiata,
+REGOLA UNICA (P2, 09/11/2026): la copia congelata della versione attiva e il
+canvas attuale del progetto sono uguali PER L'ESECUZIONE
+(``service.source_changed``: posizioni, dimensioni, selezione, campi «_»,
+note, id e doppioni degli archi, ordine e 1/1.0 non contano). Se cambiata,
 l'anteprima della ripubblicazione elenca TUTTI i binding che non troverebbero
 il bersaglio (la regola della pubblicazione, ``manifest.check_binding``).
-La lista lo calcola in SQL (``db.SOURCE_CHANGED_SQL``) senza scaricare canvas.
+La lista lo calcola solo per le righe che l'utente puo' ripubblicare (P5, P7:
+``compute_can_edit``, il predicato del pulsante), con una query per i canvas.
 """
 
 from __future__ import annotations
@@ -143,27 +145,94 @@ def test_publication_and_comparison_use_the_same_fingerprint():
     assert "canvas_fingerprint(canvas)" in source and "hashlib" not in source
 
 
-def test_list_computes_the_state_in_sql_without_loading_canvases():
-    source = inspect.getsource(eseguibili_db.list_eseguibili)
-    assert "SOURCE_CHANGED_SQL" in source and "p.canvas" not in source
-    sql = eseguibili_db.SOURCE_CHANGED_SQL
-    assert "v.canvas::jsonb IS DISTINCT FROM p.canvas::jsonb" in sql
-    assert "pg_input_is_valid(p.canvas::text, 'jsonb')" in sql
-    row = eseguibili_db.eseguibile_summary_row_from_db({
-        "id": "e", "name": "n", "default_output_format": "xlsx", "group_id": "g", "created_by": "u",
-        "created_at": "t", "updated_at": "t", "source_changed": True})
-    assert row.source_changed is True
+def test_p2_layout_and_automatic_saves_are_not_a_change():
+    """Solo spostamenti, misure, selezione, campi «_», note, collegamenti doppi
+    (pendingSync), ordine e normalizzazione del modello: nessun avviso."""
+    published = _canvas()
+    current = copy.deepcopy(published)
+    for i, node in enumerate(current["nodes"]):
+        node["position"] = {"x": 100 * i, "y": 7.5}
+        node.update(width=240, height=88, selected=True, dragging=False,
+                    measured={"width": 240, "height": 88}, style={"border": "1px"})
+        node.setdefault("data", {})["_advOpen"] = True
+    current["nodes"].reverse()
+    current["nodes"].append({"id": "nota", "type": "comment", "position": POS, "text": "promemoria"})
+    current["edges"] = list(reversed(current["edges"])) + [{**current["edges"][0], "id": "doppio"}]
+    # Normalizzazione di CanvasState: valori predefiniti scritti o assenti,
+    # alias del tipo, 1 e 1.0.
+    current["nodes"][-2]["write_mode"] = "create"
+    published["nodes"][1]["type"] = "resultNode"
+    published["nodes"][1]["limit"] = 10
+    current_out = next(n for n in current["nodes"] if n["id"] == "out")
+    current_out["limit"] = 10.0
+    assert eseguibili_service.source_changed(published, current) is False
+    assert _status(published, current)["state"] == "same"
 
 
-def test_list_shows_the_state_only_to_who_can_republish():
+def test_p2_a_changed_filter_is_a_change():
+    published = _canvas()
+    current = copy.deepcopy(published)
+    current["nodes"][0]["filters"][0]["value"] = "A1"
+    assert eseguibili_service.source_changed(published, current) is True
+    assert _status(published, current)["state"] == "changed"
+    # Un canvas illeggibile: non si sa (nessun avviso), non «cambiato».
+    assert eseguibili_service.source_changed(published, "{non json") is None
+
+
+def test_p2_one_rule_for_list_detail_editor_and_home():
+    """Dettaglio ed editor (source_status), lista e home (source_changed_by_id
+    -> campo source_changed) passano dalla stessa funzione; l'impronta
+    sha256 resta solo il source_hash della pubblicazione."""
+    status_src = inspect.getsource(eseguibili_service.source_status)
+    by_id_src = inspect.getsource(eseguibili_service.source_changed_by_id)
+    assert "source_changed(version.canvas, canvas)" in status_src
+    assert "source_changed(row.version_canvas, row.project_canvas)" in by_id_src
+    assert "canvas_fingerprint" not in inspect.getsource(eseguibili_service)
+    assert not hasattr(eseguibili_db, "SOURCE_CHANGED_SQL")
+
+
+def _summary_row(**over):
+    return eseguibili_db.eseguibile_summary_row_from_db({
+        "id": "e", "name": "n", "default_output_format": "xlsx", "group_id": "g1", "created_by": "u1",
+        "created_at": "t", "updated_at": "t", **over})
+
+
+@pytest.mark.parametrize("role,group,reads", [
+    ("esecutore", "g1", []), ("user", "g1", []), ("admin", "g3", []),
+    ("admin", "g1", ["mine"]), ("superadmin", "g9", ["mine", "shared"]),
+])
+def test_p5_p7_list_reads_canvases_only_for_rows_the_user_can_republish(role, group, reads):
+    """P5: i canvas si leggono (una query) solo per le righe ripubblicabili;
+    P7: il campo c'e' solo dove c'e' il pulsante (compute_can_edit), non su
+    un Eseguibile condiviso da un altro gruppo."""
     from app.core.eseguibili import router as eseguibili_router
-    row = eseguibili_db.eseguibile_summary_row_from_db({
-        "id": "e", "name": "n", "default_output_format": "xlsx", "group_id": "g1", "created_by": "u",
-        "created_at": "t", "updated_at": "t", "source_changed": True})
-    with patch.object(eseguibili_router, "compute_can_edit", lambda *a: False):
-        admin = eseguibili_router._summary_response(row, build_current_user(role="admin", group_id="g1"))
-        executor = eseguibili_router._summary_response(row, build_current_user(role="esecutore", group_id="g1"))
-    assert (admin["source_changed"], executor["source_changed"]) == (True, None)
+    rows = [_summary_row(id="mine"), _summary_row(id="shared", group_id="g2", created_by="u2")]
+    asked: list[list[str]] = []
+
+    def fake_canvases(ids):
+        asked.append(list(ids))
+        return [eseguibili_db.EseguibileSourceCanvasesRow(id=i, version_canvas=_canvas(2), project_canvas=_canvas(1))
+                for i in ids]
+
+    user = build_current_user(role=role, group_id=group, user_id="u1")
+    with patch.object(eseguibili_db, "list_eseguibili", return_value=rows), \
+         patch.object(eseguibili_router, "visible_resource_ids", return_value={"mine", "shared"}), \
+         patch.object(eseguibili_db, "list_source_canvases", side_effect=fake_canvases), \
+         patch("app.core.auth.ownership._users_dal.get_user", return_value=None):
+        out = eseguibili_router.list_eseguibili(limit=200, offset=0, current_user=user)
+    assert asked == ([reads] if reads else [])
+    assert {r["id"]: r["source_changed"] for r in out} == {
+        "mine": True if "mine" in reads else None, "shared": True if "shared" in reads else None}
+
+
+def test_p5_list_query_has_no_canvas_comparison():
+    captured: list[str] = []
+    with patch.object(eseguibili_db, "_fetchall", lambda sql, *a, **k: captured.append(sql) or []):
+        eseguibili_db.list_eseguibili(group_id="g1")
+        eseguibili_db.list_source_canvases(["a", "b"])
+    assert "p.canvas" not in captured[0] and "JOIN projects" not in captured[0]
+    assert "v.canvas AS version_canvas, p.canvas AS project_canvas" in captured[1]
+    assert "WHERE e.id IN (%s, %s)" in captured[1]
 
 
 def _client(role: str = "admin") -> TestClient:
@@ -189,3 +258,19 @@ def test_endpoints_are_admin_only_and_carry_the_preview():
     assert detail.status_code == 200, detail.text
     assert detail.json()["binding_problems"][0]["target_field"] == "filters.1.value"
     assert listed.status_code == 200 and listed.json()[0]["state"] == "changed"
+
+
+def test_p7_editor_notice_lists_only_what_the_user_can_republish():
+    """GET /by-source: stesso predicato della lista (compute_can_edit), non
+    solo il gruppo: un Eseguibile del gruppo creato da un superadmin non si
+    ripubblica e non si annuncia."""
+    published, current = _canvas(filters=2), _canvas(filters=1)
+    record = _record(published)
+    with patch.object(eseguibili_db, "get_eseguibile", return_value=record), \
+         patch.object(eseguibili_db, "get_eseguibile_version", return_value=_version(published)), \
+         patch.object(eseguibili_db, "list_eseguibili_by_source",
+                      return_value=[eseguibili_db.EseguibileSourceRefRow(id="exec_1", name="x")]), \
+         patch.object(eseguibili_service.project_access_context, "load_project_publish_context",
+                      return_value=_project(current)), \
+         patch("app.core.eseguibili.router.compute_can_edit", lambda *a: False):
+        assert _client().get("/eseguibili/by-source/p1").json() == []
