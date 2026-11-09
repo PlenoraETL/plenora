@@ -132,6 +132,7 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     # Input «Utente che esegue» (shared/execution/runtime_identity)
     "runtime_identity_required",
     "runtime_identity_client_value",
+    "runtime_identity_transform_failed",
 }
 
 # Pattern accettati come `http_<status>` fallback intenzionale
@@ -231,7 +232,8 @@ def test_catalog_count_domain_seventy_three():
     # 75: +runtime_identity_required, runtime_identity_client_value
     # (input «Utente che esegue»).
     # 76: +user_has_history (eliminare un utente con storico: 409, 09/11/2026)
-    assert len(EXPECTED_DOMAIN_CODES) == 76
+    # 77: +runtime_identity_transform_failed (trasformazione dell'input, 09/11/2026).
+    assert len(EXPECTED_DOMAIN_CODES) == 77
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 

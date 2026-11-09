@@ -13,6 +13,8 @@ from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     coerce_numeric_series,
     dataframe_eval_namespace,
+    dataframe_from_records,
+    non_null_head_values,
     series_null_ratio,
 )
 from app.utils.logger import get_logger
@@ -188,6 +190,151 @@ def _extract_referenced_names(formula: str) -> set[str]:
     return names
 
 
+def _evaluate_formula(
+    eval_df: DataFrame,
+    formula: str,
+    store: Any,
+    *,
+    label: str,
+    numeric_text: bool = True,
+) -> None:
+    """Nucleo UNICO della valutazione della Formula (colonna calcolata e
+    trasformazione dell'input «Utente che esegue»): cancello AST, poi
+    pandas.eval, poi eval con le colonne come variabili. ``store`` riceve il
+    valore dentro il tentativo che lo ha prodotto (un errore nel salvarlo fa
+    passare al tentativo successivo, come prima). ``numeric_text`` = le
+    colonne di testo citate si provano come numeri (colonna calcolata);
+    ``False`` = restano testo (il nome utente e' sempre testo).
+
+    Solleva l'eccezione del motore: chi chiama la traduce nel suo messaggio.
+    """
+    # SECURITY: validazione AST PRIMA di qualsiasi engine eval (pandas.eval
+    # incluso). pandas.eval ha backend `numexpr`/`python` e in alcune
+    # configurazioni puo' valutare attribute access / call: senza gate AST
+    # davanti, un payload malicioso potrebbe sfuggire al solo controllo
+    # del fallback path. Spostando il validator qui copriamo entrambi i
+    # tentativi con la stessa whitelist
+    _validate_formula_ast(formula)
+
+    # Gestisce espressioni matematiche e booleane vettoriali
+    # Non regge per: metodi stringa (.str.upper), concatenazioni con costanti stringa
+    try:
+        store(eval_df.eval(formula))
+        logger.info(f"Formula (pandas.eval) ok: '{label}'")
+        return
+    except Exception as _pd_eval_err:
+        logger.debug(
+            f"pandas.eval fallita per '{label}', fallback a "
+            f"eval() con namespace colonne: {_pd_eval_err}"
+        )
+
+    # Passa le colonne come variabili locali — nessuna sostituzione nel testo della formula
+    # Auto-conversione a numerico solo per colonne referenziate dalla
+    # formula: RAM proporzionale alla complessita' della formula, non alla
+    # larghezza del DataFrame.
+    referenced_names = _extract_referenced_names(formula)
+    cols_to_prepare = [
+        c for c in eval_df.columns
+        if c in referenced_names
+    ]
+    local_vars = {}
+    for col in cols_to_prepare:
+        series = eval_df[col]
+        dtype_name = str(series.dtype).lower()
+        if numeric_text and (series.dtype == 'object' or dtype_name in {'str', 'string'}):
+            # Prova conversione a numerico (gestisce formato IT: 1.234,56
+            converted = coerce_numeric_series(series)
+            nan_ratio = series_null_ratio(converted)
+            original_na = series_null_ratio(series)
+            if nan_ratio - original_na > 0.3:
+                # Troppi NaN nuovi → prova formato italiano
+                # Single-pass regex: rimuove €$ e separatori migliaia, converte , in
+                cleaned = (
+                    series.astype(str)
+                    .str.strip()
+                    .str.replace(r'[€$]', '', regex=True)
+                    .str.replace('.', '', regex=False)  # separatore migliaia IT
+                    .str.replace(',', '.', regex=False)  # decimale IT
+                )
+                converted = coerce_numeric_series(cleaned)
+                # Decide usando l'esito del fallback italiano, non il
+                # rapporto NaN della prima conversione.
+                nan_ratio = series_null_ratio(converted)
+            # Se la conversione ha senso (pochi NaN aggiuntivi), usa numerica
+            if nan_ratio - original_na <= 0.3:
+                local_vars[col] = converted
+            else:
+                local_vars[col] = series  # mantieni stringa
+        else:
+            local_vars[col] = series
+
+    # SECURITY: validazione AST gia' eseguita all'inizio (sopra) prima di
+    # qualsiasi engine eval. Niente da rifare qui
+    attempts = [local_vars]
+    if numeric_text and len(eval_df) == 0:
+        # Zero righe: la conversione numerica delle colonne testo decide
+        # sui valori, che mancano. Vale la prima lettura (numerica, poi
+        # testo) che l'espressione accetta; con righe nulla cambia.
+        attempts.append({col: eval_df[col] for col in cols_to_prepare})
+    for position, variables in enumerate(attempts):
+        try:
+            store(eval(
+                formula,
+                {"__builtins__": {}, **dataframe_eval_namespace()},
+                variables,
+            ))
+            break
+        except (TypeError, ValueError, ArithmeticError):
+            if position == len(attempts) - 1:
+                raise
+    logger.info(f"Formula (eval namespace) ok: '{label}'")
+
+
+def formula_names(formula: str) -> set[str]:
+    """Nomi citati da una formula che non sono dello spazio dei nomi del
+    motore (il modulo ``pd``): le colonne o variabili che servono. Formula
+    non analizzabile -> insieme vuoto (la rifiuta il cancello AST)."""
+    return _extract_referenced_names(formula) - set(dataframe_eval_namespace())
+
+
+def validate_formula(formula: str) -> None:
+    """Solo il cancello AST della Formula (sintassi e costrutti ammessi).
+    Solleva ``ValueError`` con il motivo."""
+    _validate_formula_ast(formula)
+
+
+def evaluate_formula_on_row(formula: str, row: Any) -> Any:
+    """La Formula di Manipola su UNA riga di testo (``{variabile: valore}``):
+    stesso cancello AST, stesso spazio dei nomi, stesse due strade di
+    valutazione di :func:`op_formula`, nessuna conversione del testo in
+    numero. Ritorna il valore della riga (``None`` se mancante). Solleva
+    ``ValueError`` se la formula non e' valida o la valutazione fallisce."""
+    formula = (formula or "").strip()
+    frame = dataframe_from_records([{str(key): str(value) for key, value in dict(row).items()}])
+    produced: list[Any] = []
+
+    def store(value: Any) -> None:
+        produced[:] = [value]
+
+    try:
+        _evaluate_formula(frame, formula, store, label="riga", numeric_text=False)
+    except (ValueError, TypeError, ArithmeticError, AttributeError, NameError,
+            KeyError, IndexError, SyntaxError, RecursionError) as exc:
+        # Errori del motore (formula non ammessa, nome assente, tipo,
+        # metodo inesistente): un ValueError con il motivo. Altro risale.
+        raise ValueError(f"Formula '{formula}' non valida o non applicabile: {exc}") from exc
+    value = produced[0] if produced else None
+    if hasattr(value, "columns"):
+        # Una tabella (es. ``.str.extract`` con piu' gruppi): non e' un valore.
+        raise ValueError(f"Formula '{formula}': il risultato e' una tabella, non un valore solo")
+    if hasattr(value, "iloc") and hasattr(value, "dropna"):
+        if len(value) != 1:
+            raise ValueError(f"Formula '{formula}': il risultato non e' un valore solo")
+        found = non_null_head_values(value, 1)
+        return found[0] if found else None
+    return value
+
+
 # COLONNA CALCOLATA (FORMULA
 # Aggiunge colonna con espressione Python/Pandas valutata per riga
 
@@ -273,86 +420,10 @@ def op_formula(
         eval_df = result
 
     try:
-        # SECURITY: validazione AST PRIMA di qualsiasi engine eval (pandas.eval
-        # incluso). pandas.eval ha backend `numexpr`/`python` e in alcune
-        # configurazioni puo' valutare attribute access / call: senza gate AST
-        # davanti, un payload malicioso potrebbe sfuggire al solo controllo
-        # del fallback path. Spostando il validator qui copriamo entrambi i
-        # tentativi con la stessa whitelist
-        _validate_formula_ast(formula)
+        def store(value: Any) -> None:
+            result[new_column] = value
 
-        # Gestisce espressioni matematiche e booleane vettoriali
-        # Non regge per: metodi stringa (.str.upper), concatenazioni con costanti stringa
-        try:
-            result[new_column] = eval_df.eval(formula)
-            logger.info(f"Formula (pandas.eval) ok: '{new_column}'")
-            return result
-        except Exception as _pd_eval_err:
-            logger.debug(
-                f"pandas.eval fallita per '{new_column}', fallback a "
-                f"eval() con namespace colonne: {_pd_eval_err}"
-            )
-
-        # Passa le colonne come variabili locali — nessuna sostituzione nel testo della formula
-        # Auto-conversione a numerico solo per colonne referenziate dalla
-        # formula: RAM proporzionale alla complessita' della formula, non alla
-        # larghezza del DataFrame.
-        referenced_names = _extract_referenced_names(formula)
-        cols_to_prepare = [
-            c for c in eval_df.columns
-            if c in referenced_names
-        ]
-        local_vars = {}
-        for col in cols_to_prepare:
-            series = eval_df[col]
-            dtype_name = str(series.dtype).lower()
-            if series.dtype == 'object' or dtype_name in {'str', 'string'}:
-                # Prova conversione a numerico (gestisce formato IT: 1.234,56
-                converted = coerce_numeric_series(series)
-                nan_ratio = series_null_ratio(converted)
-                original_na = series_null_ratio(series)
-                if nan_ratio - original_na > 0.3:
-                    # Troppi NaN nuovi → prova formato italiano
-                    # Single-pass regex: rimuove €$ e separatori migliaia, converte , in
-                    cleaned = (
-                        series.astype(str)
-                        .str.strip()
-                        .str.replace(r'[€$]', '', regex=True)
-                        .str.replace('.', '', regex=False)  # separatore migliaia IT
-                        .str.replace(',', '.', regex=False)  # decimale IT
-                    )
-                    converted = coerce_numeric_series(cleaned)
-                    # Decide usando l'esito del fallback italiano, non il
-                    # rapporto NaN della prima conversione.
-                    nan_ratio = series_null_ratio(converted)
-                # Se la conversione ha senso (pochi NaN aggiuntivi), usa numerica
-                if nan_ratio - original_na <= 0.3:
-                    local_vars[col] = converted
-                else:
-                    local_vars[col] = series  # mantieni stringa
-            else:
-                local_vars[col] = series
-
-        # SECURITY: validazione AST gia' eseguita all'inizio del try (sopra
-        # prima di qualsiasi engine eval. Niente da rifare qui
-        attempts = [local_vars]
-        if len(eval_df) == 0:
-            # Zero righe: la conversione numerica delle colonne testo decide
-            # sui valori, che mancano. Vale la prima lettura (numerica, poi
-            # testo) che l'espressione accetta; con righe nulla cambia.
-            attempts.append({col: eval_df[col] for col in cols_to_prepare})
-        for position, variables in enumerate(attempts):
-            try:
-                result[new_column] = eval(
-                    formula,
-                    {"__builtins__": {}, **dataframe_eval_namespace()},
-                    variables,
-                )
-                break
-            except (TypeError, ValueError, ArithmeticError):
-                if position == len(attempts) - 1:
-                    raise
-        logger.info(f"Formula (eval namespace) ok: '{new_column}'")
+        _evaluate_formula(eval_df, formula, store, label=new_column)
         return result
 
     # intent: fail-closed — formula utente non valida (sintassi, AST

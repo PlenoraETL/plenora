@@ -39,11 +39,11 @@ from app.core.eseguibili.models import ExecutableInputDefinition, ExecutableInpu
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.projects.canvas_models import CanvasState, Node
 from app.shared import error_codes
+from app.core.eseguibili.identity_transform import identity_values
 from app.shared.execution.runtime_identity import (
     RuntimeIdentity,
     RuntimeIdentityError,
     assert_identity_resolved,
-    resolve_identity_inputs,
 )
 from app.shared.execution.runtime_bound_fields import runtime_static_parameters
 from app.shared.execution.runtime_input_kinds import (
@@ -174,7 +174,7 @@ DEFS = [SimpleNamespace(key="utente", label="Utente", kind="current_user"),
 
 
 def test_rule_authenticated_user_gives_the_username():
-    assert resolve_identity_inputs(DEFS, identity=RuntimeIdentity.authenticated(MARIO),
+    assert identity_values(DEFS, identity=RuntimeIdentity.authenticated(MARIO),
                                    client_values={"anno": 2024}) == {"utente": "mario.rossi"}
 
 
@@ -182,7 +182,7 @@ def test_rule_authenticated_user_gives_the_username():
                                       RuntimeIdentity.unattended()])
 def test_rule_client_value_is_rejected_whoever_runs(identity):
     with pytest.raises(RuntimeIdentityError) as err:
-        resolve_identity_inputs(DEFS, identity=identity, client_values={"utente": "anna.bianchi"})
+        identity_values(DEFS, identity=identity, client_values={"utente": "anna.bianchi"})
     assert err.value.code == CLIENT
 
 
@@ -194,7 +194,7 @@ def test_rule_client_value_is_rejected_whoever_runs(identity):
 ])
 def test_rule_without_user_blocks_with_a_clear_message(identity, words):
     with pytest.raises(RuntimeIdentityError) as err:
-        resolve_identity_inputs(DEFS, identity=identity, client_values={})
+        identity_values(DEFS, identity=identity, client_values={})
     assert err.value.code == REQUIRED
     assert "Utente" in err.value.message and words in err.value.message
 
@@ -210,12 +210,12 @@ def test_preview_identity_is_the_test_username_only():
     conflict = RuntimeIdentity.preview_of(two)
     assert (conflict.username, conflict.reason) == (None, "preview_conflict")
     with pytest.raises(RuntimeIdentityError) as err:
-        resolve_identity_inputs(DEFS, identity=conflict, client_values={})
+        identity_values(DEFS, identity=conflict, client_values={})
     assert err.value.code == REQUIRED and "diversi" in err.value.message
 
 
 def test_canvases_without_server_inputs_are_untouched():
-    assert resolve_identity_inputs(DEFS[1:], identity=RuntimeIdentity.unattended(), client_values={}) == {}
+    assert identity_values(DEFS[1:], identity=RuntimeIdentity.unattended(), client_values={}) == {}
     assert_identity_resolved({"nodes": [{"id": "x", "type": "project_input", "data": {"input_kind": "text"}}]})
 
 

@@ -84,11 +84,33 @@ parametro (binding ``node_field``: filtro di Estrai, parametro di un passo,
 parametro API) oppure, in Manipola, SORGENTE (``as_source``): il nodo
 diventa un nodo Valori statici di una riga con la colonna ``source_column``
 (:func:`identity_source_fields`, stessa forma per inferenza ed esecuzione).
+
+TRASFORMAZIONE (09/11/2026)
+---------------------------
+L'input puo' dichiarare una «Trasformazione» (``identity_transform`` nel nodo,
+``transform`` nella definizione del manifest pubblicato): un'espressione con
+la sintassi e il cancello AST della Formula di Manipola, variabile
+:data:`TRANSFORM_VARIABLE` (``utente``). Regola unica: il VALORE dell'input e'
+il risultato della trasformazione sul nome utente dell'identita' (senza
+trasformazione, il nome utente com'e'). Lo calcola SOLO
+:func:`resolve_identity_inputs`, una volta per esecuzione, con il valutatore
+del motore della Formula passato da chi chiama (``evaluate``, obbligatorio:
+questo pacchetto non importa ``app.core``); vale per ogni uso, parametro e
+sorgente, e per ogni identita' (utente autenticato, nome di prova).
+
+- Il client non imposta ne' il valore ne' la trasformazione: questa sta nel
+  manifest pubblicato (o nel canvas del progetto, per l'editor).
+- La valutazione fallisce, oppure non da' un testo non vuoto (``None``,
+  numero, vero/falso, testo vuoto) -> l'esecuzione si ferma con
+  ``runtime_identity_transform_failed`` e un messaggio che lo dice: mai un
+  valore inventato. Diverso dal caso «trasformato ma senza righe» (per
+  esempio ``dmi_IS`` per ``admin``): il valore e' valido, il filtro non trova
+  righe, il file e' vuoto.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -114,6 +136,14 @@ TEST_RUN_SUBJECT_KIND = "test_run"
 TEST_RUN_TRIGGER_PREFIX = "test_run:"
 # Sorgente «Utente che esegue» (Manipola): una riga, una colonna di testo.
 DEFAULT_SOURCE_COLUMN = "utente"
+# Trasformazione dell'input (sezione TRASFORMAZIONE): campo del nodo e nome
+# della variabile dell'espressione.
+TRANSFORM_FIELD = "identity_transform"
+TRANSFORM_VARIABLE = "utente"
+TRANSFORM_MAX_LENGTH = 500
+# Valutatore del motore della Formula: (espressione, {variabile: valore}) ->
+# valore della riga. Lo passa chi chiama (app.core).
+IdentityEvaluator = Callable[[str, Mapping[str, str]], Any]
 
 _MISSING_MESSAGES: dict[str, str] = {
     "project_run": (
@@ -272,17 +302,59 @@ def missing_identity_error(label: str, reason: str) -> RuntimeIdentityError:
     )
 
 
+def identity_transform(item: Any) -> str | None:
+    """Trasformazione dichiarata da un nodo (``identity_transform``) o da una
+    definizione del manifest (``transform``); ``None`` se assente o vuota."""
+    raw = node_value(item, TRANSFORM_FIELD)
+    if raw is None and not isinstance(item, Mapping) and node_type(item) is None:
+        # Definizione del manifest (nessun tipo di nodo): campo ``transform``.
+        raw = getattr(item, "transform", None)
+    text = str(raw or "").strip()
+    return text or None
+
+
+def _transform_error(label: str, username: str, expression: str, reason: str) -> RuntimeIdentityError:
+    return RuntimeIdentityError(
+        error_codes.RUNTIME_IDENTITY_TRANSFORM_FAILED,
+        f"Il nome utente «{username}» non si trasforma con la regola dell'input "
+        f"«{label}» ({KIND_LABEL}: `{expression}`): {reason}. L'esecuzione si ferma "
+        "(nessun valore sostitutivo). Correggi la trasformazione o il nome utente.",
+    )
+
+
+def transform_identity_value(
+    *, label: str, username: str, expression: str | None, evaluate: IdentityEvaluator,
+) -> str:
+    """Valore dell'input per ``username`` (sezione TRASFORMAZIONE): la
+    trasformazione valutata dal motore della Formula, oppure lo username."""
+    if not expression:
+        return username
+    try:
+        value = evaluate(expression, {TRANSFORM_VARIABLE: username})
+    except (ValueError, TypeError, ArithmeticError, AttributeError, KeyError, IndexError) as exc:
+        raise _transform_error(label, username, expression, "la regola non si applica") from exc
+    if not isinstance(value, str):
+        what = "nessun valore" if value is None else f"un valore che non e' un testo ({value!r})"
+        raise _transform_error(label, username, expression, f"la regola da' {what}")
+    if not value:
+        raise _transform_error(label, username, expression, "la regola da' un testo vuoto")
+    return str(value)
+
+
 def resolve_identity_inputs(
     definitions: Iterable[Any],
     *,
     identity: RuntimeIdentity,
     client_values: Mapping[str, Any],
+    evaluate: IdentityEvaluator,
 ) -> dict[str, str]:
-    """Valori degli input di tipo server: ``{chiave: username}``.
+    """Valori degli input di tipo server: ``{chiave: valore}``.
 
     ``definitions`` sono le definizioni del manifest (``key``, ``label``,
-    ``kind``). Un valore del client per una di queste chiavi si rifiuta;
-    senza utente si blocca con il motivo del percorso.
+    ``kind``, ``transform``). Un valore del client per una di queste chiavi
+    si rifiuta; senza utente si blocca con il motivo del percorso; con una
+    trasformazione il valore e' il suo risultato (``evaluate``, sezione
+    TRASFORMAZIONE), senza e' lo username.
     """
     targets = [item for item in definitions if is_server_injected(getattr(item, "kind", None))]
     for item in targets:
@@ -296,7 +368,13 @@ def resolve_identity_inputs(
         return {}
     if identity.username is None:
         raise missing_identity_error(targets[0].label, identity.reason)
-    return {item.key: identity.username for item in targets}
+    return {
+        item.key: transform_identity_value(
+            label=str(item.label), username=identity.username,
+            expression=identity_transform(item), evaluate=evaluate,
+        )
+        for item in targets
+    }
 
 
 def subject_for_test_run(identity: RuntimeIdentity) -> dict[str, str]:
@@ -434,6 +512,12 @@ __all__ = [
     "identity_input_nodes",
     "identity_source_column",
     "identity_source_fields",
+    "identity_transform",
+    "IdentityEvaluator",
+    "TRANSFORM_FIELD",
+    "TRANSFORM_MAX_LENGTH",
+    "TRANSFORM_VARIABLE",
+    "transform_identity_value",
     "missing_identity_error",
     "resolve_identity_inputs",
     "subject_for_test_run",

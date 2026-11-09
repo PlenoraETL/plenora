@@ -28,10 +28,11 @@ from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.node_fields import node_field
 from app.shared.execution.runtime_bound_fields import runtime_bound_context
-from app.shared.execution.runtime_identity import RuntimeIdentity, resolve_identity_inputs
+from app.shared.execution.runtime_identity import RuntimeIdentity
 
 from . import db as eseguibili_db
 from . import service as eseguibili_service
+from .identity_transform import identity_values
 from .runtime import resolve_runtime_inputs
 
 PREFLIGHT_CHECKS = {
@@ -106,7 +107,7 @@ def fingerprint_for(
         group_id=eseguibile.group_id,
         raw_inputs=raw_inputs,
         connections=api_connections_of(version.canvas),
-        identity_values=resolve_identity_inputs(manifest.inputs, identity=identity, client_values=raw_inputs),
+        identity_values=identity_values(manifest.inputs, identity=identity, client_values=raw_inputs),
     )
 
 
@@ -127,7 +128,7 @@ def preflight_versioned(
         group_id=eseguibile.group_id,
         raw_inputs=raw_inputs,
         connections=connections,
-        identity_values=resolve_identity_inputs(manifest.inputs, identity=identity, client_values=raw_inputs),
+        identity_values=identity_values(manifest.inputs, identity=identity, client_values=raw_inputs),
     )
     if manifest.project_type != "arricchisci":
         return {"valid": True, "nodes": [], "preparation_fingerprint": fingerprint, "checks": dict(PREFLIGHT_CHECKS)}

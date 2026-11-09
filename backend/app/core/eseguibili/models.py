@@ -81,6 +81,10 @@ class ExecutableInputDefinition(BaseModel):
     )
     connection_set_id: Optional[str] = Field(None, max_length=200)
     connection_options: list[ConnectionInputOption] = Field(default_factory=list)
+    # «Utente che esegue»: trasformazione del nome utente (espressione della
+    # Formula, variabile ``utente``), valutata dal server a ogni esecuzione
+    # (shared/execution/runtime_identity, sezione TRASFORMAZIONE).
+    transform: Optional[str] = Field(None, max_length=500)
     order: int = Field(0, ge=0)
 
     @model_validator(mode="after")
@@ -111,6 +115,8 @@ class ExecutableInputDefinition(BaseModel):
                 "un input impostato dal server non ha valore predefinito, "
                 "vincoli o facoltativita'"
             )
+        if self.transform is not None and not is_server_injected(self.kind):
+            raise ValueError("transform e' valido solo per un input impostato dal server")
         return self
 
 

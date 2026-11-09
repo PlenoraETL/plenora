@@ -45,6 +45,27 @@ La formula prende i caratteri dal secondo al quarto del nome utente (`004` da `E
 
 Al posto della sorgente puoi collegare l'input direttamente a un parametro, quando i dati contengono già il nome utente così com'è (per esempio una colonna `owner`): in «Come entra nel progetto» lascia «Valore di un parametro» e collega l'input al filtro o al passo.
 
+## Filtrare nel database
+
+Con la sorgente e il Join interno Plenora legge prima TUTTE le righe dal database e filtra dopo: con molti dati (centinaia di migliaia di righe) l'esecuzione dura minuti. Con la «Trasformazione» dell'input il filtro si fa nel database e si leggono solo le righe dell'utente.
+
+1. Apri il progetto Estrai con la tabella dei dati (per esempio «immobili attivi») e aggiungi alla tabella un filtro sulla colonna istituto con operatore «=» (il valore lascialo vuoto).
+2. Aggiungi un nodo «Input di progetto», tipo «Utente che esegue», e lascia «Valore di un parametro».
+3. In «Trasformazione» scrivi la formula qui sotto: è la stessa sintassi della Formula di Manipola, con la variabile `utente`.
+4. In «Nome utente di prova» scrivi `E0041`: sotto compare l'anteprima `E0041 → 004_IS`.
+5. Collega l'input alla tabella e scegli come campo il valore del filtro sulla colonna istituto.
+6. Premi «Anteprima»: devi vedere solo le righe di `004_IS`. Poi pubblica come Eseguibile.
+
+```text
+utente.str.slice(1, 4) + '_IS'
+```
+
+La trasformazione la calcola il server, una volta per esecuzione, sul nome utente di chi avvia (nell'editor sul nome utente di prova). Il risultato è il valore dell'input in ogni uso: il valore del filtro, un parametro di un passo, un parametro di una chiamata API, e anche la colonna della sorgente in Manipola. Nessuno può cambiarla al momento dell'esecuzione: sta nell'Eseguibile pubblicato.
+
+Nel filtro di Estrai il valore entra sempre come dato, mai come testo della query: un nome utente con apici, virgole o parole come `NOW()` è confrontato così com'è.
+
+> **Attenzione:** Se la regola dà un valore, si usa anche quando non trova righe: per esempio `admin` diventa `dmi_IS` e riceve un file vuoto. Se invece la regola non si applica (errore, nessun valore, un testo vuoto o un valore che non è un testo), l'esecuzione si ferma con un messaggio che lo dice: Plenora non inventa un valore al suo posto.
+
 ## Provare dall'editor: Anteprima, Valida, Esegui di prova
 
 Nell'editor non c'è un utente che esegue: al suo posto si usa il nome utente di prova scritto nell'input.
@@ -72,5 +93,6 @@ Una Pianificazione o un progetto avviato da un altro progetto parte senza una pe
 - Maiuscole e minuscole: `e0041` e `E0041` sono valori diversi per il Join. Il nome utente arriva esattamente come è scritto nell'elenco utenti; se i dati usano un'altra forma, trasformalo (per esempio con `.str.upper()` nella Formula).
 - Un utente che vede l'Eseguibile ma non ha dati corrispondenti (per esempio un utente senza istituto o un amministratore) ottiene un risultato vuoto, non un errore: il filtro funziona, ma non ci sono righe per lui. Se qualcuno deve vedere tutto, serve un Eseguibile diverso.
 - Nessun nome utente di prova: Anteprima, Valida ed Esegui di prova si fermano e chiedono di indicarlo.
+- Trasformazione non valida (sintassi, nomi diversi da `utente`, o una formula che non usa `utente`): Valida e la pubblicazione la rifiutano e dicono perché.
 - Due input «Utente che esegue» con nomi utente di prova diversi: usane uno solo.
 - «Esegui» dall'editor fermo con un visualizzatore: l'esecuzione di prova è riservata a chi può modificare il progetto. Apri l'Eseguibile per eseguirlo con il tuo utente.

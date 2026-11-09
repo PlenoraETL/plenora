@@ -46,10 +46,10 @@ from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.projects.canvas_models import CanvasState
 from app.shared import error_codes
 from app.shared.execution.runtime_bound_fields import runtime_static_parameters
+from app.core.eseguibili.identity_transform import identity_values
 from app.shared.execution.runtime_identity import (
     RuntimeIdentity,
     RuntimeIdentityError,
-    resolve_identity_inputs,
     subject_for_test_run,
     trigger_for_test_run,
 )
@@ -141,7 +141,7 @@ def test_factory_without_test_username_blocks_and_says_what_to_do():
     assert (identity.username, identity.reason) == (None, "test_run_missing")
     defs = [SimpleNamespace(key="utente", label="Utente", kind="current_user")]
     with pytest.raises(RuntimeIdentityError) as err:
-        resolve_identity_inputs(defs, identity=identity, client_values={})
+        identity_values(defs, identity=identity, client_values={})
     assert err.value.code == REQUIRED and "esecuzione di prova" in err.value.message
 
 
@@ -156,7 +156,7 @@ def test_factory_with_two_different_test_usernames_is_a_conflict():
 def test_project_run_message_points_to_the_test_run():
     defs = [SimpleNamespace(key="utente", label="Utente", kind="current_user")]
     with pytest.raises(RuntimeIdentityError) as err:
-        resolve_identity_inputs(defs, identity=RuntimeIdentity.project_run(), client_values={})
+        identity_values(defs, identity=RuntimeIdentity.project_run(), client_values={})
     assert "Esegui di prova" in err.value.message
 
 

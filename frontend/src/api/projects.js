@@ -334,6 +334,18 @@ export const previewProjectQuery = async (projectId, canvas, { signal } = {}) =>
  * @returns {Promise<{values: Array<{value, is_null, count}>, column, column_id,
  *   truncated, sampled, sampled_rows, reason}>}
  */
+/**
+ * Anteprima della «Trasformazione» dell'input «Utente che esegue» sul nome
+ * utente di PROVA (es. E0041 -> 004_IS). La calcola il server con la stessa
+ * regola dell'esecuzione (backend eseguibili/identity_transform); non da'
+ * alcun valore a un'esecuzione.
+ * @returns {Promise<{success: boolean, value: string|null, message: string|null}>}
+ */
+export const previewIdentityTransform = async (expression, username, { signal } = {}) => {
+  const response = await http.post('/projects/identity-transform-preview', { expression, username }, { signal });
+  return response.data;
+};
+
 export const distinctNodeValues = async (projectId, nodeId, { canvas, column = null, columnId = null, limit = 200 }) => {
   const response = await http.post(`/projects/${projectId}/nodes/${nodeId}/distinct`, {
     canvas, column, column_id: columnId, limit,

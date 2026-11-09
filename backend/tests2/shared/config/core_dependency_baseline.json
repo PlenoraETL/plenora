@@ -76,6 +76,7 @@
     "eseguibili -> dataframes": 3,
     "eseguibili -> files": 3,
     "eseguibili -> io": 4,
+    "eseguibili -> manipola": 1,
     "eseguibili -> orchestrator": 2,
     "eseguibili -> projects": 1,
     "eseguibili -> resources": 1,

@@ -3,6 +3,7 @@ Router API per il modulo Projects.
 
 Endpoint CRUD progetti, gestione canvas, e inferenza schema.
 """
+from app.core.eseguibili.identity_transform import preview_transform
 from app.core.eseguibili.manifest import compile_manifest
 from app.core.manipola.canvas_data_preparation import CanvasDataPreparation, PREPARATION_ERRORS, classify_preparation_error
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
@@ -1160,6 +1161,38 @@ def validate_all_connections(
         return {"valid": len(errors) == 0, "errors": errors}
     except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
+
+
+class IdentityTransformPreviewRequest(BaseModel):
+    """Anteprima della «Trasformazione» dell'input «Utente che esegue»."""
+    expression: str = Field(max_length=500)
+    username: str = Field(min_length=1, max_length=200)
+
+
+class IdentityTransformPreviewResponse(BaseModel):
+    success: bool
+    value: Optional[str] = None
+    message: Optional[str] = None
+
+
+@router.post("/identity-transform-preview", response_model=IdentityTransformPreviewResponse)
+def preview_identity_transform(
+    body: IdentityTransformPreviewRequest,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> IdentityTransformPreviewResponse:
+    """Valore della trasformazione per il nome utente di PROVA del pannello
+    (es. «E0041 → 004_IS»). Stessa regola dell'esecuzione
+    (``eseguibili.identity_transform``): stesso cancello, stesso motore, stessi
+    messaggi. Nessun dato letto: valuta solo l'espressione sul testo inviato;
+    non da' alcun valore a un'esecuzione (quello lo calcola il server
+    dall'utente che esegue)."""
+    try:
+        value = preview_transform(body.expression, body.username.strip())
+    except RuntimeIdentityError as exc:
+        return IdentityTransformPreviewResponse(success=False, message=exc.message)
+    except ValueError as exc:
+        return IdentityTransformPreviewResponse(success=False, message=str(exc))
+    return IdentityTransformPreviewResponse(success=True, value=value)
 
 
 class CanvasValidationRequest(BaseModel):

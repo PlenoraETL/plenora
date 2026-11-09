@@ -30,10 +30,10 @@ from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.runtime_inputs import apply_identity_inputs
 from app.shared import error_codes
 from app.shared.contracts.auth import normalized_username, username_form_error
+from app.core.eseguibili.identity_transform import identity_values
 from app.shared.execution.runtime_identity import (
     RuntimeIdentity,
     RuntimeIdentityError,
-    resolve_identity_inputs,
 )
 from tests2.eseguibili.unit.test_runtime_identity_inputs import (
     DEFS,
@@ -59,7 +59,7 @@ REPO = BACKEND.parent
 def test_identity_is_the_exact_username(username):
     identity = RuntimeIdentity.authenticated(build_current_user(username=username))
     assert identity.username == username
-    assert resolve_identity_inputs(DEFS, identity=identity, client_values={}) == {"utente": username}
+    assert identity_values(DEFS, identity=identity, client_values={}) == {"utente": username}
 
 
 @pytest.mark.parametrize("username", [" mario.rossi", "mario.rossi ", "mario\tx", "mario\x00", "\u0085mario"])
@@ -69,7 +69,7 @@ def test_identity_refuses_a_username_outside_the_rule(username):
     identity = RuntimeIdentity.authenticated(build_current_user(username=username))
     assert identity.username is None and identity.reason == "username_invalid"
     with pytest.raises(RuntimeIdentityError) as err:
-        resolve_identity_inputs(DEFS, identity=identity, client_values={})
+        identity_values(DEFS, identity=identity, client_values={})
     assert err.value.code == REQUIRED and "amministratore" in err.value.message
 
 

@@ -68,6 +68,7 @@ describe('2. the guide says what the system does', () => {
       "Cos'è",
       'Sicurezza: nessuno può falsificarlo',
       'Configurazione passo passo (esempio)',
+      'Filtrare nel database',
       "Provare dall'editor: Anteprima, Valida, Esegui di prova",
       'Pubblicare come Eseguibile',
       'Pianificazioni e progetti collegati',
@@ -76,6 +77,15 @@ describe('2. the guide says what the system does', () => {
     const all = text(UTENTE_CHE_ESEGUE_GUIDE);
     [/Maiuscole/, /forma diversa dai dati/, /vede l'Eseguibile ma non ha dati/, /solo chi può modificare il progetto/i,
       /nome utente di prova SALVATO/, /non avvia Carica/, /Esecuzione di prova \(utente: …\)/].forEach(re => expect(all).toMatch(re));
+  });
+
+  it('explains the transformation and the filter in the database', () => {
+    const section = UTENTE_CHE_ESEGUE_GUIDE.sections.find(s => s.title === 'Filtrare nel database');
+    const body = text({ intro: '', sections: [section] });
+    [IDENTITY_EXAMPLE.formula, 'E0041 → 004_IS', 'Estrai', 'nel database', 'dmi_IS', 'file vuoto', 'non inventa', '`NOW()`', "sta nell'Eseguibile pubblicato"]
+      .forEach(word => expect(body).toContain(word));
+    [/TRASFORMAZIONE/, /runtime_identity_transform_failed/, /mai un\s+valore inventato/]
+      .forEach(rule => expect(BACKEND_IDENTITY).toMatch(rule));
   });
 
   it('matches the backend rules it describes', () => {

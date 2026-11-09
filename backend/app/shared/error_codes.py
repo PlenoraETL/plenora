@@ -325,6 +325,10 @@ senza username di prova): si blocca."""
 RUNTIME_IDENTITY_CLIENT_VALUE = "runtime_identity_client_value"
 """400: il client ha inviato un valore per un input «Utente che esegue»: il
 valore lo imposta solo il server, la richiesta si rifiuta."""
+RUNTIME_IDENTITY_TRANSFORM_FAILED = "runtime_identity_transform_failed"
+"""400: la «Trasformazione» dell'input «Utente che esegue» non da' un testo
+per il nome utente di chi esegue (errore della regola, risultato vuoto o non
+testo): l'esecuzione si ferma, nessun valore inventato."""
 
 
 # Catalog set — drift detection
@@ -427,6 +431,7 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     # Input «Utente che esegue»
     RUNTIME_IDENTITY_REQUIRED,
     RUNTIME_IDENTITY_CLIENT_VALUE,
+    RUNTIME_IDENTITY_TRANSFORM_FAILED,
 })
 
 # Codici globali (envelope-level): NON domain-specific

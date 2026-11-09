@@ -37,6 +37,7 @@ il server (nessuna richiesta lo accetta dal client).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, MutableMapping
 from typing import Any
 
@@ -56,6 +57,28 @@ def execution_path(path: str) -> str:
     head, sep, rest = str(path).partition(".")
     field = EXECUTION_FIELDS.get(head)
     return f"{field}{sep}{rest}" if field else path
+
+
+# VALORI LETTERALI (input «Utente che esegue», 09/11/2026). Il lettore di
+# alcuni bersagli interpreta il testo: il valore di un filtro di Estrai che
+# somiglia a una funzione SQL (``NOW()``) entra nella query come funzione,
+# ``IN`` divide alla virgola, ``BETWEEN`` divide a «AND». Un valore impostato
+# dal server (il nome utente, anche trasformato) e' sempre un DATO: la
+# risoluzione scrive accanto il segno della tabella (stesso contenitore), e
+# il lettore lo lega come un solo parametro SQL. Il segno puo' solo
+# restringere (un valore in piu' trattato come dato), mai allargare.
+LITERAL_MARKERS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^filters\.(\d+)\.value$"), "filters.{0}.value_literal"),
+)
+
+
+def literal_marker_path(path: str) -> str | None:
+    """Percorso del segno «valore letterale» per il bersaglio ``path``."""
+    for pattern, template in LITERAL_MARKERS:
+        match = pattern.fullmatch(str(path))
+        if match:
+            return template.format(*match.groups())
+    return None
 
 
 def _strip_mapping(container: Any) -> None:
@@ -191,6 +214,8 @@ __all__ = [
     "RUNTIME_STATIC_PARAMETERS",
     "effective_static_parameters",
     "execution_path",
+    "LITERAL_MARKERS",
+    "literal_marker_path",
     "retain_registered",
     "runtime_bound_context",
     "runtime_bound_registry",

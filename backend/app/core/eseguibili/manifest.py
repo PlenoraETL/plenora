@@ -13,10 +13,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.shared.contracts.payloads import JsonObject
-from app.shared.execution.runtime_identity import identity_source_column
+from app.shared.execution.runtime_identity import identity_source_column, identity_transform
 from app.shared.execution.runtime_input_kinds import kind_spec, project_input_role
 
 from .binding_capabilities import canonical_binding_path
+from .identity_transform import assert_valid_transform
 from .models import (
     ExecutableInputBinding,
     ExecutableInputDefinition,
@@ -103,6 +104,11 @@ def _compile_project_input(
     # predefinito, vincoli o facoltativita' dal canvas (resti di un tipo
     # precedente compresi); lo username di prova non entra mai nel manifest.
     server = spec.server_injected
+    # Trasformazione del nome utente (solo tipo server): stesso cancello della
+    # Formula, rifiutata qui con il motivo (pubblicazione, Valida, esecuzione).
+    transform = identity_transform(node) if server else None
+    if transform is not None:
+        assert_valid_transform(transform, label=label or key or node_id)
 
     definition = ExecutableInputDefinition(
         key=key,
@@ -120,6 +126,7 @@ def _compile_project_input(
             str(data.get("connection_set_id") or "").strip() or None
         ),
         order=int(data.get("order", order)),
+        transform=transform,
     )
 
     # Ruolo nel canvas: regola unica (runtime_input_kinds.project_input_role).

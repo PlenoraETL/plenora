@@ -4332,6 +4332,18 @@
             "title": "Required",
             "type": "boolean"
           },
+          "transform": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transform"
+          },
           "validation": {
             "$ref": "#/components/schemas/ExecutableInputValidation"
           }
@@ -5135,6 +5147,17 @@
             "default": "",
             "title": "Value",
             "type": "string"
+          },
+          "value_literal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Literal"
           }
         },
         "required": [
@@ -5519,6 +5542,63 @@
           }
         },
         "title": "HavingCondition",
+        "type": "object"
+      },
+      "IdentityTransformPreviewRequest": {
+        "description": "Anteprima della «Trasformazione» dell'input «Utente che esegue».",
+        "properties": {
+          "expression": {
+            "maxLength": 500,
+            "title": "Expression",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expression",
+          "username"
+        ],
+        "title": "IdentityTransformPreviewRequest",
+        "type": "object"
+      },
+      "IdentityTransformPreviewResponse": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "IdentityTransformPreviewResponse",
         "type": "object"
       },
       "InputChange": {
@@ -6858,6 +6938,17 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "identity_transform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Transform"
           },
           "if_table_exists": {
             "anyOf": [
@@ -17069,6 +17160,53 @@
           }
         ],
         "summary": "Admin Cleanup Orphans",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/identity-transform-preview": {
+      "post": {
+        "description": "Valore della trasformazione per il nome utente di PROVA del pannello\n(es. «E0041 → 004_IS»). Stessa regola dell'esecuzione\n(``eseguibili.identity_transform``): stesso cancello, stesso motore, stessi\nmessaggi. Nessun dato letto: valuta solo l'espressione sul testo inviato;\nnon da' alcun valore a un'esecuzione (quello lo calcola il server\ndall'utente che esegue).",
+        "operationId": "preview_identity_transform_api_projects_identity_transform_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityTransformPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityTransformPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Preview Identity Transform",
         "tags": [
           "projects"
         ]

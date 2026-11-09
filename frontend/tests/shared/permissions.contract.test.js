@@ -88,6 +88,7 @@ const UNGATED = {
   executeTestRun: 'esecuzione di prova: la offre solo il percorso unico (PipelineRunner) con can.testRunProject; il backend la vieta a viewer ed esecutore',
   previewProject: 'anteprima: sola lettura',
   previewProjectQuery: 'anteprima della query di Estrai sul canvas corrente: sola lettura, non salva (T6, R3.13)',
+  previewIdentityTransform: "anteprima della trasformazione dell'«Utente che esegue» sul nome di prova: sola lettura, non salva",
   pinRun: 'segnalibro su una run, non distruttivo',
   cancelTask: 'annulla un task avviato dall\'utente stesso',
   cancelTaskOnPageExit: 'annulla, uscendo dalla pagina, un task avviato dall\'utente stesso',

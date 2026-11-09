@@ -69,6 +69,11 @@ class Filter(BaseModel):
     # ``app.shared.execution.condition_groups`` (StrictInt: ``true`` o
     # ``"1"`` non sono un gruppo, come li rifiuta la regola).
     group: Optional[Annotated[StrictInt, Field(ge=0)]] = None
+    # Valore impostato dal server (input «Utente che esegue»): sempre un dato,
+    # legato come un solo parametro SQL (shared/execution/runtime_bound_fields,
+    # VALORI LETTERALI). Lo scrive la risoluzione degli input; puo' solo
+    # restringere l'interpretazione del valore.
+    value_literal: Optional[bool] = None
 
 
 class AggregationConfig(BaseModel):
@@ -194,6 +199,10 @@ class Node(BaseModel):
     as_source: Optional[bool] = False
     source_column: Optional[str] = None
     preview_username: Optional[str] = None
+    # Trasformazione del nome utente (espressione della Formula, variabile
+    # ``utente``): entra nel manifest, la valuta il server
+    # (runtime_identity, sezione TRASFORMAZIONE).
+    identity_transform: Optional[str] = None
     order: Optional[int] = 0
 
     label: Optional[str] = None

@@ -100,7 +100,8 @@ class WhereClauseBuilder:
         column_type = column_type_map.get(column, "str")
 
         return self.create_condition(
-            table_alias, column, operator, value, params, column_type
+            table_alias, column, operator, value, params, column_type,
+            literal=bool(getattr(filter_item, "value_literal", None)),
         )
 
     def create_condition(
@@ -111,7 +112,13 @@ class WhereClauseBuilder:
         value: Any,
         params: JsonObject,
         column_type: str = "str",
+        *,
+        literal: bool = False,
     ) -> str:
+        """Condizione SQL parametrizzata. ``literal`` (valore impostato dal
+        server, ``Filter.value_literal``): il valore e' sempre UN parametro,
+        mai una funzione SQL, mai diviso alla virgola (``IN``) o a «AND»
+        (``BETWEEN``, che quindi lo rifiuta)."""
         col_ref = f"{table_alias}.{column}"
 
         db = self.db_type.lower() if self.db_type else "postgres"
@@ -137,6 +144,16 @@ class WhereClauseBuilder:
             return f"{col_ref} IS NULL"
         if operator == "IS NOT NULL":
             return f"{col_ref} IS NOT NULL"
+
+        if literal and operator in ("IN", "NOT IN"):
+            param_name = self._next_param_name()
+            params[param_name] = value
+            return f"{col_ref} {operator} (:{param_name})"
+        if literal and operator == "BETWEEN":
+            raise ValueError(
+                "BETWEEN richiede due valori: un valore impostato dal server "
+                "(«Utente che esegue») e' uno solo. Usa un altro operatore."
+            )
 
         if operator == "IN":
             return self.create_condition_in(col_ref, value, params)
@@ -197,7 +214,7 @@ class WhereClauseBuilder:
             params[p_hi] = _coerce(hi_raw)
             return f"{col_ref} BETWEEN :{p_lo} AND :{p_hi}"
 
-        if isinstance(value, str) and self.is_sql_function(value):
+        if not literal and isinstance(value, str) and self.is_sql_function(value):
             translated = self.translate_date_function(value)
             return f"{col_ref} {operator} {translated}"
 

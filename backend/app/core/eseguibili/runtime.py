@@ -17,16 +17,17 @@ from app.shared.execution.runtime_identity import (
     RuntimeIdentity,
     identity_source_column,
     identity_source_fields,
-    resolve_identity_inputs,
 )
 from app.shared.execution.runtime_bound_fields import (
     RUNTIME_BOUND_FIELDS,
     execution_path,
+    literal_marker_path,
     strip_runtime_bound_fields,
 )
 from app.shared.execution.runtime_input_kinds import is_server_injected, project_input_role
 
 from . import db as eseguibili_db
+from .identity_transform import identity_values
 from .models import ExecutableInputDefinition, ExecutableManifest
 
 
@@ -132,7 +133,14 @@ def _set_existing_path(
 _CREATABLE_HEADS = frozenset({"config"}) | RUNTIME_BOUND_FIELDS
 
 
-def _apply_scalar_binding(node: dict[str, Any], path: str, value: Any) -> None:
+def _apply_scalar_binding(node: dict[str, Any], path: str, value: Any, *, literal: bool = False) -> None:
+    """``literal``: valore impostato dal server («Utente che esegue»). Dove il
+    lettore del bersaglio interpreterebbe il testo (funzioni SQL, liste con la
+    virgola, ``BETWEEN`` nei filtri di Estrai) si scrive anche il segno
+    ``literal_marker_path``: il valore entra sempre come dato (parametro SQL)."""
+    marker = literal_marker_path(path) if literal else None
+    if marker:
+        _apply_scalar_binding(node, marker, True)
     # Il bersaglio offerto (binding_capabilities) puo' essere letto
     # dall'esecuzione in un campo dedicato: si scrive li'.
     path = execution_path(path)
@@ -311,6 +319,7 @@ def _resolve_into(
     nodes_by_id: dict[str, Any],
     bindings_by_key: dict[str, list[Any]],
     cleanup_ids: list[str],
+    identity_username: str | None = None,
 ) -> JsonObject:
     """Applica gli input al canvas (in place). Ogni file materializzato entra
     in ``cleanup_ids`` appena creato: chi chiama lo elimina se qui si esce con
@@ -385,11 +394,15 @@ def _resolve_into(
             node = nodes_by_id.get(binding.target_node_id)
             if node is None:
                 raise ValueError(f"Nodo binding non trovato: {binding.target_node_id}")
-            _apply_scalar_binding(node, binding.target_field, scalar)
+            _apply_scalar_binding(node, binding.target_field, scalar,
+                                  literal=is_server_injected(definition.kind))
         summary[definition.key] = {"kind": definition.kind, "provided": scalar is not None}
         if is_server_injected(definition.kind):
-            # Audit della run: per quale utente e' stata filtrata.
-            summary[definition.key]["username"] = scalar
+            # Audit della run: per quale utente e' stata filtrata e, con una
+            # trasformazione, con quale valore.
+            summary[definition.key]["username"] = identity_username
+            if definition.transform:
+                summary[definition.key]["value"] = scalar
 
     return summary
 
@@ -406,8 +419,9 @@ def resolve_runtime_inputs(
     """Valida gli input e restituisce canvas risolto, cleanup ids e audit.
 
     ``identity`` e' obbligatoria (nessun default): ogni percorso dichiara chi
-    esegue. Gli input «Utente che esegue» prendono SOLO il suo username
-    (``runtime_identity.resolve_identity_inputs``): un valore del client si
+    esegue. Gli input «Utente che esegue» prendono SOLO il suo username,
+    trasformato se l'input ha una trasformazione
+    (``identity_transform.identity_values``): un valore del client si
     rifiuta, senza utente la catena si blocca.
     """
 
@@ -415,10 +429,10 @@ def resolve_runtime_inputs(
     unknown = sorted(set(values) - expected_keys)
     if unknown:
         raise ValueError("Input non dichiarati: " + ", ".join(unknown))
-    identity_values = resolve_identity_inputs(
+    server_values = identity_values(
         manifest.inputs, identity=identity, client_values=values,
     )
-    values = {**values, **identity_values}
+    values = {**values, **server_values}
 
     resolved_canvas = copy.deepcopy(dict(canvas))
     # I campi scritti dalla risoluzione partono vuoti: li valorizzano solo i
@@ -450,6 +464,7 @@ def resolve_runtime_inputs(
             nodes_by_id=nodes_by_id,
             bindings_by_key=bindings_by_key,
             cleanup_ids=cleanup_ids,
+            identity_username=identity.username,
         )
 
         # I project_input scalari e i loro archi sono configurazione di authoring,

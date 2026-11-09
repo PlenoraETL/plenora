@@ -26,6 +26,7 @@ import { READ_ONLY_SAFE, useReadOnlyLock } from '../common/readOnlySafe';
 import GuideModal from '../common/GuideModal';
 import { IDENTITY_EXAMPLE, UTENTE_CHE_ESEGUE_GUIDE } from '../../utils/guides/utenteCheEsegue';
 import { useCanvasDerived } from '../../hooks/useCanvasDerived';
+import { previewIdentityTransform } from '../../api/projects';
 import { shortcutText } from '../../utils/shortcuts';
 
 const INPUT_TYPES = Object.entries(INPUT_KIND_LABELS);
@@ -49,6 +50,10 @@ const PREVIEW_USERNAME = codecs.text({ empty: null });
 // Colonna della sorgente «Utente che esegue» (stessa regola della chiave).
 const SOURCE_COLUMN = codecs.key({ allowed: '_', startsWithLetter: true, maxLength: 80 });
 const DEFAULT_SOURCE_COLUMN = 'utente';
+// Trasformazione del nome utente (espressione della Formula, variabile
+// `utente`): la valuta il server a ogni esecuzione (backend
+// shared/execution/runtime_identity, sezione TRASFORMAZIONE).
+const IDENTITY_TRANSFORM = codecs.text({ empty: null, maxLength: 500 });
 
 /**
  * N4: le colonne attese si ricostruiscono dai NOMI conservando tipo e
@@ -66,6 +71,35 @@ export function mergeExpectedColumns(previous, names) {
  * completa (utils/guides/utenteCheEsegue) si apre da qui. Il pulsante e'
  * un'azione di vista: attivo anche in sola lettura.
  */
+/**
+ * Anteprima della trasformazione sul nome utente di prova («E0041 → 004_IS»),
+ * calcolata dal server con la regola dell'esecuzione (api/projects
+ * previewIdentityTransform). Senza trasformazione o senza nome di prova: nulla.
+ */
+function IdentityTransformPreview({ expression, username }) {
+  const enabled = Boolean(expression && username);
+  const preview = useResource(
+    ({ signal }) => previewIdentityTransform(expression, username, { signal }),
+    { key: ['identity-transform', expression, username], enabled },
+  );
+  if (!enabled) return null;
+  if (preview.status === 'error') {
+    return <ResourceError resource={preview} />;
+  }
+  const result = preview.data;
+  if (!result) {
+    return <p className="pin__binding-hint" role="status">Calcolo della trasformazione…</p>;
+  }
+  if (!result.success) {
+    return <p className="pin__binding-hint pin__binding-hint--error" role="status">{result.message}</p>;
+  }
+  return (
+    <p className="pin__binding-hint" role="status" aria-label="Anteprima della trasformazione">
+      <code>{username}</code> → <code>{result.value}</code>
+    </p>
+  );
+}
+
 function IdentityHelp({ sourceAllowed, onOpenGuide }) {
   return (
     <div className="pin__help" role="note" aria-label="Come si usa">
@@ -86,6 +120,10 @@ function IdentityHelp({ sourceAllowed, onOpenGuide }) {
         Esempio: Utente che esegue → Formula <code>{IDENTITY_EXAMPLE.formula}</code> → Join interno con i dati.
         {' '}Il nome <code>{IDENTITY_EXAMPLE.username}</code> diventa <code>{IDENTITY_EXAMPLE.value}</code> e restano
         solo le righe di quell’istituto.
+      </p>
+      <p>
+        Con molti dati scrivi la stessa formula in «Trasformazione» e collega l’input al filtro della tabella di
+        Estrai: il filtro si fa nel database e si leggono solo le righe dell’utente.
       </p>
       <p className="pin__help-warning">
         Il nome utente, dopo i passi, deve avere esattamente la forma dei dati (maiuscole comprese): se non
@@ -195,7 +233,10 @@ function ProjectInputNode({ id, data }) {
         // lo username di prova vale solo per lui.
         ...(isServerInjectedKind(nextKind)
           ? { default_value: null, required: true }
-          : (node.data?.preview_username != null ? { preview_username: null } : {})),
+          : {
+            ...(node.data?.preview_username != null ? { preview_username: null } : {}),
+            ...(node.data?.identity_transform != null ? { identity_transform: null } : {}),
+          }),
         ...(node.data?.as_source ? { as_source: false } : {}),
       },
     })),
@@ -383,11 +424,26 @@ function ProjectInputNode({ id, data }) {
                   </label>
                   <p className="pin__binding-hint">
                     Il nodo produce una tabella di una riga con questa colonna (testo) che contiene il nome
-                    utente di chi esegue. Collegalo ai passi (Formula, Mappa valori, Join) e chiudi con un Join
-                    interno sui dati principali per filtrarli.
+                    utente di chi esegue (trasformato, se indichi una trasformazione). Collegalo ai passi
+                    (Formula, Mappa valori, Join) e chiudi con un Join interno sui dati principali per filtrarli.
                   </p>
                 </>
               )}
+              <label className="pin__field">
+                <span>Trasformazione (facoltativa)</span>
+                <FieldInput
+                  className="nodrag"
+                  codec={IDENTITY_TRANSFORM}
+                  value={data.identity_transform ?? null}
+                  onCommit={value => update({ identity_transform: value ?? null })}
+                  placeholder={`es. ${IDENTITY_EXAMPLE.formula}`}
+                />
+              </label>
+              <p className="pin__binding-hint">
+                Stessa sintassi della Formula di Manipola, con la variabile <code>utente</code>. La calcola il
+                server a ogni esecuzione e il risultato è il valore dell’input (per esempio il valore del filtro
+                di Estrai, che così si applica nel database).
+              </p>
               <label className="pin__field">
                 <span>Nome utente di prova (Anteprima, Valida, Esegui di prova)</span>
                 <FieldInput
@@ -398,6 +454,7 @@ function ProjectInputNode({ id, data }) {
                   placeholder="es. mario.rossi"
                 />
               </label>
+              <IdentityTransformPreview expression={data.identity_transform || ''} username={data.preview_username || ''} />
               <p className="pin__binding-hint">
                 Usato solo nell’editor: Anteprima, Valida ed esecuzione di prova (il risultato della prova
                 non diventa l’Output del progetto). Non entra nell’Eseguibile.
