@@ -71,8 +71,10 @@ def _as(role: str, username: str = "E0041"):
     return build_current_user(username=username, role=role)
 
 
-def _identity(role: str, username: str = "E0041") -> RuntimeIdentity:
-    return RuntimeIdentity.authenticated(_as(role, username))
+def _identity(role: str, username: str = "E0041", owner_group_id: str = "grp-1") -> RuntimeIdentity:
+    # Gruppo proprietario dell'Eseguibile = gruppo di chi esegue (grp-1),
+    # come nei percorsi /runs e /preflight (controllo D1).
+    return RuntimeIdentity.authenticated(_as(role, username), owner_group_id=owner_group_id)
 
 
 # ---------------------------------------------------------------- 1. risoluzione
@@ -250,7 +252,7 @@ def test_preflight_fingerprint_follows_the_admin_value():
         # Stessa impronta all'avvio (stessi input, stessa identita').
         assert chosen == eseguibili_preflight.fingerprint_for(
             eseguibile=executable, raw_inputs={"utente": "007_IS"},
-            identity=RuntimeIdentity.authenticated(admin), version_id="version-1")
+            identity=RuntimeIdentity.authenticated(admin, owner_group_id="grp-1"), version_id="version-1")
 
 
 # ---------------------------------------------------------------- 3. Estrai: bind
@@ -425,3 +427,42 @@ def test_republish_is_not_refused_for_the_removed_option():
         eseguibili_service.publish_new_version(eseguibile=record, created_by="u-1")
     assert len(created) == 1
     assert created[0]["manifest"]["inputs"][0]["admin_override"] is False
+
+
+
+# ---------------------------------------------------------------- controllo di sicurezza 09/11/2026
+
+
+def test_d1_admin_of_another_group_cannot_choose_the_value():
+    """D1: su un Eseguibile condiviso, un admin di un ALTRO gruppo non sceglie
+    il valore (leggerebbe dati del gruppo proprietario): 400 come gli altri ruoli."""
+    other_admin = RuntimeIdentity.authenticated(
+        build_current_user(username="E0041", role="admin", group_id="grp-2"), owner_group_id="grp-1")
+    assert other_admin.may_choose(SimpleNamespace(admin_override=True)) is False
+
+
+def test_d1_same_group_admin_and_superadmin_can_choose():
+    same = RuntimeIdentity.authenticated(
+        build_current_user(username="E0041", role="admin", group_id="grp-1"), owner_group_id="grp-1")
+    sup = RuntimeIdentity.authenticated(
+        build_current_user(username="E0041", role="superadmin", group_id="root"), owner_group_id="grp-1")
+    item = SimpleNamespace(admin_override=True)
+    assert same.may_choose(item) is True and sup.may_choose(item) is True
+
+
+def test_d1_without_the_owner_group_nobody_chooses():
+    """Default sicuro: senza il gruppo proprietario nessuno sceglie."""
+    sup = RuntimeIdentity.authenticated(build_current_user(username="E0041", role="superadmin"))
+    assert sup.may_choose(SimpleNamespace(admin_override=True)) is False
+
+
+def test_d1_runs_and_preflight_pass_the_owner_group():
+    import inspect
+    from app.core.eseguibili import router as eseguibili_router
+    for fn in (eseguibili_router.create_eseguibile_run, eseguibili_router.preflight_eseguibile_run):
+        assert "owner_group_id=record.group_id" in inspect.getsource(fn)
+
+
+def test_d3_invisible_format_characters_are_removed():
+    from app.shared.execution.runtime_identity import chosen_value
+    assert chosen_value("Utente", "004\u200b_IS\u202e") == "004_IS"

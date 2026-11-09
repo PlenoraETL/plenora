@@ -242,6 +242,12 @@ class RuntimeIdentity:
     reason: AbsentReason = "unattended"
     # Ruolo di chi esegue: solo per ``authenticated``, letto dal server.
     role: str | None = None
+    # Puo' scegliere il valore degli input con ``admin_override`` (controllo
+    # di sicurezza 09/11/2026, D1): deciso alla costruzione, dal server, con
+    # il gruppo PROPRIETARIO della risorsa eseguita. Solo il superadmin o un
+    # admin DELLO STESSO gruppo: un admin di un altro gruppo (Eseguibile
+    # condiviso) leggerebbe dati del gruppo proprietario che oggi non vede.
+    may_override: bool = False
     # Valori di prova scelti nei nodi (anteprima e prova): ((chiave, valore), ...).
     test_values: tuple[tuple[str, str], ...] = ()
 
@@ -251,7 +257,7 @@ class RuntimeIdentity:
     # percorso e il suo mappatore unico degli errori (400 tipizzato).
 
     @classmethod
-    def authenticated(cls, user: CurrentUser) -> "RuntimeIdentity":
+    def authenticated(cls, user: CurrentUser, *, owner_group_id: str | None = None) -> "RuntimeIdentity":
         """Lo username ESATTO del DB (punto 2): nessuno strip, nessuna
         trasformazione. Gli username nuovi sono gia' senza spazi iniziali e
         finali e unici in forma normalizzata (``auth.usernames``); uno
@@ -264,7 +270,13 @@ class RuntimeIdentity:
             # database potrebbe confrontare uguale a quello di un altro.
             return cls("absent", None, "username_invalid")
         role = getattr(user, "role", None)
-        return cls("authenticated", username, role=role if isinstance(role, str) else None)
+        role = role if isinstance(role, str) else None
+        user_group = getattr(user, "group_id", None)
+        may_override = owner_group_id is not None and (
+            role == "superadmin"
+            or (role in ADMIN_OVERRIDE_ROLES and user_group == owner_group_id)
+        )
+        return cls("authenticated", username, role=role, may_override=may_override)
 
     def may_choose(self, item: Any) -> bool:
         """Chi esegue puo' inviare il valore di ``item`` (sezione VALORE
@@ -272,6 +284,7 @@ class RuntimeIdentity:
         input con ``admin_override``."""
         return (
             self.origin == "authenticated"
+            and self.may_override
             and self.role in ADMIN_OVERRIDE_ROLES
             and admin_override_enabled(item)
         )
@@ -435,7 +448,9 @@ def chosen_value(label: str, raw: Any) -> str | None:
             error_codes.RUNTIME_IDENTITY_OVERRIDE_INVALID,
             f"Il valore scelto per l'input «{label}» ({KIND_LABEL}) deve essere un testo.",
         )
-    text = "".join(ch for ch in raw if unicodedata.category(ch) != "Cc").strip()
+    # Caratteri di controllo (Cc) e di formato invisibili (Cf: U+200B,
+    # U+202E...): il valore registrato e' quello usato (controllo D3).
+    text = "".join(ch for ch in raw if unicodedata.category(ch) not in ("Cc", "Cf")).strip()
     if not text:
         return None
     if len(text) > ADMIN_OVERRIDE_MAX_LENGTH:

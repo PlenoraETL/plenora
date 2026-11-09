@@ -687,3 +687,17 @@ Nessuna migrazione (i campi stanno nel canvas e nel manifest JSON); CSP e instal
 Test che falliscono senza la funzione: `backend/tests2/eseguibili/unit/test_identity_admin_override.py` (risoluzione, admin e superadmin, vuoto, testo e limiti, endpoint, impronta, SQL con bind per apici, `;`, `--`, `NOW()`, `GETDATE()`, virgole con IN, limiti degli operatori, manifest, editor, V1 e ripubblicazione non rifiutata), `frontend/tests/components/AdminOverride.contract.test.jsx` (modulo per ruolo, pannello, righe informative) e `userGuides.contract.test.jsx` (sezione nuova e regole del backend). I test di sicurezza passano anche senza la funzione, perché oggi rifiutano tutti, e restano come guardiani: esecutore, user o viewer con l'opzione → 400; admin senza l'opzione → 400; ruolo dichiarato dal client → 422; anteprima o prova con un valore del client → 400.
 
 Verifiche: frontend eslint pulito, vitest 214 file / 6.101 test passati, build; snapshot OpenAPI allineato; backend (comando completo delle cartelle tests2) 30.205 passati, 0 falliti, 61 saltati. Niente deploy, niente push.
+
+### Controllo di sicurezza del valore scelto dagli amministratori (09/11/2026)
+
+- **D1 (alta), corretto**: un admin di un ALTRO gruppo, su un Eseguibile condiviso, poteva scegliere il
+  valore e leggere dati del gruppo proprietario.
+  - Ora `RuntimeIdentity.authenticated(user, owner_group_id=...)` decide `may_override` dal server: lo
+    ha solo il superadmin o un admin dello stesso gruppo dell'Eseguibile.
+  - Se manca il gruppo proprietario, nessuno sceglie il valore.
+  - `/runs` e `/preflight` passano `record.group_id`.
+- **D3 (bassa), corretto**: dal valore scelto si tolgono anche i caratteri di formato invisibili (Cf).
+- Test: `test_d1_*` e `test_d3_*` in `test_identity_admin_override.py`.
+- **D2 (bassa), dichiarato**: collegando l'input a parametri regex di Manipola, un admin potrebbe scrivere
+  una regex lenta (al massimo 200 caratteri).
+- **D4, dichiarato**: aggiungere l'opzione non compare tra le modifiche della ripubblicazione.

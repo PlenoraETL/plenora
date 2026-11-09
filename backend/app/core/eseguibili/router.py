@@ -761,7 +761,7 @@ def preflight_eseguibile_run(
             raw_inputs=trusted_inputs,
             # «Utente che esegue» = chi e' autenticato in questa richiesta
             # (letto dal DB da get_current_user), mai un valore del client.
-            identity=RuntimeIdentity.authenticated(current_user),
+            identity=RuntimeIdentity.authenticated(current_user, owner_group_id=record.group_id),
             version_id=version.id,
         )
     except RuntimeIdentityError as exc:
@@ -784,7 +784,7 @@ def create_eseguibile_run(
     version, manifest = _run_version(record, eseguibile_id, payload.version_id)
 
     consumed_uploads: list[str] = []
-    identity = RuntimeIdentity.authenticated(current_user)
+    identity = RuntimeIdentity.authenticated(current_user, owner_group_id=record.group_id)
     try:
         trusted_inputs, consumed_uploads = _trusted_run_inputs(
             eseguibile_id, manifest, payload.inputs, current_user,
