@@ -87,3 +87,27 @@ L1–L7 sono chiuse. Restano questi residui, dichiarati e rimandati al prossimo 
   messaggi dei Carica non passano da `withStepTitles`.
 - **M6 (B)**: un esito riuscito senza `rows_count` dice solo «Operazione eseguita con successo».
 - **M7 (B)**: `withStepTitles` sostituisce anche gli id brevi in forma di parola.
+
+## Verifica dal vivo di 13017f16 (09/11/2026)
+
+- **L1**: ✅ `/projects` risponde in 59–109 ms (prima 320–380, in origine 126–161).
+- **L2**: ⚠️ la guida compare aprendo o ricaricando un progetto vuoto. **L2b**: non compare subito dopo
+  «Crea progetto», con la navigazione interna dalla dashboard all'editor.
+- **L3**: ✅ con un ramo scollegato e una sorgente non aggiornata l'esecuzione riesce (273.653 righe) e
+  il ramo non viene eseguito.
+- **L4**: ✅ «Dati intermedi»; «273.653 righe salvate in «output.csv»»; passi intermedi in italiano.
+  - **L4b (preesistente)**: un Filtra non configurato dà «Filter: colonna 'None' non trovata.
+    Colonne disponibili: []».
+  - **L4c**: compare ancora «Pipeline in coda...», un testo d'attesa fuori da `PROGRESS_MESSAGES`.
+- **L5**: ✅ la conferma elenca i passi che resterebbero senza ingresso; il canvas li segna «senza
+  ingresso»; il salvataggio non si blocca e Valida li riporta come errore.
+- **L6**: ✅ ricerca nel canvas con la riga di riassunto; titolo del gruppo non più in maiuscolo.
+- **L7**: ⚠️ uscendo dall'account si cancellano le copie nel formato nuovo
+  (`plenora:draft:<id utente>:…`).
+  - **L7b**: resta la copia nel formato vecchio `plenora:draft:admin:<progetto>` (chiave con lo
+    username), che la regola d'uscita non riconosce né migra.
+  - Si accumulano anche le chiavi `plenora:saved:*` e `plenora:tab:*`, comprese quelle di progetti
+    cancellati.
+
+Pulizia: il progetto temporaneo `TEST_collaudo_L` è stato cancellato (204).
+Residui per il prossimo giro: L2b, L4b, L4c, L7b, M2–M7.
