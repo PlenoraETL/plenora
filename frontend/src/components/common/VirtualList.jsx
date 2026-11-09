@@ -59,6 +59,7 @@ const OVERSCAN_PX = 600;
 export const LONG_LISTS = Object.freeze({
   'components/nodes/TableNode.jsx': 'colonne della tabella',
   'pages/ProjectList.jsx': 'progetti di ogni sezione',
+  'components/projects/ChainsView.jsx': 'righe della home dei progetti collegati',
   'pages/FileManager.jsx': 'file caricati',
   'pages/ScheduleList.jsx': 'schedulazioni',
 });

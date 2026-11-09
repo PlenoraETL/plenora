@@ -48,6 +48,11 @@ const EXCEPTIONS = {
   'pages/AdminObjectStoragePage.jsx': { preview: 'nome della cartella «preview» nell\'archivio S3' },
   'utils/navItems.js': { task: 'descrizione della pagina del superadmin «Code e worker»' },
   'pages/AdminBackupsPage.jsx': { login: 'comando da terminale «aws sso login»' },
+  // Home per catene (decisione dell'utente sul mockup, 09/11/2026): «catena» e'
+  // l'insieme dei progetti collegati tra loro (componente del grafo), MAI un
+  // sinonimo di progetto; fuori dalla home resta vietata.
+  'components/projects/ChainsView.jsx': { catena: 'la home per catene: l\'insieme dei progetti collegati', catene: 'la home per catene: righe della pagina' },
+  'pages/ProjectList.jsx': { catena: 'sottotitolo della home per catene', catene: 'vista «Catene» della home' },
 };
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

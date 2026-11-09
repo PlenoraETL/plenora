@@ -43,6 +43,8 @@ def test_projects_domain_db_owns_sql_and_exports_project_contract() -> None:
         # UI-1 (C24): sorgenti dei progetti Manipola calcolate nel DB.
         "ManipolaSourceRefs",
         "list_manipola_source_refs",
+        "ProjectGraphRefs",
+        "list_project_graph_refs",
         "update_project_output_contract_row",
         "update_project_canvas_key_atomic",
     }

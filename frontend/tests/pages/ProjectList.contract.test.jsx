@@ -104,6 +104,8 @@ function mockDashboardData({
 describe('ProjectList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Queste prove sono della vista «Elenco» (le schede): la home per catene ha le sue.
+    window.localStorage.setItem('plenora:home-view', JSON.stringify('list'));
   });
 
   it('creates an estrai project with the selected connection', async () => {

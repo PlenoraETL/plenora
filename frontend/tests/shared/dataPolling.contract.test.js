@@ -151,7 +151,7 @@ describe('UI-1 — scritture e invalidazione (tabella WRITE_INVALIDATIONS)', () 
   });
 
   it('casi tipici: canvas salvato, letture con POST, scrittura sconosciuta', () => {
-    expect(invalidationsForWrite('put', '/projects/p1/canvas')).toEqual(['projects', ['project', 'p1']]);
+    expect(invalidationsForWrite('put', '/projects/p1/canvas')).toEqual(['projects', ['project', 'p1'], 'dashboardGraph']);
     expect(invalidationsForWrite('post', '/projects/p1/schemas')).toEqual([]);
     expect(invalidationsForWrite('post', '/projects/p1/query-preview')).toEqual([]);
     expect(invalidationsForWrite('delete', '/connections/c9')).toEqual(['connections', ['connectionTables', 'c9']]);

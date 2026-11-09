@@ -32,7 +32,7 @@ import { getFiles, getFile } from '../api/files';
 import { listDataSources } from '../api/datasources';
 import { getTicketsCounts, getTicketsMeta } from '../api/tickets';
 import { getBackupStatus } from '../api/adminBackups';
-import { getDashboardCounts } from '../api/dashboard';
+import { getDashboardCounts, getDashboardGraph } from '../api/dashboard';
 import { getLatestRunByProject } from '../api/logRuns';
 import { defineSharedResources, readShared, peekShared, invalidateShared, invalidationCount } from './sharedCache';
 
@@ -52,6 +52,10 @@ export const SHARED_RESOURCES = Object.freeze({
   connectionSets: { load: () => listConnectionSets(), freshMs: 30 * SECOND },
   // Conteggi della dashboard (C4): al posto di tre liste intere.
   dashboardCounts: { load: () => getDashboardCounts(), freshMs: 30 * SECOND },
+  // Home per catene (09/11/2026): progetti, Eseguibili e collegamenti, senza
+  // canvas. La invalidano le scritture di progetti, Eseguibili e
+  // pianificazioni e la fine delle esecuzioni (sharedInvalidations).
+  dashboardGraph: { load: () => getDashboardGraph(), freshMs: 30 * SECOND },
   // Stato dell'ultima esecuzione di ogni progetto (dashboard, A-K3): nella
   // cache, cosi' l'arrivo delle altre liste non lo richiede di nuovo; la
   // fine di un task lo invalida (TASK_INVALIDATIONS).

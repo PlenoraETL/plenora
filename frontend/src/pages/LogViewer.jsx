@@ -8,7 +8,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useResource } from '../hooks/useResource';
 import { saveBlob } from '../utils/downloadBlob';
 import { ResourceError } from '../components/common/ListState';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getLogs, getLogsStats } from '../api/logs';
 import { useAuth } from '../context/AuthContext';
 import RunsTab from '../components/logviewer/RunsTab';
@@ -70,6 +70,10 @@ function LogViewer() {
   const [autoRefresh,  setAutoRefresh]  = useState(false);
   const [expandedRow,  setExpandedRow]  = useState(null);
   const [mainTab,      setMainTab]      = useState('runs');
+  // «Cronologia» della home per catene: /logs?project=<id> mostra le sue esecuzioni.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const projectFilter = searchParams.get('project') || '';
+  const clearProjectFilter = () => setSearchParams(p => { const n = new URLSearchParams(p); n.delete('project'); return n; }, { replace: true });
   // Un filtro nuovo riparte dalla prima pagina.
   const resetting = (setter) => (value) => { setOffset(0); setter(value); };
   const setFilterLevel = resetting(setFilterLevelRaw);
@@ -186,7 +190,7 @@ function LogViewer() {
           )}
 
           {/* Tab Esecuzioni — visibile a tutti gli utenti loggati */}
-          {mainTab === 'runs' && <RunsTab projectNames={projectNames} live={autoRefresh} />}
+          {mainTab === 'runs' && <RunsTab projectNames={projectNames} live={autoRefresh} projectId={projectFilter} onClearProject={clearProjectFilter} />}
 
           {/* Tab Log Tecnici — solo admin/superadmin */}
           {mainTab === 'logs' && canSeeTechnicalLog && <>

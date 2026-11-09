@@ -344,3 +344,6 @@
 .lv__th--w-100 { width: 100px; }
 .lv__th--w-130 { width: 130px; }
 
+
+/* Filtro per progetto («Cronologia» della home per catene, 09/11/2026). */
+.lv__project-filter { display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:var(--plen-text); background:var(--plen-surface-2); border:1px solid var(--plen-border); border-radius:999px; padding:2px 4px 2px 12px; }

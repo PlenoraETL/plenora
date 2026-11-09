@@ -80,6 +80,14 @@ export function formatDateTime(value, { seconds = false, zone = false } = {}) {
 }
 
 
+/** Giorno e mese nel fuso del browser: «07/11» (home per catene). */
+export function formatDayMonth(value) {
+  const d = parseServerDate(value);
+  if (!d) return unreadable(value);
+  return fmt('date', { day: '2-digit', month: '2-digit' }).format(d);
+}
+
+
 /** Solo l'ora: «14:03» (o «14:03:12»). */
 export function formatTime(value, { seconds = false } = {}) {
   const d = parseServerDate(value);

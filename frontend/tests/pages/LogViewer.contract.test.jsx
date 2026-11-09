@@ -28,7 +28,7 @@ vi.mock('../../src/context/AuthContext', () => ({
 }));
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
-  return { ...actual, useNavigate: () => navigateMock };
+  return { ...actual, useNavigate: () => navigateMock, useSearchParams: () => [new URLSearchParams(), vi.fn()] };
 });
 vi.mock('../../src/utils/hexCanvas', () => ({ useHexCanvas: () => {} }));
 vi.mock('../../src/components/AppSidebar', () => ({ default: () => null }));

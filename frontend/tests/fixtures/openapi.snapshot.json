@@ -2233,6 +2233,33 @@
         "title": "DashboardCounts",
         "type": "object"
       },
+      "DashboardGraph": {
+        "properties": {
+          "eseguibili": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEseguibile"
+            },
+            "title": "Eseguibili",
+            "type": "array"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/GraphProject"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "unavailable": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unavailable",
+            "type": "array"
+          }
+        },
+        "title": "DashboardGraph",
+        "type": "object"
+      },
       "DataSource": {
         "description": "Rappresentazione completa di un Data Source (risposta API).",
         "properties": {
@@ -5016,6 +5043,260 @@
           "operator"
         ],
         "title": "Filter",
+        "type": "object"
+      },
+      "GraphConnectionRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "db",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "GraphConnectionRef",
+        "type": "object"
+      },
+      "GraphDatasourceRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "GraphDatasourceRef",
+        "type": "object"
+      },
+      "GraphEseguibile": {
+        "properties": {
+          "active_version": {
+            "default": 1,
+            "title": "Active Version",
+            "type": "integer"
+          },
+          "has_manifest": {
+            "default": false,
+            "title": "Has Manifest",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs_count": {
+            "default": 0,
+            "title": "Inputs Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_type": {
+            "default": "arricchisci",
+            "title": "Project Type",
+            "type": "string"
+          },
+          "source_project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Project Id"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "GraphEseguibile",
+        "type": "object"
+      },
+      "GraphProject": {
+        "properties": {
+          "canvas_corrupted": {
+            "default": false,
+            "title": "Canvas Corrupted",
+            "type": "boolean"
+          },
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/GraphConnectionRef"
+            },
+            "title": "Connections",
+            "type": "array"
+          },
+          "datasources": {
+            "items": {
+              "$ref": "#/components/schemas/GraphDatasourceRef"
+            },
+            "title": "Datasources",
+            "type": "array"
+          },
+          "default_connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Connection Id"
+          },
+          "file_source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "File Source Ids",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GraphRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "loads": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Loads",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_type": {
+            "default": "estrai",
+            "title": "Project Type",
+            "type": "string"
+          },
+          "schedules": {
+            "default": 0,
+            "title": "Schedules",
+            "type": "integer"
+          },
+          "schedules_active": {
+            "default": 0,
+            "title": "Schedules Active",
+            "type": "integer"
+          },
+          "source_project_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Project Ids",
+            "type": "array"
+          },
+          "tables": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tables",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "GraphProject",
+        "type": "object"
+      },
+      "GraphRun": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "GraphRun",
         "type": "object"
       },
       "GroupCreate": {
@@ -13082,6 +13363,33 @@
           }
         ],
         "summary": "Get Dashboard Counts",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/dashboard/graph": {
+      "get": {
+        "description": "Progetti, Eseguibili e collegamenti per la home per catene (09/11/2026).\n\nNessun canvas nella risposta: regole in app/core/dashboard/graph.py.",
+        "operationId": "get_dashboard_graph_api_dashboard_graph_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardGraph"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Dashboard Graph",
         "tags": [
           "dashboard"
         ]

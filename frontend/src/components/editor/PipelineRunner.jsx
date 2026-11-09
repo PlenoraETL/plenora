@@ -60,6 +60,8 @@ import useCanvasStore from '../../store/useCanvasStore';
 import { requestErrorMessage, backendMessage } from '../../utils/errorMessages';
 import { restMigrationIssues } from '../../utils/restSecrets';
 import { useCanvasDerived } from '../../hooks/useCanvasDerived';
+import { takeRunOnOpen } from '../../utils/pendingRun';
+import { hasUnsavedChanges } from '../../store/saveState';
 
 const OUTPUT_TYPES = new Set(['result', 'resultNode']);
 const outputId = (nodes) => (nodes || []).find(n => OUTPUT_TYPES.has(n.type))?.id || null;
@@ -344,6 +346,17 @@ export default function PipelineRunner({ user = null }) {
       useCanvasStore.getState().setRunReady?.(false);
     };
   }, []);
+
+  // «Esegui» chiesto dalla home per catene (utils/pendingRun): parte una
+  // volta, quando il canvas di quel progetto e' caricato, con lo stesso
+  // percorso del pulsante. Con una copia locale ripristinata (modifiche non
+  // salvate) non parte da solo: Esegui salverebbe modifiche non viste.
+  const loadedProjectId = useCanvasStore(s => (s.graphLoaded ? s.projectId : null));
+  useEffect(() => {
+    if (!loadedProjectId || !takeRunOnOpen(loadedProjectId)) return;
+    if (hasUnsavedChanges(useCanvasStore.getState())) return;
+    ref.current.run();
+  }, [loadedProjectId]);
 
   // "Vai al nodo": chiude la finestra e porta al nodo NELLA VISTA APERTA
   // (canvas: centrato; Passi: scorre al passo), con lo stesso meccanismo di

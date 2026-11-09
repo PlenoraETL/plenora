@@ -37,6 +37,10 @@ import { formatDateTime } from '../utils/format';
 import SearchField, { SearchEmpty } from '../components/common/SearchField';
 import { useSearch } from '../hooks/useSearch';
 import VirtualList from '../components/common/VirtualList';
+import ChainsView from '../components/projects/ChainsView';
+import { STORAGE_KEYS, readJson, writeJson } from '../utils/browserStorage';
+import { requestRunOnOpen } from '../utils/pendingRun';
+import { invalidateShared } from '../utils/sharedResources';
 
 // Griglia delle card (stessa di .pl__cards-grid): oltre la soglia di
 // VirtualList si disegnano solo le righe visibili (UI-2, V9).
@@ -46,6 +50,20 @@ const DASHBOARD_SECTIONS = { estrai: 'Estrai', manipola: 'Manipola', arricchisci
 
 // Ricerca della dashboard: nome, descrizione e tag (hooks/useSearch).
 const searchValues = (p) => [p.name, p.description, p.tags];
+
+// Vista della home (09/11/2026): «Catene» (default) o «Elenco» (le schede di
+// prima), ricordata in questo browser (utils/browserStorage, riga homeView).
+const HOME_VIEWS = Object.freeze({ chains: 'Catene', list: 'Elenco' });
+const readHomeView = () => {
+  const v = readJson('homeView', STORAGE_KEYS.homeView.key, 'chains');
+  return HOME_VIEWS[v] ? v : 'chains';
+};
+// Pagine delle origini della prima colonna (pulsante «Apri» del pannello).
+const ORIGIN_PAGES = Object.freeze({
+  connection: { path: '/connections', label: 'Apri Connessioni' },
+  file: { path: '/files', label: 'Apri File' },
+  datasource: { path: '/datasources', label: 'Apri Data Source' },
+});
 
 function ProjectList() {
   const toast    = useToast();
@@ -88,6 +106,8 @@ function ProjectList() {
   const [tagFilter,         setTagFilter]         = useState('all');   // all|<tag>
   const [sortBy,            setSortBy]            = useState('recent'); // recent|oldest|name
   const { theme } = useTheme();
+  const [homeView, setHomeViewState] = useState(readHomeView);
+  const setHomeView = (v) => { setHomeViewState(v); writeJson('homeView', STORAGE_KEYS.homeView.key, v); };
 
 
   const canvasRef = useRef(null);
@@ -99,6 +119,8 @@ function ProjectList() {
   const sectionKey = location.hash?.replace('#', '') || '';
   const section = DASHBOARD_SECTIONS[sectionKey] ? sectionKey : null;
   const showSection = (key) => !section || section === key;
+  // Le voci della barra laterale (una sezione) sono dell'elenco.
+  const view = section ? 'list' : homeView;
 
   const handleDeleteProject = async (id, name) => {
     const ok = await confirmModal.confirm({
@@ -294,6 +316,42 @@ function ProjectList() {
   const searchShown = visibleSections.reduce((n, [, shown]) => n + shown.length, shownEseguibili.length);
   const searchTotal = visibleSections.reduce((n, [, , all]) => n + all.length, section ? 0 : eseguibili.length);
   const fileNameById = useMemo(() => new Map(files.map(f => [f.id, f.name])), [files]);
+  // Home per catene: nomi delle connessioni (database e ArcGIS) e azioni del
+  // pannello, le stesse delle schede dell'elenco.
+  const chainConnections = useMemo(() => new Map([
+    ...connections.map(c => [c.id, { name: c.name, kind: 'db' }]),
+    ...arcgisConnections.map(c => [c.id, { name: c.name, kind: 'arcgis' }]),
+  ]), [connections, arcgisConnections]);
+  const eseguibileById = useMemo(() => new Map(eseguibili.map(e => [e.id, e])), [eseguibili]);
+  const chainActions = (node) => {
+    if (node.kind === 'project') {
+      const p = projectById.get(node.id) || { id: node.id, name: node.name, project_type: node.type, tags: node.raw?.tags || [] };
+      const editMeta = can.editProjectMeta(user, p);
+      return {
+        open: () => handleOpenProject(p),
+        run: () => { requestRunOnOpen(p.id); handleOpenProject(p); },
+        history: () => navigate(`/logs?project=${encodeURIComponent(p.id)}`),
+        schedules: node.raw?.schedules > 0 ? () => navigate(`/schedules?project_id=${p.id}`) : null,
+        rename: editMeta ? (name) => handleRenameProject(p, name) : null,
+        clone: canCreateProj ? () => handleCloneProject(p) : null,
+        publish: can.createEseguibile(user) ? () => setPublishProject(p) : null,
+        remove: can.deleteProject(user, p) ? () => handleDeleteProject(p.id, p.name) : null,
+        tags: { value: p.tags, onSet: editMeta ? (tags) => handleSetTags(p, tags) : null },
+      };
+    }
+    if (node.kind === 'eseguibile') {
+      const item = eseguibileById.get(node.id) || { id: node.id, name: node.name };
+      const source = node.raw?.source_project_id ? projectById.get(node.raw.source_project_id) : null;
+      return {
+        open: source ? () => handleOpenProject(source) : null,
+        openLabel: 'Apri il progetto',
+        run: () => setExecuteEseguibileId(node.id),
+        remove: can.manageEseguibile(user, item) ? () => handleDeleteEseguibile(node.id, node.name) : null,
+      };
+    }
+    const page = ORIGIN_PAGES[node.type];
+    return page ? { open: () => navigate(page.path), openLabel: page.label } : {};
+  };
   const emptyFor = (what, firstText) => (narrowed
     ? { title: `Nessun progetto ${what} con questi filtri`, text: 'Cambia o azzera la ricerca e i filtri.' }
     : { title: `Nessun progetto ${what}`, text: firstText });
@@ -307,17 +365,34 @@ function ProjectList() {
       className="pl"
       data-theme-local={theme}
       bare
-      title={section ? DASHBOARD_SECTIONS[section] : 'Dashboard'}
-      subtitle={section ? 'Progetti di questa sezione — «Dashboard» nella barra laterale per vederli tutti' : null}
+      title={section ? DASHBOARD_SECTIONS[section] : (view === 'chains' ? 'Progetti' : 'Dashboard')}
+      subtitle={section ? 'Progetti di questa sezione — «Dashboard» nella barra laterale per vederli tutti'
+        : (view === 'chains' ? 'Ogni riga è una catena: da dove arrivano i dati, chi li trasforma, cosa è pubblicato. Clicca un progetto per vedere cosa usa e chi lo usa.' : null)}
       actions={(
         <>
-            <SearchField
-              search={search}
-              label="Cerca progetti"
-              className="pl__search"
-              shown={searchShown}
-              total={searchTotal}
-            />
+            {view === 'chains' ? (
+              <SearchField
+                search={search}
+                label="Cerca progetto, tabella, connessione"
+                className="pl__search"
+              />
+            ) : (
+              <SearchField
+                search={search}
+                label="Cerca progetti"
+                className="pl__search"
+                shown={searchShown}
+                total={searchTotal}
+              />
+            )}
+            {!section && (
+              <div className="pl__view-toggle" role="group" aria-label="Vista della pagina">
+                {Object.entries(HOME_VIEWS).map(([key, label]) => (
+                  <button key={key} type="button" aria-pressed={view === key} onClick={() => setHomeView(key)}>{label}</button>
+                ))}
+              </div>
+            )}
+            {view === 'list' && <>
             {/* #11 filtri smart: stato ultima run + ordinamento */}
             <select
               className={`pl__filter-select${statusFilter !== 'all' ? ' pl__filter-select--active' : ''}`}
@@ -362,7 +437,8 @@ function ProjectList() {
                 ✕ Filtri
               </button>
             )}
-            <button type="button" className="pl__btn pl__btn--ghost" onClick={() => loadData()} disabled={resource.refreshing}>{resource.refreshing ? '⟳ Aggiornamento…' : '⟳ Aggiorna'}</button>
+            </>}
+            <button type="button" className="pl__btn pl__btn--ghost" onClick={() => { loadData(); if (view === 'chains') invalidateShared('dashboardGraph'); }} disabled={resource.refreshing}>{resource.refreshing ? '⟳ Aggiornamento…' : '⟳ Aggiorna'}</button>
             {canCreateProj && (
               <button type="button" className="pl__btn pl__btn--primary" onClick={() => setShowModal(true)}>＋ Nuovo Progetto</button>
             )}
@@ -378,6 +454,21 @@ function ProjectList() {
           {failures.length > 0 && (
             <ResourceError compact title="Alcuni dati non caricati" message={failures.join(', ')} onRetry={resource.reload} />
           )}
+          {view === 'chains' ? (
+            <ChainsView
+              search={search}
+              connections={chainConnections}
+              fileNames={fileNameById}
+              actions={chainActions}
+              empty={projects.length === 0 && eseguibili.length === 0 ? (
+                <QuickStart
+                  hasDataSource={connections.length + arcgisConnections.length + (counts.api_connections ?? 0) + (counts.datasources ?? 0) > 0}
+                  canCreate={canCreateProj}
+                  onNewProject={openModalForType}
+                />
+              ) : null}
+            />
+          ) : (<>
           <SearchEmpty search={search} shown={searchShown} />
 
           {/* KPI (DB2, G2): solo per ciò che esiste; ognuno porta alla sua
@@ -542,6 +633,7 @@ function ProjectList() {
             onDelete={(item) => handleDeleteEseguibile(item.id, item.name)}
           />
           )}
+          </>)}
 
         </div>{/* /content */}
       <NewProjectModal

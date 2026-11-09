@@ -40,6 +40,10 @@ export const STORAGE_KEYS = Object.freeze({
     prefix: 'plenora:layout:', area: 'local', owner: 'browser', logout: 'keep', legacyPrefix: 'plenora-layout:',
     why: 'barre chiuse e larghezza del pannello: preferenza del dispositivo (hooks/useStoredState)',
   }),
+  homeView: Object.freeze({
+    key: 'plenora:home-view', area: 'local', owner: 'browser', logout: 'keep',
+    why: 'vista della home (progetti collegati o elenco): preferenza del dispositivo (pages/ProjectList)',
+  }),
   palette: Object.freeze({
     prefix: 'plenora:palette:', area: 'local', owner: 'user', logout: 'clear',
     legacyUserKey: (user, scope) => `plenora.palette.user:${user}.${scope}`,

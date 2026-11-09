@@ -100,7 +100,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # +1 (2026-11-05): connection_tests.results._after_effect. Registrazione e
 # azzeramento dell'esito del «Test connessione» seguono un effetto gia'
 # compiuto: qualunque errore si logga ERROR con lo stack e non arriva all'utente.
-_EXPECT_BROAD_BUDGET = 785
+# +1 (2026-11-09): dashboard.graph.build_dashboard_graph, una parte della home
+# per catene (collegamenti, esecuzioni, Eseguibili, pianificazioni) che fallisce
+# va in `unavailable` e le altre restano, come GET /dashboard/counts.
+_EXPECT_BROAD_BUDGET = 786
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from app.core.arricchisci import router as api_connections_routes
 from app.core.auth.dependencies import require_not_esecutore
+from app.core.dashboard.graph import DashboardGraph, build_dashboard_graph
 from app.core.datasources import router as datasources_routes
 from app.core.scheduler import router as schedules_routes
 from app.shared.contracts.auth import CurrentUser
@@ -138,3 +139,14 @@ def get_dashboard_counts(
     count("datasources", datasources)
     count("schedules", schedules)
     return counts
+
+
+@router.get("/graph", response_model=DashboardGraph)
+def get_dashboard_graph(
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> DashboardGraph:
+    """Progetti, Eseguibili e collegamenti per la home per catene (09/11/2026).
+
+    Nessun canvas nella risposta: regole in app/core/dashboard/graph.py.
+    """
+    return build_dashboard_graph(current_user, all_items=_all_items)

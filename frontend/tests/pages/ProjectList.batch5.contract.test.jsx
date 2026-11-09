@@ -88,6 +88,8 @@ const sampleProject = {
 describe('ProjectList contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Vista «Elenco» (le schede): la home per catene ha le sue prove.
+    window.localStorage.setItem('plenora:home-view', JSON.stringify('list'));
     authState.user = { role: 'admin', username: 'tester', group_id: 'grp-1' };
   });
   it('deletes a project after confirm with optimistic removal (no reload)', async () => {

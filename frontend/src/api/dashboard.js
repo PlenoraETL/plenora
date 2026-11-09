@@ -15,4 +15,15 @@ export const getDashboardCounts = async () => {
   return response.data;
 };
 
-export default { getDashboardCounts };
+/**
+ * Nodi e collegamenti della home per catene (09/11/2026): progetti (sorgenti,
+ * connessioni, Data Source, Carica, ultima esecuzione e ultima riuscita,
+ * pianificazioni) ed Eseguibili (progetto sorgente, input). Nessun canvas.
+ * Le parti non calcolate sono in `unavailable` (links, runs, eseguibili, schedules).
+ */
+export const getDashboardGraph = async () => {
+  const response = await http.get('/dashboard/graph');
+  return response.data;
+};
+
+export default { getDashboardCounts, getDashboardGraph };

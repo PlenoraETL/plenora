@@ -67,7 +67,7 @@ describe('A-K2 — la fine di un task invalida quello che ha cambiato', () => {
       for (const n of names) expect(Object.keys(SHARED_RESOURCES)).toContain(n);
     }
     // Avvii tipici e il caso sconosciuto (tutto).
-    expect(taskEffects('post', '/projects/p1/execute').invalidates).toEqual(['project', 'latestRunByProject']);
+    expect(taskEffects('post', '/projects/p1/execute').invalidates).toEqual(['project', 'latestRunByProject', 'dashboardGraph']);
     expect(taskEffects('post', '/api/projects/p1/enrich-async').profile).toBe('enrichTask');
     expect(taskEffects('get', '/projects/p1/preview').invalidates).toEqual([['project', 'p1']]);
     expect(taskEffects('post', '/qualcosa/di-nuovo').known).toBe(false);

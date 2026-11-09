@@ -31,7 +31,7 @@ const ANY = /^(post|put|patch|delete)$/;
 const ALL_LISTS = Object.freeze([
   'projects', 'project', 'connections', 'connectionTables', 'arcgisConnections', 'apiConnections',
   'files', 'file', 'datasources', 'eseguibili', 'connectionSets', 'dashboardCounts',
-  'ticketsCounts', 'backupStatus', 'latestRunByProject',
+  'ticketsCounts', 'backupStatus', 'latestRunByProject', 'dashboardGraph',
 ]);
 
 export const WRITE_INVALIDATIONS = Object.freeze([
@@ -54,19 +54,19 @@ export const WRITE_INVALIDATIONS = Object.freeze([
   { method: /^post$/, url: /^\/admin\/task-runtime\//, invalidates: [], why: 'risoluzione di un Carica dall\'esito incerto' },
 
   // ── Scritture delle liste condivise ──────────────────────────────────────
-  { method: /^delete$/, url: /^\/projects\/([^/]+)$/, invalidates: (m) => ['projects', ['project', m[1]], 'eseguibili', 'dashboardCounts'], why: 'eliminazione a cascata (eseguibili, pianificazioni)' },
-  { method: ANY, url: /^\/projects\/([^/]+)(\/|$)/, invalidates: (m) => ['projects', ['project', m[1]]], why: 'canvas, metadati, versioni, clone' },
-  { method: /^post$/, url: /^\/projects$/, invalidates: ['projects'], why: 'nuovo progetto' },
+  { method: /^delete$/, url: /^\/projects\/([^/]+)$/, invalidates: (m) => ['projects', ['project', m[1]], 'eseguibili', 'dashboardCounts', 'dashboardGraph'], why: 'eliminazione a cascata (eseguibili, pianificazioni)' },
+  { method: ANY, url: /^\/projects\/([^/]+)(\/|$)/, invalidates: (m) => ['projects', ['project', m[1]], 'dashboardGraph'], why: 'canvas, metadati, versioni, clone: anche i collegamenti della home' },
+  { method: /^post$/, url: /^\/projects$/, invalidates: ['projects', 'dashboardGraph'], why: 'nuovo progetto' },
   { method: /^(put|delete)$/, url: /^\/connections\/([^/]+)$/, invalidates: (m) => ['connections', ['connectionTables', m[1]]], why: 'connessione modificata o eliminata: anche le sue tabelle' },
   { method: ANY, url: /^\/connections(\/|$)/, invalidates: ['connections'], why: 'nuova connessione o esito del test' },
   { method: ANY, url: /^\/connection-sets(\/|$)/, invalidates: ['connectionSets'], why: 'set di connessioni' },
   { method: ANY, url: /^\/features\/connections(\/|$)/, invalidates: ['arcgisConnections'], why: 'connessioni ArcGIS ed esito del test' },
   { method: ANY, url: /^\/api-connections(\/|$)/, invalidates: ['apiConnections', 'dashboardCounts'], why: 'connessioni API ed esito del test' },
   { method: ANY, url: /^\/datasources(\/|$)/, invalidates: ['datasources', 'dashboardCounts'], why: 'data source ed esito del test' },
-  { method: ANY, url: /^\/eseguibili(\/|$)/, invalidates: ['eseguibili'], why: 'eseguibili e loro versioni' },
+  { method: ANY, url: /^\/eseguibili(\/|$)/, invalidates: ['eseguibili', 'dashboardGraph'], why: 'eseguibili e loro versioni (anche nella home)' },
   { method: /^post$/, url: /^\/files\/(upload|upload-multi-layer)$/, invalidates: ['files'], why: 'file caricati' },
   { method: /^(put|delete)$/, url: /^\/files\/([^/]+)$/, invalidates: (m) => ['files', ['file', m[1]]], why: 'file modificato o eliminato' },
-  { method: ANY, url: /^\/schedules(\/|$)/, invalidates: ['dashboardCounts'], why: 'conteggio delle pianificazioni nella dashboard' },
+  { method: ANY, url: /^\/schedules(\/|$)/, invalidates: ['dashboardCounts', 'dashboardGraph'], why: 'conteggio delle pianificazioni nella dashboard e nella home' },
   { method: ANY, url: /^\/shares\//, invalidates: ALL_LISTS, why: 'la condivisione cambia cosa vede ogni lista' },
   { method: ANY, url: /^\/tickets(\/|$)/, invalidates: ['ticketsCounts'], why: 'contatore dei ticket aperti' },
   { method: /^post$/, url: /^\/admin\/backups\/trigger$/, invalidates: ['backupStatus'], why: 'backup avviato' },
@@ -80,13 +80,13 @@ const ENRICH_TASK = 'enrichTask';
 // dei progetti a valle (annotata nei loro nodi da GET /projects/{id}) sono
 // cambiati: tutte le voci `project` (chi sta a valle non si sa qui), quindi
 // anche le mappe /schemas degli editor aperti; e lo stato delle esecuzioni.
-const EXECUTION_DONE = Object.freeze(['project', 'latestRunByProject']);
+const EXECUTION_DONE = Object.freeze(['project', 'latestRunByProject', 'dashboardGraph']);
 
 export const TASK_INVALIDATIONS = Object.freeze([
   { method: /^post$/, url: /^\/projects\/[^/]+\/(execute|test-run)$/, profile: TASK, invalidates: EXECUTION_DONE, why: 'esecuzione (anche di prova): contratto, freschezza a valle, ultima esecuzione' },
   { method: /^post$/, url: /^\/projects\/[^/]+\/(enrich-async|test-run\/enrich)$/, profile: ENRICH_TASK, invalidates: EXECUTION_DONE, why: 'Arricchisci: come un\'esecuzione; nessun tetto di durata lato server (chiamate API a ritmo limitato)' },
   { method: /^get$/, url: /^\/projects\/([^/]+)\/preview$/, profile: TASK, invalidates: (m) => [['project', m[1]]], why: 'anteprima: puo\' aggiornare le colonne note del progetto' },
-  { method: /^post$/, url: /^\/eseguibili\/[^/]+\/(execute|runs)$/, profile: TASK, invalidates: ['latestRunByProject'], why: 'eseguibile: istantanea congelata, scrive solo l\'esecuzione' },
+  { method: /^post$/, url: /^\/eseguibili\/[^/]+\/(execute|runs)$/, profile: TASK, invalidates: ['latestRunByProject', 'dashboardGraph'], why: 'eseguibile: istantanea congelata, scrive solo l\'esecuzione (ultima esecuzione anche nella home)' },
 ]);
 
 /**
@@ -96,7 +96,7 @@ export const TASK_INVALIDATIONS = Object.freeze([
  */
 export function caricaTaskInvalidations(task) {
   const connectionId = task?.connection_id;
-  return [connectionId ? ['connectionTables', connectionId] : 'connectionTables', 'latestRunByProject'];
+  return [connectionId ? ['connectionTables', connectionId] : 'connectionTables', 'latestRunByProject', 'dashboardGraph'];
 }
 
 /** Toglie origine, query e barra finale: `/projects/abc/canvas`. */

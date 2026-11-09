@@ -144,11 +144,27 @@ def get_latest_run_by_project(
     proprio gruppo). Risposta compatta `{project_id: {status, ts_start}}` —
     pensata per costruire una mappa client-side senza paginare le run.
     """
+    return {"statuses": latest_runs_by_project(current_user)}
+
+
+def latest_runs_by_project(
+    current_user: CurrentUser,
+    *,
+    status: Optional[str] = None,
+) -> RunPayload:
+    """Ultima esecuzione di ogni progetto visibile: `{project_id: {status,
+    ts_start}}`. Con `status` l'ultima con quell'esito (la home per catene
+    chiede l'ultima riuscita, 09/11/2026). Regola unica per
+    GET /pipeline-runs/latest-by-project e GET /dashboard/graph.
+    """
     # Un'esecuzione di prova (runtime_identity, regola H) non e' lo stato del
     # progetto: non conta come «ultima esecuzione».
     conditions = ["project_id IS NOT NULL", "project_id <> ''",
                   "COALESCE(triggered_by, '') NOT LIKE %s"]
     params: list[Any] = [TEST_RUN_TRIGGER_PREFIX.replace("_", "\\_") + "%"]
+    if status:
+        conditions.append("status = %s")
+        params.append(status)
     if current_user.role != "superadmin":
         conditions.append("group_id = %s")
         params.append(current_user.group_id)
@@ -160,11 +176,9 @@ def get_latest_run_by_project(
         tuple(params),
     )
     return {
-        "statuses": {
-            r["project_id"]: {"status": r.get("status"), "ts_start": r.get("ts_start")}
-            for r in rows
-            if r.get("project_id")
-        }
+        r["project_id"]: {"status": r.get("status"), "ts_start": r.get("ts_start")}
+        for r in rows
+        if r.get("project_id")
     }
 
 

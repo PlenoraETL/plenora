@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 
 __all__ = [
     "ManipolaSourceRefs",
+    "ProjectGraphRefs",
     "ProjectCanvasCheckRow",
     "ProjectDetailRow",
     "ProjectDependencyRow",
@@ -34,6 +35,7 @@ __all__ = [
     "get_project_row",
     "list_manipola_source_refs",
     "list_project_canvas_check_rows",
+    "list_project_graph_refs",
     "list_project_dependency_rows_using_connection",
     "list_owned_project_ids",
     "list_project_ids_for_group",
@@ -305,6 +307,25 @@ class ManipolaSourceRefs:
 
 
 @dataclass(frozen=True)
+class ProjectGraphRefs:
+    """Collegamenti di un progetto letti dal DB, senza canvas (home per
+    catene, 09/11/2026): da dove legge e dove scrive."""
+
+    project_id: str
+    source_project_ids: tuple[str, ...]
+    file_source_ids: tuple[str, ...]
+    # Connessioni lette dai nodi: (id, "db" | "arcgis").
+    connections: tuple[tuple[str, str], ...]
+    # Data Source letti: (id, nome salvato nel nodo).
+    datasources: tuple[tuple[str, str], ...]
+    # Destinazioni di Carica: "db", "rest", "arcgis", "datasource".
+    loads: tuple[str, ...]
+    # Tabelle lette o scritte (nodi tabella e Carica su database), per la ricerca.
+    tables: tuple[str, ...]
+    corrupted: bool
+
+
+@dataclass(frozen=True)
 class ProjectRawCanvasRow:
     """Typed raw canvas read used by recovery/debug service paths."""
 
@@ -396,6 +417,104 @@ MANIPOLA_SOURCE_REFS_SQL = """
              ) AS node
     ) AS refs ON true
 """
+
+
+# Collegamenti di OGNI progetto per la home per catene (09/11/2026): stesse
+# regole di MANIPOLA_SOURCE_REFS_SQL (colonna jsonb o TEXT scelta riga per
+# riga, canvas TEXT illeggibile -> `corrupted`, nodi scorsi una volta in un
+# LATERAL), per tutti i tipi di progetto. Il tipo del nodo e' normalizzato
+# (alias del registro dei nodi del client: tableNode, featureLayerNode, ...);
+# ogni campo si legge in `data` o in cima al nodo, come la query Manipola.
+# Il SELECT finale restituisce solo id e liste: nessun canvas verso Python.
+def _graph_node_field(name: str) -> str:
+    return f"COALESCE(node -> 'data' ->> '{name}', node ->> '{name}', '')"
+
+
+PROJECT_GRAPH_REFS_SQL = f"""
+    WITH p AS (
+        SELECT id,
+               CASE WHEN pg_typeof(canvas) = 'jsonb'::regtype THEN canvas::jsonb
+                    WHEN pg_input_is_valid(canvas::text, 'jsonb') THEN canvas::text::jsonb
+               END AS doc
+        FROM projects
+        WHERE id IN ({{placeholders}})
+    )
+    SELECT p.id,
+           p.doc IS NULL AS corrupted,
+           COALESCE(refs.source_project_ids, '[]'::jsonb) AS source_project_ids,
+           COALESCE(refs.file_source_ids, '[]'::jsonb) AS file_source_ids,
+           COALESCE(refs.connections, '[]'::jsonb) AS connections,
+           COALESCE(refs.datasources, '[]'::jsonb) AS datasources,
+           COALESCE(refs.loads, '[]'::jsonb) AS loads,
+           COALESCE(refs.tables, '[]'::jsonb) AS tables
+    FROM p
+    LEFT JOIN LATERAL (
+        SELECT jsonb_agg(DISTINCT to_jsonb(n.source_project_id))
+                   FILTER (WHERE n.kind = 'project_source' AND n.source_project_id <> '')
+                   AS source_project_ids,
+               jsonb_agg(DISTINCT to_jsonb(n.file_source_id))
+                   FILTER (WHERE n.kind = 'file_source' AND n.file_source_id <> '')
+                   AS file_source_ids,
+               jsonb_agg(DISTINCT jsonb_build_array(n.connection_id,
+                   CASE WHEN n.kind = 'feature_source' THEN 'arcgis' ELSE 'db' END))
+                   FILTER (WHERE n.kind IN ('source', 'feature_source') AND n.connection_id <> '')
+                   AS connections,
+               jsonb_agg(DISTINCT jsonb_build_array(n.datasource_id, n.datasource_name))
+                   FILTER (WHERE n.kind = 'datasource_node' AND n.ds_mode <> 'carica'
+                             AND n.datasource_id <> '')
+                   AS datasources,
+               jsonb_agg(DISTINCT to_jsonb(CASE
+                   WHEN n.kind = 'carica' THEN CASE WHEN n.dest_type = 'rest' THEN 'rest' ELSE 'db' END
+                   WHEN n.kind = 'carica_arcgis' THEN 'arcgis'
+                   ELSE 'datasource' END))
+                   FILTER (WHERE n.kind IN ('carica', 'carica_arcgis')
+                             OR (n.kind = 'datasource_node' AND n.ds_mode = 'carica'))
+                   AS loads,
+               jsonb_agg(DISTINCT to_jsonb(n.table_name))
+                   FILTER (WHERE n.kind IN ('source', 'carica') AND n.table_name <> '')
+                   AS tables
+        FROM (
+            SELECT CASE node ->> 'type'
+                       WHEN 'projectSource' THEN 'project_source'
+                       WHEN 'fileSource' THEN 'file_source'
+                       WHEN 'tableNode' THEN 'source'
+                       WHEN 'featureLayerNode' THEN 'feature_source'
+                       WHEN 'datasourceNode' THEN 'datasource_node'
+                       WHEN 'caricaArcgis' THEN 'carica_arcgis'
+                       ELSE node ->> 'type'
+                   END AS kind,
+                   {_graph_node_field('source_project_id')} AS source_project_id,
+                   {_graph_node_field('file_source_id')} AS file_source_id,
+                   {_graph_node_field('connection_id')} AS connection_id,
+                   {_graph_node_field('datasource_id')} AS datasource_id,
+                   {_graph_node_field('datasource_name')} AS datasource_name,
+                   COALESCE(NULLIF({_graph_node_field('mode')}, ''), 'source') AS ds_mode,
+                   {_graph_node_field('dest_type')} AS dest_type,
+                   {_graph_node_field('table_name')} AS table_name
+            FROM jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(p.doc -> 'nodes') = 'array'
+                          THEN p.doc -> 'nodes' ELSE '[]'::jsonb END
+                 ) AS node
+        ) AS n
+    ) AS refs ON true
+"""
+
+
+def _json_pairs(value: object) -> tuple[tuple[str, str], ...]:
+    """Una colonna jsonb di coppie [a, b] come tuple ordinate di stringhe."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return ()
+    if not isinstance(value, list):
+        return ()
+    out = []
+    for item in value:
+        if isinstance(item, list) and len(item) == 2 and item[0] not in (None, ""):
+            out.append((str(item[0]), "" if item[1] is None else str(item[1])))
+    return tuple(sorted(out))
+
 
 class ProjectRepository:
     """Repository boundary for project-owned SQL persistence."""
@@ -707,6 +826,34 @@ class ProjectRepository:
             for row in rows
         ]
 
+    def list_project_graph_refs(
+        self,
+        project_ids: set[str],
+    ) -> list[ProjectGraphRefs]:
+        """Collegamenti dei progetti calcolati nel DB (home per catene):
+        `PROJECT_GRAPH_REFS_SQL` (regole li'). Nessun canvas verso Python."""
+        if not project_ids:
+            return []
+        ordered_ids = sorted(project_ids)
+        placeholders = ", ".join(["%s"] * len(ordered_ids))
+        rows = _fetchall(
+            PROJECT_GRAPH_REFS_SQL.format(placeholders=placeholders),
+            tuple(ordered_ids),
+        )
+        return [
+            ProjectGraphRefs(
+                project_id=str(row["id"]),
+                source_project_ids=tuple(sorted(_json_str_list(row.get("source_project_ids")))),
+                file_source_ids=tuple(sorted(_json_str_list(row.get("file_source_ids")))),
+                connections=_json_pairs(row.get("connections")),
+                datasources=_json_pairs(row.get("datasources")),
+                loads=tuple(sorted(_json_str_list(row.get("loads")))),
+                tables=tuple(sorted(_json_str_list(row.get("tables")))),
+                corrupted=bool(row.get("corrupted")),
+            )
+            for row in rows
+        ]
+
     def update_project_canvas_key_atomic(
         self,
         project_id: str,
@@ -910,6 +1057,11 @@ def list_project_canvas_check_rows(
 def list_manipola_source_refs(project_ids: set[str]) -> list[ManipolaSourceRefs]:
     """Id delle sorgenti dei progetti Manipola, estratti dal DB (UI-1, C24)."""
     return project_repository.list_manipola_source_refs(project_ids)
+
+
+def list_project_graph_refs(project_ids: set[str]) -> list[ProjectGraphRefs]:
+    """Collegamenti di ogni progetto, estratti dal DB (home per catene)."""
+    return project_repository.list_project_graph_refs(project_ids)
 
 
 def update_project_canvas_key_atomic(project_id: str, key: str, value: object) -> bool:

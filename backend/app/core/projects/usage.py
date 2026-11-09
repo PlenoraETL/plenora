@@ -62,3 +62,10 @@ def list_manipola_source_refs(project_ids: set[str]) -> list[project_db.Manipola
     nell'applicazione (UI-1, C24): una riga tipizzata per progetto
     (ManipolaSourceRefs)."""
     return project_db.list_manipola_source_refs(project_ids)
+
+
+def list_project_graph_refs(project_ids: set[str]) -> list[project_db.ProjectGraphRefs]:
+    """Collegamenti di ogni progetto (sorgenti, connessioni, Data Source,
+    destinazioni di Carica) senza leggere i canvas nell'applicazione: la home
+    per catene (GET /dashboard/graph, 09/11/2026)."""
+    return project_db.list_project_graph_refs(project_ids)

@@ -35,7 +35,7 @@ const STATUS_CONFIG = {
 
 const PAGE = 30;
 
-export default function RunsTab({ live = false, projectNames = null }) {
+export default function RunsTab({ live = false, projectNames = null, projectId = '', onClearProject = null }) {
   const [offset,       setOffset]       = useState(0);
   const [expandedRun,  setExpandedRun]  = useState(null);
   const [filterStatus, setFilterStatusRaw] = useState('');
@@ -43,13 +43,17 @@ export default function RunsTab({ live = false, projectNames = null }) {
   // Un filtro nuovo riparte dalla prima pagina.
   const setFilterStatus = (v) => { setOffset(0); setFilterStatusRaw(v); };
   const setFilterModule = (v) => { setOffset(0); setFilterModuleRaw(v); };
+  // Un progetto solo («Cronologia» della home per catene): /logs?project=<id>.
+  const [projectOffsetKey, setProjectOffsetKey] = useState(projectId);
+  if (projectOffsetKey !== projectId) { setProjectOffsetKey(projectId); setOffset(0); }
   const resource = useResource(() => getLogRuns({
+    project_id: projectId || undefined,
     status: filterStatus || undefined,
     module: filterModule || undefined,
     limit:  PAGE,
     offset,
   }), {
-    key: { filterStatus, filterModule, offset },
+    key: { projectId, filterStatus, filterModule, offset },
     keepPreviousData: true,
     refreshInterval: live ? 'live' : 0,
   });
@@ -112,6 +116,15 @@ export default function RunsTab({ live = false, projectNames = null }) {
               <option key={m} value={m}>{m}</option>
             )}
           </select>
+          {projectId && (
+            <span className="lv__project-filter">
+              Solo {projectLabel(projectId, projectNames)}
+              {onClearProject && (
+                <button type="button" className="lv__btn lv__btn--ghost lv__btn--sm" onClick={onClearProject}
+                  aria-label="Mostra le esecuzioni di tutti i progetti">✕ Tutti i progetti</button>
+              )}
+            </span>
+          )}
           {(filterStatus || filterModule) && (
             <button className="lv__btn lv__btn--ghost lv__btn--sm"
               onClick={() => { setFilterStatus(''); setFilterModule(''); }}>
