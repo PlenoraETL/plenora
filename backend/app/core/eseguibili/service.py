@@ -334,17 +334,21 @@ def _without_ui(fields: Mapping[str, object]) -> JsonObject:
     }
 
 
-def execution_view(canvas: object) -> JsonObject | None:
-    """Il canvas come lo vede l'esecuzione (regola sopra); None se illeggibile."""
+def execution_view(canvas: object, *, normalize: bool = True) -> JsonObject | None:
+    """Il canvas come lo vede l'esecuzione (regola sopra); None se illeggibile
+    o, con ``normalize``, se il modello dell'esecuzione non lo accetta."""
     canvas = _parsed_canvas(canvas)
     if not isinstance(canvas, dict):
         return None
-    try:
-        canvas = CanvasState.model_validate(canvas).model_dump(mode="json")
-    except (TypeError, ValueError):
-        pass  # canvas fuori schema: stesso confronto sul JSON com'e'
+    if normalize:
+        try:
+            canvas = CanvasState.model_validate(canvas).model_dump(mode="json")
+        except (TypeError, ValueError):
+            return None
+    raw_nodes = canvas.get("nodes")
+    raw_edges = canvas.get("edges")
     nodes = []
-    for node in canvas.get("nodes") or []:
+    for node in raw_nodes if isinstance(raw_nodes, list) else []:
         if not isinstance(node, dict) or node.get("type") == "comment":
             continue
         view = _without_ui(node)
@@ -352,19 +356,37 @@ def execution_view(canvas: object) -> JsonObject | None:
             view["data"] = _without_ui(view["data"])
         nodes.append(_plain(view))
     edges = {
-        json.dumps(_plain({k: v for k, v in edge.items() if k != "id"}), sort_keys=True, ensure_ascii=False)
-        for edge in canvas.get("edges") or [] if isinstance(edge, dict)
+        json.dumps(_plain({k: v for k, v in edge.items() if k != "id"}), sort_keys=True, ensure_ascii=False, default=str)
+        for edge in (raw_edges if isinstance(raw_edges, list) else []) if isinstance(edge, dict)
     }
     return {"nodes": sorted(nodes, key=lambda n: str(n.get("id"))), "edges": sorted(edges)}
 
 
 def source_changed(version_canvas: object, project_canvas: object) -> bool | None:
     """La versione e il progetto differiscono per l'esecuzione? None se uno
-    dei due canvas manca o non si legge (non si sa: nessun avviso)."""
-    published, current = execution_view(version_canvas), execution_view(project_canvas)
+    dei due canvas manca o non si legge (non si sa: nessun avviso).
+
+    Simmetrico (conferma D1): se il modello dell'esecuzione accetta entrambi
+    si confrontano normalizzati; se ne rifiuta anche uno solo, si confrontano
+    ENTRAMBI sul JSON com'e' (mai uno normalizzato contro uno grezzo, che
+    darebbe un «cambiato» falso e permanente)."""
+    published = execution_view(version_canvas)
+    current = execution_view(project_canvas)
+    if published is None or current is None:
+        published = execution_view(version_canvas, normalize=False)
+        current = execution_view(project_canvas, normalize=False)
     if published is None or current is None:
         return None
     return published != current
+
+
+def _source_changed_or_unknown(version_canvas: object, project_canvas: object) -> bool | None:
+    """Una riga che non si confronta non rompe la lista (conferma D2): None."""
+    try:
+        return source_changed(version_canvas, project_canvas)
+    except (TypeError, ValueError, AttributeError, KeyError, RecursionError):
+        logger.warning("Confronto progetto/versione non riuscito: nessun avviso per questa riga")
+        return None
 
 
 def source_changed_by_id(eseguibile_ids: Sequence[str]) -> Mapping[str, Optional[bool]]:
@@ -373,7 +395,7 @@ def source_changed_by_id(eseguibile_ids: Sequence[str]) -> Mapping[str, Optional
     if not eseguibile_ids:
         return {}
     return {
-        row.id: source_changed(row.version_canvas, row.project_canvas)
+        row.id: _source_changed_or_unknown(row.version_canvas, row.project_canvas)
         for row in eseguibili_db.list_source_canvases(list(eseguibile_ids))
     }
 

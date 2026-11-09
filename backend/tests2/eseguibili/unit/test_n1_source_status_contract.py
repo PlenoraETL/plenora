@@ -186,7 +186,12 @@ def test_p2_one_rule_for_list_detail_editor_and_home():
     status_src = inspect.getsource(eseguibili_service.source_status)
     by_id_src = inspect.getsource(eseguibili_service.source_changed_by_id)
     assert "source_changed(version.canvas, canvas)" in status_src
-    assert "source_changed(row.version_canvas, row.project_canvas)" in by_id_src
+    # La lista passa dall'involucro che isola una riga non confrontabile (D2),
+    # che a sua volta usa la stessa funzione.
+    assert "_source_changed_or_unknown(row.version_canvas, row.project_canvas)" in by_id_src
+    assert "source_changed(version_canvas, project_canvas)" in inspect.getsource(
+        eseguibili_service._source_changed_or_unknown
+    )
     assert "canvas_fingerprint" not in inspect.getsource(eseguibili_service)
     assert not hasattr(eseguibili_db, "SOURCE_CHANGED_SQL")
 
@@ -274,3 +279,46 @@ def test_p7_editor_notice_lists_only_what_the_user_can_republish():
                       return_value=_project(current)), \
          patch("app.core.eseguibili.router.compute_can_edit", lambda *a: False):
         assert _client().get("/eseguibili/by-source/p1").json() == []
+
+
+# ── Controllo veloce dopo P1–P7 (09/11/2026): D1 confronto simmetrico, D2
+# una riga che non si confronta non rompe la lista ─────────────────────────
+
+def test_d1_one_canvas_refused_by_the_model_compares_both_raw(monkeypatch):
+    """Se il modello rifiuta anche uno solo dei due canvas, si confrontano
+    entrambi grezzi: mai uno normalizzato contro uno grezzo (falso «cambiato»)."""
+    from app.core.eseguibili import service
+
+    canvas = {"nodes": [{"id": "n1", "type": "result", "data": {}}], "edges": []}
+    real = service.CanvasState.model_validate
+    calls = {"n": 0}
+
+    def refuse_first(value, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError("canvas vecchio fuori schema")
+        return real(value, *args, **kwargs)
+
+    monkeypatch.setattr(service.CanvasState, "model_validate", refuse_first)
+    assert service.source_changed(canvas, dict(canvas)) is False
+
+
+def test_d2_a_row_that_cannot_be_compared_does_not_break_the_list(monkeypatch):
+    from app.core.eseguibili import service
+
+    # Archi non iterabili: nessuna eccezione, nessun falso avviso.
+    weird = {"nodes": [], "edges": 5}
+    assert service.source_changed(weird, weird) is False
+
+    class _Row:
+        id = "exec_x"
+        version_canvas = {"nodes": []}
+        project_canvas = {"nodes": []}
+
+    monkeypatch.setattr(service.eseguibili_db, "list_source_canvases", lambda ids: [_Row()])
+
+    def boom(*_args, **_kwargs):
+        raise TypeError("canvas corrotto")
+
+    monkeypatch.setattr(service, "source_changed", boom)
+    assert service.source_changed_by_id(["exec_x"]) == {"exec_x": None}

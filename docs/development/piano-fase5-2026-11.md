@@ -567,3 +567,20 @@ Correzione unica dell'elenco P1–P7 del giro di conferma su `a26d1e4c` (home pe
 Test adeguati: `test_binding_warnings` (la lista legge i canvas: `list_source_canvases` simulata), `test_n1_source_status_contract` (tolti i test della SQL e quello che dava il campo all'admin anche senza `can_edit`), commento del grafo della home. Nessuna API cambiata (stessi modelli; snapshot OpenAPI rigenerato: cambia solo la descrizione di `GET /eseguibili/by-source/{project_id}`), nessuna migrazione, CSP e installer invariati.
 
 Verifiche: frontend eslint pulito, vitest 212 file / 6.067 test passati, build; backend (comando completo delle cartelle tests2) 30.030 passati, 0 falliti, 61 saltati (il primo giro aveva trovato 6 fallimenti, corretti: annotazione di ritorno di `source_changed_by_id` per i guardiani dei tipi, `test_binding_warnings` senza la nuova lettura simulata). Niente deploy, niente push.
+
+### Controllo veloce dopo P1–P7 (09/11/2026)
+
+P1–P7 risultano chiuse o dichiarate. Lo stesso controllo ha trovato due punti in
+`eseguibili/service.source_changed`, corretti nello stesso commit:
+
+- **D1**: il confronto è simmetrico. Se il modello dell'esecuzione rifiuta anche uno solo dei due canvas,
+  si confrontano entrambi sul JSON com'è, mai uno normalizzato contro uno grezzo.
+- **D2**: nodi o archi non in forma di lista non sollevano eccezioni, e una riga che non si confronta
+  (`_source_changed_or_unknown`) restituisce `None` senza rompere la lista.
+
+Test: `test_d1_*`, `test_d2_*` in `test_n1_source_status_contract.py`.
+
+Dichiarati:
+- **D3**: ogni GET della lista e della home scrive nel log un warning `[canvas-contract]`.
+- **D4**: per il superadmin il costo cresce in modo lineare con il numero degli Eseguibili.
+- **D5**: «Esegui» su un progetto senza `nodes` scade dopo 60 s.
