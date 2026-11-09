@@ -359,10 +359,10 @@ export const WATCH_RULES = Object.freeze([
     title: 'Progetto cambiato dopo la pubblicazione',
     kinds: ['eseguibile'],
     needs: ['eseguibili'],
-    // N1 (Eseguibile pubblicato che non corrisponde piu' al suo progetto): il
-    // campo lo aggiunge il lavoro su N1 alla lista degli Eseguibili; si
-    // accende al ribasamento, quando GET /dashboard/graph lo porta.
-    enabled: false,
+    // N1 (Eseguibile pubblicato che non corrisponde piu' al suo progetto):
+    // GET /dashboard/graph porta il campo della lista degli Eseguibili
+    // (eseguibili.db.SOURCE_CHANGED_SQL); null (non admin) = la regola tace.
+    enabled: true,
     field: 'source_changed_since_publish',
     check(node) {
       return node.raw?.source_changed_since_publish

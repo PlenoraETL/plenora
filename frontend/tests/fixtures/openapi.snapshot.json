@@ -5203,6 +5203,17 @@
             "title": "Project Type",
             "type": "string"
           },
+          "source_changed_since_publish": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Changed Since Publish"
+          },
           "source_project_id": {
             "anyOf": [
               {

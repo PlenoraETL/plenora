@@ -159,11 +159,15 @@ describe('«Da guardare»: tabella WATCH_RULES', () => {
     expect(watchFindings(c.silent, { rules: enabled(rule) }).list).toEqual([]);
   });
 
-  it('N1 «progetto cambiato dopo la pubblicazione» e\' dichiarata e spenta fino al ribasamento', () => {
+  it('N1 «progetto cambiato dopo la pubblicazione» e\' accesa: scatta col campo del server, tace senza', () => {
     const rule = WATCH_RULES.find((r) => r.id === 'changed_after_publish');
-    expect(rule.enabled).toBe(false);
+    expect(rule.enabled).toBe(true);
     expect(rule.field).toBe('source_changed_since_publish');
-    expect(watchFindings(CASES.changed_after_publish.fires).list).toEqual([]);
+    expect(watchFindings(CASES.changed_after_publish.fires).list.map(f => f.rule.id)).toContain('changed_after_publish');
+    expect(watchFindings(CASES.changed_after_publish.silent).list.filter(f => f.rule.id === 'changed_after_publish')).toEqual([]);
+    // Non admin: il server manda null, la regola tace.
+    expect(watchFindings(mini([P('p')], [X('x', 'p', { source_changed_since_publish: null })])).list
+      .filter(f => f.rule.id === 'changed_after_publish')).toEqual([]);
   });
 
   it.each(WATCH_RULES.filter((r) => r.needs.length).map((r) => [r.id, r]))('%s: tace se manca una parte che le serve', (id, rule) => {

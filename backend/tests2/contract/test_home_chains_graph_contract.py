@@ -101,7 +101,8 @@ def _client(monkeypatch, user, *, fail=()):
             raise RuntimeError("giu'")
         return [{"id": "x-1", "name": "immobili attivi per istituto", "project_type": "manipola",
                  "source_canvas_id": "m1", "inputs_count": 0, "has_manifest": True,
-                 "active_version": 2, "updated_at": "2026-11-08", "canvas": {"nodes": []}}] if offset == 0 else []
+                 "active_version": 2, "updated_at": "2026-11-08", "source_changed": True,
+                 "canvas": {"nodes": []}}] if offset == 0 else []
 
     monkeypatch.setattr(eseguibili_routes, "list_eseguibili", fake_eseguibili)
 
@@ -153,6 +154,8 @@ def test_graph_returns_nodes_and_links_without_canvas(monkeypatch):
         "id": "x-1", "name": "immobili attivi per istituto", "project_type": "manipola",
         "source_project_id": "m1", "inputs_count": 0, "has_manifest": True,
         "active_version": 2, "updated_at": "2026-11-08",
+        # N1: lo stesso campo della lista degli Eseguibili (SOURCE_CHANGED_SQL).
+        "source_changed_since_publish": True,
     }]
     assert body["unavailable"] == []
 

@@ -87,6 +87,10 @@ class GraphEseguibile(BaseModel):
     has_manifest: bool = False
     active_version: int = 1
     updated_at: Optional[str] = None
+    # N1: la versione attiva non corrisponde piu' al canvas del progetto
+    # sorgente; lo stesso campo della lista (eseguibili.db.SOURCE_CHANGED_SQL,
+    # calcolato in SQL, nessun canvas); None se la route non lo dice (non admin).
+    source_changed_since_publish: Optional[bool] = None
 
 
 class DashboardGraph(BaseModel):
@@ -192,6 +196,7 @@ def build_dashboard_graph(
                 has_manifest=bool(_field(item, "has_manifest")),
                 active_version=int(_field(item, "active_version") or 1),
                 updated_at=_iso(_field(item, "updated_at")),
+                source_changed_since_publish=_field(item, "source_changed"),
             )
             for item in items
         ]
