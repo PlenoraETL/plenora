@@ -1288,7 +1288,7 @@ def execute_enrichment_task(
             update_task_progress(
                 self,
                 0,
-                progress_text("failed", detail=error_message),
+                progress_text("failed"),
                 is_error=True,
                 task_id=task_id,
                 check_revocation=False,
@@ -1305,6 +1305,9 @@ def execute_enrichment_task(
             "task_id": task_id,
             "project_id": project_id,
             "error": error_message,
+            # Il motivo sta nell'esito, non nel testo di avanzamento
+            # (progress_messages: niente dettaglio grezzo in «failed»).
+            "message": error_message,
             "failed_at": datetime.now(timezone.utc).isoformat(),
             # Statistiche parziali se disponibili
             "enrichment_stats": enrichment_stats,

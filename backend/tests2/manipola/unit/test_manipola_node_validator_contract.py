@@ -147,13 +147,12 @@ def test_known_op_not_flagged_unknown():
 
 
 def test_required_param_missing_is_error():
-    # La preparazione dell'esecutore produce lo stesso errore di Filter.
+    # Residui collaudo live L4b: il campo obbligatorio vuoto si dice col suo
+    # nome, non con il rifiuto tecnico che ne consegue («colonna 'None'»).
     node = _node(config={}, transform_op="filter")
     issues = _v().validate_node(node, upstream=_upstream(["a"]))
-    assert "preparation.invalid" in _codes(issues)
-    req = [i for i in issues if i.code == "preparation.invalid"][0]
-    assert req.severity == "error"
-    assert req.message == "Filter: colonna 'None' non trovata. Colonne disponibili: ['a']"
+    assert [(i.code, i.severity, i.message) for i in issues] == [
+        ("TRANSFORM_PARAM_REQUIRED", "error", "Compila «Colonna»: il campo è obbligatorio.")]
 
 
 def test_required_param_present_not_flagged():

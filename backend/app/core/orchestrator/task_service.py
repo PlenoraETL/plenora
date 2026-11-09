@@ -30,6 +30,7 @@ from app.core.orchestrator.preview_payload_store import (
 )
 from app.core.orchestrator.execution_contract import CaricaExecutionContract
 from app.shared.execution import carica_dispatcher
+from app.shared.execution.progress_messages import progress_text
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -141,7 +142,6 @@ class TaskSubmitRequest:
     task_type: TaskType
     project_id: str
     payload: TaskLaunchPayload
-    queued_message: str
     log_label: str
     task_id: Optional[str] = None
 
@@ -481,7 +481,7 @@ class TaskService:
             project_id=request.project_id,
             status=TaskStatus.PENDING,
             progress=0,
-            message=request.queued_message,
+            message=progress_text("queued"),
             created_at=datetime.now(timezone.utc).isoformat(),
         )
 
@@ -525,7 +525,6 @@ class TaskService:
                     execution_context=execution_context,
                     execution_contract=execution_contract,
                 ),
-                queued_message="Task in coda...",
                 log_label="enrichment",
                 task_id=task_id,
             )
@@ -558,7 +557,6 @@ class TaskService:
                     user_id=user_id,
                     execution_contract=execution_contract,
                 ),
-                queued_message="Task CARICA in coda...",
                 log_label="carica",
             )
         )
@@ -704,7 +702,6 @@ class TaskService:
                     intermediate_mode_override=intermediate_mode_override,
                     execution_contract=execution_contract,
                 ),
-                queued_message="Pipeline in coda...",
                 log_label="execute",
                 task_id=task_id,
             )
@@ -729,7 +726,6 @@ class TaskService:
                     user_id=user_id,
                     execution_contract=execution_contract,
                 ),
-                queued_message="Preview in coda...",
                 log_label="preview",
             )
         )

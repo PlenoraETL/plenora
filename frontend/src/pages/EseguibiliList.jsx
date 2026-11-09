@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
 import EseguibileVersionsModal from '../components/eseguibili/EseguibileVersionsModal';
+import { SourceChangedBadge } from '../components/eseguibili/SourceStatus';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import PageLayout from '../components/common/PageLayout';
 import EmptyState from '../components/common/EmptyState';
@@ -211,6 +212,7 @@ function EseguibiliList() {
                   <p className="esl__card-desc">{item.description}</p>
                 )}
                 {canEdit && <BindingWarnings warnings={item.binding_warnings} />}
+                {canEdit && item.source_changed && <SourceChangedBadge onPublish={() => setVersioningEseguibile(item)} />}
                 <div className="esl__card-meta">
                   <span>{projectTypeChip(item.project_type)} · v{item.active_version} · {item.inputs_count} input</span>
                 </div>

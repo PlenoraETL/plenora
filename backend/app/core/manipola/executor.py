@@ -67,6 +67,7 @@ from .project_source_runtime import (
 from .transform_ordering import sorted_incoming_edges
 from .types import ColumnMetadataRows, FrameMap, JsonObject, JsonRows, StringMap
 from app.core.projects.canvas_preview_scope import scoped_canvas
+from app.core.projects.canvas_access import ORPHAN_STEP_MESSAGE
 
 
 logger = get_logger(__name__)
@@ -839,26 +840,25 @@ class ManipolaExecutor:
             inputs = [dataframes[e.source] for e in incoming if e.source in dataframes]
 
             if not inputs:
-                # Se il nodo ha incoming edges ma nessuna source e' presente
-                # in `dataframes`, e' un
-                # mismatch di stato (upstream fallito, edge orfano,
-                # ordering bug) — fail-loud invece di continuare e
-                # rischiare che i downstream leggano stale dal grafo
-                # parziale. Se invece il nodo e' completamente
-                # orfano (no incoming edges) accettiamo lo skip:
-                # canvas in fase di draft puo' avere nodi disconnessi.
-                if incoming:
-                    msg = (
-                        f"Nodo {node.id} ({node.type}) ha "
-                        f"{len(incoming)} incoming edges ma nessuna "
-                        f"source disponibile in dataframes "
-                        f"({[e.source for e in incoming]}). Upstream "
-                        "fallito o edge mismatch?"
-                    )
-                    logger.error(f"[CRASH] {msg}", op="execute", project_id=project_id)
-                    raise mark_failed_node(ValueError(msg), node.id, node.type)
-                logger.warning(f"Nodo {node.id} senza input, skip")
-                continue
+                # Residui collaudo live M2: un passo senza ingressi ferma
+                # l'esecuzione e l'anteprima con lo stesso messaggio di
+                # Valida e col passo nell'esito (titolo, «Vai al passo»).
+                # Prima si saltava e il passo dopo falliva col messaggio
+                # tecnico qui sotto. I rami scollegati non arrivano fin qui
+                # (run_canvas li toglie, L3).
+                if not incoming:
+                    raise mark_failed_node(ValueError(ORPHAN_STEP_MESSAGE), node.id, node.type)
+                # Ingressi presenti ma nessun dato: mismatch di stato
+                # (upstream fallito, ordering bug), fail-loud.
+                msg = (
+                    f"Nodo {node.id} ({node.type}) ha "
+                    f"{len(incoming)} incoming edges ma nessuna "
+                    f"source disponibile in dataframes "
+                    f"({[e.source for e in incoming]}). Upstream "
+                    "fallito o edge mismatch?"
+                )
+                logger.error(f"[CRASH] {msg}", op="execute", project_id=project_id)
+                raise mark_failed_node(ValueError(msg), node.id, node.type)
 
             owns_inputs = _take_last_consumer_inputs(incoming)
             # Non mantenere vivo un risultato di un ramo precedente durante

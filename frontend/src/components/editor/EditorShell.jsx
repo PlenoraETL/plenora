@@ -88,6 +88,7 @@ import EditorToolbar from './EditorToolbar';
 import PipelineRunner from './PipelineRunner';
 import CanvasOverlays from './CanvasOverlays';
 import SaveConflictNotice from './SaveConflictNotice';
+import PublishedExecutablesNotice from '../eseguibili/PublishedExecutablesNotice';
 import useLocalDraft, { DRAFT_ORIGIN_LABEL } from '../../hooks/useLocalDraft';
 import { useColumnSync } from '../../hooks/useColumns';
 import { useCanvasDerived } from '../../hooks/useCanvasDerived';
@@ -475,6 +476,8 @@ canvasConfig = EMPTY_OBJ,
       )}
       {/* Salvataggio superato da un'altra scheda (Blocco A, regola 8). */}
       {toolbar && <SaveConflictNotice />}
+      {/* N1: Eseguibili pubblicati da qui con una copia superata. */}
+      {toolbar && <PublishedExecutablesNotice projectId={projectId} user={user} />}
       {draft.notices.map(notice => (
         <div key={notice.id} className="draft-offer draft-offer--notice" role="status">
           <span>{notice.text}</span>

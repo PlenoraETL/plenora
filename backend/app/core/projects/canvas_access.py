@@ -257,6 +257,12 @@ def lookup_api_type(api_id: Optional[str]) -> Optional[str]:
         return None
 
 
+#: Un passo senza ingressi: lo stesso testo in Valida (``structure.orphan``)
+#: e nell'anteprima/esecuzione di Manipola (residui collaudo live M2), col
+#: passo nell'esito (``error_node_id``: titolo e «Vai al passo»).
+ORPHAN_STEP_MESSAGE = "Questo passo non ha ingressi: collegalo a un passo precedente o eliminalo."
+
+
 def find_orphan_processing_nodes(
     canvas: CanvasState,
     *,

@@ -47,6 +47,7 @@ from .models import (
     ExecutableRunRequest,
     ExecutablePreflightRequest,
     EseguibileVersionSummary,
+    EseguibileSourceStatus,
 )
 
 logger = get_logger(__name__)
@@ -88,6 +89,8 @@ def _summary_response(
         "active_version": record.active_version,
         "inputs_count": record.inputs_count,
         "has_manifest": record.has_manifest,
+        # N1: solo per chi puo' ripubblicare (l'esecutore non vede nulla in piu').
+        "source_changed": record.source_changed if user.role in ("admin", "superadmin") else None,
         "binding_warnings": eseguibili_service.binding_warnings(
             list(record.bindings), {"nodes": list(record.binding_target_nodes)},
         ),
@@ -169,6 +172,32 @@ def create_eseguibile(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
     return _details_response(record, current_user)
+
+
+# N1 — l'Eseguibile corrisponde ancora al suo progetto? (solo admin: chi puo'
+# ripubblicare; il dettaglio letto dall'esecutore resta com'e')
+
+@router.get("/by-source/{project_id}", response_model=List[EseguibileSourceStatus])
+def list_source_status(
+    project_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+) -> list[JsonObject]:
+    """Gli Eseguibili pubblicati dal progetto, con lo stato rispetto al canvas
+    attuale (avviso nell'editor del progetto sorgente). Solo quelli del gruppo
+    dell'admin (tutti per il superadmin)."""
+    group_id = None if current_user.role == "superadmin" else current_user.group_id
+    return eseguibili_service.source_status_for_project(project_id, group_id=group_id)
+
+
+@router.get("/{eseguibile_id}/source-status", response_model=EseguibileSourceStatus)
+def get_source_status(
+    eseguibile_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+) -> JsonObject:
+    """Stato rispetto al progetto sorgente e anteprima della ripubblicazione."""
+    record = eseguibili_db.get_eseguibile(eseguibile_id)
+    _check_group_access(record, current_user)
+    return eseguibili_service.source_status(record)
 
 
 # GET ONE

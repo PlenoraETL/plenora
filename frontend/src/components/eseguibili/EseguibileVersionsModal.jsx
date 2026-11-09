@@ -9,6 +9,7 @@
 import React from 'react';
 import {
   activateEseguibileVersion,
+  getEseguibileSourceStatus,
   listEseguibileVersions,
   republishEseguibile,
 } from '../../api';
@@ -19,9 +20,10 @@ import { useBusy } from '../../hooks/useBusy';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import ConfirmDialog from '../common/ConfirmDialog';
-import ListState from '../common/ListState';
+import ListState, { ResourceError } from '../common/ListState';
 import { formatDateTime } from '../../utils/format';
 import { projectTypeChip } from '../../utils/projectTypes';
+import { RepublishPreview, republishBlocked } from './SourceStatus';
 
 function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
   const toast = useToast();
@@ -31,6 +33,13 @@ function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
     errorMessage: (exc) => humanizeError(exc).message,
   });
   const versions = resource.data || [];
+  // N1: il progetto e' cambiato dopo la pubblicazione? Anteprima della
+  // ripubblicazione (collegamenti degli input che non troverebbero il campo).
+  const statusResource = useResource(() => getEseguibileSourceStatus(eseguibile.id), {
+    key: ['eseguibile-source-status', eseguibile.id],
+    errorMessage: (exc) => humanizeError(exc).message,
+  });
+  const blocked = republishBlocked(statusResource.data);
   const actions = useBusy();
   const busy = actions.any;
   const [error, setError] = React.useState(null);
@@ -41,7 +50,7 @@ function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
       const r = await actions.run('version', perform);
       if (r.skipped) return;
       toast.success(success(r.value));
-      await resource.reload();
+      await Promise.all([resource.reload(), statusResource.reload()]);
       onUpdated?.(r.value);
     } catch (exc) {
       setError(humanizeError(exc).message);
@@ -85,7 +94,7 @@ function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
       footer={(
         <>
           <ModalButton variant="secondary" onClick={onClose} disabled={busy}>Chiudi</ModalButton>
-          <ModalButton variant="primary" onClick={republish} loading={busy} disabled={busy}>
+          <ModalButton variant="primary" onClick={republish} loading={busy} disabled={busy || blocked}>
             Ripubblica dal progetto
           </ModalButton>
         </>
@@ -98,6 +107,8 @@ function EseguibileVersionsModal({ eseguibile, onClose, onUpdated }) {
           avviate continuano a usare la versione selezionata al loro avvio.
         </p>
         {error && <div className="esv__error" role="alert">{error}</div>}
+        <ResourceError resource={statusResource} title="Confronto con il progetto non riuscito" compact />
+        <RepublishPreview status={statusResource.data} />
         <ListState
           resource={resource}
           loading={<div className="esv__loading">Caricamento versioni...</div>}

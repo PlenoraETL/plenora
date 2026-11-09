@@ -30,6 +30,34 @@ ExpectedColumns = JsonRows
 MANIFEST_PRESENT_SQL = "(COALESCE(v.manifest, '{}'::jsonb) NOT IN ('{}'::jsonb, 'null'::jsonb))"
 
 
+def canvas_fingerprint(canvas: object) -> str:
+    """Impronta di un canvas (N1, 09/11/2026): la stessa alla pubblicazione
+    (``eseguibile_versions.source_hash``) e nel confronto con il canvas attuale
+    del progetto sorgente (``service.source_status``). Un testo JSON si legge
+    prima (colonna storica TEXT)."""
+    if isinstance(canvas, str):
+        canvas = json.loads(canvas)
+    return hashlib.sha256(
+        json.dumps(canvas, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+# N1: la versione attiva e' ancora il canvas attuale del progetto sorgente?
+# Calcolato in SQL per la lista (nessun canvas scaricato): confronto jsonb
+# semantico fra la copia congelata della versione e il canvas del progetto.
+# Equivale al confronto delle impronte (``canvas_fingerprint``: JSON con le
+# chiavi ordinate) salvo numeri scritti diversamente con lo stesso valore
+# (1 e 1.0). Colonna del progetto jsonb (produzione) o TEXT storico, come
+# ``projects.db.MANIPOLA_SOURCE_REFS_SQL``; un canvas TEXT illeggibile conta
+# come cambiato. NULL senza progetto sorgente o senza versione attiva.
+SOURCE_CHANGED_SQL = """(CASE
+        WHEN v.id IS NULL OR p.id IS NULL THEN NULL
+        WHEN pg_typeof(p.canvas) = 'jsonb'::regtype THEN v.canvas::jsonb IS DISTINCT FROM p.canvas::jsonb
+        WHEN pg_input_is_valid(p.canvas::text, 'jsonb') THEN v.canvas::jsonb IS DISTINCT FROM p.canvas::text::jsonb
+        ELSE true
+    END)"""
+
+
 def manifest_present(manifest: object) -> bool:
     """True se il manifest c'e' e non e' vuoto (stessa regola di MANIFEST_PRESENT_SQL)."""
     return isinstance(manifest, dict) and bool(manifest)
@@ -116,6 +144,8 @@ class EseguibileSummaryRow:
     # ne sono bersaglio (per ``binding_warnings`` senza caricare il canvas).
     bindings: tuple[JsonObject, ...] = ()
     binding_target_nodes: tuple[JsonObject, ...] = ()
+    # N1: progetto sorgente cambiato dopo la pubblicazione (SOURCE_CHANGED_SQL).
+    source_changed: bool | None = None
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -274,6 +304,7 @@ def eseguibile_summary_row_from_db(row: Mapping[str, object]) -> EseguibileSumma
         has_manifest=bool(row.get("has_manifest")),
         bindings=_parse_json_objects(row.get("bindings")),
         binding_target_nodes=_parse_json_objects(row.get("binding_target_nodes")),
+        source_changed=None if row.get("source_changed") is None else bool(row.get("source_changed")),
     )
 
 
@@ -421,8 +452,10 @@ def list_eseguibili(
                            FROM jsonb_array_elements(
                                 CASE WHEN jsonb_typeof(v.manifest->'bindings') = 'array'
                                      THEN v.manifest->'bindings' ELSE '[]'::jsonb END) AS b(binding))
-                 ) AS binding_target_nodes"""
-    join = " LEFT JOIN eseguibile_versions v ON v.id = e.active_version_id "
+                 ) AS binding_target_nodes,
+                 {SOURCE_CHANGED_SQL} AS source_changed"""
+    join = (" LEFT JOIN eseguibile_versions v ON v.id = e.active_version_id "
+            " LEFT JOIN projects p ON p.id = e.source_canvas_id ")
     if resource_ids is not None:
         if not resource_ids:
             return []
@@ -483,9 +516,7 @@ def create_eseguibile_version(
     source_project_id: str | None,
     created_by: str,
 ) -> EseguibileVersionRow:
-    source_hash = hashlib.sha256(
-        json.dumps(canvas, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()
+    source_hash = canvas_fingerprint(canvas)
     now = _now()
     with unit_of_work() as session:
         parent = session.fetchone(

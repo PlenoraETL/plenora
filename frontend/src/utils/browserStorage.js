@@ -52,15 +52,15 @@ export const STORAGE_KEYS = Object.freeze({
   }),
   draft: Object.freeze({
     prefix: 'plenora:draft:', area: 'local', owner: 'user', logout: 'own', clearedBy: 'localDrafts',
-    why: 'copie di sicurezza delle modifiche non salvate (utils/localDrafts): servono a non perdere lavoro dopo una chiusura improvvisa, scadono in 14 giorni; all\'uscita scelta (dopo la domanda sulle modifiche non salvate) si tolgono quelle di chi esce, tranne quelle delle sue altre schede ancora aperte',
+    why: 'copie di sicurezza delle modifiche non salvate (utils/localDrafts): servono a non perdere lavoro dopo una chiusura improvvisa, scadono in 14 giorni; all\'uscita scelta (dopo la domanda sulle modifiche non salvate) si tolgono quelle di chi esce, tranne quelle delle sue altre schede ancora aperte (appello delle schede); le copie della forma vecchia (<username>:<progetto>, illeggibili) si tolgono all\'avvio e all\'uscita (localDrafts.KEEP)',
   }),
   draftTab: Object.freeze({
     prefix: 'plenora:tab:', area: 'local', owner: 'browser', logout: 'keep',
-    why: 'segnale di vita delle schede aperte (utils/localDrafts)',
+    why: 'segnale di vita delle schede aperte (utils/localDrafts): si tolgono quelli delle schede non più vive (localDrafts.KEEP)',
   }),
   draftSaved: Object.freeze({
     prefix: 'plenora:saved:', area: 'local', owner: 'browser', logout: 'keep',
-    why: 'annuncio «salvato in un\'altra scheda» (utils/localDrafts)',
+    why: 'annuncio «salvato in un\'altra scheda» (utils/localDrafts): serve solo all\'evento storage, si scrive e si toglie subito (localDrafts.KEEP)',
   }),
   draftDeleted: Object.freeze({
     prefix: 'plenora:deleted:', area: 'local', owner: 'browser', logout: 'keep',

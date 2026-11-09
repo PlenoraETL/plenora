@@ -26,6 +26,7 @@ from app.core.orchestrator.task_metadata_store import (
     PendingTaskMetadata,
 )
 from app.core.orchestrator.router_mappers import task_info_to_dict, task_result_to_dict
+from app.shared.execution.progress_messages import progress_text
 
 
 pytestmark = [
@@ -48,7 +49,6 @@ def test_executable_enrichment_metadata_carries_tenant_and_owner():
             user_id="u-1",
             execution_context={"eseguibile_id": "exec_1", "group_id": "g-1"},
         ),
-        queued_message="queued",
         log_label="enrichment",
     )
 
@@ -76,7 +76,6 @@ def test_executable_pipeline_metadata_uses_execution_subject():
                 },
             },
         ),
-        queued_message="queued",
         log_label="execute",
     )
 
@@ -482,7 +481,6 @@ def test_submit_task_launches_celery_and_returns_pending_task_info(monkeypatch):
                 force_recalculate=False,
                 user_id="user-1",
             ),
-            queued_message="Pipeline in coda...",
             log_label="execute",
         )
     )
@@ -493,7 +491,7 @@ def test_submit_task_launches_celery_and_returns_pending_task_info(monkeypatch):
     assert task_info.task_type is TaskType.EXECUTE
     assert task_info.project_id == "project-1"
     assert task_info.status is TaskStatus.PENDING
-    assert task_info.message == "Pipeline in coda..."
+    assert task_info.message == progress_text("queued") == "In coda..."
     assert captured_kwargs == {
         "project_id": "project-1",
         "force_recalculate": False,
@@ -536,7 +534,6 @@ def test_submit_task_does_not_publish_when_metadata_persistence_fails(monkeypatc
                 task_type=TaskType.EXECUTE,
                 project_id="project-1",
                 payload=PipelineTaskPayload(project_id="project-1"),
-                queued_message="Pipeline in coda...",
                 log_label="execute",
             )
         )
@@ -565,7 +562,6 @@ def test_submit_task_removes_pending_metadata_when_publish_fails(monkeypatch):
                 task_type=TaskType.EXECUTE,
                 project_id="project-1",
                 payload=PipelineTaskPayload(project_id="project-1"),
-                queued_message="Pipeline in coda...",
                 log_label="execute",
             )
         )
@@ -613,7 +609,6 @@ def test_submit_task_outbox_keeps_pending_when_broker_is_temporarily_down(
             task_type=TaskType.EXECUTE,
             project_id="project-1",
             payload=PipelineTaskPayload(project_id="project-1"),
-            queued_message="Pipeline in coda...",
             log_label="execute",
         )
     )
@@ -706,7 +701,7 @@ def test_preview_router_uses_task_service_boundary(monkeypatch):
             task_type=TaskType.PREVIEW,
             project_id=kwargs["project_id"],
             status=TaskStatus.PENDING,
-            message="Preview in coda...",
+            message=progress_text("queued"),
         )
 
     def fail_submit_task(_request):
@@ -777,7 +772,7 @@ def test_preview_router_preserves_project_not_found(monkeypatch):
                 "intermediate_mode_override": "save",
             },
             TaskType.ENRICHMENT,
-            "Task in coda...",
+            "In coda...",
             {
                 "project_id": "project-1",
                 "canvas": {"nodes": [], "edges": []},
@@ -801,7 +796,7 @@ def test_preview_router_preserves_project_not_found(monkeypatch):
                 "user_id": "user-1",
             },
             TaskType.CARICA,
-            "Task CARICA in coda...",
+            "In coda...",
             {
                 "project_id": "project-1",
                 "canvas": {"nodes": [], "edges": []},
@@ -822,7 +817,7 @@ def test_preview_router_preserves_project_not_found(monkeypatch):
                 "intermediate_mode_override": "save",
             },
             TaskType.EXECUTE,
-            "Pipeline in coda...",
+            "In coda...",
             {
                 "project_id": "project-1",
                 "force_recalculate": True,
@@ -835,7 +830,7 @@ def test_preview_router_preserves_project_not_found(monkeypatch):
             "create_preview_task",
             {"project_id": "project-1", "limit": 25, "user_id": "user-1"},
             TaskType.PREVIEW,
-            "Preview in coda...",
+            "In coda...",
             {"project_id": "project-1", "limit": 25, "user_id": "user-1"},
         ),
     ],
@@ -858,7 +853,7 @@ def test_create_task_wrappers_delegate_to_generic_submit(
             task_type=request.task_type,
             project_id=request.project_id,
             status=TaskStatus.PENDING,
-            message=request.queued_message,
+            message=progress_text("queued"),
         )
 
     monkeypatch.setattr(service, "submit_task", fake_submit_task)
@@ -870,7 +865,7 @@ def test_create_task_wrappers_delegate_to_generic_submit(
     assert request.task_type is expected_task_type
     assert request.project_id == "project-1"
     assert dict(task_payload_to_celery_kwargs(request.payload)) == expected_kwargs
-    assert request.queued_message == expected_message
+    assert expected_message == progress_text("queued") == task_info.message
     # Plenora 2.0: dispatch by-name -> il task espone `name`, non piu' `.delay`.
     assert hasattr(request.celery_task, "name")
     assert task_info.task_type is expected_task_type
@@ -890,7 +885,7 @@ def test_create_task_router_uses_enrichment_task_service_boundary(monkeypatch):
             task_type=TaskType.ENRICHMENT,
             project_id=kwargs["project_id"],
             status=TaskStatus.PENDING,
-            message="Task in coda...",
+            message=progress_text("queued"),
         )
 
     def fail_submit_task(_request):
@@ -935,7 +930,7 @@ def test_create_task_router_uses_carica_task_service_boundary(monkeypatch):
             task_type=TaskType.CARICA,
             project_id=kwargs["project_id"],
             status=TaskStatus.PENDING,
-            message="Task CARICA in coda...",
+            message=progress_text("queued"),
         )
 
     def fail_submit_task(_request):

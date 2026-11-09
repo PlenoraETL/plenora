@@ -150,6 +150,7 @@ def test_router_serializes_summary_row_at_api_edge(monkeypatch) -> None:
         "active_version": 1,
         "inputs_count": 1,
         "has_manifest": False,
+        "source_changed": None,
         "binding_warnings": [],
         "can_edit": False,
     }

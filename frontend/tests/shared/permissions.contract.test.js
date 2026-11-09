@@ -109,7 +109,7 @@ const UNGATED = {
 const DELEGATED = {
   'components/api-conn/ApiConnectionWizard.jsx': ['pages/ApiConnectionManager.jsx'],
   'components/connections/ConnectionSetsPanel.jsx': ['pages/ConnectionManager.jsx'],
-  'components/eseguibili/EseguibileVersionsModal.jsx': ['pages/EseguibiliList.jsx'],
+  'components/eseguibili/EseguibileVersionsModal.jsx': ['pages/EseguibiliList.jsx', 'components/eseguibili/PublishedExecutablesNotice.jsx'],
   'components/eseguibili/PublishEseguibileModal.jsx': ['pages/EseguibiliList.jsx', 'pages/ProjectList.jsx'],
   'components/modals/ScheduleWizard.jsx': ['pages/ScheduleList.jsx'],
   'components/projects/NewProjectModal.jsx': ['pages/ProjectList.jsx'],

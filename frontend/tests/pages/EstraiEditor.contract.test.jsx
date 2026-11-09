@@ -56,6 +56,8 @@ vi.mock('../../src/hooks/useColumns', () => ({
   refreshColumns: () => undefined,
 }));
 
+// N1: lo stato degli Eseguibili pubblicati ha il suo test (EseguibileSourceStatus.contract).
+vi.mock('../../src/components/eseguibili/PublishedExecutablesNotice', () => ({ default: () => null }));
 vi.mock('@xyflow/react', () => globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef: reactFlowStateRef }));
 
 vi.mock('react-router-dom', async () => {

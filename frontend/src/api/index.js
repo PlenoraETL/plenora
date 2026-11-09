@@ -130,6 +130,8 @@ export {
   listEseguibileVersions,
   republishEseguibile,
   activateEseguibileVersion,
+  getEseguibileSourceStatus,
+  listSourceStatusOfProject,
 } from './eseguibili';
 
 export {

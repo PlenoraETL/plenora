@@ -3702,6 +3702,87 @@
         "title": "EseguibileDetails",
         "type": "object"
       },
+      "EseguibileSourceStatus": {
+        "description": "N1: la versione attiva rispetto al canvas attuale del progetto\nsorgente (regola unica ``service.source_status``: stessa impronta?).\nCon ``changed`` c'e' l'anteprima della ripubblicazione.",
+        "properties": {
+          "binding_problems": {
+            "items": {
+              "$ref": "#/components/schemas/BindingWarning"
+            },
+            "title": "Binding Problems",
+            "type": "array"
+          },
+          "changed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed"
+          },
+          "eseguibile_id": {
+            "title": "Eseguibile Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "publish_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publish Error"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "state": {
+            "enum": [
+              "same",
+              "changed",
+              "no_source",
+              "no_version"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "eseguibile_id",
+          "name",
+          "state"
+        ],
+        "title": "EseguibileSourceStatus",
+        "type": "object"
+      },
       "EseguibileSummary": {
         "description": "Scheda compatta per la lista.",
         "properties": {
@@ -3799,6 +3880,17 @@
             ],
             "title": "Project Type",
             "type": "string"
+          },
+          "source_changed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Changed"
           },
           "updated_at": {
             "title": "Updated At",
@@ -14209,6 +14301,58 @@
         ]
       }
     },
+    "/api/eseguibili/by-source/{project_id}": {
+      "get": {
+        "description": "Gli Eseguibili pubblicati dal progetto, con lo stato rispetto al canvas\nattuale (avviso nell'editor del progetto sorgente). Solo quelli del gruppo\ndell'admin (tutti per il superadmin).",
+        "operationId": "list_source_status_api_eseguibili_by_source__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EseguibileSourceStatus"
+                  },
+                  "title": "Response List Source Status Api Eseguibili By Source  Project Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Source Status",
+        "tags": [
+          "eseguibili"
+        ]
+      }
+    },
     "/api/eseguibili/{eseguibile_id}": {
       "delete": {
         "operationId": "delete_eseguibile_api_eseguibili__eseguibile_id__delete",
@@ -14647,6 +14791,54 @@
           }
         ],
         "summary": "Create Eseguibile Run",
+        "tags": [
+          "eseguibili"
+        ]
+      }
+    },
+    "/api/eseguibili/{eseguibile_id}/source-status": {
+      "get": {
+        "description": "Stato rispetto al progetto sorgente e anteprima della ripubblicazione.",
+        "operationId": "get_source_status_api_eseguibili__eseguibile_id__source_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eseguibile_id",
+            "required": true,
+            "schema": {
+              "title": "Eseguibile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EseguibileSourceStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Source Status",
         "tags": [
           "eseguibili"
         ]

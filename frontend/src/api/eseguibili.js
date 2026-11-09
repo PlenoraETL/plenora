@@ -141,6 +141,19 @@ export const republishEseguibile = async (eseguibileId) => {
   return r.data;
 };
 
+// N1: la versione attiva rispetto al canvas attuale del progetto sorgente
+// (stessa impronta?) e l'anteprima della ripubblicazione. Solo admin.
+export const getEseguibileSourceStatus = async (eseguibileId) => {
+  const r = await http.get(`/eseguibili/${encodeURIComponent(eseguibileId)}/source-status`);
+  return r.data;
+};
+
+// N1: gli Eseguibili pubblicati da un progetto, con il loro stato (editor).
+export const listSourceStatusOfProject = async (projectId) => {
+  const r = await http.get(`/eseguibili/by-source/${encodeURIComponent(projectId)}`);
+  return r.data;
+};
+
 export const activateEseguibileVersion = async (eseguibileId, versionId) => {
   const r = await http.post(
     `/eseguibili/${eseguibileId}/versions/${versionId}/activate`,

@@ -15,7 +15,7 @@
  */
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
 import { humanizeError } from './errorMessages';
-import { withStepTitles } from './stepTitles';
+import { citedStep, withStepTitles } from './stepTitles';
 import { can } from './permissions';
 import { formatNumber } from './format';
 
@@ -55,9 +55,19 @@ const quoted = (text) => [...String(text || '').matchAll(/[«"'“]([^»"'”]{2
  * dell'esito (righe, file), numeri formattati qui; mai il messaggio del
  * backend («Salvato 238044 righe in …»).
  */
+// Residui collaudo live M6: i campi con cui i tre esecutori dicono righe e
+// file (Arricchisci rest_file: `output_filename`, senza righe), il primo
+// presente vince. Un esito senza righe dice comunque il file.
+const SUCCESS_FIELDS = Object.freeze({
+  rows: Object.freeze(['rows_count', 'rows_processed']),
+  file: Object.freeze(['output_file', 'output_filename']),
+});
+const firstOf = (result, keys) => keys.map(k => result?.[k]).find(v => v != null && v !== '') ?? null;
+
 export function runSuccessText(result) {
-  const rows = result?.rows_count ?? result?.rows_processed;
-  const file = result?.output_file || null;
+  // Un file restituito cosi' com'e' (`output_type: 'file'`) non ha righe contate.
+  const rows = result?.output_type === 'file' ? null : firstOf(result, SUCCESS_FIELDS.rows);
+  const file = firstOf(result, SUCCESS_FIELDS.file);
   if (rows == null) return file ? `Risultato salvato in «${file}».` : 'Operazione eseguita con successo';
   const what = Number(rows) === 1 ? '1 riga salvata' : `${formatNumber(rows)} righe salvate`;
   return file ? `${what} in «${file}».` : `${what}.`;
@@ -71,7 +81,7 @@ export function failedStepOf(result, nodes = []) {
   const declared = result.error_node_id || result.result?.error_node_id || null;
   let node = declared ? byId(String(declared)) : null;
   const message = String(result.message || result.error || '');
-  if (!node && message) node = list.find(n => message.includes(n.id)) || null;
+  if (!node && message) node = citedStep(message, list);
   if (!node && message) {
     const names = quoted(message);
     node = list.find(n => names.includes(nodeTitle(n.type, n.data))) || null;

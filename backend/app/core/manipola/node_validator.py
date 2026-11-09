@@ -63,7 +63,12 @@ def _is_empty_param_value(val: Any) -> bool:
 
 def _param_value_for_required_check(transform_op: str, param_id: str, config: JsonObject) -> Any:
     if transform_op == "filter" and config.get("conditions") is not None and param_id in {"column", "operator", "value"}:
-        return True
+        # Con le condizioni il campo vive in ogni condizione: e' compilato
+        # solo se lo e' in tutte (residui collaudo live L4b).
+        conditions = config.get("conditions")
+        if param_id == "value" or not isinstance(conditions, list) or not conditions:
+            return True
+        return all(isinstance(c, dict) and not _is_empty_param_value(c.get(param_id)) for c in conditions) or None
     if transform_op == "formula" and config.get("items") is not None and param_id in {"new_column", "formula"}:
         return True
     return parameter_value(config, param_id)
@@ -77,6 +82,31 @@ def _runtime_default(param: JsonObject, config: JsonObject) -> bool:
     tale e quale all'operazione, quindi resta un errore di Valida.
     """
     return param.get("id") not in config and not _is_empty_param_value(param.get("default"))
+
+
+#: Il messaggio di un campo obbligatorio vuoto: il nome del campo come lo
+#: mostra il pannello (``label`` del registry), mai l'id o il valore.
+REQUIRED_PARAM_MESSAGE = "Compila «{label}»: il campo è obbligatorio."
+
+
+def required_param_issues(node_id: str, transform_op: str, config: JsonObject, spec: JsonObject) -> List[Issue]:
+    """Campi obbligatori del registry non compilati (``TRANSFORM_PARAM_REQUIRED``).
+
+    Errore di Valida (come HEAD): senza il parametro il runtime fa un no-op o
+    altro dall'intenzione. Avviso solo se il runtime applica il default.
+    """
+    out = []
+    for param in spec.get("parameters") or []:
+        pid = param.get("id")
+        if not pid or not param.get("required"):
+            continue
+        if not _is_empty_param_value(_param_value_for_required_check(transform_op, pid, config)):
+            continue
+        out.append(Issue(node_id=node_id, severity="warning" if _runtime_default(param, config) else "error",
+                         code="TRANSFORM_PARAM_REQUIRED",
+                         message=REQUIRED_PARAM_MESSAGE.format(label=param.get("label") or pid),
+                         suggestion={"param": pid}))
+    return out
 
 
 def _uncertain(schemas: list[InferredSchema]) -> bool:
@@ -124,11 +154,20 @@ class ManipolaNodeValidator:
                           message=f"Operazione '{transform_op}' non riconosciuta dal motore di trasformazione.",
                           suggestion={"op": transform_op})]
 
+        config = _node_config(node)
+        # Residui collaudo live L4b: un campo obbligatorio vuoto si dice con
+        # il suo nome («Compila «Colonna»…»), PRIMA dell'esecuzione a vuoto,
+        # che fallirebbe per conseguenza col messaggio tecnico del motore
+        # («Filter: colonna 'None' non trovata»). Regola unica per ogni campo
+        # obbligatorio del registry (anche dentro le condizioni di Filtra).
+        required = required_param_issues(node_id, transform_op, config, registry[transform_op])
+        if any(issue.severity == "error" for issue in required):
+            return required
+
         issues = self._dry_run_issues(node, dry_run_transform(node, schemas, transform_op), schemas + [upstream])
         if issues:
             return issues
-
-        config = _node_config(node)
+        issues = list(required)
         # Le regole di schema leggono ciò che l'operazione riceve: il primo
         # ingresso per le operazioni 'single', tutti per le 'multi'.
         if registry[transform_op].get("inputs") != "multi" and schemas:
@@ -199,14 +238,8 @@ class ManipolaNodeValidator:
             if not pid:
                 continue
             val = _param_value_for_required_check(transform_op, pid, config)
-            # Errore di Valida (come HEAD): senza il parametro il runtime fa un
-            # no-op o altro dall'intenzione. Avviso solo se applica il default.
             if param.get("required") and _is_empty_param_value(val):
-                issues.append(Issue(node_id=node_id, severity="warning" if _runtime_default(param, config) else "error",
-                                    code="TRANSFORM_PARAM_REQUIRED",
-                                    message=f"Parametro obbligatorio '{param.get('label') or pid}' non configurato.",
-                                    suggestion={"param": pid}))
-                continue
+                continue  # gia' detto da required_param_issues
             # Schema a monte: parametro geometria su colonna nota non geometrica.
             if param.get("type") == "geometry_column" and not _is_empty_param_value(val):
                 resolved_name = id_to_name.get(str(val), val)

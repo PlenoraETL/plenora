@@ -27,8 +27,8 @@ from app.utils.logger import get_logger
 from app.core.manipola.transform_ordering import incoming_edge_sort_key_for_nodes
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
-from app.core.projects.canvas_access import find_orphan_processing_nodes
-from app.core.projects.canvas_preview_scope import run_canvas, unreached_node_ids
+from app.core.projects.canvas_access import ORPHAN_STEP_MESSAGE, find_orphan_processing_nodes
+from app.core.projects.canvas_preview_scope import FINAL_NODE_TYPES, run_canvas, unreached_node_ids
 from app.core.projects.schema_inference import SchemaInferenceService
 from app.core.projects.canvas_schema_preparation import infer_canvas_columns
 from app.core.projects.canvas_models import CanvasState
@@ -75,6 +75,8 @@ class _StaticCanvasService:
 
 #: Messaggio di un passo in un ramo che non arriva all'Output (collaudo live L3).
 UNREACHED_MESSAGE = "Questo passo non arriva all'Output: non viene eseguito e i suoi dati non finiscono nel risultato."
+#: Output senza ingressi: un avviso solo (residui collaudo live M4).
+OUTPUT_UNCONNECTED_MESSAGE = "L'Output non è collegato: nessun passo viene eseguito finché non colleghi l'ultimo passo all'Output."
 
 
 def validate_canvas(
@@ -101,11 +103,20 @@ def validate_canvas(
         issues = [
             replace(i, severity="warning") if i.node_id in unreached and i.severity == "error" else i
             for i in issues
-        ] + [
-            Issue(node_id=str(node_id), severity="warning", code="structure.unreached",
-                  message=UNREACHED_MESSAGE, suggestion=None)
-            for node_id in sorted(unreached) if node_id not in isolated
         ]
+        # Residui collaudo live M4: con l'Output senza ingressi nessun passo
+        # lo raggiunge; un solo avviso sull'Output, non uno per passo.
+        finals = [_field(n, "id") for n in canvas.nodes if _field(n, "type") in FINAL_NODE_TYPES]
+        targets = {_field(e, "target") for e in (getattr(canvas, "edges", None) or [])}
+        if finals and not targets.intersection(finals):
+            issues += [Issue(node_id=str(final_id), severity="warning", code="structure.output_unconnected",
+                             message=OUTPUT_UNCONNECTED_MESSAGE, suggestion=None) for final_id in finals]
+        else:
+            issues += [
+                Issue(node_id=str(node_id), severity="warning", code="structure.unreached",
+                      message=UNREACHED_MESSAGE, suggestion=None)
+                for node_id in sorted(unreached) if node_id not in isolated
+            ]
     return ValidationReport(issues=tuple(issues))
 
 
@@ -189,7 +200,7 @@ def _canvas_issues(
     for orphan_id in find_orphan_processing_nodes(canvas):
         issues.append(Issue(
             node_id=str(orphan_id), severity="error", code="structure.orphan",
-            message="Questo passo non ha ingressi: collegalo a un passo precedente o eliminalo.",
+            message=ORPHAN_STEP_MESSAGE,
             suggestion=None,
         ))
 

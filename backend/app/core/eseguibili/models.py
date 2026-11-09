@@ -218,6 +218,24 @@ class EseguibileSummary(BaseModel):
     has_manifest: bool = False
     can_edit: Optional[bool] = None  # calcolato per l'utente corrente
     binding_warnings: List[BindingWarning] = Field(default_factory=list)
+    # N1: progetto sorgente cambiato dopo la pubblicazione (None: non si sa,
+    # senza progetto sorgente o senza versione attiva).
+    source_changed: Optional[bool] = None
+
+
+class EseguibileSourceStatus(BaseModel):
+    """N1: la versione attiva rispetto al canvas attuale del progetto
+    sorgente (regola unica ``service.source_status``: stessa impronta?).
+    Con ``changed`` c'e' l'anteprima della ripubblicazione."""
+
+    eseguibile_id: str
+    name: str
+    version: Optional[int] = None
+    published_at: Optional[str] = None
+    state: Literal["same", "changed", "no_source", "no_version"]
+    changed: Optional[bool] = None
+    binding_problems: List[BindingWarning] = Field(default_factory=list)
+    publish_error: Optional[str] = None
 
 
 class EseguibileDetails(BaseModel):

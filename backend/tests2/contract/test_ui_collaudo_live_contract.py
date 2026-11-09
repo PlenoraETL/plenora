@@ -261,7 +261,7 @@ def test_unused_rows_are_not_declared():
 
     sources = "".join(
         (BACKEND / p).read_text(encoding="utf-8")
-        for p in PROGRESS_FILES + ["app/core/arricchisci/enrichment_service.py"]
+        for p in PROGRESS_FILES + ["app/core/arricchisci/enrichment_service.py", "app/core/orchestrator/task_service.py"]
     )
     unused = [key for key in PROGRESS_MESSAGES if f'"{key}"' not in sources]
     assert unused == []

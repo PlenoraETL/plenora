@@ -537,7 +537,7 @@ def execute_pipeline_task(
                 _update_progress(
                     self,
                     0,
-                    progress_text("connection_lost", detail=message),
+                    progress_text("connection_lost"),
                     check_revocation=False,
                 )
                 logger.warning(
@@ -556,7 +556,7 @@ def execute_pipeline_task(
                 _update_progress(
                     self,
                     0,
-                    progress_text("connection_lost", detail=message),
+                    progress_text("connection_lost"),
                     check_revocation=False,
                 )
                 return _outcome({

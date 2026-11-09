@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import React from 'react';
 import { render, screen, act, cleanup } from '@testing-library/react';
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import useCanvasStore from '../../src/store/useCanvasStore';
 import { REVISION_FIELDS } from '../../src/store/graphRevisions';
 import { GRAPH_FIELDS } from '../../src/hooks/useCanvasDerived';
@@ -35,7 +35,7 @@ import { orphanedByDeletion, requestCanvasDeletion } from '../../src/utils/canva
 import { nodeTitle } from '../../src/components/canvas/nodeDescriptors';
 import { STORAGE_KEYS, storageKey } from '../../src/utils/browserStorage';
 import { registeredSessionResets, resetSession } from '../../src/utils/session';
-import { draftKey, touchTab, currentTabId } from '../../src/utils/localDrafts';
+import { ROLL_CALL_MS, draftKey, touchTab, currentTabId, writeDraft } from '../../src/utils/localDrafts';
 import { SRC, sourceFiles, stripComments } from '../helpers/sourceScan.js';
 
 const read = (rel) => fs.readFileSync(path.join(SRC, rel), 'utf-8');
@@ -232,22 +232,22 @@ describe('L6: ricerca e «Collega a» distinguono i nodi dello stesso tipo', () 
 // ── L7 ──────────────────────────────────────────────────────────────────
 
 describe('L7: le copie di sicurezza all\'uscita dall\'account', () => {
-  beforeEach(() => window.localStorage.clear());
+  beforeEach(() => { window.localStorage.clear(); vi.useFakeTimers(); });
+  afterEach(() => vi.useRealTimers());
 
+  // Copie vere (writeDraft): la forma vecchia si toglie a ogni uscita (L7b).
   const seed = () => {
-    const mine = draftKey('u1', 'p1', currentTabId());
-    const closedTab = draftKey('u1', 'p2', 'scheda-chiusa');
-    const openTab = draftKey('u1', 'p3', 'scheda-aperta');
-    const other = draftKey('u2', 'p1', 'altra');
+    const rows = { mine: ['u1', 'p1', currentTabId()], closedTab: ['u1', 'p2', 'scheda-chiusa'], openTab: ['u1', 'p3', 'scheda-aperta'], other: ['u2', 'p1', 'altra'] };
     touchTab('scheda-aperta');
-    for (const k of [mine, closedTab, openTab, other]) window.localStorage.setItem(k, JSON.stringify({ nodes: [], savedAt: Date.now() }));
-    return { mine, closedTab, openTab, other };
+    for (const [u, p, t] of Object.values(rows)) writeDraft(u, p, t, { nodes: [], edges: [], savedAt: Date.now() });
+    return Object.fromEntries(Object.entries(rows).map(([name, parts]) => [name, draftKey(...parts)]));
   };
   const present = (k) => window.localStorage.getItem(k) != null;
 
   it('uscita scelta: via quelle di chi esce, restano le sue schede aperte e gli altri utenti', () => {
     const k = seed();
     resetSession({ reason: 'logout', userId: 'u1' });
+    vi.advanceTimersByTime(ROLL_CALL_MS);
     expect([present(k.mine), present(k.closedTab), present(k.openTab), present(k.other)]).toEqual([false, false, true, true]);
   });
 
@@ -255,6 +255,7 @@ describe('L7: le copie di sicurezza all\'uscita dall\'account', () => {
     const k = seed();
     resetSession({ reason: 'expired', userId: 'u1' });
     resetSession();
+    vi.advanceTimersByTime(ROLL_CALL_MS);
     expect(Object.values(k).every(present)).toBe(true);
   });
 

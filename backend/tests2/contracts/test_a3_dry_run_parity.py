@@ -180,6 +180,13 @@ def valida_codes(op: str, inputs: list, config: dict, severity: str) -> set[str]
     return {issue.code for issue in issues if issue.severity == severity}
 
 
+def required_said(op: str, inputs: list, config: dict) -> bool:
+    """Residui collaudo live L4b: un campo obbligatorio vuoto si dice col suo
+    nome invece del rifiuto tecnico che ne consegue (stesso blocco, messaggio
+    dell'interfaccia: ``node_validator.required_param_issues``)."""
+    return "TRANSFORM_PARAM_REQUIRED" in valida_codes(op, inputs, config, "error")
+
+
 def runtime_result(op: str, inputs: list, config: dict):
     from app.core.manipola.executor import ManipolaExecutor
     return ManipolaExecutor(project_service=None)._esegui_trasformazione(node_for(op, config), inputs)
@@ -221,7 +228,7 @@ def test_true_negative_has_same_reason(op, override):
     config = apply(valid_config(op), override)
     message = runtime_error(op, inputs, config)
     assert message is not None, "il caso negativo deve essere rifiutato dall'esecuzione con righe"
-    assert message in valida_errors(op, inputs, config)
+    assert message in valida_errors(op, inputs, config) or required_said(op, inputs, config)
 
 
 @pytest.mark.parametrize("op", sorted(SOLO_REGOLA_VALIDA))
@@ -272,7 +279,7 @@ def test_generic_variants_same_outcome(op, name, config):
     errors = valida_errors(op, inputs, config)
     if message is not None:
         assert errors, f"il runtime rifiuta ({message}), Valida no"
-        if dry_run_transform(node_for(op, config), schemas_of(inputs), op).verdict == "rejected":
+        if dry_run_transform(node_for(op, config), schemas_of(inputs), op).verdict == "rejected" and not required_said(op, inputs, config):
             assert message in errors, f"il runtime rifiuta ({message}), Valida con altro messaggio: {errors}"
         return
     false_positives = valida_codes(op, inputs, config, "error") - set(DECLARATIVE_ERROR_CODES)

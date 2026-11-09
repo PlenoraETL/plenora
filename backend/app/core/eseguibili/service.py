@@ -37,7 +37,7 @@ from .models import (
 from .runtime import resolve_runtime_inputs
 from app.shared.execution.runtime_identity import RuntimeIdentity
 from app.shared.execution.runtime_bound_fields import runtime_bound_context
-from .manifest import binding_problems, compile_manifest
+from .manifest import binding_problems, compile_manifest, compile_project_inputs
 from .storage import INTERNAL_ARTIFACT_PREFIX
 
 logger = get_logger(__name__)
@@ -270,6 +270,132 @@ def publish_new_version(
     if updated is None:
         raise RuntimeError("Eseguibile non trovato dopo la ripubblicazione")
     return updated
+
+
+# N1 — l'Eseguibile corrisponde ancora al suo progetto?
+
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _problem_rows(problems) -> list[JsonObject]:
+    return [
+        {
+            "input_key": problem.input_key,
+            "target_node_id": problem.target_node_id,
+            "target_field": problem.target_field,
+            "motivo": problem.motivo,
+        }
+        for problem in problems
+    ]
+
+
+def _parsed_canvas(canvas: object) -> object:
+    if isinstance(canvas, str):
+        try:
+            return json.loads(canvas)
+        except json.JSONDecodeError:
+            return None
+    return canvas
+
+
+def version_fingerprint(version: eseguibili_db.EseguibileVersionRow) -> str:
+    """Impronta della versione: ``source_hash`` (``db.canvas_fingerprint`` alla
+    pubblicazione). Le versioni importate dalla migrazione del 16/07/2026
+    hanno un md5 del testo: per loro l'impronta si calcola, allo stesso modo,
+    sulla copia congelata della versione (il canvas allora pubblicato)."""
+    if _SHA256_HEX.fullmatch(str(version.source_hash or "")):
+        return str(version.source_hash)
+    return eseguibili_db.canvas_fingerprint(version.canvas)
+
+
+def republish_preview(
+    canvas: Mapping[str, object],
+    *,
+    project_type: str,
+    source_project_id: str,
+    default_connection_id: str | None,
+) -> tuple[list[JsonObject], str | None]:
+    """Cosa direbbe la ripubblicazione del canvas attuale, PRIMA di farla:
+    TUTTI i binding degli input che non troverebbero il bersaglio (stessa
+    regola della pubblicazione, ``check_binding``, che li' si ferma al primo)
+    e l'eventuale altro rifiuto di ``compile_manifest``."""
+    try:
+        _, bindings = compile_project_inputs(canvas, project_type)
+    except ValueError as exc:
+        return [], str(exc)
+    problems = _problem_rows(binding_problems(bindings, canvas))
+    if problems:
+        return problems, None
+    try:
+        compile_manifest(
+            source_project_id=source_project_id,
+            project_type=project_type,
+            canvas=canvas,
+            default_connection_id=default_connection_id,
+        )
+    except ValueError as exc:
+        return [], str(exc)
+    return [], None
+
+
+def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = None) -> JsonObject:
+    """Regola unica N1: la versione attiva e il canvas attuale del progetto
+    sorgente hanno la stessa impronta (``db.canvas_fingerprint``)?
+
+    ``state``: ``same`` | ``changed`` | ``no_source`` (Eseguibile senza
+    progetto sorgente o progetto non piu' esistente) | ``no_version``. Con
+    ``changed`` c'e' l'anteprima della ripubblicazione. La versione pubblicata
+    non cambia da se' (versione = release): qui lo si dice soltanto.
+    ``project``: contesto gia' letto (un solo caricamento del canvas per piu'
+    Eseguibili dello stesso progetto)."""
+    version = (
+        eseguibili_db.get_eseguibile_version(eseguibile.active_version_id, eseguibile_id=eseguibile.id)
+        if eseguibile.active_version_id else None
+    )
+    base: JsonObject = {
+        "eseguibile_id": eseguibile.id,
+        "name": eseguibile.name,
+        "version": version.version_number if version else None,
+        "published_at": version.created_at if version else None,
+        "state": "same",
+        "changed": False,
+        "binding_problems": [],
+        "publish_error": None,
+    }
+    if version is None:
+        return {**base, "state": "no_version", "changed": None}
+    source_id = eseguibile.source_canvas_id
+    proj = project if project is not None else (
+        project_access_context.load_project_publish_context(source_id) if source_id else None
+    )
+    canvas = _parsed_canvas(proj.canvas) if proj is not None else None
+    if proj is None or not isinstance(canvas, dict):
+        return {**base, "state": "no_source", "changed": None}
+    if eseguibili_db.canvas_fingerprint(canvas) == version_fingerprint(version):
+        return base
+    problems, error = republish_preview(
+        canvas,
+        project_type=str(proj.project_type or "").lower(),
+        source_project_id=str(source_id),
+        default_connection_id=getattr(proj, "default_connection_id", None),
+    )
+    return {**base, "state": "changed", "changed": True, "binding_problems": problems, "publish_error": error}
+
+
+def source_status_for_project(project_id: str, *, group_id: str | None) -> list[JsonObject]:
+    """Gli Eseguibili pubblicati da ``project_id`` (solo quelli del gruppo, se
+    dato) con il loro stato N1; il canvas del progetto si legge una volta."""
+    refs = eseguibili_db.list_eseguibili_by_source(project_id)
+    if not refs:
+        return []
+    proj = project_access_context.load_project_publish_context(project_id)
+    out: list[JsonObject] = []
+    for ref in refs:
+        record = eseguibili_db.get_eseguibile(ref.id)
+        if record is None or (group_id is not None and record.group_id != group_id):
+            continue
+        out.append(source_status(record, project=proj))
+    return out
 
 
 # ANALYZE UPLOAD — upload file utente + estrazione colonne

@@ -33,6 +33,7 @@ vi.mock('../../src/api', () => ({
   activateEseguibileVersion: activateMock,
   republishEseguibile: republishMock,
   listEseguibileVersions: listVersionsMock,
+  getEseguibileSourceStatus: vi.fn(async () => ({ eseguibile_id: 'e', name: 'e', state: 'same', changed: false, binding_problems: [] })),
   ...apiMocks,
 }));
 vi.mock('../../src/api/transforms', () => ({ getTransformRegistry: registryMock }));

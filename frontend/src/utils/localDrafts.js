@@ -26,7 +26,8 @@
  *    rinascere la sua copia.
  *  - Uscita dall'account scelta dall'utente (collaudo live L7): via le sue
  *    copie (questa scheda e le schede chiuse), restano quelle delle sue altre
- *    schede ancora aperte (mai cancellate da fuori). Sessione scaduta (401) o
+ *    schede ancora aperte (mai cancellate da fuori; residui M3: vive = quelle
+ *    che rispondono all'appello sul canale delle schede). Sessione scaduta (401) o
  *    browser chiuso di colpo: la copia RESTA (e' il suo scopo) e scade.
  *
  * TABELLA DELLE TRANSIZIONI (S = questa scheda, A = le altre schede/copie).
@@ -246,11 +247,18 @@ export const serverMovedOn = (baseUpdatedAt, serverUpdatedAt) => {
 
 // ── Annunci tra schede (evento storage) ──────────────────────────────────
 
-/** Il canvas del server e' cambiato da questa scheda (salvataggio, versione). */
+/**
+ * Il canvas del server e' cambiato da questa scheda (salvataggio, versione).
+ * L'annuncio serve solo all'evento storage delle altre schede: si scrive e
+ * si toglie subito (residui collaudo live L7b: prima restava, una chiave per
+ * ogni progetto salvato, anche cancellato).
+ */
 export const announceSaved = (projectId, { tabId, updatedAt = null } = {}) => {
   const ls = storage();
   if (!ls || !projectId) return;
-  try { ls.setItem(`${SAVED_PREFIX}${projectId}`, JSON.stringify({ tabId, updatedAt, at: Date.now() })); } catch { /* pieno */ }
+  const key = `${SAVED_PREFIX}${projectId}`;
+  try { ls.setItem(key, JSON.stringify({ tabId, updatedAt, at: Date.now() })); } catch { /* pieno */ }
+  remove(ls, key);
 };
 
 /**
@@ -304,14 +312,37 @@ export const parseDraftEvent = (e) => {
 
 // ── Pulizia globale e segnale di vita ────────────────────────────────────
 
-/** Toglie copie scadute o illeggibili, annunci e lapidi vecchi, segnali morti. */
+// Una copia nella forma attuale: record v2 la cui chiave e' esattamente
+// utente:progetto:scheda del record. Le copie della forma vecchia
+// (`plenora:draft:<username>:<progetto>`, prima delle copie per scheda)
+// nessun editor le legge piu': non si possono offrire ne' ripristinare.
+const isCurrentDraft = (key, d) => d?.v === 2 && Array.isArray(d.nodes)
+  && key === draftKey(d.userId, d.projectId, d.tabId);
+const fresh = (at, now) => Number.isFinite(at) && now - at <= MAX_AGE_MS;
+
+/**
+ * Regola unica delle chiavi delle copie (residui collaudo live L7b): cosa
+ * resta nel browser, per ogni riga di STORAGE_KEYS che questo modulo usa.
+ * Si applica all'avvio dell'app e all'uscita scelta dall'account.
+ */
+const KEEP = Object.freeze({
+  // copie nella forma attuale e non scadute (le vecchie si tolgono)
+  [PREFIX]: (k, ls, now) => { const d = readJson(ls, k); return isCurrentDraft(k, d) && !expired(d, now); },
+  // annunci: vivono solo per l'evento storage (announceSaved li toglie subito)
+  [SAVED_PREFIX]: () => false,
+  // lapidi dei progetti eliminati: 14 giorni, come le copie
+  [DELETED_PREFIX]: (k, ls, now) => fresh(Number(ls.getItem(k)), now),
+  // segnali di vita: solo quelli delle schede vive (una scheda viva lo riscrive)
+  [TAB_PREFIX]: (k, ls, now) => isTabAlive(k.slice(TAB_PREFIX.length), now),
+});
+
+/** Applica KEEP: via copie scadute, illeggibili o della forma vecchia, annunci, lapidi vecchie, segnali morti. */
 export function pruneDrafts(now = Date.now()) {
   const ls = storage();
   if (!ls) return;
-  keysWith(ls, PREFIX).forEach(k => { const d = readJson(ls, k); if (!d?.nodes || expired(d, now)) remove(ls, k); });
-  keysWith(ls, SAVED_PREFIX).forEach(k => { const d = readJson(ls, k); if (!d?.at || now - d.at > MAX_AGE_MS) remove(ls, k); });
-  keysWith(ls, DELETED_PREFIX).forEach(k => { const at = Number(ls.getItem(k)); if (!Number.isFinite(at) || now - at > MAX_AGE_MS) remove(ls, k); });
-  keysWith(ls, TAB_PREFIX).forEach(k => { const at = Number(ls.getItem(k)); if (!Number.isFinite(at) || now - at > MAX_AGE_MS) remove(ls, k); });
+  for (const [prefix, keep] of Object.entries(KEEP)) {
+    keysWith(ls, prefix).forEach(k => { if (!keep(k, ls, now)) remove(ls, k); });
+  }
 }
 
 /**
@@ -322,6 +353,7 @@ export function pruneDrafts(now = Date.now()) {
 function dropUserDrafts(user, myTab = currentTabId()) {
   const ls = storage();
   if (!ls || !user) return;
+  pruneDrafts();
   const prefix = `${PREFIX}${user}:`;
   for (const k of keysWith(ls, prefix)) {
     const tab = k.slice(prefix.length).split(':').slice(1).join(':');
@@ -329,8 +361,38 @@ function dropUserDrafts(user, myTab = currentTabId()) {
   }
 }
 
+/*
+ * Schede vive all'uscita (residui collaudo live M3). Il segnale di vita
+ * batte ogni HEARTBEAT_MS, ma una scheda in secondo piano da piu' di 5
+ * minuti ha i timer rallentati (Chrome: uno al minuto) e risultava chiusa:
+ * uscendo da un'altra scheda la sua copia si cancellava. Regola: prima di
+ * cancellare, la scheda che esce fa l'appello sul canale delle schede
+ * (BroadcastChannel: i messaggi arrivano anche alle schede in secondo
+ * piano, che non dipendono dai loro timer); ogni scheda viva risponde
+ * rinnovando il segnale; dopo ROLL_CALL_MS si cancella con la regola di
+ * sempre (draftOrigin). Senza BroadcastChannel: subito, come prima. Una
+ * scheda congelata dal browser (risparmio energetico) non risponde e conta
+ * come chiusa (dichiarato). Chiudere la pagina prima della fine
+ * dell'appello lascia le copie: scadono come ogni copia.
+ */
+export const TABS_CHANNEL = 'plenora-schede';
+export const ROLL_CALL = 'appello';
+export const ROLL_CALL_MS = 1000;
+let tabsChannel;
+const channel = () => {
+  if (tabsChannel !== undefined) return tabsChannel;
+  try { tabsChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel(TABS_CHANNEL) : null; } catch { tabsChannel = null; }
+  tabsChannel?.unref?.(); // Node (test): il canale non tiene vivo il processo
+  return tabsChannel;
+};
+
 registerSessionReset('localDrafts', ({ reason, userId } = {}) => {
-  if (STORAGE_KEYS.draft.logout === 'own' && reason === 'logout' && userId) dropUserDrafts(userId);
+  if (!(STORAGE_KEYS.draft.logout === 'own' && reason === 'logout' && userId)) return;
+  const myTab = currentTabId();
+  const ch = channel();
+  if (!ch) { dropUserDrafts(userId, myTab); return; }
+  try { ch.postMessage(ROLL_CALL); } catch { /* canale chiuso: nessuna risposta */ }
+  setTimeout(() => dropUserDrafts(userId, myTab), ROLL_CALL_MS);
 });
 
 let housekeeping = false;
@@ -342,6 +404,10 @@ export function installDraftHousekeeping() {
   const tabId = currentTabId();
   touchTab(tabId);
   setInterval(() => touchTab(tabId), HEARTBEAT_MS);
+  // Appello delle schede all'uscita da un'altra scheda (M3): si risponde
+  // rinnovando il segnale, senza aspettare il prossimo battito.
+  const ch = channel();
+  if (ch) ch.onmessage = (e) => { if (e?.data === ROLL_CALL) touchTab(tabId); };
   // In uscita la scheda smette di essere viva: al ricaricamento tiene il suo id.
   window.addEventListener('pagehide', () => dropTab(tabId));
   window.addEventListener('pageshow', () => touchTab(tabId));

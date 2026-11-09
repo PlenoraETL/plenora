@@ -246,21 +246,18 @@ def binding_problems(
     ]
 
 
-def compile_manifest(
-    *,
-    source_project_id: str,
-    project_type: ProjectType,
+def compile_project_inputs(
     canvas: Mapping[str, Any],
-    default_connection_id: str | None = None,
-    for_project: bool = False,
-) -> ExecutableManifest:
-    """Compila e valida il manifest v2 da un canvas persistito."""
-
+    project_type: ProjectType,
+) -> tuple[list[ExecutableInputDefinition], list[ExecutableInputBinding]]:
+    """Input e binding dei nodi «Input progetto» del canvas: la parte della
+    pubblicazione che li legge (``compile_manifest``), riusata dall'anteprima
+    della ripubblicazione (``service.source_status``, N1) per verificare i
+    binding con la stessa regola (``check_binding``) senza fermarsi al primo.
+    I binding non sono ancora verificati contro il canvas."""
     nodes = canvas.get("nodes") or []
-    if not isinstance(nodes, list) or not nodes:
-        raise ValueError("Il progetto non ha un canvas valido")
-
-    nodes_by_id = canvas_nodes_by_id(canvas)
+    if not isinstance(nodes, list):
+        nodes = []
     inputs: list[ExecutableInputDefinition] = []
     bindings: list[ExecutableInputBinding] = []
 
@@ -314,6 +311,31 @@ def compile_manifest(
                 f"nei progetti {', '.join(spec.source_modes)}"
             )
         bindings.extend(node_bindings)
+
+    return inputs, bindings
+
+
+def compile_manifest(
+    *,
+    source_project_id: str,
+    project_type: ProjectType,
+    canvas: Mapping[str, Any],
+    default_connection_id: str | None = None,
+    for_project: bool = False,
+) -> ExecutableManifest:
+    """Compila e valida il manifest v2 da un canvas persistito."""
+
+    nodes = canvas.get("nodes") or []
+    if not isinstance(nodes, list) or not nodes:
+        raise ValueError("Il progetto non ha un canvas valido")
+
+    nodes_by_id = canvas_nodes_by_id(canvas)
+    inputs, bindings = compile_project_inputs(canvas, project_type)
+    project_inputs = [
+        node
+        for node in nodes
+        if isinstance(node, Mapping) and node.get("type") == "project_input"
+    ]
 
     if sum(item.kind == "connection" for item in inputs) > 1:
         raise ValueError(
@@ -392,4 +414,5 @@ __all__ = [
     "canvas_nodes_by_id",
     "check_binding",
     "compile_manifest",
+    "compile_project_inputs",
 ]

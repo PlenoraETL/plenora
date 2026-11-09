@@ -18,6 +18,7 @@ import { saveBlob } from '../../utils/downloadBlob';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { humanizeError, ERROR_MESSAGES } from '../../utils/errorMessages';
+import { withStepTitles } from '../../utils/stepTitles';
 import { useSmoothProgress } from '../../hooks/useSmoothProgress';
 import './ExecutionModal.css';
 import { formatNumber, formatSeconds } from '../../utils/format';
@@ -223,7 +224,7 @@ function ExecutionModal({
             </div>
 
             <p className="execution-modal__progress-message">
-              {progressMessage || 'Elaborazione in corso...'}
+              {withStepTitles(progressMessage, editorStepsFor(projectId, useCanvasStore.getState())) || 'Elaborazione in corso...'}
             </p>
 
             <div className="execution-modal__task-status">
@@ -272,7 +273,7 @@ function ExecutionModal({
                 </h4>
                 <p className="execution-modal__success-message">
                   {hasEnrichmentErrors 
-                    ? `${totalErrors} righe su ${enrichmentStats.total_rows} hanno generato errori`
+                    ? `${formatNumber(totalErrors)} righe su ${formatNumber(enrichmentStats.total_rows)} hanno generato errori`
                     : runSuccessText(result)
                   }
                 </p>
@@ -348,7 +349,7 @@ function ExecutionModal({
                     </span>
                   </div>
                   <p className="execution-modal__error-report-desc">
-                    {totalErrors} righe hanno generato errori durante l'arricchimento.
+                    {formatNumber(totalErrors)} righe hanno generato errori durante l'arricchimento.
                     Scarica il rapporto CSV per vedere i dettagli di ogni errore.
                   </p>
                   <button
@@ -417,8 +418,8 @@ function ExecutionModal({
                         {t.status === 'success'
                           ? `${formatNumber(t.rows_written || 0)} righe scritte`
                           : (t.status === 'failure' || t.status === 'validation_error' || t.status === 'write_error' || t.status === 'connection_error')
-                          ? caricaTaskErrorText(t)
-                          : (t.message || 'In coda...')}
+                          ? withStepTitles(caricaTaskErrorText(t), editorStepsFor(projectId, useCanvasStore.getState()))
+                          : (withStepTitles(t.message, editorStepsFor(projectId, useCanvasStore.getState())) || 'In coda...')}
                       </span>
                     </div>
                   ))}

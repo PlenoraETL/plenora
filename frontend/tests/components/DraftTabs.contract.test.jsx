@@ -18,7 +18,7 @@ import useLocalDraft, { DRAFT_DELAY_MS } from '../../src/hooks/useLocalDraft';
 import { AuthProvider } from '../../src/context/AuthContext';
 import { authBus } from '../../src/utils/authBus';
 import {
-  MAX_AGE_MS, currentDraftUser, draftKey, listDrafts, markProjectDeleted, pruneDrafts,
+  MAX_AGE_MS, ROLL_CALL_MS, currentDraftUser, draftKey, listDrafts, markProjectDeleted, pruneDrafts,
   currentTabId, keepTabCopy, readDraft, serverCanvasReplaced, touchTab, writeDraft,
 } from '../../src/utils/localDrafts';
 import { resetSession } from '../../src/utils/session';
@@ -313,7 +313,7 @@ const DRAFT_TRANSITIONS = {
     closedCopy('chiusa', 'c-chiusa');
     writeDraft('altro', P, 'X', { savedAt: Date.now(), nodes: [], edges: [] });
     act(() => { touchTab('B'); });
-    act(() => { resetSession({ reason: 'logout', userId: U }); });
+    act(() => { resetSession({ reason: 'logout', userId: U }); vi.advanceTimersByTime(ROLL_CALL_MS); });
     expect(copyOf(me)).toBe(null);
     expect(copyOf('chiusa')).toBe(null);
     expect(label(copyOf('B'))).toBe('b-aperta');

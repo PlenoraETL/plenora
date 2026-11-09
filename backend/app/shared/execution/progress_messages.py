@@ -15,7 +15,14 @@ Regola:
   (``frontend/tests/shared/terms.contract.test.js``): stesso glossario
   dell'interfaccia;
 - niente id nei testi; i numeri passano da ``progress_text``, che li scrive
-  come il frontend (``it-IT``: 238.044).
+  come il frontend (``it-IT``: 238.044);
+- residui del collaudo dal vivo (09/11/2026): anche il testo dell'attesa in
+  coda viene da qui (``queued``, prima «Pipeline in coda...» scritto a mano
+  in ``orchestrator/task_service``); un valore con un nome tecnico passa dalla
+  sua etichetta (``VALUE_LABELS``: l'operazione di ArcGIS, mai «add» o
+  «create_service»); nessun testo porta il dettaglio grezzo di un errore
+  (niente ``{detail}``): l'errore e' nell'esito, che la finestra mostra con i
+  titoli dei passi e «Vai al passo».
 """
 
 from __future__ import annotations
@@ -24,12 +31,14 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 PROGRESS_MESSAGES: Mapping[str, str] = MappingProxyType({
+    # Task appena accodato, ogni tipo (core/orchestrator/task_service.py)
+    "queued": "In coda...",
     # Esecuzione di un progetto (workers/tasks/pipeline_task.py)
     "run_start": "Avvio dell'esecuzione...",
     "run_loading": "Lettura del progetto...",
     "run_working": "Elaborazione dei dati...",
     "run_saving": "Salvataggio del risultato...",
-    "connection_lost": "Connessione al database persa: {detail}",
+    "connection_lost": "Connessione al database persa.",
     # Anteprima (workers/tasks/pipeline_task.py)
     "preview_start": "Avvio dell'anteprima...",
     "preview_working": "Calcolo dell'anteprima...",
@@ -59,11 +68,31 @@ PROGRESS_MESSAGES: Mapping[str, str] = MappingProxyType({
     "enrich_calls": "{api}: {processed} di {total} righe ({success} riuscite, {cached} dalla cache, {errors} errori)",
     "enrich_saving": "Salvataggio dei risultati...",
     "done": "Completato",
-    "failed": "Errore: {detail}",
+    "failed": "Esecuzione non riuscita.",
 })
 
 
-def _shown(value: Any) -> str:
+#: Valori con un nome tecnico: il segnaposto si riempie con l'etichetta, mai
+#: con il valore grezzo (un valore fuori tabella diventa ``_UNKNOWN``).
+#: ``operation``: le operazioni di Carica su ArcGIS (``carica/dispatch``,
+#: stesse voci del pannello ``CaricanArcGISNode``; ``add`` = ``append``).
+VALUE_LABELS: Mapping[str, Mapping[str, str]] = MappingProxyType({
+    "operation": MappingProxyType({
+        "add": "aggiunta",
+        "append": "aggiunta",
+        "update": "aggiornamento",
+        "upsert": "aggiornamento o inserimento",
+        "delete": "eliminazione",
+        "create_service": "nuovo servizio",
+    }),
+})
+_UNKNOWN = "scrittura"
+
+
+def _shown(name: str, value: Any) -> str:
+    labels = VALUE_LABELS.get(name)
+    if labels is not None:
+        return labels.get(str(value), _UNKNOWN)
     # Numeri come il frontend (formatNumber, it-IT): 238.044.
     if isinstance(value, bool):
         return str(value)
@@ -75,4 +104,4 @@ def _shown(value: Any) -> str:
 def progress_text(key: str, **values: Any) -> str:
     """Il testo di avanzamento ``key`` con i valori al loro posto."""
     template = PROGRESS_MESSAGES[key]
-    return template.format(**{name: _shown(value) for name, value in values.items()})
+    return template.format(**{name: _shown(name, value) for name, value in values.items()})
