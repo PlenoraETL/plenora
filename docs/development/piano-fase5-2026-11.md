@@ -637,3 +637,25 @@ Ribasato su `e42fb0df` (V1–V3 e campi dei metadati; questa funzione non scrive
 Architettura: arco nuovo `eseguibili -> manipola` (solo `eseguibili/identity_transform` importa il motore della Formula), documentato in `docs/architecture/dependency-matrix.md` e aggiunto alla baseline; nessun `except Exception` in più (la valutazione su una riga cattura le famiglie del motore).
 
 Verifiche (dopo il ribasamento su `e42fb0df`): frontend eslint pulito, vitest 213 file / 6.087 test passati, build; snapshot OpenAPI allineato; backend (comando completo delle cartelle tests2) 30.128 passati, 0 falliti, 61 saltati (il primo giro aveva trovato 3 guardiani: ritorno `dict[str, str]` invece di `StringMap`, arco tra domini non censito, un `except Exception` in più; corretti). Niente deploy, niente push.
+
+### Controllo di sicurezza della trasformazione (09/11/2026)
+
+Esito: nessun difetto sul percorso dei dati. Il valore viene solo dal server, il bind SQL vale su tutti
+i dialetti e `op_formula` non cambia. Corretti due punti medi:
+
+- **D1/O1**: un valore impostato dal server (`Filter.value_literal`) si confronta solo con `=` o `IN`
+  (`query_filters.LITERAL_OPERATORS`). Si rifiutano:
+  - LIKE e NOT LIKE, perché nel valore `_` e `%` fanno da jolly e «004_IS» troverebbe altri istituti;
+  - `!=`, gli operatori di ordine, NOT IN e BETWEEN;
+  - un filtro di questo tipo dentro condizioni con «oppure».
+- **D2**: la trasformazione ammette solo testi, slice, metodi di testo e `+`, con numeri entro 1000 e
+  testi entro 200 caratteri (`identity_transform._bounded_problem`).
+  - Il limite si ricontrolla anche all'esecuzione (O2).
+  - L'anteprima del pannello richiede `require_user_or_above`.
+
+Test: in `test_identity_transform.py`, operatori rifiutati, gruppo «oppure», espressioni costose e
+permesso dell'anteprima.
+
+Restano dichiarate:
+- **O3**: un'eccezione fuori dalle famiglie gestite nell'anteprima dà 500;
+- la vecchia `/execute` non risolve gli input, come prima.

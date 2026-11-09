@@ -9,6 +9,21 @@ from app.core.estrai.query_aliases import effective_alias
 from app.core.estrai.types import JsonObject, StringMap
 from app.shared.execution.condition_groups import condition_groups
 
+# VALORI IMPOSTATI DAL SERVER («Utente che esegue», ``Filter.value_literal``):
+# il filtro restringe i dati di CHI ESEGUE, quindi si ammettono solo gli
+# operatori che selezionano esattamente quel valore. LIKE (jolly «_» e «%»
+# nel valore), «diverso da», confronti d'ordine, NOT IN, BETWEEN e un gruppo
+# «oppure» allargherebbero i dati visibili (controllo 09/11/2026, D1/O1).
+LITERAL_OPERATORS = frozenset({"=", "IN"})
+LITERAL_OPERATOR_MESSAGE = (
+    "Un valore impostato dal server («Utente che esegue») si confronta solo con "
+    "«uguale» o «è uno di»: l'operatore {operator} allargherebbe i dati visibili."
+)
+LITERAL_IN_OR_GROUP_MESSAGE = (
+    "Un filtro con un valore impostato dal server («Utente che esegue») non può "
+    "stare in condizioni con «oppure»: allargherebbe i dati visibili."
+)
+
 
 class WhereClauseBuilder:
     """Builds parametrized WHERE filters for QueryGenerator."""
@@ -68,6 +83,8 @@ class WhereClauseBuilder:
                 if rendered:
                     groups.append(rendered)
 
+            if len(groups) > 1 and any(getattr(item, "value_literal", None) for item in filters):
+                raise ValueError(LITERAL_IN_OR_GROUP_MESSAGE)
             if len(groups) == 1:
                 conditions.extend(groups[0])
             elif groups:
@@ -145,15 +162,12 @@ class WhereClauseBuilder:
         if operator == "IS NOT NULL":
             return f"{col_ref} IS NOT NULL"
 
-        if literal and operator in ("IN", "NOT IN"):
+        if literal and operator not in LITERAL_OPERATORS:
+            raise ValueError(LITERAL_OPERATOR_MESSAGE.format(operator=operator))
+        if literal and operator == "IN":
             param_name = self._next_param_name()
             params[param_name] = value
-            return f"{col_ref} {operator} (:{param_name})"
-        if literal and operator == "BETWEEN":
-            raise ValueError(
-                "BETWEEN richiede due valori: un valore impostato dal server "
-                "(«Utente che esegue») e' uno solo. Usa un altro operatore."
-            )
+            return f"{col_ref} IN (:{param_name})"
 
         if operator == "IN":
             return self.create_condition_in(col_ref, value, params)

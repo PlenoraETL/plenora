@@ -202,7 +202,6 @@ def _with_operator(canvas: dict, operator: str) -> dict:
     ("e0041", "'GETDATE()' + utente", "=", "GETDATE()e0041", "= :p_0"),
     # Virgola con IN: un solo valore, non una lista.
     ("rossi,bianchi", None, "IN", "rossi,bianchi", "IN (:p_0)"),
-    ("rossi,bianchi", None, "NOT IN", "rossi,bianchi", "NOT IN (:p_0)"),
 ])
 def test_estrai_binds_the_value_as_one_sql_parameter(username, transform, operator, value, clause):
     extra = {"identity_transform": transform} if transform else {}
@@ -217,9 +216,50 @@ def test_estrai_binds_the_value_as_one_sql_parameter(username, transform, operat
     assert info["summary"]["utente"] == expected
 
 
-def test_estrai_between_with_the_runtime_user_is_refused():
-    with pytest.raises(ValueError, match="BETWEEN richiede due valori"):
-        _estrai_sql(_with_operator(_estrai_canvas(), "BETWEEN"), _user("a AND b"))
+@pytest.mark.parametrize("operator", ["LIKE", "NOT LIKE", "!=", ">", "<", ">=", "<=", "NOT IN", "BETWEEN"])
+def test_estrai_refuses_operators_that_would_widen_the_data(operator):
+    """D1/O1 (controllo 09/11/2026): un valore del server restringe i dati di
+    chi esegue; solo «uguale» e «è uno di» selezionano esattamente quel valore.
+    LIKE con «004_IS» troverebbe anche altri istituti («_» e «%» sono jolly)."""
+    with pytest.raises(ValueError, match="si confronta solo con «uguale» o «è uno di»"):
+        _estrai_sql(_with_operator(_estrai_canvas(identity_transform=RULE), operator), _user("E0071"))
+
+
+def test_estrai_refuses_the_runtime_user_inside_an_or_group():
+    canvas = _estrai_canvas(identity_transform=RULE)
+    filters = canvas["nodes"][0]["filters"]
+    filters[0]["group"] = 0
+    filters.append({"column": "owner", "operator": "=", "value": "altro", "group": 1})
+    with pytest.raises(ValueError, match="non può stare in condizioni con «oppure»"):
+        _estrai_sql(canvas, _user("E0071"))
+
+
+@pytest.mark.parametrize("expression", [
+    "utente + 'a' * 9**9**9",
+    "utente.str.pad(10**10)",
+    "utente.str.pad(100000)",
+    "utente * 1000",
+    "utente + '" + "x" * 300 + "'",
+])
+def test_costly_transforms_are_refused_before_running(expression):
+    """D2: potenze, ripetizioni e numeri o testi grandi bloccherebbero il
+    processo anche su una riga; la trasformazione ammette solo «+»."""
+    assert transform_problem(expression) is not None
+    with pytest.raises(ValueError):
+        preview_transform(expression, "E0041")
+
+
+def test_rule_still_accepted_after_the_cost_limits():
+    assert transform_problem(RULE) is None
+    assert preview_transform(RULE, "E0071") == "007_IS"
+
+
+def test_panel_preview_is_for_who_can_edit_projects():
+    """D2: l'anteprima e' per chi scrive canvas (non il viewer)."""
+    import inspect
+    from app.core.projects import router as projects
+    src = inspect.getsource(projects.preview_identity_transform)
+    assert "Depends(require_user_or_above)" in src
 
 
 def test_client_text_inputs_keep_their_reading():

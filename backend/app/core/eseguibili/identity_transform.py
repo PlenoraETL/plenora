@@ -16,6 +16,7 @@ Manipola, che ``app.shared`` non puo' importare:
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -47,6 +48,9 @@ def transform_problem(expression: str | None) -> str | None:
         validate_formula(text)
     except ValueError as exc:
         return f"la trasformazione non e' una formula ammessa ({exc})"
+    bounded = _bounded_problem(text)
+    if bounded:
+        return bounded
     names = formula_names(text)
     others = sorted(names - {TRANSFORM_VARIABLE})
     if others:
@@ -62,6 +66,36 @@ def transform_problem(expression: str | None) -> str | None:
     return None
 
 
+# Limiti di COSTO della trasformazione (controllo 09/11/2026, D2): il
+# cancello della Formula ammette potenze e ripetizioni, che anche su una sola
+# riga di testo possono bloccare il processo. Per il nome utente bastano
+# testi, slice, metodi di testo e concatenazione con «+»: niente altri
+# operatori aritmetici e solo numeri e testi piccoli.
+TRANSFORM_MAX_NUMBER = 1000
+TRANSFORM_MAX_TEXT = 200
+
+
+def _bounded_problem(text: str) -> str | None:
+    try:
+        tree = ast.parse(text, mode="eval")
+    except SyntaxError:
+        return "la trasformazione non e' un'espressione valida"
+    for node in ast.walk(tree):
+        if isinstance(node, ast.BinOp) and not isinstance(node.op, ast.Add):
+            return "la trasformazione puo' usare solo «+» per unire i testi"
+        if isinstance(node, ast.UnaryOp) and not isinstance(node.op, ast.USub):
+            return "la trasformazione usa un operatore non ammesso"
+        if isinstance(node, ast.Constant):
+            value = node.value
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)) and abs(value) > TRANSFORM_MAX_NUMBER:
+                return f"la trasformazione usa un numero oltre {TRANSFORM_MAX_NUMBER}"
+            if isinstance(value, str) and len(value) > TRANSFORM_MAX_TEXT:
+                return f"la trasformazione usa un testo oltre {TRANSFORM_MAX_TEXT} caratteri"
+    return None
+
+
 def assert_valid_transform(expression: str | None, *, label: str) -> None:
     problem = transform_problem(expression)
     if problem:
@@ -69,7 +103,11 @@ def assert_valid_transform(expression: str | None, *, label: str) -> None:
 
 
 def evaluate_identity_transform(expression: str, row: Mapping[str, str]) -> Any:
-    """Valutatore di ``runtime_identity`` (motore della Formula, una riga)."""
+    """Valutatore di ``runtime_identity`` (motore della Formula, una riga).
+
+    Ricontrolla l'espressione anche qui (O2): un manifest salvato prima di un
+    limite nuovo non lo aggira."""
+    assert_valid_transform(expression, label="Utente")
     return evaluate_formula_on_row(expression, row)
 
 

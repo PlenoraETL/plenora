@@ -30,7 +30,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.auth.dependencies import require_not_esecutore
+from app.core.auth.dependencies import require_not_esecutore, require_user_or_above
 from app.core.eseguibili import db as eseguibili_db
 from app.core.eseguibili import preflight as eseguibili_preflight
 from app.core.eseguibili import runtime as executable_runtime
@@ -330,6 +330,7 @@ def _project_app(project_type, canvas, monkeypatch, **metadata_extra):
         monkeypatch.setattr(task_service, name, submitted)
     app = FastAPI()
     app.dependency_overrides[require_not_esecutore] = lambda: MARIO
+    app.dependency_overrides[require_user_or_above] = lambda: MARIO
     app.include_router(enrichment.enrich_router, prefix="/api")
     app.include_router(pipeline.pipeline_router, prefix="/api")
     app.include_router(projects.router, prefix="/api")

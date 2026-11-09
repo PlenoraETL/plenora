@@ -1178,7 +1178,8 @@ class IdentityTransformPreviewResponse(BaseModel):
 @router.post("/identity-transform-preview", response_model=IdentityTransformPreviewResponse)
 def preview_identity_transform(
     body: IdentityTransformPreviewRequest,
-    current_user: CurrentUser = Depends(require_not_esecutore),
+    # Solo chi puo' modificare i progetti (D2): il viewer non scrive canvas.
+    current_user: CurrentUser = Depends(require_user_or_above),
 ) -> IdentityTransformPreviewResponse:
     """Valore della trasformazione per il nome utente di PROVA del pannello
     (es. «E0041 → 004_IS»). Stessa regola dell'esecuzione
