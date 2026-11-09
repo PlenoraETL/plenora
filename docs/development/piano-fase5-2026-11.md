@@ -596,3 +596,20 @@ Correzione unica di tre voci (V1 e V2 dall'elenco, V3 aggiunta dal coordinatore,
 API cambiate: `EseguibileSourceStatus.input_changes`, corpo facoltativo di `POST /eseguibili/{id}/versions`, `chain_title` in `ProjectMetadata`, `ProjectDetailsUpdate` e `GraphProject`, codice `user_has_history` (snapshot OpenAPI rigenerato). Una migrazione (V2, non distruttiva). CSP e installer invariati.
 
 Verifiche: frontend eslint pulito, vitest 212 file / 6.079 test passati (il primo giro ha trovato 1 fallimento, corretto: `INPUT_CHANGES_INTRO` esportato senza uso), build; backend (comando completo delle cartelle tests2) 30.065 passati, 0 falliti, 61 saltati (il primo giro aveva trovato 11 fallimenti, corretti: lock del catalogo dei codici con `user_has_history`, ritorni tipizzati `UserReferenceCount` e `NoReturn` per i guardiani dei tipi, `chain_title` nei metadati attesi, messaggio di `InputChangesNotConfirmed` senza `str(exc)`). Niente deploy, niente push.
+
+### Controllo veloce dopo V1–V3 (09/11/2026)
+
+- **D1 (alta), corretto**: `tags` e `chain_title` mancavano in `sql_safety._ALLOWED_UPDATE_FIELDS["projects"]`,
+  quindi `safe_set_clause` sollevava ValueError e PATCH /projects/{id} rispondeva 500.
+  - Per i tag era un **difetto già presente in produzione**: verificato dal vivo, 500 su un PATCH dei tag.
+  - I test lo nascondevano perché sostituivano `update_project_row` con un finto.
+  - Test: `tests2/projects/test_project_meta_update_fields_contract.py`. Enumera i campi scritti
+    dall'aggiornamento dei metadati, verifica che `safe_set_clause` li accetti e che il percorso
+    `update_project_row` arrivi davvero all'SQL.
+- **D2 (bassa), dichiarato**: la conferma «Ripubblica comunque» vale per tutte le modifiche presenti al
+  momento della ripubblicazione, comprese quelle comparse dopo l'anteprima per una modifica
+  concorrente.
+- **D3 (bassa), dichiarato**: versioni molto vecchie con campi salvati senza il prefisso `config.`
+  possono chiedere una conferma in più.
+- **D4 (bassa), dichiarato**: il conteggio dei riferimenti dell'utente presume che tutte le 13 tabelle
+  esistano. Ci sono tutte in un database aggiornato.

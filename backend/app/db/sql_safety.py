@@ -24,6 +24,11 @@ _ALLOWED_UPDATE_FIELDS: dict[str, frozenset[str]] = {
         "output_contract",
         "updated_at",
         "retention_n",
+        # Metadati modificati da PATCH /projects/{id} (service.update_project_meta):
+        # senza queste voci safe_set_clause rifiutava tag e titolo della catena
+        # e la PATCH rispondeva 500 (collaudo 09/11/2026).
+        "tags",
+        "chain_title",
     }),
     "connections": frozenset({
         "name",
