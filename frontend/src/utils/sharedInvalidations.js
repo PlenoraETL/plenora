@@ -45,6 +45,8 @@ export const WRITE_INVALIDATIONS = Object.freeze([
   { method: /^post$/, url: /^\/files\/preview-temp$/, invalidates: [], why: 'anteprima di un file non salvato' },
   { method: /^post$/, url: /^\/functions\/(translate|preview-formula)$/, invalidates: [], why: 'traduzione/anteprima di una formula' },
   { method: /^post$/, url: /^\/eseguibili\/[^/]+\/(analyze-upload|preflight|execute|runs)$/, invalidates: [], why: 'analisi e avvio di un eseguibile (la fine: TASK_INVALIDATIONS)' },
+  { method: /^post$/, url: /^\/eseguibili\/[^/]+\/dashboard\/(pass|edit-link)$/, invalidates: [], why: 'lasciapassare dei dati e link di modifica della dashboard Grafana: nessuna lista cambia (crea ed elimina: riga degli eseguibili)' },
+  { method: ANY, url: /^\/grafana\/session$/, invalidates: [], why: 'cookie della sessione per /grafana (apertura, rinnovo, logout)' },
   { method: /^post$/, url: /^\/auth\/(login|logout|change-password)$/, invalidates: [], why: 'sessione: il logout svuota comunque tutto (resetSession)' },
   { method: /^delete$/, url: /^\/auth\/groups\/[^/]+$/, invalidates: ALL_LISTS, why: 'gruppo eliminato a cascata con le sue risorse (progetti, connessioni, file...)' },
   { method: ANY, url: /^\/auth\/(users|groups)(\/|$)/, invalidates: [], why: 'utenti e gruppi: non sono liste condivise; il cambio del PROPRIO ruolo o gruppo lo rileva /auth/me (context/AuthContext)' },

@@ -47,8 +47,10 @@
  * lo leggono il prompt di chiusura della scheda, il guard di navigazione e
  * l'uscita dall'account.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { downloadEseguibileOutput } from '../../api';
+import { useAuth } from '../../context/AuthContext';
+import { dashboardTarget } from '../../utils/eseguibileDashboard';
 import { cancelTaskOnPageExit } from '../../api/tasks';
 import { authBus } from '../../utils/authBus';
 import { useTask } from '../../hooks/useTask';
@@ -103,7 +105,24 @@ function resultNoteOf(resultState, { expiresAt = null, cleansOnExit = false } = 
   }
 }
 
-export function useEseguibileRun({ eseguibileId, onCleanup = null, onClose = null }) {
+// Utente della sessione o null (l'hook gira anche fuori da AuthProvider: test).
+function useSessionUser() {
+  try {
+    return useAuth()?.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `eseguibile` (dettaglio, facoltativo): per «Apri dashboard» (`dashboard`,
+ * regola unica utils/eseguibileDashboard.dashboardTarget). Ogni finestra
+ * dei risultati di un Eseguibile lo riceve da qui: stesse condizioni per
+ * tutti i percorsi, e la dashboard sparisce quando il risultato non c'e'
+ * piu' (`gone`) o la finestra si chiude.
+ */
+export function useEseguibileRun({ eseguibileId, eseguibile = null, onCleanup = null, onClose = null }) {
+  const user = useSessionUser();
   const task = useTask({ scope: eseguibileId, interval: 1500 });
   const dl = useDownload();
   const transfer = useTransferProgress();
@@ -283,9 +302,14 @@ export function useEseguibileRun({ eseguibileId, onCleanup = null, onClose = nul
     });
   }, [state.phase, state.taskId, saved, gone, expireIfDue, dl, eseguibileId, transfer]);
 
+  const dashboard = useMemo(
+    () => dashboardTarget({ user, eseguibile, taskId: state.taskId, resultState }),
+    [user, eseguibile, state.taskId, resultState],
+  );
+
   return {
     task, state, start: task.run, cancel: task.cancel, close, discard, download,
-    busy, resultState,
+    busy, resultState, dashboard,
     canDownload: resultState === 'on_server' || resultState === 'local',
     resultNote: resultNoteOf(resultState, { expiresAt: saved?.expiresAt, cleansOnExit: Boolean(onCleanup) }),
     downloading: dl.busy, downloadError: dl.error, downloadProgress: transfer.progress,

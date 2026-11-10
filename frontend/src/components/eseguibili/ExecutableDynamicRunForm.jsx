@@ -24,6 +24,8 @@ import { requestErrorMessage, backendMessage } from '../../utils/errorMessages';
 import { isPreparationChanged, needsPreflight } from '../../utils/beforeRun';
 import BeforeRunModal from '../editor/BeforeRunModal';
 import BindingWarnings from './BindingWarnings';
+import DashboardWarnings from './DashboardWarnings';
+import { dashboardWarningsFor } from '../../utils/eseguibileDashboard';
 import { useAuth } from '../../context/AuthContext';
 import { can } from '../../utils/permissions';
 import ExecutionModal from '../modals/ExecutionModal';
@@ -218,8 +220,15 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
   const user = useSignedInUser();
   // Binding non letti dall'esecuzione: avviso NON bloccante per chi puo'
   // ripubblicare (can.manageEseguibile, la stessa regola della card).
+  // Avvisi della dashboard Grafana: stessa regola (dashboardWarningsFor).
+  const dashboardWarnings = dashboardWarningsFor(user, eseguibile);
   const bindingNotice = can.manageEseguibile(user, eseguibile)
-    ? <BindingWarnings warnings={eseguibile.binding_warnings} />
+    ? (
+      <>
+        <BindingWarnings warnings={eseguibile.binding_warnings} />
+        <DashboardWarnings warnings={dashboardWarnings} />
+      </>
+    )
     : null;
   const manifest = eseguibile.manifest;
   const projectType = String(eseguibile.project_type || 'estrai').toLowerCase();
@@ -235,7 +244,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
   );
   const [outputName, setOutputName] = useState(eseguibile.default_output_name || '');
   const [launched, setLaunched] = useState(false);
-  const run = useEseguibileRun({ eseguibileId: eseguibile.id, onCleanup: onAfterDownload, onClose });
+  const run = useEseguibileRun({ eseguibileId: eseguibile.id, eseguibile, onCleanup: onAfterDownload, onClose });
 
   const newRequest = (extra = {}) => ({
     id: Date.now(),
@@ -359,6 +368,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
       downloaded={run.downloaded}
       downloadNote={run.resultNote}
       onDiscard={run.canDownload ? () => run.discard() : null}
+      dashboard={run.dashboard}
       projectName={eseguibile.name}
       backgroundable={false}
     />

@@ -98,6 +98,11 @@
   background: rgba(124, 58, 237, 0.12);
 }
 
+/* Casella «Crea anche una dashboard» (11/11/2026). */
+.pem-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 4px; cursor: pointer; font-size: 13px; }
+.pem-check input { margin-top: 3px; }
+.pem-check__hint { display: block; margin-top: 2px; font-size: 12px; color: var(--plen-text-sub); }
+
 .pem-icon-custom {
   width: 72px !important;
   text-align: center;

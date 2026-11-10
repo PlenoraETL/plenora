@@ -112,6 +112,7 @@ describe('PublishEseguibileModal', () => {
       default_output_format: 'xlsx',
       default_output_name: 'roma_geocoded',
       icon: '▶',
+      create_dashboard: false,
     });
     expect(toastMock.success).toHaveBeenCalledWith(
       'Eseguibile "Enrich Roma" pubblicato',

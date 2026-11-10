@@ -165,3 +165,42 @@ export const activateEseguibileVersion = async (eseguibileId, versionId) => {
   );
   return r.data;
 };
+
+// ── Dashboard Grafana (11/11/2026) ────────────────────────────────────────
+// Gestione: stessa regola di modifica dell'Eseguibile
+// (can.manageEseguibileDashboard); il lasciapassare a chi ha lanciato
+// l'esecuzione (can.openEseguibileDashboard, hooks/useDashboardPass).
+
+/** Crea la dashboard di partenza: {dashboard_uid, view_path, edit_path, dashboard_warnings}. */
+export const createEseguibileDashboard = async (eseguibileId) => {
+  const r = await http.post(`/eseguibili/${encodeURIComponent(eseguibileId)}/dashboard`);
+  return r.data;
+};
+
+/** Elimina la dashboard (in Grafana e il legame). */
+export const deleteEseguibileDashboard = async (eseguibileId) => {
+  const r = await http.delete(`/eseguibili/${encodeURIComponent(eseguibileId)}/dashboard`);
+  return r.data;
+};
+
+/** «Modifica in Grafana»: sincronizza team e cartelle e restituisce `edit_path`. */
+export const getEseguibileDashboardEditLink = async (eseguibileId, { taskId = null } = {}) => {
+  const r = await http.post(
+    `/eseguibili/${encodeURIComponent(eseguibileId)}/dashboard/edit-link`,
+    taskId ? { task_id: taskId } : {},
+  );
+  return r.data;
+};
+
+/**
+ * Lasciapassare dei dati di UNA esecuzione:
+ * {task_id, dashboard_uid, pass_token, expires_at, data_expires_at, iframe_path}
+ * (epoch in secondi). Si rinnova richiamandolo.
+ */
+export const issueEseguibileDashboardPass = async (eseguibileId, taskId) => {
+  const r = await http.post(
+    `/eseguibili/${encodeURIComponent(eseguibileId)}/dashboard/pass`,
+    { task_id: taskId },
+  );
+  return r.data;
+};

@@ -17,6 +17,7 @@ import { useSharedResource } from '../../hooks/useSharedResource';
 import { saveBlob } from '../../utils/downloadBlob';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
+import DashboardLauncher from '../eseguibili/DashboardLauncher';
 import { humanizeError, ERROR_MESSAGES } from '../../utils/errorMessages';
 import { withStepTitles } from '../../utils/stepTitles';
 import { useSmoothProgress } from '../../hooks/useSmoothProgress';
@@ -110,6 +111,10 @@ function ExecutionModal({
   downloaded = false,
   downloadNote = null,
   onDiscard = null,
+  // Dashboard Grafana (11/11/2026): bersaglio di «Apri dashboard» per il
+  // risultato di un Eseguibile (useEseguibileRun.dashboard); gli editor
+  // non lo passano.
+  dashboard = null,
 }) {
   const reportDownload = useDownload();
   const [reporting, setReporting] = useState(false);
@@ -389,6 +394,7 @@ function ExecutionModal({
                   {downloading ? 'Scaricamento…' : (downloaded ? '⬇️ Scarica di nuovo' : '⬇️ Scarica il file')}
                 </button>
               )}
+              <DashboardLauncher target={dashboard} />
               <TransferProgress progress={downloadProgress} verb="Scaricamento" />
               {downloadNote && <p className="execution-modal__hint">{downloadNote}</p>}
               {onDiscard && (

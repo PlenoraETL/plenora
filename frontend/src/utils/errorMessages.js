@@ -108,6 +108,14 @@ export const ERROR_MESSAGES = {
   auth_self_delete_denied: { title: 'Operazione non consentita', message: 'Non puoi eliminare il tuo stesso account.' },
   auth_revocation_unavailable: { title: 'Logout parziale', message: 'Il servizio di logout non è momentaneamente disponibile, ma la sessione locale è stata chiusa.' },
 
+  // Dashboard Grafana degli Eseguibili (11/11/2026)
+  grafana_disabled: { title: 'Dashboard disattivate', message: 'Le dashboard Grafana non sono attive su questo server: pubblica senza dashboard o chiedi all’amministratore di attivarle.' },
+  grafana_unavailable: { title: 'Grafana non disponibile', message: 'Grafana non risponde o non è configurato. Riprova tra poco; se persiste, contatta l’amministratore.' },
+  dashboard_not_found: { title: 'Dashboard non trovata', message: 'Questo Eseguibile non ha (più) una dashboard. Chi lo gestisce può crearla dal menu «⋯».' },
+  dashboard_already_exists: { title: 'Dashboard già presente', message: 'Questo Eseguibile ha già una dashboard: aprila con «Modifica in Grafana».' },
+  dashboard_data_unavailable: { title: 'Dati non più disponibili', message: 'I dati di questa esecuzione per la dashboard non sono più disponibili: esegui di nuovo per vederne di nuovi.' },
+  dashboard_pass_invalid: { title: 'Accesso alla dashboard scaduto', message: 'L’accesso ai dati della dashboard è scaduto o non è valido. Riapri la dashboard dalla finestra dei risultati.' },
+
   // Backup / object storage
   object_storage_disabled: { title: 'Storage non abilitato', message: 'Lo storage di backup (object storage) non è abilitato sul server.' },
   aws_crt_missing: { title: 'Componente mancante', message: 'Un componente AWS richiesto manca sul server. Contatta l’amministratore.' },

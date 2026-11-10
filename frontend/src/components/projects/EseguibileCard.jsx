@@ -1,6 +1,7 @@
 import React from 'react';
 import ActionMenu from '../common/ActionMenu';
 import BindingWarnings from '../eseguibili/BindingWarnings';
+import DashboardBadge from '../eseguibili/DashboardBadge';
 import { runInputSummary } from '../eseguibili/runForm';
 
 /**
@@ -19,6 +20,7 @@ function EseguibileCard({ item, onExecute, onDelete, canManage = false }) {
       <div className="pl__card-body">
         <div className="pl__card-header-row">
           <button type="button" className="pl__card-name pl__card-open" onClick={onExecute} title={item.name}>{item.name}</button>
+          <DashboardBadge item={item} />
           <span className="pl__card-mod pl__card-mod--eseg">🚀 {fmt}</span>
         </div>
         {item.description && <div className="pl__card-desc">{item.description}</div>}

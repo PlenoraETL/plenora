@@ -73,6 +73,8 @@
 .esl__rename-action { border: 0; background: transparent; color: var(--plen-text); cursor: pointer; font-size: 18px; padding: 2px 4px; }
 .esl__rename-action:disabled { opacity: .5; cursor: default; }
 
+.esl__card-badges { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
 .esl__card-format {
   background: rgba(124, 58, 237, 0.15);
   color: #a78bfa;

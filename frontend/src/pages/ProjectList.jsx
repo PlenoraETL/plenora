@@ -29,6 +29,7 @@ import PageLayout from '../components/common/PageLayout';
 import { useTheme } from '../hooks/useTheme';
 import { RULES, connectionShareType } from '../utils/nodeActions';
 import { confirmDeleteEseguibile, renameEseguibile } from '../utils/resourceActions';
+import { dashboardHandlers } from '../utils/dashboardActions';
 import { testConnectionOf } from '../utils/connectionTest';
 import { lastTestFromResult } from '../utils/connectionTestStatus';
 import { toastApiError } from '../utils/toastApiError';
@@ -368,6 +369,10 @@ function ProjectList() {
           share: () => setSharing({ resourceType: 'eseguibili', resourceId: item.id, name: item.name, disabled: item.can_edit === false }),
           rename: (value) => renameEseguibile({ toast, item, value }),
           versions: () => setVersioningEseguibile(item),
+          // Dashboard Grafana: gli stessi gestori della pagina Eseguibili.
+          ...(RULES.manageEseguibileDashboard(user, item)
+            ? dashboardHandlers({ toast, confirm: confirmModal.confirm, item, onChanged: loadData })
+            : {}),
           remove: () => handleDeleteEseguibile(item),
         },
       };

@@ -1,0 +1,26 @@
+/* «Apri dashboard» e finestra della dashboard Grafana (DashboardLauncher.jsx). */
+.dashboard-launcher { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+
+.dashboard-launcher__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  padding: 11px;
+  background: var(--plen-blue-bg);
+  border: 1px solid var(--plen-blue-border);
+  border-radius: 7px;
+  color: var(--plen-blue);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--plen-font-body);
+  cursor: pointer;
+}
+.dashboard-launcher__btn:hover { filter: brightness(1.08); }
+
+.dashboard-viewer .modal-wrapper__content { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; }
+.dashboard-viewer__body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.dashboard-viewer__frame { flex: 1; width: 100%; min-height: 60vh; border: 0; background: var(--plen-surface); }
+.dashboard-viewer__status { padding: 24px; color: var(--plen-text-sub); }
+.dashboard-viewer__hint { margin: 0; padding: 6px 12px; font-size: 12px; color: var(--plen-text-sub); }

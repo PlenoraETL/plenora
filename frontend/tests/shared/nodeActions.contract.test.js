@@ -35,7 +35,7 @@ describe('tabella delle azioni per tipo di nodo', () => {
     const ids = Object.fromEntries(Object.entries(NODE_ACTIONS).map(([k, list]) => [k, list.map((a) => a.id)]));
     expect(ids).toEqual({
       project: ['open', 'run', 'history', 'schedules', 'rename', 'clone', 'publish', 'remove'],
-      eseguibile: ['openSource', 'run', 'publishVersion', 'share', 'rename', 'versions', 'remove'],
+      eseguibile: ['openSource', 'run', 'publishVersion', 'share', 'rename', 'versions', 'createDashboard', 'editDashboard', 'deleteDashboard', 'remove'],
       connection: ['edit', 'openPage', 'test', 'share'],
       file: ['openPage'],
       datasource: ['openPage'],
@@ -58,6 +58,7 @@ describe('tabella delle azioni per tipo di nodo', () => {
     const rule = (kind, id) => NODE_ACTIONS[kind].find((a) => a.id === id).rule;
     expect(rule('eseguibile', 'share')).toBe('shareEseguibile');
     for (const id of ['rename', 'versions', 'remove', 'publishVersion']) expect(rule('eseguibile', id)).toBe('manageEseguibile');
+    for (const id of ['createDashboard', 'editDashboard', 'deleteDashboard']) expect(rule('eseguibile', id)).toBe('manageEseguibileDashboard');
     expect(rule('connection', 'share')).toBe('shareConnection');
     expect(rule('connection', 'edit')).toBe('editConnection');
     expect(rule('project', 'rename')).toBe('editProjectMeta');
@@ -73,8 +74,11 @@ describe('stesse funzioni e stessi permessi delle pagine (lettura statica)', () 
   const pl = read('pages/ProjectList.jsx');
 
   it('pagina Eseguibili: permessi da RULES, gestori e finestre comuni', () => {
-    expect(esl).toContain('RULES.shareEseguibile(user, item)');
+    // Il menu «⋯» viene dalla tabella (panelActions), come il pannello (11/11/2026).
+    expect(esl).toContain('panelActions(ESEGUIBILE_NODE');
     expect(esl).toContain('RULES.manageEseguibile(user, item)');
+    expect(esl).toContain('RULES.manageEseguibileDashboard(user, item)');
+    expect(esl).toContain('dashboardHandlers(');
     expect(esl).not.toMatch(/can\.(shareResources|manageEseguibile)\(/);
     for (const used of ['confirmDeleteEseguibile(', 'saveEseguibileName(', '<ShareDialog', '<EseguibileVersionsModal']) expect(esl).toContain(used);
     expect(esl).not.toContain('AllowedGroupsSelector');
@@ -92,7 +96,7 @@ describe('stesse funzioni e stessi permessi delle pagine (lettura statica)', () 
     for (const used of [
       'confirmDeleteEseguibile(', 'renameEseguibile(', 'testConnectionOf(', '<ShareDialog', '<EseguibileVersionsModal',
       'connectionShareType(', "requestOnOpen('editConnection'", 'handleCloneProject(p)', 'handleDeleteProject(p.id, p.name)',
-      'setPublishProject(p)', 'handleRenameProject(p, name)',
+      'setPublishProject(p)', 'handleRenameProject(p, name)', 'dashboardHandlers(',
     ]) expect(pl).toContain(used);
     // I permessi della home vengono dalla tabella (nessun can.* nella pagina).
     expect(pl).not.toMatch(/\bcan\.[a-zA-Z]+\(/);

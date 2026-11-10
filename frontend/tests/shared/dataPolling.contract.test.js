@@ -315,6 +315,7 @@ const TIMER_USES = {
   'components/editor/BeforeRunModal.jsx': 'attesa dopo la digitazione prima della stima (debounce)',
   'components/editor/EditorShell.jsx': 'salvataggio al giro dopo e fine dell\'evidenziazione della vista',
   'components/eseguibili/useEseguibileRun.js': 'file scaricato tolto dalla memoria dopo il tempo dichiarato (UI-3, U13)',
+  'hooks/useDashboardPass.js': 'rinnovo di sessione Grafana e lasciapassare prima della scadenza (non un polling: un passo per scadenza)',
   'components/modals/PreviewModal.jsx': 'ridisegno della mappa Leaflet dopo l\'apertura',
   'components/nodes/StaticValuesNode.jsx': 'chiusura del suggerimento dopo il blur',
   'components/panels/QueryPreview.jsx': 'fine del segno «copiato»',

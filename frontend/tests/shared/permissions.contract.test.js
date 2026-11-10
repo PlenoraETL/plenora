@@ -56,6 +56,12 @@ const GATED = {
   deleteEseguibile: ['manageEseguibile'],
   republishEseguibile: ['manageEseguibile'],
   activateEseguibileVersion: ['manageEseguibile'],
+  createEseguibileDashboard: ['manageEseguibileDashboard'],
+  deleteEseguibileDashboard: ['manageEseguibileDashboard'],
+  getEseguibileDashboardEditLink: ['manageEseguibileDashboard'],
+  issueEseguibileDashboardPass: ['openEseguibileDashboard'],
+  // Sessione per /grafana: prima dell'iframe o di «Modifica in Grafana».
+  openGrafanaSession: ['openEseguibileDashboard', 'manageEseguibileDashboard'],
   uploadFile: ['uploadFile'],
   uploadMultiLayer: ['uploadFile'],
   updateFile: ['editFile', 'uploadFile'], // anche la scelta del layer dopo l'upload
@@ -122,6 +128,8 @@ const DELEGATED = {
   'components/panels/ApiEnrichNode.jsx': 'canvas',
   // Gestori condivisi delle pagine Eseguibili e della home (pannello delle catene).
   'utils/resourceActions.js': ['pages/EseguibiliList.jsx', 'pages/ProjectList.jsx'],
+  // Dashboard Grafana (11/11/2026): gestori comuni di pagina, pannello e finestra della dashboard.
+  'utils/dashboardActions.js': ['pages/EseguibiliList.jsx', 'pages/ProjectList.jsx', 'components/eseguibili/DashboardLauncher.jsx'],
 };
 
 // RULES di utils/nodeActions: regola -> capability che usa (`can.<nome>(` nel corpo).
@@ -322,10 +330,12 @@ describe('ogni capability e\' la regola del backend del suo endpoint (CAPABILITY
   it('le funzioni elencate esistono e hanno la dependency dichiarata', () => {
     const wrong = [];
     for (const [cap, spec] of Object.entries(CAPABILITY_BACKEND)) {
-      for (const fn of spec.fns) {
-        const deps = authDepends(spec.file, fn);
-        if (deps === null) wrong.push(`${cap}: ${spec.file}::${fn} non trovata`);
-        else if (deps.length !== 1 || deps[0] !== spec.depends) wrong.push(`${cap}: ${spec.file}::${fn} usa ${deps.join(', ') || 'nessuna'} (dichiarato ${spec.depends})`);
+      for (const entry of spec.fns) {
+        // `file::funzione`: funzione di un altro router (stessa regola).
+        const [file, fn] = entry.includes('::') ? entry.split('::') : [spec.file, entry];
+        const deps = authDepends(file, fn);
+        if (deps === null) wrong.push(`${cap}: ${file}::${fn} non trovata`);
+        else if (deps.length !== 1 || deps[0] !== spec.depends) wrong.push(`${cap}: ${file}::${fn} usa ${deps.join(', ') || 'nessuna'} (dichiarato ${spec.depends})`);
       }
     }
     expect(wrong).toEqual([]);

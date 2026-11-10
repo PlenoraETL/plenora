@@ -22,6 +22,7 @@ import useDialog from '../../hooks/useDialog';
 import { useResource } from '../../hooks/useResource';
 import { useEseguibileRun } from './useEseguibileRun';
 import TransferProgress from '../common/TransferProgress';
+import DashboardLauncher from './DashboardLauncher';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { ResourceError } from '../common/ListState';
 import { requestErrorMessage } from '../../utils/errorMessages';
@@ -54,7 +55,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
   // Step 3
   const [outputFormat, setOutputFormat] = useState(DEFAULT_OUTPUT_FORMAT);
   const [outputName, setOutputName] = useState('');
-  const run = useEseguibileRun({ eseguibileId, onCleanup: onAfterDownload, onClose });
+  const run = useEseguibileRun({ eseguibileId, eseguibile, onCleanup: onAfterDownload, onClose });
   const { state } = run;
   const executing = run.task.isActive;
   const close = () => { run.close(); };
@@ -441,6 +442,8 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                     <TransferProgress progress={run.downloadProgress} verb="Scaricamento" />
                     {/* B-K5: un solo stato del risultato (useEseguibileRun.resultState). */}
                     <p className="esw-hint">{run.resultNote}</p>
+                    {/* Dashboard Grafana: stesso pulsante e stesse condizioni della finestra con il manifest. */}
+                    <DashboardLauncher target={run.dashboard} />
                     <div className="esw-actions">
                       <button type="button" className="esw-btn esw-btn--ghost" onClick={close} disabled={run.busy}>Chiudi</button>
                       {run.canDownload && (

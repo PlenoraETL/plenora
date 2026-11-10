@@ -104,6 +104,13 @@ export const can = {
   // Tutti i ruoli loggati possono eseguire gli eseguibili visibili al
   // proprio gruppo (incluso esecutore, che è proprio il suo unico scopo).
   runEseguibile:     (u) => !!u?.role && Object.values(ROLES).includes(u.role),
+  // Dashboard Grafana (11/11/2026): crea, elimina, «Modifica in Grafana» =
+  // stessa regola di modifica dell'Eseguibile (require_admin +
+  // assert_can_modify, flag can_edit del server).
+  manageEseguibileDashboard: (u, item) => isAdminOrAbove(u) && serverAllows(item),
+  // «Apri dashboard» nella finestra dei risultati: ogni ruolo che esegue
+  // (il server da' il lasciapassare solo a chi ha lanciato l'esecuzione).
+  openEseguibileDashboard: (u) => !!u?.role && Object.values(ROLES).includes(u.role),
 
   // ── Condivisioni tra gruppi ──────────────────────────────────────────
   shareResources:    isSuperadmin,
@@ -170,6 +177,10 @@ export const CAPABILITY_BACKEND = Object.freeze({
   createEseguibile: { file: 'eseguibili/router.py', fns: ['create_eseguibile', 'list_source_status'], depends: 'require_admin', rule: 'role' },
   manageEseguibile: { file: 'eseguibili/router.py', fns: ['update_eseguibile', 'delete_eseguibile', 'republish_eseguibile', 'activate_eseguibile_version', 'get_source_status'], depends: 'require_admin', rule: 'role', serverFlag: true },
   runEseguibile: { file: 'eseguibili/router.py', fns: ['execute_eseguibile', 'create_eseguibile_run'], depends: 'get_current_user', rule: 'role' },
+  manageEseguibileDashboard: { file: 'eseguibili/dashboard_router.py', fns: ['create_eseguibile_dashboard', 'delete_eseguibile_dashboard', 'get_eseguibile_dashboard_edit_link'], depends: 'require_admin', rule: 'role', serverFlag: true },
+  // `file::funzione` = funzione di un altro router. close_grafana_session
+  // (logout) non ha dependency: toglie soltanto il cookie.
+  openEseguibileDashboard: { file: 'eseguibili/dashboard_router.py', fns: ['issue_eseguibile_dashboard_pass', 'auth/grafana_router.py::open_grafana_session'], depends: 'get_current_user', rule: 'role' },
   shareResources: { file: 'auth/shares_router.py', fns: ['set_shares', 'add_share', 'remove_share'], depends: 'require_superadmin', rule: 'role' },
   manageTickets: { file: 'tickets/router.py', fns: ['update_ticket_endpoint', 'delete_ticket_endpoint'], depends: '_require_not_esecutore', rule: 'service' },
   reopenTicket: { file: 'tickets/router.py', fns: ['update_ticket_endpoint'], depends: '_require_not_esecutore', rule: 'service' },

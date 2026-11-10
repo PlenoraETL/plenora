@@ -27,6 +27,7 @@
  */
 import { can } from './permissions';
 import { ICON } from './icons';
+import { dashboardFeatureOn } from './eseguibileDashboard';
 
 /** Tipo del nodo: 'project' | 'eseguibile' | 'connection' | 'file' | 'datasource'. */
 function nodeKind(node) {
@@ -64,6 +65,8 @@ export const RULES = Object.freeze({
   createEseguibile: (user) => can.createEseguibile(user),
   runEseguibile: (user) => can.runEseguibile(user),
   manageEseguibile: (user, item) => can.manageEseguibile(user, item),
+  // Dashboard Grafana (11/11/2026): stessa regola di modifica dell'Eseguibile.
+  manageEseguibileDashboard: (user, item) => can.manageEseguibileDashboard(user, item),
   // pages/EseguibiliList: solo superadmin, e non su una risorsa bloccata dal server.
   shareEseguibile: (user, item) => can.shareResources(user) && item?.can_edit !== false,
   editConnection: (user, connection) => can.editConnection(user, connection),
@@ -72,6 +75,10 @@ export const RULES = Object.freeze({
 });
 
 const sourceChanged = (item) => item?.source_changed === true;
+// Dashboard Grafana: con la funzione attiva sul server, crea se manca,
+// modifica ed elimina se c'e'.
+const withoutDashboard = (item) => dashboardFeatureOn(item) && item?.has_dashboard !== true;
+const withDashboard = (item) => dashboardFeatureOn(item) && item?.has_dashboard === true;
 
 /**
  * Le azioni del pannello per tipo di nodo. `rule`: chiave di RULES.
@@ -95,6 +102,9 @@ export const NODE_ACTIONS = Object.freeze({
     { id: 'share', label: '🔗 Condividi', place: 'menu', rule: 'shareEseguibile', title: 'Gestisci condivisione cross-gruppo (solo superadmin)' },
     { id: 'rename', label: '✎ Rinomina', place: 'menu', inline: true, rule: 'manageEseguibile' },
     { id: 'versions', label: 'Versioni', place: 'menu', rule: 'manageEseguibile' },
+    { id: 'createDashboard', label: '📊 Crea dashboard', place: 'menu', rule: 'manageEseguibileDashboard', shown: withoutDashboard, title: 'Genera una dashboard Grafana dalle colonne del risultato' },
+    { id: 'editDashboard', label: '📊 Modifica in Grafana', place: 'menu', rule: 'manageEseguibileDashboard', shown: withDashboard, title: 'Apri la dashboard in Grafana per modificarla' },
+    { id: 'deleteDashboard', label: 'Elimina dashboard', place: 'menu', danger: true, rule: 'manageEseguibileDashboard', shown: withDashboard },
     { id: 'remove', label: `${ICON.delete} Elimina`, place: 'menu', danger: true, rule: 'manageEseguibile' },
   ]),
   connection: Object.freeze([

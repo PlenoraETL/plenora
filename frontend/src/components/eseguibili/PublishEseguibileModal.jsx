@@ -11,6 +11,9 @@ import { createEseguibile } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { humanizeError } from '../../utils/errorMessages';
+import { peekShared } from '../../utils/sharedCache';
+import { eseguibiliOf } from '../../utils/sharedSelectors';
+import { dashboardFeatureFromList, toastDashboardWarnings } from '../../utils/eseguibileDashboard';
 import './PublishEseguibileModal.css';
 
 // Preset di icone comuni — l'utente può sceglierne una o digitarne un'altra
@@ -23,6 +26,13 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
   const [outputFormat, setOutputFormat] = useState(DEFAULT_OUTPUT_FORMAT);
   const [outputName, setOutputName] = useState('');
   const [icon, setIcon] = useState('▶');
+  // Dashboard Grafana (11/11/2026): la casella c'e' se la funzione e'
+  // attiva, letto dalla lista degli Eseguibili gia' in cache (la carica la
+  // pagina che apre questa finestra: nessuna richiesta qui). Lista vuota o
+  // non in cache = non si sa: si mostra e un server spento risponde
+  // `grafana_disabled`, col suo testo.
+  const [featureOn] = useState(() => dashboardFeatureFromList(eseguibiliOf(peekShared('eseguibili')?.data)));
+  const [createDashboard, setCreateDashboard] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -41,8 +51,11 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
         default_output_format: outputFormat,
         default_output_name: outputName.trim() || null,
         icon: icon.trim() || null,
+        create_dashboard: featureOn !== false && createDashboard,
       });
       toast.success(`Eseguibile "${result.name}" pubblicato`);
+      // Dashboard non creata (Grafana non risponde) o colonne da controllare.
+      toastDashboardWarnings(toast, result?.dashboard_warnings);
       onSuccess && onSuccess(result);
       onClose();
     } catch (e) {
@@ -146,6 +159,22 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
               />
             </div>
           </div>
+
+          {featureOn !== false && (
+            <label className="pem-check">
+              <input
+                type="checkbox"
+                checked={createDashboard}
+                onChange={(e) => setCreateDashboard(e.target.checked)}
+              />
+              <span>
+                <strong>📊 Crea anche una dashboard</strong>
+                <span className="pem-check__hint">
+                  Una dashboard Grafana generata dalle colonne del risultato: chi esegue la apre dalla finestra dei risultati, chi gestisce l&apos;Eseguibile la modifica in Grafana.
+                </span>
+              </span>
+            </label>
+          )}
         </div>
     </ModalWrapper>
   );

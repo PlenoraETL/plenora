@@ -34,6 +34,7 @@ import { useSignOut } from '../hooks/useSignOut';
 import { useToast } from '../hooks/useToast';
 import { useHexCanvas } from '../utils/hexCanvas';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
+import DashboardBadge from '../components/eseguibili/DashboardBadge';
 import { runInputSummary, usesRunForm } from '../components/eseguibili/runForm';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
@@ -63,7 +64,7 @@ function EseguibileCard({ item, onRun }) {
     <button type="button" className="esh__card" onClick={() => onRun(item)}>
       <div className="esh__card-icon">{item.icon || '▶'}</div>
       <div className="esh__card-body">
-        <div className="esh__card-title">{item.name}</div>
+        <div className="esh__card-title">{item.name} <DashboardBadge item={item} /></div>
         {item.description && (
           <div className="esh__card-description">{item.description}</div>
         )}

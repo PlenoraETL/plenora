@@ -56,6 +56,9 @@ export const EFFECT_EXCEPTIONS = {
   // tornata) ripartono UNA volta all'apertura di /run: non e' un dato della
   // pagina, e' la fine di una pulizia gia' chiesta.
   'pages/EsecutoreHome.jsx': 'pulizie rimaste annotate (api/tasks.flushParkedExitCleanups) all apertura di /run',
+  // Dashboard Grafana (11/11/2026): sessione /grafana e lasciapassare con il
+  // rinnovo a orario (scadenza del server), non un dato di pagina: UN hook.
+  'hooks/useDashboardPass.js': 'sessione Grafana e lasciapassare della dashboard, con il rinnovo prima della scadenza',
 };
 
 const INTERVAL_EXCEPTIONS = {

@@ -132,7 +132,13 @@ export {
   activateEseguibileVersion,
   getEseguibileSourceStatus,
   listSourceStatusOfProject,
+  createEseguibileDashboard,
+  deleteEseguibileDashboard,
+  getEseguibileDashboardEditLink,
+  issueEseguibileDashboardPass,
 } from './eseguibili';
+
+export { openGrafanaSession, closeGrafanaSession } from './grafana';
 
 export {
   getShares,

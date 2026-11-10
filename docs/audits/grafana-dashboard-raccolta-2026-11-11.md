@@ -124,3 +124,34 @@ Scelta (vincolo A della richiesta): **artifact interno nella cartella del task**
 | I2 | segreti | `.env`: `DASHBOARD_PASS_SECRET`, `GRAFANA_DATA_SECRET`, `GRAFANA_SERVICE_TOKEN` (letti con `get_env`, nessun default) |
 | I3 | resto | `config.py` DEFAULTS: `GRAFANA_ENABLED` (false), `GRAFANA_URL`, percorso pubblico, URL dei dati visto da Grafana, uid del datasource, timeout, TTL sessione, TTL copia/lasciapassare, limiti righe/byte, frequenza |
 | I4 | moduli | `app/core/grafana/` foglia (client, generatore, lasciapassare e sessione firmati, sincronizzazione): non importa domini del grande ciclo, così `eseguibili → grafana` e `auth → grafana` non creano cicli; gli endpoint stanno in `eseguibili/dashboard_router.py` e `auth/grafana_router.py` |
+
+## L. Frontend (raccolta, 11/11/2026)
+
+Base: `ad31df94` (backend e installer già fatti). Raccolta di ogni punto del frontend che pubblica un Eseguibile, ne mostra la scheda o il menu «⋯», apre la finestra dei risultati di un'esecuzione, gestisce la sessione o mostra un errore, **senza correggere**. Ricerca: ogni import di `PublishEseguibileModal`, `EseguibileExecuteWizard`, `ExecutableDynamicRunForm`, `ExecutionModal`, `useEseguibileRun`; ogni menu «⋯» degli Eseguibili (`ActionMenu` in pagine e schede, `NODE_ACTIONS`); ogni scheda di un Eseguibile; il logout (`context/AuthContext`); le tabelle uniche (`utils/permissions`, `utils/sharedInvalidations`, `utils/errorMessages`, `utils/nodeActions`).
+
+| # | Punto | Oggi | Deve succedere |
+|---|---|---|---|
+| L1 | Pubblicazione: `PublishEseguibileModal` (aperta da `EseguibiliList`, `ProjectList` anche dopo `EsegSelectorModal`) | nessuna scelta sulla dashboard | casella «Crea anche una dashboard» (→ `create_dashboard`), solo se la funzione è attiva; gli avvisi `dashboard_warnings` della risposta si mostrano |
+| L2 | La funzione è attiva? | — | `dashboard_feature_enabled` arriva solo con un Eseguibile (lista o dettaglio): per la finestra di pubblicazione si legge dalla lista condivisa `eseguibili`; lista vuota = non si sa → la casella si mostra e un `grafana_disabled` ha un messaggio chiaro (punto dichiarato) |
+| L3 | Menu «⋯» della pagina Eseguibili (`EseguibiliList.jsx:202-210`) | costruito a mano accanto alla tabella (stessi permessi via `RULES`) | le voci vengono dalla tabella unica `NODE_ACTIONS.eseguibile` (posto `menu`) come nel pannello: nessuna voce dashboard fuori dalla tabella |
+| L4 | Pannello della home (`ProjectList.chainActions` → `panelActions`) | nessuna voce dashboard | «📊 Crea dashboard» (senza dashboard), «📊 Modifica in Grafana» ed «Elimina dashboard» (con dashboard): permesso di modifica dell'Eseguibile (stessa regola, flag `can_edit`), funzione attiva |
+| L5 | Scheda degli Eseguibili della home (`EseguibileCard`, menu solo «Elimina») | — | etichetta DASHBOARD; il menu resta com'è (gestione dalla pagina e dal pannello) |
+| L6 | Schede: `EseguibiliList`, `EseguibileCard` (home), `EsecutoreHome` | nessuna etichetta | etichetta DASHBOARD quando `has_dashboard` (un componente) |
+| L7 | Finestra dei risultati con manifest: `ExecutableDynamicRunForm` → `ExecutionModal` (condivisa con gli editor) | «Scarica» e «Elimina il risultato» | «📊 Apri dashboard» accanto a «Scarica» (prop facoltativa: gli editor non la passano) |
+| L8 | Finestra dei risultati legacy: `EseguibileExecuteWizard` passo 3 | pulsanti propri | lo stesso pulsante con le stesse condizioni |
+| L9 | Chi monta la finestra: `EseguibiliList`, `ProjectList` (home), `EsecutoreHome` (con pulizia `onAfterDownload`) | — | tutti tramite `EseguibileExecuteWizard`: il pulsante deve venire dall'hook comune `useEseguibileRun`, non da ogni pagina |
+| L10 | Condizioni di «Apri dashboard» | — | `has_dashboard`, output non a file (`output_is_file_based` falso), risultato `on_server` o `local` (`resultState`; in `gone` no), esecuzione con il suo identificativo; UNA funzione |
+| L11 | Chiusura della finestra, risultato scaduto (`gone`), `pagehide`, logout | — | la dashboard si chiude con la finestra (iframe smontato, rinnovi fermi); a `gone` sparisce |
+| L12 | Lasciapassare e sessione | — | prima `POST /grafana/session`, poi `POST .../dashboard/pass`; rinnovo di entrambi ogni 20 min o prima della scadenza, iframe ricaricato con il nuovo `iframe_path`; mai oltre `data_expires_at` (poi «dati non più disponibili»); un solo hook |
+| L13 | «Modifica in Grafana» | — | `edit-link` (sincronizza), poi sessione, poi apertura in una nuova scheda (aperta subito al clic per non essere bloccata; bloccata → stessa finestra) |
+| L14 | iframe | nessun iframe nell'app | `src` relativo `/grafana/...` (validato: mai un altro origine), niente `srcDoc`, `referrerPolicy="no-referrer"`, `title`, `sandbox` (vedi M) |
+| L15 | Logout (`AuthContext.logout`, anche per 401) | revoca del JWT | anche `DELETE /grafana/session` (best effort) |
+| L16 | Errori nuovi (`grafana_disabled`, `grafana_unavailable`, `dashboard_not_found`, `dashboard_already_exists`, `dashboard_data_unavailable`, `dashboard_pass_invalid`) | ricadono sul generico per stato | testo curato in `ERROR_MESSAGES` |
+| L17 | Permessi | — | `can.manageEseguibileDashboard` (crea, elimina, link di modifica: `require_admin` + flag) e `can.openEseguibileDashboard` (lasciapassare e sessione: `get_current_user`) in `CAPABILITY_BACKEND`, verificati sui Depends dei router |
+| L18 | Invalidazioni (`WRITE_INVALIDATIONS`) | `ANY /eseguibili` invalida la lista | crea/elimina invalidano `eseguibili` e `dashboardGraph` (riga esistente); lasciapassare, link di modifica e sessione Grafana non toccano liste (righe nuove con il motivo) |
+| L19 | Avvisi `dashboard_warnings` | — | a chi può modificare: nella finestra «Prima di avviare» (come `binding_warnings`), sotto «Apri dashboard», e dopo crea/«Modifica in Grafana»/pubblicazione |
+| L20 | Termini | — | niente «task», «download», «run» nel testo visibile (glossario) |
+
+### M. Sandbox dell'iframe
+
+Grafana gira sotto lo stesso origine di Plenora (`/grafana`, dietro Caddy) e ha bisogno di script e del proprio origine (cookie della sessione, `localStorage`). Con `allow-scripts allow-same-origin` lo `sandbox` non è un confine di sicurezza (un documento dello stesso origine può togliere l'attributo dal proprio iframe); lo teniamo per quello che dà davvero: niente navigazione della pagina di Plenora dall'iframe (`allow-top-navigation` non concesso). Il confine vero è lato server: `forward_auth`, cookie dedicato con `Path=/grafana`, lasciapassare per esecuzione.

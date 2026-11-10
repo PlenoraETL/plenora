@@ -14,6 +14,7 @@ import { authBus } from '../utils/authBus';
 import { resetSession } from '../utils/session';
 import { loginRedirectState } from '../utils/navigation';
 import { login as apiLogin, logout as apiLogout } from '../api/auth';
+import { closeGrafanaSession } from '../api/grafana';
 import { getMe } from '../api/users';
 import { invalidateShared } from '../utils/sharedCache';
 import { SHARED_LIST_NAMES } from '../utils/sharedInvalidations';
@@ -72,6 +73,13 @@ export function AuthProvider({ children }) {
       } catch {
         // mock / interceptor sincrono — ignora, procedi al clear locale.
       }
+    }
+    // Dashboard Grafana (11/11/2026): toglie anche il cookie di /grafana
+    // (anche sul 401: la route non chiede il token). Best effort.
+    try {
+      closeGrafanaSession();
+    } catch {
+      // mock o rete assente: il cookie scade comunque da solo (30 min).
     }
     // Chi esce (letto prima di toglierlo): all'uscita scelta si tolgono le
     // sue copie di sicurezza (collaudo live L7, utils/browserStorage).

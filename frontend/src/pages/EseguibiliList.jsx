@@ -24,8 +24,12 @@ import BindingWarnings from '../components/eseguibili/BindingWarnings';
 import { useToast } from '../hooks/useToast';
 import { can } from '../utils/permissions';
 // Permessi e gestori condivisi con il pannello della home per catene (10/11/2026).
-import { RULES } from '../utils/nodeActions';
+// Il menu «⋯» viene dalla tabella unica NODE_ACTIONS (panelActions), come
+// nel pannello della home: nessuna voce scritta a mano qui (11/11/2026).
+import { RULES, panelActions } from '../utils/nodeActions';
 import { confirmDeleteEseguibile, eseguibileNameToSave, saveEseguibileName } from '../utils/resourceActions';
+import { dashboardHandlers } from '../utils/dashboardActions';
+import DashboardBadge from '../components/eseguibili/DashboardBadge';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import useDialog from '../hooks/useDialog';
@@ -38,6 +42,7 @@ import { projectTypeChip } from '../utils/projectTypes';
 
 const PUBLISHABLE_TYPES = ['estrai', 'manipola', 'arricchisci'];
 const publishableProjects = (all) => (all?.projects || []).filter(p => PUBLISHABLE_TYPES.includes(p.project_type));
+const ESEGUIBILE_NODE = Object.freeze({ kind: 'eseguibile' });
 
 function EseguibiliList() {
   const toast = useToast();
@@ -83,6 +88,23 @@ function EseguibiliList() {
   const handleDelete = async (item) => {
     if (await confirmDeleteEseguibile({ confirm: confirmModal.confirm, toast, item })) loadItems();
   };
+
+  // Voci del menu «⋯» dalla tabella (stessi gestori del pannello della home).
+  const menuItems = (item) => panelActions(ESEGUIBILE_NODE, {
+    user,
+    item,
+    handlers: {
+      share: () => setSharingEseguibile(item),
+      rename: () => startRename(item),
+      versions: () => setVersioningEseguibile(item),
+      ...(RULES.manageEseguibileDashboard(user, item)
+        ? dashboardHandlers({ toast, confirm: confirmModal.confirm, item, onChanged: loadItems })
+        : {}),
+      remove: () => handleDelete(item),
+    },
+  })
+    .filter(action => action.place === 'menu')
+    .map(({ label, onSelect, danger, title }) => ({ label, onSelect, danger, title }));
 
   const startRename = (item) => {
     if (renameBusy.isBusy(item.id)) return;
@@ -148,7 +170,6 @@ function EseguibiliList() {
         <div className="esl__grid">
           {items.map(item => {
             const canEdit = RULES.manageEseguibile(user, item);
-            const canShare = RULES.shareEseguibile(user, item);
             return (
               <div key={item.id} className="esl__card">
                 <div className="esl__card-header">
@@ -188,7 +209,10 @@ function EseguibiliList() {
                       )}
                     </h3>
                   )}
-                  <span className="esl__card-format">{item.default_output_format?.toUpperCase() || 'XLSX'}</span>
+                  <span className="esl__card-badges">
+                    <DashboardBadge item={item} />
+                    <span className="esl__card-format">{item.default_output_format?.toUpperCase() || 'XLSX'}</span>
+                  </span>
                 </div>
                 {item.description && (
                   <p className="esl__card-desc">{item.description}</p>
@@ -201,12 +225,7 @@ function EseguibiliList() {
                 <div className="esl__card-actions">
                   <ActionMenu
                     label={`Azioni per ${item.name}`}
-                    items={[
-                      canShare && { label: '🔗 Condividi', onSelect: () => setSharingEseguibile(item), title: 'Gestisci condivisione cross-gruppo (solo superadmin)' },
-                      canEdit && { label: '✎ Rinomina', onSelect: () => startRename(item) },
-                      canEdit && { label: 'Versioni', onSelect: () => setVersioningEseguibile(item) },
-                      canEdit && { label: '🗑 Elimina', onSelect: () => handleDelete(item), danger: true },
-                    ]}
+                    items={menuItems(item)}
                   />
                   <button type="button" className="esl__btn esl__btn--primary"
                     onClick={() => setSelectedId(item.id)}
