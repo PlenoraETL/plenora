@@ -232,6 +232,7 @@ class ProjectCanvasService:
                 label=r.get("label"),
                 created_at=r.get("created_at"),
                 created_by=r.get("created_by"),
+                created_by_name=r.get("created_by_name"),
             )
             for r in project_db.list_canvas_versions(project_id)
         ]

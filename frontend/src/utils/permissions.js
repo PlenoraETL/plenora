@@ -117,6 +117,7 @@ export const can = {
 
   // ── Utenti e gruppi ──────────────────────────────────────────────────
   manageUsers:       isAdminOrAbove,  // admin gestisce solo il proprio gruppo
+  deleteUserKeepingHistory: isSuperadmin, // utente con storico: lapide (10/11/2026)
   manageGroups:      isSuperadmin,    // solo superadmin tocca i gruppi
   deleteGroup:       (u, group) => isSuperadmin(u) && !!group?.group_id && group.group_id !== 'default',
 
@@ -174,6 +175,7 @@ export const CAPABILITY_BACKEND = Object.freeze({
   reopenTicket: { file: 'tickets/router.py', fns: ['update_ticket_endpoint'], depends: '_require_not_esecutore', rule: 'service' },
   removeTicketAttachment: { file: 'tickets/router.py', fns: ['delete_attachment_endpoint'], depends: '_require_not_esecutore', rule: 'service' },
   manageUsers: { file: 'auth/users_router.py', fns: ['create_user', 'update_user', 'delete_user', 'reset_password'], depends: 'require_admin', rule: 'role' },
+  deleteUserKeepingHistory: { file: 'auth/users_router.py', fns: ['delete_user_keeping_history'], depends: 'require_superadmin', rule: 'role' },
   manageGroups: { file: 'auth/groups_router.py', fns: ['create_group'], depends: 'require_superadmin', rule: 'role' },
   deleteGroup: { file: 'auth/groups_router.py', fns: ['delete_group'], depends: 'require_superadmin', rule: 'service' },
   manageObjectStorage: { file: 'admin_object_storage/router.py', fns: ['delete_all_previews', 'delete_object'], depends: 'require_superadmin', rule: 'role' },

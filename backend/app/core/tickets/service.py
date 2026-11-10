@@ -193,6 +193,16 @@ def _is_admin(actor: CurrentUser) -> bool:
     return actor.role in _ROLES_ADMIN
 
 
+def _require_assignable(assignee: Any) -> None:
+    """Si assegna solo a un utente esistente e non eliminato (10/11/2026):
+    un id inesistente era un 500 (chiave esterna), una lapide passerebbe la
+    chiave esterna. ``None`` (togli l'assegnazione) e' sempre valido."""
+    if assignee is None or assignee == "__UNSET__":
+        return
+    if not isinstance(assignee, str) or not tdb.assignable_user_exists(assignee):
+        raise HTTPException(400, "Assegnatario non valido: utente inesistente o eliminato")
+
+
 def _can_view(ticket: tdb.TicketRow, actor: CurrentUser) -> bool:
     """True se l'attore puo' vedere questo ticket."""
     if actor.role == "superadmin":
@@ -266,6 +276,7 @@ def create_ticket(
     # Assignee: solo admin/superadmin possono pre-assegnare
     if assignee and not _is_admin(actor):
         raise HTTPException(403, "Solo admin/superadmin possono assegnare un ticket")
+    _require_assignable(assignee)
 
     ticket = tdb.create_ticket(
         kind=kind,
@@ -373,6 +384,8 @@ def update_ticket(
             raise HTTPException(403, f"Solo admin/superadmin possono modificare '{fname}'")
     if touches_assignee and not is_privileged:
         raise HTTPException(403, "Solo admin/superadmin possono assegnare un ticket")
+    if touches_assignee:
+        _require_assignable(assignee)
 
     # Transizione status: user puo' solo riaprire i PROPRI
     if status is not None and not is_privileged:

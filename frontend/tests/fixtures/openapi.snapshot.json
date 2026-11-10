@@ -12998,6 +12998,47 @@
         ]
       }
     },
+    "/api/auth/users/{user_id}/delete-keeping-history": {
+      "post": {
+        "description": "Elimina l'utente MANTENENDO lo storico (10/11/2026). Solo superadmin.\n\nLa riga resta come «lapide» (``auth.db.tombstone_user``, una\ntransazione): ogni chiave esterna dello storico resta valida; lo username\noriginale passa in ``deleted_username`` e torna libero; password, email e\nMFA si cancellano; l'utente non si autentica piu' in nessun modo e sparisce\nda liste, selettori e conteggi; lo storico lo mostra come «utente\neliminato (<username>)». Vale con o senza storico.\n\nProtezioni: non se stessi; l'ultimo superadmin non si puo' eliminare per\ncostruzione (chi elimina e' un superadmin attivo e non e' il bersaglio).",
+        "operationId": "delete_user_keeping_history_api_auth_users__user_id__delete_keeping_history_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete User Keeping History",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/api/auth/users/{user_id}/reset-password": {
       "post": {
         "description": "Reset password di un utente (senza richiedere la vecchia).\nsuperadmin → qualsiasi utente\nadmin → solo utenti del proprio gruppo",

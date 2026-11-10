@@ -154,7 +154,7 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
                 <div className="cv-versions__meta">
                   <div className="cv-versions__name">{v.label || '(senza etichetta)'}</div>
                   <div className="cv-versions__sub">
-                    {fmtDate(v.created_at)}{v.created_by ? ` · ${v.created_by}` : ''}
+                    {fmtDate(v.created_at)}{(v.created_by_name || v.created_by) ? ` · ${v.created_by_name || v.created_by}` : ''}
                   </div>
                 </div>
                 {!isReadOnly && <button

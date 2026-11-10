@@ -43,6 +43,16 @@ describe('users api contract', () => {
     expect(result).toEqual({ ok: true });
   });
 
+  it('deleteUserKeepingHistory posts to the dedicated endpoint (204 vuoto)', async () => {
+    httpMock.post.mockResolvedValueOnce({ data: '' });
+
+    const { deleteUserKeepingHistory } = await import('../../src/api/users');
+    const result = await deleteUserKeepingHistory('u-e0071');
+
+    expect(httpMock.post).toHaveBeenCalledWith('/auth/users/u-e0071/delete-keeping-history');
+    expect(result).toEqual({ success: true, id: 'u-e0071' });
+  });
+
   it('getGroupSummary hits the dedicated summary endpoint', async () => {
     httpMock.get.mockResolvedValueOnce({ data: { users: 3, projects: 2 } });
 

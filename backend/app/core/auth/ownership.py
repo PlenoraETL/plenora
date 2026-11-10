@@ -81,7 +81,9 @@ def compute_can_edit(
         created_by = getattr(resource, "created_by", None)
 
     if created_by and created_by != current_user.user_id:
-        creator = _users_dal.get_user(created_by)
+        # Lettura storica: la risorsa creata da un superadmin poi eliminato
+        # resta protetta (la lapide conserva il ruolo).
+        creator = _users_dal.get_user_including_deleted(created_by)
         if creator and creator.role == "superadmin":
             return False
 
@@ -124,7 +126,7 @@ def assert_can_modify(
         created_by = getattr(resource, "created_by", None)
 
     if created_by and created_by != current_user.user_id:
-        creator = _users_dal.get_user(created_by)
+        creator = _users_dal.get_user_including_deleted(created_by)
         if creator and creator.role == "superadmin":
             _disclosure.raise_disclosure(
                 _disclosure.hierarchical_owner_required(label)

@@ -130,6 +130,8 @@ def test_users_router_url_paths_locked():
         ("PUT", "/auth/users/{user_id}"),
         ("POST", "/auth/users/{user_id}/reset-password"),
         ("DELETE", "/auth/users/{user_id}"),
+        # Eliminare mantenendo lo storico (10/11/2026, solo superadmin).
+        ("POST", "/auth/users/{user_id}/delete-keeping-history"),
     }
     found = set()
     for route in users_router.routes:

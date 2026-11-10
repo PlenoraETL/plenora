@@ -69,6 +69,8 @@ class CanvasVersionRef(BaseModel):
     label: Optional[str] = None
     created_at: Optional[datetime] = None
     created_by: Optional[str] = None
+    # Nome di chi l'ha salvata (storico: «utente eliminato (<username>)»).
+    created_by_name: Optional[str] = None
 
 
 class ProjectCreate(BaseModel):

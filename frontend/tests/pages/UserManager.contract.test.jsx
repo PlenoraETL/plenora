@@ -48,6 +48,7 @@ vi.mock('../../src/api/users', () => ({
   createUser: createUserMock,
   updateUser: vi.fn(),
   deleteUser: vi.fn(),
+  deleteUserKeepingHistory: vi.fn(),
   resetPassword: vi.fn(),
   listGroups: listGroupsMock,
   createGroup: vi.fn(),
@@ -203,6 +204,33 @@ describe('UserManager', () => {
     await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Utente "E0071" disattivato'));
   });
 
+  // Eliminare mantenendo lo storico (10/11/2026): il superadmin, al 409,
+  // ha anche «Elimina mantenendo lo storico»; un secondo passo spiega cosa
+  // succede e chiede la conferma esplicita.
+  it('utente con storico: il superadmin elimina mantenendo lo storico dopo la conferma', async () => {
+    listUsersMock.mockResolvedValue([
+      { id: 'u-e0071', username: 'E0071', role: 'esecutore', group_id: 'grp-1', is_active: true },
+    ]);
+    usersApi.deleteUser.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: { error: 'user_has_history', message: 'storico', details: { references: [] } } },
+    });
+    usersApi.deleteUserKeepingHistory.mockResolvedValue({ success: true, id: 'u-e0071' });
+    render(<UserManager />);
+    expect(await screen.findByText('E0071')).toBeInTheDocument();
+    await userEvent.click(screen.getByTitle('Elimina'));
+    await userEvent.click(screen.getByRole('button', { name: /^elimina$/i }));
+    expect(await screen.findByRole('button', { name: /^disattiva$/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /elimina mantenendo lo storico/i }));
+    // Il secondo passo spiega e non ha ancora eliminato nulla.
+    expect(await screen.findByText(/non potrà più accedere/)).toBeInTheDocument();
+    expect(screen.getByText(/«utente eliminato \(nome\)»/)).toBeInTheDocument();
+    expect(usersApi.deleteUserKeepingHistory).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: /conferma eliminazione/i }));
+    await waitFor(() => expect(usersApi.deleteUserKeepingHistory).toHaveBeenCalledWith('u-e0071'));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Utente "E0071" eliminato, storico mantenuto'));
+  });
+
   it('altro errore di eliminazione: nessun «Disattiva»', async () => {
     usersApi.deleteUser.mockRejectedValue({ isAxiosError: true, response: { status: 500, data: { error: 'internal_error' } } });
     render(<UserManager />);
@@ -212,5 +240,6 @@ describe('UserManager', () => {
     await waitFor(() => expect(usersApi.deleteUser).toHaveBeenCalled());
     expect(await screen.findByText(/errore interno/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^disattiva$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /elimina mantenendo lo storico/i })).toBeNull();
   });
 });

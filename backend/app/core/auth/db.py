@@ -25,7 +25,12 @@ from pydantic import (
 from app.core.auth.exceptions import UsernameInvalidError, UsernameTakenError
 from app.core.auth import user_references as _user_references
 from app.db.pg_connection import unit_of_work
-from app.shared.contracts.auth import normalized_username, username_form_error
+from app.shared.contracts.auth import (
+    NOT_DELETED_SQL,
+    normalized_username,
+    tombstone_username,
+    username_form_error,
+)
 from app.db.sql_safety import safe_set_clause
 
 
@@ -57,6 +62,10 @@ class UserRow:
     is_active: bool = True
     created_at: str = ""
     updated_at: str = ""
+    # Lapide (10/11/2026): valorizzati solo per un utente eliminato con
+    # storico; le letture operative non restituiscono mai queste righe.
+    deleted_at: str | None = None
+    deleted_username: str | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +102,8 @@ class _UserRowHydration(_HydrationModel):
     is_active: StrictBool = True
     created_at: _TimestampStr = ""
     updated_at: _TimestampStr = ""
+    deleted_at: _TimestampStr | None = None
+    deleted_username: StrictStr | None = None
 
 
 class _GroupRowHydration(_HydrationModel):
@@ -158,13 +169,24 @@ def _execute(sql: str, params: tuple = ()):
         return session.execute(sql, params)
 
 
+# Letture OPERATIVE (autenticazione, gestione, liste, conteggi): mai le
+# lapidi (``shared.contracts.auth``, regola dell'utente eliminato).
 def get_user(user_id: str) -> Optional[UserRow]:
-    row = _fetchone("SELECT * FROM users WHERE id = %s", (user_id,))
+    """Utente esistente (attivo o disattivato), ``None`` se assente o
+    eliminato: e' la lettura di ogni autenticazione e di ogni permesso."""
+    row = _fetchone(f"SELECT * FROM users WHERE id = %s AND {NOT_DELETED_SQL}", (user_id,))
     return hydrate_user_row(row)
 
 
 def get_user_by_username(username: str) -> Optional[UserRow]:
-    row = _fetchone("SELECT * FROM users WHERE username = %s", (username,))
+    row = _fetchone(f"SELECT * FROM users WHERE username = %s AND {NOT_DELETED_SQL}", (username,))
+    return hydrate_user_row(row)
+
+
+def get_user_including_deleted(user_id: str) -> Optional[UserRow]:
+    """Lettura STORICA: anche la lapide di un utente eliminato (es. il ruolo
+    di chi ha creato una risorsa, ``ownership``). Mai per autenticare."""
+    row = _fetchone("SELECT * FROM users WHERE id = %s", (user_id,))
     return hydrate_user_row(row)
 
 
@@ -173,7 +195,8 @@ def list_users(
 ) -> list[UserRow]:
     rows = _fetchall(
         "SELECT id, username, email, group_id, role, is_active, created_at "
-        "FROM users WHERE group_id = %s ORDER BY username LIMIT %s OFFSET %s",
+        f"FROM users WHERE group_id = %s AND {NOT_DELETED_SQL} "
+        "ORDER BY username LIMIT %s OFFSET %s",
         (group_id, limit, offset),
     )
     return [row for row in (hydrate_user_row(row) for row in rows) if row is not None]
@@ -181,7 +204,7 @@ def list_users(
 
 def list_all_users(*, limit: int = 200, offset: int = 0) -> list[UserRow]:
     rows = _fetchall(
-        "SELECT * FROM users ORDER BY username LIMIT %s OFFSET %s",
+        f"SELECT * FROM users WHERE {NOT_DELETED_SQL} ORDER BY username LIMIT %s OFFSET %s",
         (limit, offset),
     )
     return [row for row in (hydrate_user_row(row) for row in rows) if row is not None]
@@ -191,11 +214,15 @@ def find_users_by_normalized_username(username: str) -> list[UserRow]:
     """Utenti il cui username coincide con ``username`` in forma normalizzata
     (trim + casefold). Il confronto e' in Python su tutti gli username:
     ``casefold`` non ha un equivalente esatto in SQL (``lower`` lascia «ß») e
-    la tabella degli utenti e' piccola."""
+    la tabella degli utenti e' piccola. TUTTE le righe, lapidi comprese:
+    l'indice unico del DB le copre (lo username di una lapide e'
+    ``tombstone_username``: il nome originale torna libero)."""
     target = normalized_username(username)
-    rows = _fetchall("SELECT id, username FROM users")
-    matches = [str(row["id"]) for row in rows if normalized_username(row["username"]) == target]
-    return [user for user in (get_user(user_id) for user_id in matches) if user is not None]
+    rows = _fetchall("SELECT * FROM users")
+    return [
+        user for user in (hydrate_user_row(row) for row in rows)
+        if user is not None and normalized_username(user.username) == target
+    ]
 
 
 def assert_username_writable(username: str) -> None:
@@ -301,13 +328,13 @@ def update_user(
         fields["group_id"] = group_id
     fields["updated_at"] = _now_iso()
     set_clause, vals = safe_set_clause("users", fields)
-    _execute(f"UPDATE users SET {set_clause} WHERE id = %s", vals + (user_id,))
+    _execute(f"UPDATE users SET {set_clause} WHERE id = %s AND {NOT_DELETED_SQL}", vals + (user_id,))
     return get_user(user_id)
 
 
 def update_user_password(user_id: str, password_hash: str) -> None:
     _execute(
-        "UPDATE users SET password_hash = %s, updated_at = %s WHERE id = %s",
+        f"UPDATE users SET password_hash = %s, updated_at = %s WHERE id = %s AND {NOT_DELETED_SQL}",
         (password_hash, _now_iso(), user_id),
     )
 
@@ -322,10 +349,41 @@ def delete_user(user_id: str) -> bool:
     """Cancella l'utente. Una chiave esterna violata (storico che lo
     referenzia) diventa ``UserHasHistoryError``, mai un errore generico."""
     try:
-        cur = _execute("DELETE FROM users WHERE id = %s", (user_id,))
+        cur = _execute(f"DELETE FROM users WHERE id = %s AND {NOT_DELETED_SQL}", (user_id,))
     except psycopg.errors.ForeignKeyViolation as exc:
         raise _user_references.UserHasHistoryError(str(exc)) from exc
     return cur.rowcount > 0
+
+
+# Eliminazione «a lapide» (10/11/2026): UNA transazione. La riga resta (ogni
+# chiave esterna dello storico, presente e futura, resta valida); si tolgono
+# credenziali, segreti e dati personali non necessari allo storico. Restano
+# id, ruolo, gruppo e date: dicono chi era (``deleted_username``) e decidono
+# le regole storiche (es. risorsa creata da un superadmin, ``ownership``).
+TOMBSTONE_USER_SQL = (
+    "UPDATE users SET deleted_at = %s, deleted_username = username, username = %s, "
+    "password_hash = '', email = NULL, is_active = FALSE, updated_at = %s "
+    f"WHERE id = %s AND {NOT_DELETED_SQL}"
+)
+# Segreti dell'utente in altre tabelle: con la riga che resta le loro
+# ON DELETE CASCADE non scattano, quindi si cancellano qui.
+TOMBSTONE_CLEANUP_SQL: tuple[str, ...] = (
+    "DELETE FROM user_mfa_used_codes WHERE user_id = %s",
+    "DELETE FROM user_mfa WHERE user_id = %s",
+)
+
+
+def tombstone_user(user_id: str) -> bool:
+    """Elimina l'utente mantenendo lo storico, in una transazione. ``False``
+    se non esiste o e' gia' eliminato (nessuna modifica)."""
+    now = _now_iso()
+    with unit_of_work() as session:
+        cur = session.execute(TOMBSTONE_USER_SQL, (now, tombstone_username(user_id), now, user_id))
+        if not getattr(cur, "rowcount", 0):
+            return False
+        for sql in TOMBSTONE_CLEANUP_SQL:
+            session.execute(sql, (user_id,))
+    return True
 
 
 def get_group(group_id: str) -> Optional[GroupRow]:
@@ -367,7 +425,7 @@ def get_group_summary(group_id: str) -> GroupSummaryRow:
     row = _fetchone(
         "SELECT "
         "(SELECT COUNT(*) FROM projects WHERE group_id = %s) AS projects, "
-        "(SELECT COUNT(*) FROM users WHERE group_id = %s) AS users, "
+        f"(SELECT COUNT(*) FROM users WHERE group_id = %s AND {NOT_DELETED_SQL}) AS users, "
         "(SELECT COUNT(*) FROM connections WHERE group_id = %s) AS connections, "
         "(SELECT COUNT(*) FROM file_sources WHERE group_id = %s) AS file_sources, "
         "(SELECT COUNT(*) FROM datasources WHERE group_id = %s) AS datasources, "
@@ -400,6 +458,7 @@ __all__ = [
     "get_group_summary",
     "get_user",
     "get_user_by_username",
+    "get_user_including_deleted",
     "get_username_index_status",
     "hydrate_group_row",
     "is_username_unique_violation",
@@ -408,6 +467,7 @@ __all__ = [
     "list_all_users",
     "list_groups",
     "list_users",
+    "tombstone_user",
     "update_user",
     "update_user_password",
 ]

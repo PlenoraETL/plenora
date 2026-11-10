@@ -76,6 +76,7 @@ const GATED = {
   createUser: ['manageUsers'],
   updateUser: ['manageUsers'],
   deleteUser: ['manageUsers'],
+  deleteUserKeepingHistory: ['deleteUserKeepingHistory'],
   resetPassword: ['manageUsers'],
   createGroup: ['manageGroups'],
   deleteGroup: ['deleteGroup'],

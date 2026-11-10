@@ -66,6 +66,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional, Protocol, Sequenc
 
 import psycopg
 from app.db.pg_connection import unit_of_work
+from app.shared.contracts.auth import user_display_name_sql
 from app.shared.contracts.connection_test_status import ConnectionTestStatus
 from app.shared.error_sanitizer import collect_secret_values, sanitize_with_secrets
 from app.utils.logger import get_logger
@@ -144,8 +145,11 @@ _RESET_SQL = (
 
 # Il gruppo ATTUALE di chi ha testato decide chi ne vede il nome
 # (``_tester_name_for``); utente cancellato -> gruppo NULL -> nome nascosto.
+# Utente eliminato mantenendo lo storico (lapide, gruppo conservato): il nome
+# e' «utente eliminato (<username>)» (regola di shared.contracts.auth).
 _LOAD_SQL = (
-    "SELECT r.resource_id, r.success, r.message, r.tested_at, r.tested_by_name, "
+    "SELECT r.resource_id, r.success, r.message, r.tested_at, "
+    f"{user_display_name_sql('u', 'r.tested_by_name')} AS tested_by_name, "
     "r.duration_ms, u.group_id AS tested_by_group "
     "FROM connection_test_results r LEFT JOIN users u ON u.id = r.tested_by "
     "WHERE r.resource_kind = %s AND r.resource_id = ANY(%s) AND r.tested_at IS NOT NULL"

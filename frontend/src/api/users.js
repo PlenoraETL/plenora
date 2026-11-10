@@ -18,6 +18,9 @@ export const updateUser      = (id, data)      => http.put(`/auth/users/${id}`, 
 // canonico {success: true} per semantica esplicita.
 export const deleteUser      = (id)            =>
   http.delete(`/auth/users/${id}`).then(() => ({ success: true, id }));
+// Elimina mantenendo lo storico (10/11/2026, solo superadmin): 204 vuoto.
+export const deleteUserKeepingHistory = (id)   =>
+  http.post(`/auth/users/${id}/delete-keeping-history`).then(() => ({ success: true, id }));
 export const resetPassword   = (id, data)      => http.post(`/auth/users/${id}/reset-password`, data).then(r => r.data);
 
 export const listGroups      = ()              => fetchAllOffsetPages('/auth/groups');

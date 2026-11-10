@@ -47,6 +47,47 @@ def username_form_error(username: object) -> str | None:
     return None
 
 
+# REGOLA dell'utente eliminato «a lapide» (10/11/2026). Eliminare un utente
+# con storico non cancella la riga: ``users.deleted_at`` e' valorizzato, lo
+# username originale passa in ``users.deleted_username`` e ``username``
+# diventa :func:`tombstone_username` (libera il nome per un utente nuovo).
+# Due sole letture della tabella ``users``:
+# - OPERATIVA (autenticazione, liste, selettori, conteggi): solo le righe
+#   con :data:`NOT_DELETED_SQL`; una lapide non esiste;
+# - STORICA (chi ha scritto il commento, chi ha salvato la versione, ...):
+#   il nome si mostra SOLO con :func:`user_display_name_sql`, che per una
+#   lapide da' «utente eliminato (<username originale>)».
+# Il test ``tests2/auth/test_deleted_user_contract.py`` enumera ogni SQL del
+# backend che legge ``users`` e la confronta con la tabella dichiarativa
+# ``app.core.auth.deleted_users.USERS_SQL_SITES``.
+NOT_DELETED_SQL = "deleted_at IS NULL"
+DELETED_USER_LABEL = "utente eliminato"
+TOMBSTONE_USERNAME_PREFIX = "eliminato:"
+
+
+def tombstone_username(user_id: str) -> str:
+    """Username della lapide: unico (contiene l'id) e diverso da qualunque
+    nome scelto da un amministratore che non lo copi apposta."""
+    return f"{TOMBSTONE_USERNAME_PREFIX}{user_id}"
+
+
+def user_display_name_sql(alias: str, live_name_sql: str | None = None) -> str:
+    """Espressione SQL del nome nello storico per la riga ``users`` con alias
+    ``alias`` (unita con LEFT JOIN). ``live_name_sql``: il nome da mostrare
+    per un utente non eliminato (default ``<alias>.username``; es. il nome
+    registrato al momento del fatto). Una riga assente (LEFT JOIN vuoto) da'
+    ``live_name_sql``, come prima."""
+    if not alias.isidentifier():
+        raise ValueError(f"alias SQL non valido: {alias!r}")
+    live = live_name_sql or f"{alias}.username"
+    label = DELETED_USER_LABEL.replace("'", "''")
+    return (
+        f"CASE WHEN {alias}.{NOT_DELETED_SQL} THEN {live} "
+        f"WHEN NULLIF(btrim({alias}.deleted_username), '') IS NULL THEN '{label}' "
+        f"ELSE '{label} (' || btrim({alias}.deleted_username) || ')' END"
+    )
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str

@@ -9,6 +9,7 @@ from typing import Any, List, Mapping, Optional
 
 from app.db.pg_connection import unit_of_work
 from app.db.sql_safety import safe_set_clause
+from app.shared.contracts.auth import NOT_DELETED_SQL, user_display_name_sql
 from app.shared.contracts.payloads import IntMap, JsonObject
 from app.utils.logger import get_logger
 
@@ -409,16 +410,37 @@ def add_comment(ticket_id: str, author_id: str, body: str) -> CommentRow:
     )
 
 
+# SQL su users (regola dell'utente eliminato, shared.contracts.auth): testo
+# costante, composto all'import solo da costanti del contratto; i valori
+# passano sempre come parametri.
+_ASSIGNABLE_USER_SQL = f"SELECT 1 AS ok FROM users WHERE id = %s AND {NOT_DELETED_SQL}"
+_LIST_COMMENTS_SQL = (
+    f"SELECT c.*, {user_display_name_sql('u')} AS author_username "
+    "FROM ticket_comments c "
+    "LEFT JOIN users u ON u.id = c.author_id "
+    "WHERE c.ticket_id = %s ORDER BY c.created_at ASC"
+)
+_LIST_ATTACHMENTS_SQL = (
+    "SELECT a.id, a.ticket_id, a.file_source_id, a.uploaded_by, a.uploaded_at, "
+    "       fs.name AS file_name, fs.original_filename, fs.format, "
+    f"       fs.size_bytes, {user_display_name_sql('u')} AS uploaded_by_username "
+    "FROM ticket_attachments a "
+    "JOIN file_sources fs ON fs.id = a.file_source_id "
+    "LEFT JOIN users u ON u.id = a.uploaded_by "
+    "WHERE a.ticket_id = %s ORDER BY a.uploaded_at ASC"
+)
+
+
+def assignable_user_exists(user_id: str) -> bool:
+    """L'assegnatario di un ticket e' un utente esistente e non eliminato
+    (selettore operativo, regola dell'utente eliminato)."""
+    return fetchone(_ASSIGNABLE_USER_SQL, (user_id,)) is not None
+
+
 def list_comments(ticket_id: str) -> List[CommentRow]:
     return [
         comment_row_from_db(row)
-        for row in fetchall(
-            "SELECT c.*, u.username AS author_username "
-            "FROM ticket_comments c "
-            "LEFT JOIN users u ON u.id = c.author_id "
-            "WHERE c.ticket_id = %s ORDER BY c.created_at ASC",
-            (ticket_id,),
-        )
+        for row in fetchall(_LIST_COMMENTS_SQL, (ticket_id,))
     ]
 
 
@@ -453,16 +475,7 @@ def list_attachments(ticket_id: str) -> List[AttachmentRow]:
     """Lista allegati del ticket join con file_sources per nome/size."""
     return [
         attachment_row_from_db(row)
-        for row in fetchall(
-            "SELECT a.id, a.ticket_id, a.file_source_id, a.uploaded_by, a.uploaded_at, "
-            "       fs.name AS file_name, fs.original_filename, fs.format, "
-            "       fs.size_bytes, u.username AS uploaded_by_username "
-            "FROM ticket_attachments a "
-            "JOIN file_sources fs ON fs.id = a.file_source_id "
-            "LEFT JOIN users u ON u.id = a.uploaded_by "
-            "WHERE a.ticket_id = %s ORDER BY a.uploaded_at ASC",
-            (ticket_id,),
-        )
+        for row in fetchall(_LIST_ATTACHMENTS_SQL, (ticket_id,))
     ]
 
 

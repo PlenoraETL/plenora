@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 from app.db.pg_connection import unit_of_work
 from app.db.sql_safety import safe_set_clause
+from app.shared.contracts.auth import user_display_name_sql
 from app.utils.logger import get_logger
 from app.core.projects.canvas_revision import CanvasRevisionConflict, canvas_version
 
@@ -1003,10 +1004,14 @@ def insert_canvas_version(
 
 
 def list_canvas_versions(project_id: str) -> list[Mapping[str, object]]:
+    # Nome di chi ha salvato la versione: lettura storica (utente eliminato
+    # = «utente eliminato (<username>)», regola di shared.contracts.auth).
     return _fetchall(
-        "SELECT id, label, created_at, created_by "
-        "FROM project_canvas_versions WHERE project_id = %s "
-        "ORDER BY created_at DESC",
+        "SELECT v.id, v.label, v.created_at, v.created_by, "
+        f"{user_display_name_sql('u')} AS created_by_name "
+        "FROM project_canvas_versions v LEFT JOIN users u ON u.id = v.created_by "
+        "WHERE v.project_id = %s "
+        "ORDER BY v.created_at DESC",
         (project_id,),
     )
 

@@ -300,3 +300,32 @@ def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)
         _raise_user_has_history(target.username, [])
     if not deleted:
         _disclosure.raise_disclosure(_disclosure.user_not_found())
+
+
+def require_superadmin(current_user: CurrentUser = Depends(_get_current_user_proxy)) -> CurrentUser:
+    """Stessa regola di ``dependencies.require_superadmin``."""
+    if current_user.role != "superadmin":
+        _disclosure.raise_disclosure(_disclosure.role_superadmin_required())
+    return current_user
+
+
+@users_router.post("/{user_id}/delete-keeping-history", status_code=204)
+@audit_action(action="user.delete_keeping_history", target_param="user_id")
+def delete_user_keeping_history(user_id: str, current_user: CurrentUser = Depends(require_superadmin)) -> None:
+    """
+    Elimina l'utente MANTENENDO lo storico (10/11/2026). Solo superadmin.
+
+    La riga resta come «lapide» (``auth.db.tombstone_user``, una
+    transazione): ogni chiave esterna dello storico resta valida; lo username
+    originale passa in ``deleted_username`` e torna libero; password, email e
+    MFA si cancellano; l'utente non si autentica piu' in nessun modo e sparisce
+    da liste, selettori e conteggi; lo storico lo mostra come «utente
+    eliminato (<username>)». Vale con o senza storico.
+
+    Protezioni: non se stessi; l'ultimo superadmin non si puo' eliminare per
+    costruzione (chi elimina e' un superadmin attivo e non e' il bersaglio).
+    """
+    if user_id == current_user.user_id:
+        _disclosure.raise_disclosure(_disclosure.self_delete_denied())
+    if not _users_dal.get_user(user_id) or not _users_dal.tombstone_user(user_id):
+        _disclosure.raise_disclosure(_disclosure.user_not_found())

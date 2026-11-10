@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
 import {
-  listUsers, createUser, updateUser, deleteUser, resetPassword,
+  listUsers, createUser, updateUser, deleteUser, deleteUserKeepingHistory, resetPassword,
   listGroups, createGroup, deleteGroup, getGroupSummary,
 } from '../api/users';
 import PageLayout from '../components/common/PageLayout';
@@ -307,17 +307,30 @@ function GroupModal({ onClose, onSave }) {
   );
 }
 // MODAL — Conferma eliminazione
+// Cosa succede eliminando un utente mantenendo lo storico (backend
+// users_router.delete_user_keeping_history).
+const KEEP_HISTORY_EFFECTS = Object.freeze([
+  'non potrà più accedere in nessun modo (password, MFA e sessioni non valgono più);',
+  'sparisce dalla lista degli utenti e dai conteggi; il suo nome torna libero per un utente nuovo;',
+  'le sue esecuzioni, i ticket, i commenti e gli altri dati registrati restano e lo mostrano come «utente eliminato (nome)»;',
+  'l’operazione non è reversibile.',
+]);
+
 /**
  * Conferma di eliminazione. `onDeactivate` (utenti, 09/11/2026): se il
  * backend rifiuta perche' l'utente ha storico (409 `user_has_history`:
  * esecuzioni, progetti, ticket che lo referenziano), il messaggio lo dice e
  * si offre «Disattiva» (is_active=false con PUT /auth/users/{id}, gli stessi
  * permessi della modifica).
+ * `onDeleteKeepingHistory` (10/11/2026, solo superadmin): accanto a
+ * «Disattiva» si offre «Elimina mantenendo lo storico»; un secondo passo
+ * spiega cosa succede e chiede la conferma esplicita.
  */
-function ConfirmDeleteModal({ title, message, onClose, onConfirm, onDeactivate = null }) {
+function ConfirmDeleteModal({ title, message, onClose, onConfirm, onDeactivate = null, onDeleteKeepingHistory = null, subject = '' }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [hasHistory, setHasHistory] = useState(false);
+  const [keepHistoryStep, setKeepHistoryStep] = useState(false);
   const handleConfirm = async () => {
     setLoading(true);
     setErrorMsg(null);
@@ -340,7 +353,47 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm, onDeactivate =
       setLoading(false);
     }
   };
+  const handleDeleteKeepingHistory = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try { await onDeleteKeepingHistory(); onClose(); }
+    catch (e) {
+      setErrorMsg(requestErrorMessage(e, 'Eliminazione fallita'));
+      setLoading(false);
+    }
+  };
   const offerDeactivate = hasHistory && Boolean(onDeactivate);
+  const offerKeepHistory = hasHistory && Boolean(onDeleteKeepingHistory);
+  if (keepHistoryStep) {
+    return (
+      <ModalWrapper
+        isOpen={true}
+        onClose={onClose}
+        busy={loading}
+        title="Elimina mantenendo lo storico"
+        icon="⚠️"
+        size="sm"
+        footer={
+          <>
+            <ModalButton variant="secondary" onClick={() => setKeepHistoryStep(false)} disabled={loading}>Indietro</ModalButton>
+            <ModalButton variant="danger" onClick={handleDeleteKeepingHistory} loading={loading}>
+              Conferma eliminazione
+            </ModalButton>
+          </>
+        }
+      >
+        <p className="um__cdg-message">Stai eliminando l’utente «{subject}» mantenendo lo storico. L’utente:</p>
+        <ul className="um__cdg-message">
+          {KEEP_HISTORY_EFFECTS.map((effect) => <li key={effect}>{effect}</li>)}
+        </ul>
+        {errorMsg && (
+          <p className="um__cdg-error" style={{ color: '#dc2626', marginTop: 8 }}>
+            {errorMsg}
+          </p>
+        )}
+      </ModalWrapper>
+    );
+  }
   return (
     <ModalWrapper
       isOpen={true}
@@ -352,11 +405,16 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm, onDeactivate =
       footer={
         <>
           <ModalButton variant="secondary" onClick={onClose} disabled={loading}>Annulla</ModalButton>
+          {offerKeepHistory && (
+            <ModalButton variant="danger" onClick={() => { setErrorMsg(null); setKeepHistoryStep(true); }} disabled={loading}>
+              Elimina mantenendo lo storico
+            </ModalButton>
+          )}
           {offerDeactivate ? (
             <ModalButton variant="primary" onClick={handleDeactivate} loading={loading}>
               Disattiva
             </ModalButton>
-          ) : (
+          ) : offerKeepHistory ? null : (
             <ModalButton variant="danger" onClick={handleConfirm} loading={loading}>
               Elimina
             </ModalButton>
@@ -519,6 +577,8 @@ export default function UserManager() {
   const handleDeleteUser  = async (user) => { await deleteUser(user.id); toast.success(`Utente "${user.username}" eliminato`); loadData(); };
   // Utente con storico (409 user_has_history): si disattiva invece di eliminarlo.
   const handleDeactivateUser = async (user) => { await updateUser(user.id, { is_active: false }); toast.success(`Utente "${user.username}" disattivato`); loadData(); };
+  // ...oppure il superadmin lo elimina mantenendo lo storico (lapide).
+  const handleDeleteUserKeepingHistory = async (user) => { await deleteUserKeepingHistory(user.id); toast.success(`Utente "${user.username}" eliminato, storico mantenuto`); loadData(); };
   const handleResetPassword = async (userId, newPassword) => { await resetPassword(userId, { new_password: newPassword }); toast.success('Password reimpostata'); };
   const handleCreateGroup = async (data) => { await createGroup(data); toast.success(`Gruppo "${data.name}" creato`); loadData(); };
   const handleDeleteGroup = async (group) => {
@@ -666,7 +726,9 @@ export default function UserManager() {
       {deleteTarget?.type === 'user' && (
         <ConfirmDeleteModal title="Elimina utente" message={`Sei sicuro di voler eliminare l'utente "${deleteTarget.item.username}"? L'operazione non è reversibile.`}
           onClose={() => setDeleteTarget(null)} onConfirm={() => handleDeleteUser(deleteTarget.item)}
-          onDeactivate={deleteTarget.item.is_active ? () => handleDeactivateUser(deleteTarget.item) : null} />
+          onDeactivate={deleteTarget.item.is_active ? () => handleDeactivateUser(deleteTarget.item) : null}
+          onDeleteKeepingHistory={can.deleteUserKeepingHistory(currentUser) ? () => handleDeleteUserKeepingHistory(deleteTarget.item) : null}
+          subject={deleteTarget.item.username} />
       )}
       {deleteTarget?.type === 'group' && (
         <ConfirmDeleteGroupModal group={deleteTarget.item} onClose={() => setDeleteTarget(null)} onConfirm={() => handleDeleteGroup(deleteTarget.item)} />
