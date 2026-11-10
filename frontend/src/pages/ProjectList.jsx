@@ -7,7 +7,7 @@ import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { deleteProject, deleteEseguibile, cloneProject, updateProject } from '../api';
+import { deleteProject, cloneProject, updateProject } from '../api';
 import { markProjectDeleted } from '../utils/localDrafts';
 import NewProjectModal from '../components/projects/NewProjectModal';
 import EsegSelectorModal from '../components/projects/EsegSelectorModal';
@@ -23,9 +23,14 @@ import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useHexCanvas } from '../utils/hexCanvas';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
+import EseguibileVersionsModal from '../components/eseguibili/EseguibileVersionsModal';
+import ShareDialog from '../components/shared/ShareDialog';
 import PageLayout from '../components/common/PageLayout';
 import { useTheme } from '../hooks/useTheme';
-import { can } from '../utils/permissions';
+import { RULES, connectionShareType } from '../utils/nodeActions';
+import { confirmDeleteEseguibile, renameEseguibile } from '../utils/resourceActions';
+import { testConnectionOf } from '../utils/connectionTest';
+import { lastTestFromResult } from '../utils/connectionTestStatus';
 import { toastApiError } from '../utils/toastApiError';
 import { humanizeErrorMessage } from '../utils/errorMessages';
 import { useBusy } from '../hooks/useBusy';
@@ -40,7 +45,7 @@ import VirtualList from '../components/common/VirtualList';
 import ChainsView from '../components/projects/ChainsView';
 import { chainTitleWrites } from '../utils/projectChains';
 import { STORAGE_KEYS, readJson, writeJson } from '../utils/browserStorage';
-import { requestRunOnOpen } from '../utils/pendingRun';
+import { connectionEditKey, requestOnOpen, requestRunOnOpen } from '../utils/pendingRun';
 import { invalidateShared } from '../utils/sharedResources';
 
 // Griglia delle card (stessa di .pl__cards-grid): oltre la soglia di
@@ -59,11 +64,11 @@ const readHomeView = () => {
   const v = readJson('homeView', STORAGE_KEYS.homeView.key, 'chains');
   return HOME_VIEWS[v] ? v : 'chains';
 };
-// Pagine delle origini della prima colonna (pulsante «Apri» del pannello).
+// Pagine delle origini della prima colonna (azione «openPage» del pannello).
 const ORIGIN_PAGES = Object.freeze({
-  connection: { path: '/connections', label: 'Apri Connessioni' },
-  file: { path: '/files', label: 'Apri File' },
-  datasource: { path: '/datasources', label: 'Apri Data Source' },
+  connection: '/connections',
+  file: '/files',
+  datasource: '/datasources',
 });
 
 function ProjectList() {
@@ -94,6 +99,11 @@ function ProjectList() {
   } = useProjectListData();
   // Clonazione per progetto (Fase 5 T2, R9.11): doppio clic = un clone.
   const cloning = useBusy();
+  // Test per connessione dal pannello della home (come la pagina Connessioni).
+  const testing = useBusy();
+  // Finestre del pannello della home: le stesse delle pagine di origine.
+  const [sharing, setSharing] = useState(null); // { resourceType, resourceId, name, disabled }
+  const [versioningEseguibile, setVersioningEseguibile] = useState(null);
 
   // UI state
   const [showModal,         setShowModal]         = useState(false);
@@ -204,22 +214,24 @@ function ProjectList() {
     }
   };
 
-  const canCreateProj = can.createProject(user);
+  const canCreateProj = RULES.createProject(user);
 
-  const handleDeleteEseguibile = async (id, name) => {
-    const ok = await confirmModal.confirm({
-      title: 'Elimina eseguibile',
-      message: `Eliminare l'eseguibile "${name}"?`,
-      confirmText: 'Elimina',
-      variant: 'danger',
-    });
-    if (!ok) return;
+  // Lo stesso gestore della pagina Eseguibili (utils/resourceActions).
+  const handleDeleteEseguibile = async (item) => {
+    if (await confirmDeleteEseguibile({ confirm: confirmModal.confirm, toast, item })) loadData();
+  };
+
+  // «Test» di una connessione: la stessa chiamata della pagina Connessioni;
+  // l'esito (salvato dal server, `last_test`) qui si dice con un avviso.
+  const handleTestConnection = async (conn, category) => {
     try {
-      await deleteEseguibile(id);
-      toast.success('Eseguibile eliminato');
-      loadData();
+      const r = await testing.run(conn.id, () => testConnectionOf(category, conn.id));
+      if (r.skipped) return;
+      const result = lastTestFromResult(r.value, user?.username);
+      if (result.success) toast.success(`Test di «${conn.name}»: ${result.message}`);
+      else toast.error(`Test di «${conn.name}» non riuscito: ${result.message}`);
     } catch (err) {
-      toastApiError(toast, err, 'Errore eliminazione');
+      toastApiError(toast, err, `Test di «${conn.name}» non eseguito`);
     }
   };
 
@@ -317,8 +329,10 @@ function ProjectList() {
   const searchShown = visibleSections.reduce((n, [, shown]) => n + shown.length, shownEseguibili.length);
   const searchTotal = visibleSections.reduce((n, [, , all]) => n + all.length, section ? 0 : eseguibili.length);
   const fileNameById = useMemo(() => new Map(files.map(f => [f.id, f.name])), [files]);
-  // Home per catene: nomi delle connessioni (database e ArcGIS) e azioni del
-  // pannello, le stesse delle schede dell'elenco.
+  // Home per catene: nomi delle connessioni (database e ArcGIS) e azioni
+  // del pannello: per ogni
+  // tipo di nodo i gestori delle pagine di origine; quali si vedono lo dice
+  // la tabella NODE_ACTIONS (utils/nodeActions) con i permessi RULES.
   const chainConnections = useMemo(() => new Map([
     ...connections.map(c => [c.id, { name: c.name, kind: 'db' }]),
     ...arcgisConnections.map(c => [c.id, { name: c.name, kind: 'arcgis' }]),
@@ -326,38 +340,61 @@ function ProjectList() {
   const eseguibileById = useMemo(() => new Map(eseguibili.map(e => [e.id, e])), [eseguibili]);
   const chainActions = (node) => {
     if (node.kind === 'project') {
-      const p = projectById.get(node.id) || { id: node.id, name: node.name, project_type: node.type, tags: node.raw?.tags || [] };
-      const editMeta = can.editProjectMeta(user, p);
+      const p = projectById.get(node.id) || { id: node.id, name: node.name, project_type: node.type, tags: node.raw?.tags || [], group_id: node.raw?.group_id };
       return {
-        open: () => handleOpenProject(p),
-        run: () => { requestRunOnOpen(p.id); handleOpenProject(p); },
-        history: () => navigate(`/logs?project=${encodeURIComponent(p.id)}`),
-        schedules: node.raw?.schedules > 0 ? () => navigate(`/schedules?project_id=${p.id}`) : null,
-        rename: editMeta ? (name) => handleRenameProject(p, name) : null,
-        clone: canCreateProj ? () => handleCloneProject(p) : null,
-        publish: can.createEseguibile(user) ? () => setPublishProject(p) : null,
-        remove: can.deleteProject(user, p) ? () => handleDeleteProject(p.id, p.name) : null,
-        tags: { value: p.tags, onSet: editMeta ? (tags) => handleSetTags(p, tags) : null },
+        item: p,
+        handlers: {
+          open: () => handleOpenProject(p),
+          run: () => { requestRunOnOpen(p.id); handleOpenProject(p); },
+          history: () => navigate(`/logs?project=${encodeURIComponent(p.id)}`),
+          schedules: node.raw?.schedules > 0 ? () => navigate(`/schedules?project_id=${p.id}`) : null,
+          rename: (name) => handleRenameProject(p, name),
+          clone: () => handleCloneProject(p),
+          publish: () => setPublishProject(p),
+          remove: () => handleDeleteProject(p.id, p.name),
+        },
+        tags: { value: p.tags, onSet: RULES.editProjectMeta(user, p) ? (tags) => handleSetTags(p, tags) : null },
       };
     }
     if (node.kind === 'eseguibile') {
       const item = eseguibileById.get(node.id) || { id: node.id, name: node.name };
       const source = node.raw?.source_project_id ? projectById.get(node.raw.source_project_id) : null;
       return {
-        open: source ? () => handleOpenProject(source) : null,
-        openLabel: 'Apri il progetto',
-        run: () => setExecuteEseguibileId(node.id),
-        remove: can.manageEseguibile(user, item) ? () => handleDeleteEseguibile(node.id, node.name) : null,
+        item,
+        handlers: {
+          openSource: source ? () => handleOpenProject(source) : null,
+          run: () => setExecuteEseguibileId(node.id),
+          publishVersion: () => setVersioningEseguibile(item),
+          share: () => setSharing({ resourceType: 'eseguibili', resourceId: item.id, name: item.name, disabled: item.can_edit === false }),
+          rename: (value) => renameEseguibile({ toast, item, value }),
+          versions: () => setVersioningEseguibile(item),
+          remove: () => handleDeleteEseguibile(item),
+        },
       };
     }
-    const page = ORIGIN_PAGES[node.type];
-    return page ? { open: () => navigate(page.path), openLabel: page.label } : {};
+    if (node.type === 'connection') {
+      // La lista della sua categoria (stesso id in database e ArcGIS = due connessioni).
+      const category = node.connectionKind === 'arcgis' ? 'arcgis' : 'database';
+      const conn = (category === 'arcgis' ? arcgisConnections : connections).find(c => c.id === node.id) || null;
+      return {
+        item: conn,
+        handlers: {
+          // La finestra di modifica e' quella della pagina Connessioni (utils/pendingRun).
+          edit: conn ? () => { requestOnOpen('editConnection', connectionEditKey(category, conn.id)); navigate(ORIGIN_PAGES.connection); } : null,
+          openPage: () => navigate(ORIGIN_PAGES.connection),
+          test: conn ? () => handleTestConnection(conn, category) : null,
+          share: conn ? () => setSharing({ resourceType: connectionShareType(category), resourceId: conn.id, name: conn.name }) : null,
+        },
+      };
+    }
+    const path = ORIGIN_PAGES[node.type];
+    return { item: null, handlers: { openPage: path ? () => navigate(path) : null } };
   };
   // Titolo della catena (09/11/2026): sul progetto titolare, con il permesso
   // di modificarne i metadati (regola e scritture in utils/projectChains).
   const renameChain = (chain) => {
     const owner = chain.titleOwnerKey ? projectById.get(chain.titleOwnerKey.slice(2)) : null;
-    if (!owner || !can.editProjectMeta(user, owner)) return null;
+    if (!owner || !RULES.editProjectMeta(user, owner)) return null;
     return async (title) => {
       try {
         await Promise.all(chainTitleWrites(chain, title).map((w) => updateProject(w.projectId, { chain_title: w.chain_title })));
@@ -475,6 +512,7 @@ function ProjectList() {
               connections={chainConnections}
               fileNames={fileNameById}
               actions={chainActions}
+              user={user}
               renameChain={renameChain}
               empty={projects.length === 0 && eseguibili.length === 0 ? (
                 <QuickStart
@@ -554,10 +592,10 @@ function ProjectList() {
                   ]}
                   scheduleCount={getScheduleCount(project.id)}
                   onOpen={() => handleOpenProject(project)}
-                  onDelete={can.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
+                  onDelete={RULES.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
                   onClone={canCreateProj ? () => handleCloneProject(project) : null}
-                  onRename={can.editProjectMeta(user, project) ? (newName) => handleRenameProject(project, newName) : null}
-                  onSetTags={can.editProjectMeta(user, project) ? (tags) => handleSetTags(project, tags) : null}
+                  onRename={RULES.editProjectMeta(user, project) ? (newName) => handleRenameProject(project, newName) : null}
+                  onSetTags={RULES.editProjectMeta(user, project) ? (tags) => handleSetTags(project, tags) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -593,10 +631,10 @@ function ProjectList() {
                   ]}
                   scheduleCount={getScheduleCount(project.id)}
                   onOpen={() => handleOpenProject(project)}
-                  onDelete={can.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
+                  onDelete={RULES.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
                   onClone={canCreateProj ? () => handleCloneProject(project) : null}
-                  onRename={can.editProjectMeta(user, project) ? (newName) => handleRenameProject(project, newName) : null}
-                  onSetTags={can.editProjectMeta(user, project) ? (tags) => handleSetTags(project, tags) : null}
+                  onRename={RULES.editProjectMeta(user, project) ? (newName) => handleRenameProject(project, newName) : null}
+                  onSetTags={RULES.editProjectMeta(user, project) ? (tags) => handleSetTags(project, tags) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -627,10 +665,10 @@ function ProjectList() {
                 ]}
                 scheduleCount={getScheduleCount(project.id)}
                 onOpen={() => handleOpenProject(project)}
-                onDelete={can.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
+                onDelete={RULES.deleteProject(user, project) ? () => handleDeleteProject(project.id, project.name) : null}
                 onClone={canCreateProj ? () => handleCloneProject(project) : null}
-                onRename={can.editProjectMeta(user, project) ? (newName) => handleRenameProject(project, newName) : null}
-                onSetTags={can.editProjectMeta(user, project) ? (tags) => handleSetTags(project, tags) : null}
+                onRename={RULES.editProjectMeta(user, project) ? (newName) => handleRenameProject(project, newName) : null}
+                onSetTags={RULES.editProjectMeta(user, project) ? (tags) => handleSetTags(project, tags) : null}
                 onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
               />
             )} />
@@ -642,11 +680,11 @@ function ProjectList() {
           <EseguibiliSection
             items={shownEseguibili}
             filtered={search.active}
-            canCreate={can.createEseguibile(user)}
-            canDelete={(item) => can.manageEseguibile(user, item)}
+            canCreate={RULES.createEseguibile(user)}
+            canDelete={(item) => RULES.manageEseguibile(user, item)}
             onNew={openEsegSelector}
             onExecute={(item) => setExecuteEseguibileId(item.id)}
-            onDelete={(item) => handleDeleteEseguibile(item.id, item.name)}
+            onDelete={(item) => handleDeleteEseguibile(item)}
           />
           )}
           </>)}
@@ -674,6 +712,22 @@ function ProjectList() {
         <EseguibileExecuteWizard
           eseguibileId={executeEseguibileId}
           onClose={() => setExecuteEseguibileId(null)}
+        />
+      )}
+      {versioningEseguibile && (
+        <EseguibileVersionsModal
+          eseguibile={versioningEseguibile}
+          onClose={() => setVersioningEseguibile(null)}
+          onUpdated={() => loadData()}
+        />
+      )}
+      {sharing && (
+        <ShareDialog
+          resourceType={sharing.resourceType}
+          resourceId={sharing.resourceId}
+          name={sharing.name}
+          disabled={sharing.disabled}
+          onClose={() => setSharing(null)}
         />
       )}
       <EsegSelectorModal

@@ -115,6 +115,7 @@ def test_dashboard_graph_exposes_chain_title_per_project(monkeypatch):
     service = MagicMock()
     service.list_projects.return_value = None
     monkeypatch.setattr(projects_routes, "_project_service", service)
+    monkeypatch.setattr(graph_mod.auth_db, "group_names", lambda ids: {})
     metas = [
         SimpleNamespace(id="p1", name="fine", project_type="manipola", default_connection_id=None, tags=[],
                         updated_at=None, chain_title="Patrimonio"),

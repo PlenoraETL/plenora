@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import cast
 from typing_extensions import TypedDict
 
 from app.db.pg_connection import (
+    fetchall as _pg_fetchall,
     fetchone as _pg_fetchone,
     get_connection as _pg_get_conn,
     put_connection as _pg_put_conn,
@@ -28,6 +29,41 @@ def fetch_shareable_resource_owner(
         (resource_id,),
     )
     return cast(ShareableResourceOwnerRow, dict(row)) if row else None
+
+
+def fetch_resource_owner_groups(
+    resource_table: str,
+    resource_ids: Iterable[str],
+) -> Mapping[str, str | None]:
+    """Owner group of many shareable resources (id -> group_id), one query."""
+    ids = sorted({str(i) for i in resource_ids if i})
+    if not ids:
+        return {}
+    rows = _pg_fetchall(
+        f"SELECT id, group_id FROM {resource_table} WHERE id = ANY(%s)",
+        (ids,),
+    )
+    return {str(row["id"]): row.get("group_id") for row in rows}
+
+
+def fetch_resource_share_group_ids_by_id(
+    share_table: str,
+    fk: str,
+    resource_ids: Iterable[str],
+) -> Mapping[str, list[str]]:
+    """Share rows of many resources (id -> sorted group ids), one query."""
+    ids = sorted({str(i) for i in resource_ids if i})
+    if not ids:
+        return {}
+    rows = _pg_fetchall(
+        f"SELECT {fk} AS resource_id, group_id FROM {share_table} "
+        f"WHERE {fk} = ANY(%s) ORDER BY {fk}, group_id",
+        (ids,),
+    )
+    out: dict[str, list[str]] = {}
+    for row in rows:
+        out.setdefault(str(row["resource_id"]), []).append(str(row["group_id"]))
+    return out
 
 
 def fetch_visible_resource_ids(

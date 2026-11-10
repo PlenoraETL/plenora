@@ -12,7 +12,12 @@ Un test per regola:
 - la query dei collegamenti non porta il canvas in Python e legge gli alias
   dei tipi di nodo;
 - `latest_runs_by_project` filtra gruppo ed esito;
-- la route e' nello snapshot OpenAPI ed e' riservata a chi non e' esecutore.
+- la route e' nello snapshot OpenAPI ed e' riservata a chi non e' esecutore;
+- «Visibile a» (10/11/2026): `access` dice gruppo proprietario e condivisioni
+  di Eseguibili e origini con la visibilita' delle liste
+  (`visible_resource_ids`); l'elenco delle condivisioni solo al superadmin
+  (`shared_with` null agli altri); `groups` nomina i gruppi della risposta;
+  il progetto porta il suo `group_id`.
 """
 
 from __future__ import annotations
@@ -39,9 +44,29 @@ def _user(role: str = "admin", group: str = "grp-1") -> CurrentUser:
     return CurrentUser(user_id="u-1", username="tester", group_id=group, role=role)
 
 
-def _meta(pid: str, name: str, ptype: str, conn: str | None = None):
-    return SimpleNamespace(id=pid, name=name, project_type=ptype, default_connection_id=conn,
+def _meta(pid: str, name: str, ptype: str, conn: str | None = None, group: str = "grp-1"):
+    return SimpleNamespace(id=pid, name=name, project_type=ptype, default_connection_id=conn, group_id=group,
                            tags=[], updated_at="2026-11-09T10:00:00+00:00", canvas={"nodes": []})
+
+
+# Il mondo delle condivisioni dei test: proprietari, righe di condivisione,
+# nomi dei gruppi. ds1 e' di un gruppo che non lo condivide: un utente di
+# grp-1 non lo vede (la lista dei Data Source non lo mostrerebbe).
+OWNERS = {
+    "eseguibili": {"x-1": "grp-1"},
+    "connections": {"c1": "grp-2"},
+    "arcgis_connections": {},
+    "file_sources": {"f1": "grp-1"},
+    "datasources": {"ds1": "grp-9"},
+}
+SHARES = {"eseguibili": {"x-1": ["grp-3"]}, "connections": {"c1": ["*"]}}
+GROUP_NAMES = {"grp-1": "Uffici", "grp-2": "Patrimonio", "grp-3": "Ospiti", "grp-9": "Altro"}
+
+
+def _visible(table: str, group: str) -> set[str]:
+    shares = SHARES.get(table, {})
+    return {rid for rid, owner in OWNERS[table].items()
+            if owner == group or group in shares.get(rid, []) or "*" in shares.get(rid, [])}
 
 
 class _Calls:
@@ -115,6 +140,35 @@ def _client(monkeypatch, user, *, fail=()):
 
     monkeypatch.setattr(schedules_routes, "list_schedules", fake_schedules)
 
+    from app.core.dashboard import graph as graph_mod
+
+    def fake_visible(table, group_id, is_superadmin=False):
+        calls.items.append(("visible", table, group_id))
+        if "access" in fail:
+            raise RuntimeError("giu'")
+        return _visible(table, group_id)
+
+    def fake_owners(table, ids):
+        calls.items.append(("owners", table, frozenset(ids)))
+        if "access" in fail:
+            raise RuntimeError("giu'")
+        return {rid: OWNERS[table][rid] for rid in ids if rid in OWNERS[table]}
+
+    def fake_shares(table, ids):
+        calls.items.append(("shares", table, frozenset(ids)))
+        return {rid: SHARES.get(table, {})[rid] for rid in ids if rid in SHARES.get(table, {})}
+
+    def fake_group_names(ids):
+        calls.items.append(("groups", frozenset(ids)))
+        if "groups" in fail:
+            raise RuntimeError("giu'")
+        return {g: GROUP_NAMES[g] for g in ids if g in GROUP_NAMES}
+
+    monkeypatch.setattr(graph_mod.auth_visibility, "visible_resource_ids", fake_visible)
+    monkeypatch.setattr(graph_mod.auth_shares, "resource_owner_groups", fake_owners)
+    monkeypatch.setattr(graph_mod.auth_shares, "resource_shares_by_id", fake_shares)
+    monkeypatch.setattr(graph_mod.auth_db, "group_names", fake_group_names)
+
     app = FastAPI()
     app.dependency_overrides[dashboard_mod.require_not_esecutore] = lambda: user
     app.include_router(dashboard_mod.router, prefix="/api")
@@ -175,7 +229,7 @@ def test_graph_uses_the_list_visibility(monkeypatch, role, group, expected):
     assert ("links", frozenset({"e1", "m1", "x1"})) in calls.items
 
 
-@pytest.mark.parametrize("part", ["links", "runs", "eseguibili", "schedules"])
+@pytest.mark.parametrize("part", ["links", "runs", "eseguibili", "schedules", "access", "groups"])
 def test_graph_part_failure_is_declared_and_others_stay(monkeypatch, part):
     client, _ = _client(monkeypatch, _user(), fail=(part,))
     body = client.get("/api/dashboard/graph").json()
@@ -310,3 +364,117 @@ def test_latest_runs_by_project_filters_group_and_status(monkeypatch, role, stat
 def test_graph_route_in_openapi_snapshot():
     snapshot = json.loads((BACKEND_ROOT.parent / "frontend" / "tests" / "fixtures" / "openapi.snapshot.json").read_text(encoding="utf-8"))
     assert "/api/dashboard/graph" in snapshot["paths"]
+
+
+# ── «Visibile a» (10/11/2026) ────────────────────────────────────────────
+
+
+def _access(body):
+    return {(a["resource_type"], a["id"]): a for a in body["access"]}
+
+
+def test_graph_parts_are_declared():
+    from app.core.dashboard import graph as graph_mod
+    from app.core.auth.visibility import _SHAREABLE
+
+    assert graph_mod.GRAPH_PARTS == ("links", "runs", "eseguibili", "schedules", "access", "groups")
+    # Le tabelle di «Visibile a» sono tabelle condivisibili vere.
+    assert set(graph_mod.ACCESS_TABLES) <= set(_SHAREABLE)
+    assert set(graph_mod.CONNECTION_TABLES.values()) <= set(graph_mod.ACCESS_TABLES)
+
+
+def test_superadmin_sees_owner_and_shares_of_every_node(monkeypatch):
+    client, calls = _client(monkeypatch, _user("superadmin", "grp-1"))
+    body = client.get("/api/dashboard/graph").json()
+    assert body["unavailable"] == []
+    assert _access(body) == {
+        ("eseguibili", "x-1"): {"resource_type": "eseguibili", "id": "x-1", "group_id": "grp-1", "shared_with": ["grp-3"]},
+        ("connections", "c1"): {"resource_type": "connections", "id": "c1", "group_id": "grp-2", "shared_with": ["*"]},
+        ("file_sources", "f1"): {"resource_type": "file_sources", "id": "f1", "group_id": "grp-1", "shared_with": []},
+        ("datasources", "ds1"): {"resource_type": "datasources", "id": "ds1", "group_id": "grp-9", "shared_with": []},
+    }
+    # Il superadmin vede tutto: nessun filtro di visibilita'.
+    assert not [c for c in calls.items if c[0] == "visible"]
+    # Nomi: proprietari e gruppi delle condivisioni (non «*»).
+    assert body["groups"] == {"grp-1": "Uffici", "grp-2": "Patrimonio", "grp-3": "Ospiti", "grp-9": "Altro"}
+    assert {p["id"]: p["group_id"] for p in body["projects"]} == {"e1": "grp-1", "m1": "grp-1", "x1": "grp-1"}
+
+
+@pytest.mark.parametrize("role", ["admin", "user"])
+def test_others_see_owner_but_not_the_share_list(monkeypatch, role):
+    client, calls = _client(monkeypatch, _user(role, "grp-1"))
+    body = client.get("/api/dashboard/graph").json()
+    assert body["unavailable"] == []
+    access = _access(body)
+    # Solo cio' che le liste mostrerebbe: ds1 (di grp-9, non condiviso) manca.
+    assert set(access) == {("eseguibili", "x-1"), ("connections", "c1"), ("file_sources", "f1")}
+    assert access[("connections", "c1")]["group_id"] == "grp-2"
+    # Le condivisioni le legge e le gestisce solo il superadmin.
+    assert all(a["shared_with"] is None for a in access.values())
+    assert not [c for c in calls.items if c[0] == "shares"]
+    # La visibilita' delle liste, con il gruppo dell'utente, tabella per tabella.
+    assert {c[1] for c in calls.items if c[0] == "visible"} == {"eseguibili", "connections", "file_sources", "datasources"}
+    assert {c[2] for c in calls.items if c[0] == "visible"} == {"grp-1"}
+    # Nessun nome di gruppo che la risposta non nomina (grp-3 della condivisione, grp-9).
+    assert body["groups"] == {"grp-1": "Uffici", "grp-2": "Patrimonio"}
+
+
+def test_access_asks_only_the_graph_resources(monkeypatch):
+    client, calls = _client(monkeypatch, _user("superadmin", "grp-1"))
+    client.get("/api/dashboard/graph")
+    owners = {c[1]: c[2] for c in calls.items if c[0] == "owners"}
+    assert owners == {
+        "eseguibili": frozenset({"x-1"}),
+        "connections": frozenset({"c1"}),
+        "file_sources": frozenset({"f1"}),
+        "datasources": frozenset({"ds1"}),
+    }
+
+
+def test_shares_batch_queries(monkeypatch):
+    from app.core.auth import db as auth_db
+    from app.core.auth import share_store, shares
+
+    seen = []
+
+    def fake_fetchall(sql, params=()):
+        seen.append((sql, params))
+        if "group_id FROM eseguibile_shares" in sql:
+            return [{"resource_id": "x-1", "group_id": "grp-3"}, {"resource_id": "x-1", "group_id": "*"}]
+        return [{"id": "x-1", "group_id": "grp-1"}]
+
+    monkeypatch.setattr(share_store, "_pg_fetchall", fake_fetchall)
+    assert shares.resource_owner_groups("eseguibili", {"x-1", "x-1"}) == {"x-1": "grp-1"}
+    assert shares.resource_shares_by_id("eseguibili", ["x-1"]) == {"x-1": ["grp-3", "*"]}
+    assert seen[0] == ("SELECT id, group_id FROM eseguibili WHERE id = ANY(%s)", (["x-1"],))
+    assert "WHERE eseguibile_id = ANY(%s)" in seen[1][0]
+    # Niente query senza id; tabella non condivisibile rifiutata.
+    assert shares.resource_owner_groups("eseguibili", []) == {}
+    assert len(seen) == 2
+    with pytest.raises(ValueError):
+        shares.resource_owner_groups("projects", ["p1"])
+
+    monkeypatch.setattr(auth_db, "_fetchall", lambda sql, params=(): (seen.append((sql, params)), [{"id": "grp-1", "name": "Uffici"}])[1])
+    assert auth_db.group_names({"grp-1", ""}) == {"grp-1": "Uffici"}
+    assert seen[-1] == ("SELECT id, name FROM groups WHERE id = ANY(%s)", (["grp-1"],))
+    assert auth_db.group_names([]) == {}
+
+
+@real_pg_marks
+def test_shares_batch_queries_on_real_postgres(monkeypatch):
+    from app.core.auth import db as auth_db
+    from app.core.auth import share_store, shares
+
+    with real_pg_schema() as conn:
+        conn.execute("CREATE TABLE eseguibili (id text primary key, group_id text)")
+        conn.execute("CREATE TABLE eseguibile_shares (eseguibile_id text, group_id text)")
+        conn.execute("CREATE TABLE groups (id text primary key, name text)")
+        conn.execute("INSERT INTO eseguibili VALUES ('x-1', 'grp-1'), ('x-2', 'grp-2')")
+        conn.execute("INSERT INTO eseguibile_shares VALUES ('x-1', 'grp-3'), ('x-1', '*'), ('x-2', 'grp-1')")
+        conn.execute("INSERT INTO groups VALUES ('grp-1', 'Uffici'), ('grp-2', 'Patrimonio')")
+        run = lambda sql, params=(): list(conn.execute(sql, params).fetchall())
+        monkeypatch.setattr(share_store, "_pg_fetchall", run)
+        monkeypatch.setattr(auth_db, "_fetchall", run)
+        assert shares.resource_owner_groups("eseguibili", ["x-1", "nope"]) == {"x-1": "grp-1"}
+        assert shares.resource_shares_by_id("eseguibili", ["x-1", "x-2"]) == {"x-1": ["*", "grp-3"], "x-2": ["grp-1"]}
+        assert auth_db.group_names(["grp-1", "grp-x"]) == {"grp-1": "Uffici"}

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Annotated, Any, Mapping, Optional
+from typing import Annotated, Any, Iterable, Mapping, Optional
 
 import psycopg
 from pydantic import (
@@ -331,6 +331,15 @@ def delete_user(user_id: str) -> bool:
 def get_group(group_id: str) -> Optional[GroupRow]:
     row = _fetchone("SELECT * FROM groups WHERE id = %s", (group_id,))
     return hydrate_group_row(row)
+
+
+def group_names(group_ids: Iterable[str]) -> Mapping[str, str]:
+    """Names of many groups (id -> name), one query; unknown ids are absent."""
+    ids = sorted({str(g) for g in group_ids if g})
+    if not ids:
+        return {}
+    rows = _fetchall("SELECT id, name FROM groups WHERE id = ANY(%s)", (ids,))
+    return {str(row["id"]): str(row.get("name") or "") for row in rows}
 
 
 def list_groups(*, limit: int = 200, offset: int = 0) -> list[GroupRow]:

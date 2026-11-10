@@ -4,9 +4,11 @@
  * Ogni catena e' una riga: Connessione -> Estrai -> Manipola e Arricchisci ->
  * Pubblicato (regole in utils/projectChains). Un clic su una scheda la
  * seleziona: a monte in blu, a valle in verde, il resto sbiadito; il
- * pannello laterale dice tipo, ultima esecuzione, avvisi, «Usa» ed «È usato
- * da» (cliccabili) e le azioni (Apri, Esegui, Cronologia, menu «⋯»). Sotto,
- * «Da guardare» (tabella WATCH_RULES) e i contatori.
+ * pannello laterale dice tipo, ultima esecuzione, avvisi, «Visibile a»,
+ * «Usa» ed «È usato da» (cliccabili) e le azioni del tipo di nodo (tabella
+ * NODE_ACTIONS di utils/nodeActions: le stesse azioni e gli stessi permessi
+ * delle pagine di origine). Sotto, «Da guardare» (tabella WATCH_RULES) e i
+ * contatori.
  *
  * Dati: la risorsa condivisa `dashboardGraph` (GET /dashboard/graph, niente
  * canvas); nomi delle connessioni e dei file dalle liste della dashboard.
@@ -26,6 +28,7 @@ import {
   CHAIN_TITLE_MAX, COLUMNS, COLLAPSE_AT, buildGraph, buildChains, chainCounters, filterChains, lineage,
   nodeMeta, nodeTags, orderChains, relationOf, typeLabel, watchFindings, byName,
 } from '../../utils/projectChains';
+import { accessIndex, panelActions, visibilityOf } from '../../utils/nodeActions';
 import { formatCount } from './useProjectListData';
 import './ChainsView.css';
 
@@ -35,6 +38,8 @@ const PART_LABELS = Object.freeze({
   runs: 'stato delle esecuzioni',
   eseguibili: 'Eseguibili',
   schedules: 'pianificazioni',
+  access: 'proprietari e condivisioni',
+  groups: 'nomi dei gruppi',
 });
 const WATCH_SHOWN = 8;
 // Testo di una colonna richiusa: «9 Estrai», «3 connessioni».
@@ -196,7 +201,19 @@ function RelatedList({ title, empty, keys, graph, onPick }) {
   );
 }
 
-function SelectionPanel({ node, meta, graph, findings, actions, onPick }) {
+function VisibleTo({ visibility }) {
+  return (
+    <div className="ch__visible" role="group" aria-label="Visibile a">
+      <h3 className="ch__h3">Visibile a</h3>
+      <ul className="ch__visible-list">
+        {visibility.lines.map((line) => <li key={line}>{line}</li>)}
+      </ul>
+      {visibility.note && <p className="ch__muted">{visibility.note}</p>}
+    </div>
+  );
+}
+
+function SelectionPanel({ node, meta, graph, findings, actions, user, visibility, onPick }) {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState('');
   useEffect(() => { setRenaming(false); }, [node?.key]);
@@ -207,13 +224,16 @@ function SelectionPanel({ node, meta, graph, findings, actions, onPick }) {
       </section>
     );
   }
-  const a = actions(node) || {};
+  const given = actions(node) || {};
+  const list = panelActions(node, { user, item: given.item, handlers: given.handlers });
+  const rename = list.find((x) => x.inline);
   const warns = findings.byKey.get(node.key) || [];
   const commitRename = () => {
     setRenaming(false);
     const v = draft.trim();
-    if (v && v !== node.name) a.rename?.(v);
+    if (v && v !== node.name) rename?.onSelect(v);
   };
+  const onMenu = (x) => (x.inline ? () => { setDraft(node.name); setRenaming(true); } : x.onSelect);
   return (
     <section className="ch__panel" aria-label="Progetto selezionato">
       <div className="ch__panel-head">
@@ -234,8 +254,9 @@ function SelectionPanel({ node, meta, graph, findings, actions, onPick }) {
         ) : <h2 className="ch__panel-name">{node.name}</h2>}
         <span className="ch__muted">{meta}</span>
       </div>
-      {a.tags && <ProjectTags tags={a.tags.value} onSetTags={a.tags.onSet} />}
+      {given.tags && <ProjectTags tags={given.tags.value} onSetTags={given.tags.onSet} />}
       {warns.map((w) => <div key={w.rule.id} className="ch__warn" role="note">{w.text}</div>)}
+      <VisibleTo visibility={visibility} />
       <RelatedList title="Usa" empty="Niente: è all'inizio della catena" keys={graph.ups.get(node.key) || []} graph={graph} onPick={onPick} />
       <RelatedList
         title="È usato da"
@@ -245,18 +266,14 @@ function SelectionPanel({ node, meta, graph, findings, actions, onPick }) {
         onPick={onPick}
       />
       <div className="ch__actions">
-        {a.open && <button type="button" className="ch__btn ch__btn--primary" onClick={a.open}>{a.openLabel || 'Apri'}</button>}
-        {a.run && <button type="button" className="ch__btn" onClick={a.run}>{ICON.run} Esegui</button>}
-        {a.history && <button type="button" className="ch__btn" onClick={a.history}>{ICON.run_history} Cronologia</button>}
-        {a.schedules && <button type="button" className="ch__btn" onClick={a.schedules}>{ICON.schedule} Pianificazioni</button>}
+        {list.filter((x) => x.place === 'primary' || x.place === 'button').map((x) => (
+          <button key={x.id} type="button" className={`ch__btn${x.place === 'primary' ? ' ch__btn--primary' : ''}`} onClick={() => x.onSelect()}>
+            {x.label}
+          </button>
+        ))}
         <ActionMenu
           label={`Azioni per ${node.name}`}
-          items={[
-            a.rename && { label: '✎ Rinomina', onSelect: () => { setDraft(node.name); setRenaming(true); } },
-            a.clone && { label: '⧉ Clona', onSelect: a.clone },
-            a.publish && { label: `${ICON.executable} Pubblica come Eseguibile`, onSelect: a.publish },
-            a.remove && { label: `${ICON.delete} Elimina`, onSelect: a.remove, danger: true },
-          ]}
+          items={list.filter((x) => x.place === 'menu').map((x) => ({ label: x.label, onSelect: onMenu(x), danger: x.danger, title: x.title }))}
         />
       </div>
     </section>
@@ -313,12 +330,14 @@ function Counters({ counters }) {
  * @param {object} props.search          hooks/useSearch della pagina
  * @param {Map} props.connections        id -> { name, kind } (database e ArcGIS)
  * @param {Map} props.fileNames          id -> nome del file
- * @param {(node) => object} props.actions azioni del nodo selezionato (open, run, history, ...)
+ * @param {(node) => {item?, handlers, tags?}} props.actions per il nodo selezionato: l'elemento
+ *   della lista d'origine (permessi), i gestori per id di NODE_ACTIONS, i tag (progetti)
+ * @param {object} [props.user]        utente (permessi di utils/nodeActions)
  * @param {(chain, graph) => ((title: string) => Promise)|null} [props.renameChain]
  *   rinomina della catena (null = non si puo': permesso o catena senza progetto titolare)
  * @param {React.ReactNode} [props.empty] stato vuoto senza progetti
  */
-export default function ChainsView({ search, connections, fileNames, actions, renameChain = null, empty = null }) {
+export default function ChainsView({ search, connections, fileNames, actions, user = null, renameChain = null, empty = null }) {
   const resource = useSharedResource('dashboardGraph');
   const raw = resource.data;
   const [selected, setSelected] = useState(null);
@@ -345,6 +364,12 @@ export default function ChainsView({ search, connections, fileNames, actions, re
     [chains, filter, findings, search?.active, search?.matches],
   );
   const counters = useMemo(() => chainCounters(graph), [graph]);
+  const access = useMemo(() => accessIndex(raw), [raw]);
+  const selNode = sel ? graph.nodes.get(sel) : null;
+  const visibility = useMemo(
+    () => visibilityOf(selNode, { access, groups: raw?.groups || {}, user, unavailable: graph.unavailable }),
+    [selNode, access, raw, user, graph],
+  );
   const isolatedCount = chains.find((c) => c.isolated)?.nodes.filter((n) => n.kind === 'project').length || 0;
 
   const pick = useCallback((key, { scroll = false } = {}) => {
@@ -447,7 +472,7 @@ export default function ChainsView({ search, connections, fileNames, actions, re
           )}
         </div>
         <aside className="ch__side" aria-label="Dettagli e controlli">
-          <SelectionPanel node={sel ? graph.nodes.get(sel) : null} meta={sel ? metas.get(sel) : null} graph={graph} findings={findings} actions={actions} onPick={pick} />
+          <SelectionPanel node={selNode} meta={sel ? metas.get(sel) : null} graph={graph} findings={findings} actions={actions} user={user} visibility={visibility} onPick={pick} />
           <WatchPanel findings={findings} graph={graph} onPick={pick} />
           <Counters counters={counters} />
         </aside>

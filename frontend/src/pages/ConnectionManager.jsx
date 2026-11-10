@@ -3,19 +3,23 @@
  * Redesign Plenora: sidebar layout, hex bg, nuovo design system
  * Route: /connections
  */
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
 import {
   createConnection, updateConnection,
-  deleteConnection, testConnection
+  deleteConnection,
 } from '../api';
 import {
   createFeatureConnection,
-  updateFeatureConnection, deleteFeatureConnection, testFeatureConnection
+  updateFeatureConnection, deleteFeatureConnection,
 } from '../api/features';
 import { useHexCanvas } from '../utils/hexCanvas';
-import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
+import ShareDialog from '../components/shared/ShareDialog';
+// Permessi e gestori condivisi con il pannello della home per catene (10/11/2026).
+import { RULES, connectionShareType } from '../utils/nodeActions';
+import { testConnectionOf } from '../utils/connectionTest';
+import { connectionEditKey, takeOnOpen } from '../utils/pendingRun';
 import PageLayout from '../components/common/PageLayout';
 import EmptyState from '../components/common/EmptyState';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
@@ -195,7 +199,7 @@ function ConnectionManager() {
   // test rifiutato (rete, permessi) non e' un esito: avviso e basta.
   const handleTest = async (conn) => {
     try {
-      const r = await testing.run(conn.id, () => (conn._category === 'arcgis' ? testFeatureConnection(conn.id) : testConnection(conn.id)));
+      const r = await testing.run(conn.id, () => testConnectionOf(conn._category, conn.id));
       if (r.skipped) return;
       const lastTest = lastTestFromResult(r.value, user?.username);
       resource.setData(d => (d ? {
@@ -207,6 +211,13 @@ function ConnectionManager() {
       toastApiError(toast, err, `Test di «${conn.name}» non eseguito`);
     }
   };
+
+  // «Modifica» dal pannello della home: si apre QUESTA finestra di modifica,
+  // una volta, se la connessione c'e' e l'utente la puo' modificare.
+  useEffect(() => {
+    const conn = allConnections.find(c => takeOnOpen('editConnection', connectionEditKey(c._category, c.id)));
+    if (conn && RULES.editConnection(user, conn)) handleOpenModal(conn);
+  }, [allConnections]);
 
   const currentTypeInfo = ALL_TYPES.find(t => t.value === formData.type);
   const isArcgis = currentTypeInfo?.category === 'arcgis';
@@ -285,8 +296,8 @@ function ConnectionManager() {
                   onEdit={handleOpenModal}
                   onDelete={handleDelete}
                   onShare={setSharingConnection}
-                  canEditOf={(c) => can.editConnection(user, c)}
-                  canShare={can.shareResources(user)}
+                  canEditOf={(c) => RULES.editConnection(user, c)}
+                  canShare={RULES.shareConnection(user)}
                   arcgis={false}
                 />
               )}
@@ -300,8 +311,8 @@ function ConnectionManager() {
                   onEdit={handleOpenModal}
                   onDelete={handleDelete}
                   onShare={setSharingConnection}
-                  canEditOf={(c) => can.editConnection(user, c)}
-                  canShare={can.shareResources(user)}
+                  canEditOf={(c) => RULES.editConnection(user, c)}
+                  canShare={RULES.shareConnection(user)}
                   arcgis={true}
                 />
               )}
@@ -311,7 +322,7 @@ function ConnectionManager() {
                     !isSuperadmin || connection.group_id === user?.group_id
                   ))}
                   canEdit={canCreateConnection}
-                  canEditItem={(item) => can.editConnection(user, item)}
+                  canEditItem={(item) => RULES.editConnection(user, item)}
                   toast={toast}
                   confirm={confirmModal.confirm}
                 />
@@ -469,21 +480,12 @@ function ConnectionManager() {
         </ModalWrapper>
       )}
 {sharingConnection && (
-        <ModalWrapper
-          isOpen={true}
+        <ShareDialog
+          resourceType={connectionShareType(sharingConnection._category)}
+          resourceId={sharingConnection.id}
+          name={sharingConnection.name}
           onClose={() => setSharingConnection(null)}
-          title="Condividi connessione"
-          icon="🔗"
-          subtitle={sharingConnection.name}
-          size="md"
-        >
-          <AllowedGroupsSelector
-            embedded
-            resourceType={sharingConnection._category === 'arcgis' ? 'arcgis_connections' : 'connections'}
-            resourceId={sharingConnection.id}
-            onClose={() => setSharingConnection(null)}
-          />
-        </ModalWrapper>
+        />
       )}
       <ConfirmDialog {...confirmModal} />
     </PageLayout>

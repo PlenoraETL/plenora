@@ -2235,12 +2235,26 @@
       },
       "DashboardGraph": {
         "properties": {
+          "access": {
+            "items": {
+              "$ref": "#/components/schemas/GraphAccess"
+            },
+            "title": "Access",
+            "type": "array"
+          },
           "eseguibili": {
             "items": {
               "$ref": "#/components/schemas/GraphEseguibile"
             },
             "title": "Eseguibili",
             "type": "array"
+          },
+          "groups": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Groups",
+            "type": "object"
           },
           "projects": {
             "items": {
@@ -5184,6 +5198,50 @@
         "title": "Filter",
         "type": "object"
       },
+      "GraphAccess": {
+        "description": "Chi vede una risorsa condivisibile del grafo («Visibile a»).",
+        "properties": {
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          },
+          "shared_with": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared With"
+          }
+        },
+        "required": [
+          "resource_type",
+          "id"
+        ],
+        "title": "GraphAccess",
+        "type": "object"
+      },
       "GraphConnectionRef": {
         "properties": {
           "id": {
@@ -5340,6 +5398,17 @@
             },
             "title": "File Source Ids",
             "type": "array"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
           },
           "id": {
             "title": "Id",

@@ -701,3 +701,82 @@ Verifiche: frontend eslint pulito, vitest 214 file / 6.101 test passati, build; 
 - **D2 (bassa), dichiarato**: collegando l'input a parametri regex di Manipola, un admin potrebbe scrivere
   una regex lenta (al massimo 200 caratteri).
 - **D4, dichiarato**: aggiungere l'opzione non compare tra le modifiche della ripubblicazione.
+
+## Home: azioni e visibilità per ogni tipo di nodo (10/11/2026)
+
+Richiesta dell'utente: nel pannello laterale della home per catene, selezionando un Eseguibile il menu «⋯» aveva solo «Elimina». Servono le azioni della pagina d'origine, per TUTTI i tipi di nodo. Base `main` @ `e53e75ca`.
+
+**Regola unica** in `frontend/src/utils/nodeActions.js`.
+- `NODE_ACTIONS`: una tabella dichiarativa delle azioni di ogni tipo di nodo. Per ogni azione: etichetta, posto (pulsante principale, pulsante o menu «⋯») e permesso.
+  - Progetto: Apri, Esegui, Cronologia, Pianificazioni (se ce ne sono), Rinomina, Clona, Pubblica come Eseguibile, Elimina, più i tag. C'erano già tutte; ora vengono dalla tabella.
+  - Eseguibile: Apri il progetto, Esegui, Pubblica nuova versione, Condividi, Rinomina, Versioni, Elimina. «Pubblica nuova versione» compare solo se il progetto è cambiato, come il badge della pagina.
+  - Connessione: Modifica, Apri Connessioni, Test, Condividi.
+  - File e Data Source: Apri la pagina.
+- `RULES`: i permessi, uno per significato, sopra `can.*`. Le pagine d'origine li leggono da qui, quindi pannello e pagina non possono divergere.
+  - `EseguibiliList`: `shareEseguibile`, `manageEseguibile`.
+  - `ConnectionManager`: `editConnection`, `shareConnection`.
+  - Schede di `ProjectList`: `editProjectMeta`, `createProject`, `deleteProject`, `createEseguibile`.
+- `panelActions`: un'azione si mostra se ha il gestore, se il permesso la ammette e, quando serve, se lo stato la rende sensata.
+
+**Stessi gestori e stesse finestre**, nessuna copia.
+- `components/shared/ShareDialog` è l'unica finestra «Condividi»: la usano la pagina Eseguibili, la pagina Connessioni e la home. Dentro c'è `AllowedGroupsSelector`.
+- `utils/resourceActions` fa eliminazione con conferma, controllo del nome da salvare e rinomina degli Eseguibili. La usano la pagina Eseguibili e la home.
+- `utils/connectionTest` fa il «Test» per categoria. La usano la pagina Connessioni e la home.
+- Le versioni passano da `EseguibileVersionsModal`, anche «Pubblica nuova versione» con l'anteprima V1.
+- «Modifica» di una connessione apre la finestra di modifica della pagina Connessioni.
+  - Usa lo stesso meccanismo di «Esegui»: `utils/pendingRun` è generalizzato in `requestOnOpen` / `takeOnOpen`, con chiave per categoria e id.
+  - Una richiesta alla volta, valida 60 s, presa una sola volta.
+  - La pagina apre la finestra solo se l'utente può modificare quella connessione.
+
+**«Visibile a»**: un riquadro per ogni nodo (`visibilityOf`).
+- Progetti: «Tutto il gruppo <nome>». I progetti non si condividono tra gruppi.
+- Eseguibili e origini (connessioni database e ArcGIS, file, Data Source): il gruppo proprietario più i gruppi della condivisione.
+  - «Tutti i gruppi» per `*`.
+  - Senza condivisioni: «Non condiviso con altri gruppi».
+
+**Backend**: `GET /dashboard/graph`.
+- Campi nuovi:
+  - `GraphProject.group_id`;
+  - `access`: per ogni risorsa `resource_type`, `id`, `group_id`, `shared_with`;
+  - `groups`: da id a nome.
+- Due parti indipendenti in `unavailable`: `access` e `groups`. Nessun canvas nella risposta.
+- Visibilità: solo le risorse del grafo che la lista mostrerebbe, con `visible_resource_ids`, la funzione delle route di lista. Il superadmin le vede tutte.
+- **Scelta dichiarata**: l'elenco delle condivisioni (`shared_with`) arriva SOLO al superadmin.
+  - È coerente con `GET/PUT /shares`, che richiede `require_superadmin`, e con il pulsante «Condividi» delle pagine, che è solo suo.
+  - Agli altri arriva `null`. La home mostra il proprietario e, se la risorsa è di un altro gruppo, «Il tuo gruppo, per condivisione». Una nota dice che le condivisioni le vede il superadmin.
+- `groups` nomina solo i gruppi presenti nella risposta: i proprietari, il gruppo dell'utente e, per il superadmin, i gruppi delle condivisioni.
+- Query in blocco: `share_store.fetch_resource_owner_groups`, `fetch_resource_share_group_ids_by_id`, `auth.db.group_names`.
+
+**Invalidazione**: il salvataggio delle condivisioni (`PUT /shares/...`) invalidava già tutte le liste condivise, compresa `dashboardGraph` (riga di `WRITE_INVALIDATIONS`). Ora un test lo verifica per Eseguibili, connessioni e connessioni ArcGIS.
+
+**Test**
+- `tests/shared/nodeActions.contract.test.js`:
+  - enumerazione della tabella per tipo di nodo, e regola di ogni azione;
+  - lettura statica: le pagine usano `RULES` e gli stessi gestori e finestre; la home non usa `can.*`;
+  - permessi per ruolo: Condividi solo al superadmin; `can_edit: false` blocca;
+  - `panelActions`;
+  - «Visibile a»: proprietario, gruppi, tutti, condivisioni non dichiarate, dati non caricati, risorsa non visibile;
+  - invalidazione della home dopo il salvataggio delle condivisioni;
+  - richieste alla pagina che si apre.
+- `tests/pages/ProjectListChainsActions.test.jsx`: rendering per superadmin, admin e user.
+  - Eseguibile: voci del menu per ruolo; Condividi apre la finestra comune su `eseguibili`; Versioni; rinomina con PATCH; eliminazione con conferma; «Pubblica nuova versione».
+  - Connessione: Modifica, Apri, Test, Condividi su `connections`.
+  - Progetto: voci del menu; Pubblica apre la finestra.
+  - Parte `access` non caricata.
+- `ConnectionManager.contract.test.jsx`: la richiesta «Modifica» della home apre la modifica una volta sola. Non apre una connessione di un'altra categoria con lo stesso id.
+- `permissions.contract.test.js`: `RULES.<regola>(` vale come `can.<capability>(` se la regola la usa; ogni regola deve corrispondere a una capability.
+- `tests2/contract/test_home_chains_graph_contract.py`:
+  - superadmin: proprietario e condivisioni di ogni nodo, nessun filtro;
+  - admin e user: il proprietario sì, l'elenco delle condivisioni no; una risorsa non visibile è assente; filtro di visibilità per tabella con il gruppo dell'utente; nomi solo dei gruppi presenti nella risposta;
+  - le richieste riguardano solo le risorse del grafo;
+  - le parti `access` e `groups` sono indipendenti;
+  - query in blocco, anche su PostgreSQL vero (`real_pg`).
+
+**API cambiate**: `GraphProject.group_id`, `DashboardGraph.access`, `DashboardGraph.groups` e il nuovo `GraphAccess`. Lo snapshot OpenAPI è rigenerato. Nessuna migrazione. CSP e installer invariati.
+
+**Verifiche**
+- Frontend: eslint pulito; vitest 216 file e 6.141 test passati; build riuscita.
+  - Il primo giro aveva trovato fallimenti di guardia, poi corretti: export usati solo all'interno, una classe CSS rimasta senza uso, i permessi via `RULES` riconosciuti dal test R10.
+- Backend, comando completo delle cartelle tests2: 30.218 passati, 0 falliti, 61 saltati.
+  - Il primo giro aveva trovato 2 fallimenti, poi corretti: i ritorni `dict` sono diventati `Mapping` per le guardie dei confini tipizzati di auth e core.
+- Niente deploy, niente push.

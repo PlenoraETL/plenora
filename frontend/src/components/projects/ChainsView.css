@@ -221,6 +221,17 @@
   color: var(--plen-text-sub);
 }
 .ch__related { display: flex; flex-direction: column; gap: 6px; }
+.ch__visible { display: flex; flex-direction: column; gap: 6px; }
+.ch__visible-list {
+  margin: 0;
+  padding: 8px 10px 8px 26px;
+  border: 1px solid var(--plen-border);
+  border-radius: 8px;
+  background: var(--plen-surface-2);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 .ch__related-item {
   display: flex;
   justify-content: space-between;

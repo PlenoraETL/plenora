@@ -263,7 +263,6 @@
 
 /* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-004) ────────────── */
 .esl__lock-icon        { margin-left: 6px; opacity: 0.7; cursor: help; font-size: 0.85em; }
-.esl__sharing-modal    { max-width: 560px; }
 
 .esv { display: grid; gap: 12px; }
 .esv__info { margin: 0; color: var(--plen-text-sub); font-size: 13px; line-height: 1.5; }

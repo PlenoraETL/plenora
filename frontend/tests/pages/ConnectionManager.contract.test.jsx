@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 import ConnectionManager from '../../src/pages/ConnectionManager';
+import { requestOnOpen } from '../../src/utils/pendingRun';
 
 const {
   navigateMock,
@@ -172,5 +173,26 @@ describe('ConnectionManager', () => {
     expect(await screen.findByText('Connessioni non caricate')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Riprova' }));
     expect(await screen.findByText('Warehouse DB')).toBeInTheDocument();
+  });
+
+  // «Modifica» dal pannello della home (10/11/2026): si apre la finestra di
+  // modifica di QUESTA pagina per quella connessione, una volta sola.
+  it('richiesta «Modifica» della home: apre la modifica della connessione, una volta', async () => {
+    requestOnOpen('editConnection', 'db:conn-1');
+    const { unmount } = render(<ConnectionManager />);
+    expect(await screen.findByText('Modifica Connessione')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('db.local')).toBeInTheDocument();
+    unmount();
+    render(<ConnectionManager />);
+    expect(await screen.findByText('Warehouse DB')).toBeInTheDocument();
+    expect(screen.queryByText('Modifica Connessione')).toBeNull();
+  });
+
+  it('richiesta per una connessione ArcGIS con lo stesso id: non apre quella database', async () => {
+    requestOnOpen('editConnection', 'arcgis:conn-1');
+    render(<ConnectionManager />);
+    expect(await screen.findByText('Warehouse DB')).toBeInTheDocument();
+    expect(screen.queryByText('Modifica Connessione')).toBeNull();
+    requestOnOpen('editConnection', null);
   });
 });

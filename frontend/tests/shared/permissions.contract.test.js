@@ -11,7 +11,10 @@ import { can, CAPABILITY_BACKEND } from '../../src/utils/permissions';
  *     una capability (GATED) o ha un motivo scritto per non esserlo
  *     (UNGATED). Una funzione nuova non classificata fa fallire il test.
  *  3. Ogni file che importa una funzione GATED usa la sua capability
- *     (`can.<nome>(`): l'azione si mostra solo a chi la puo' fare.
+ *     (`can.<nome>(`): l'azione si mostra solo a chi la puo' fare. Vale
+ *     anche `RULES.<regola>(` (utils/nodeActions, 10/11/2026: i permessi
+ *     condivisi tra le pagine e il pannello della home), se quella regola
+ *     usa `can.<nome>(`.
  */
 
 const srcRoot = path.resolve(import.meta.dirname, '../../src');
@@ -110,13 +113,26 @@ const UNGATED = {
 const DELEGATED = {
   'components/api-conn/ApiConnectionWizard.jsx': ['pages/ApiConnectionManager.jsx'],
   'components/connections/ConnectionSetsPanel.jsx': ['pages/ConnectionManager.jsx'],
-  'components/eseguibili/EseguibileVersionsModal.jsx': ['pages/EseguibiliList.jsx', 'components/eseguibili/PublishedExecutablesNotice.jsx'],
+  'components/eseguibili/EseguibileVersionsModal.jsx': ['pages/EseguibiliList.jsx', 'pages/ProjectList.jsx', 'components/eseguibili/PublishedExecutablesNotice.jsx'],
   'components/eseguibili/PublishEseguibileModal.jsx': ['pages/EseguibiliList.jsx', 'pages/ProjectList.jsx'],
   'components/modals/ScheduleWizard.jsx': ['pages/ScheduleList.jsx'],
   'components/projects/NewProjectModal.jsx': ['pages/ProjectList.jsx'],
   'components/panels/FeatureServicePanel.jsx': ['pages/EstraiEditor.jsx'],
   'components/panels/ApiEnrichNode.jsx': 'canvas',
+  // Gestori condivisi delle pagine Eseguibili e della home (pannello delle catene).
+  'utils/resourceActions.js': ['pages/EseguibiliList.jsx', 'pages/ProjectList.jsx'],
 };
+
+// RULES di utils/nodeActions: regola -> capability che usa (`can.<nome>(` nel corpo).
+function ruleCapabilities() {
+  const src = fs.readFileSync(path.join(srcRoot, 'utils/nodeActions.js'), 'utf-8');
+  const body = src.split('export const RULES = Object.freeze({')[1].split('});')[0];
+  const out = {};
+  for (const m of body.matchAll(/^\s*([A-Za-z]+):\s*\(.*$/gm)) {
+    out[m[1]] = [...m[0].matchAll(/can\.([A-Za-z]+)\(/g)].map((c) => c[1]);
+  }
+  return out;
+}
 
 const MUTATING = /^(create|update|delete|remove|set|add|toggle|run|execute|restore|republish|activate|clone|cleanup|trigger|resolve|reset|upload|cancel|pin|change|write|preview)[A-Z]/;
 
@@ -176,7 +192,9 @@ describe('permessi solo tramite can.* (R10)', () => {
   it('chi importa una funzione GATED usa la sua capability (o la delega a un genitore che la usa)', () => {
     const files = collectSources(srcRoot).map((file) => ({ name: rel(file), content: fs.readFileSync(file, 'utf-8') }));
     const byName = Object.fromEntries(files.map((f) => [f.name, f.content]));
-    const uses = (content, caps) => caps.some((cap) => content.includes(`can.${cap}(`));
+    const rules = ruleCapabilities();
+    const uses = (content, caps) => caps.some((cap) => content.includes(`can.${cap}(`)
+      || Object.entries(rules).some(([rule, used]) => used.includes(cap) && content.includes(`RULES.${rule}(`)));
     const importersOf = (target) => {
       const base = path.posix.basename(target).replace(/\.jsx?$/, '');
       const importRe = new RegExp(`from\\s+['"][^'"]*/${base}['"]`);
@@ -354,5 +372,17 @@ describe('ogni capability e\' la regola del backend del suo endpoint (CAPABILITY
     expect(can.deleteProject({ role: 'admin', user_id: 'a' }, {})).toBe(true);
     // Schedule del viewer che l'ha creato: require_schedule_owner lo ammette.
     expect(can.manageSchedule({ role: 'viewer', user_id: 'v' }, { created_by: 'v' })).toBe(true);
+  });
+});
+
+describe('RULES delle azioni della home (utils/nodeActions)', () => {
+  it('ogni regola e\' una capability di can.* (o «always»)', () => {
+    const rules = ruleCapabilities();
+    expect(Object.keys(rules).length).toBeGreaterThan(5);
+    for (const [rule, used] of Object.entries(rules)) {
+      if (rule === 'always') { expect(used).toEqual([]); continue; }
+      expect(used.length, rule).toBeGreaterThan(0);
+      for (const cap of used) expect(typeof can[cap], `${rule} -> can.${cap}`).toBe('function');
+    }
   });
 });

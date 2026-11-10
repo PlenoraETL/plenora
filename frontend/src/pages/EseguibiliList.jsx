@@ -9,10 +9,6 @@
 import React, { useState } from 'react';
 import { useBusy } from '../hooks/useBusy';
 import ListState, { ResourceError } from '../components/common/ListState';
-import {
-  updateEseguibile,
-  deleteEseguibile,
-} from '../api';
 import { useSharedResource } from '../hooks/useSharedResource';
 import { eseguibiliOf } from '../utils/sharedSelectors';
 import { useAuth } from '../context/AuthContext';
@@ -20,13 +16,16 @@ import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteW
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
 import EseguibileVersionsModal from '../components/eseguibili/EseguibileVersionsModal';
 import { SourceChangedBadge } from '../components/eseguibili/SourceStatus';
-import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
+import ShareDialog from '../components/shared/ShareDialog';
 import PageLayout from '../components/common/PageLayout';
 import EmptyState from '../components/common/EmptyState';
 import ActionMenu from '../components/common/ActionMenu';
 import BindingWarnings from '../components/eseguibili/BindingWarnings';
 import { useToast } from '../hooks/useToast';
 import { can } from '../utils/permissions';
+// Permessi e gestori condivisi con il pannello della home per catene (10/11/2026).
+import { RULES } from '../utils/nodeActions';
+import { confirmDeleteEseguibile, eseguibileNameToSave, saveEseguibileName } from '../utils/resourceActions';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import useDialog from '../hooks/useDialog';
@@ -73,30 +72,16 @@ function EseguibiliList() {
 
   const canCreate    = can.createEseguibile(user);
 
-  // I 2 dialog inline passano dallo stack unico delle finestre (hooks/useDialog).
-  const selectorDialog = useDialog({ isOpen: showSelector,        onClose: () => setShowSelector(false) });
-  const shareDialog    = useDialog({ isOpen: !!sharingEseguibile, onClose: () => setSharingEseguibile(null) });
+  // Il dialog inline passa dallo stack unico delle finestre (hooks/useDialog).
+  const selectorDialog = useDialog({ isOpen: showSelector, onClose: () => setShowSelector(false) });
 
   const openSelector = () => {
     projectSearch.clear();
     setShowSelector(true);
   };
 
-  const handleDelete = async (eid, name) => {
-    const ok = await confirmModal.confirm({
-      title: 'Elimina eseguibile',
-      message: `Eliminare l'eseguibile "${name}"?`,
-      confirmText: 'Elimina',
-      variant: 'danger',
-    });
-    if (!ok) return;
-    try {
-      await deleteEseguibile(eid);
-      toast.success('Eseguibile eliminato');
-      loadItems();
-    } catch (e) {
-      toastApiError(toast, e, 'Errore eliminazione');
-    }
+  const handleDelete = async (item) => {
+    if (await confirmDeleteEseguibile({ confirm: confirmModal.confirm, toast, item })) loadItems();
   };
 
   const startRename = (item) => {
@@ -112,17 +97,14 @@ function EseguibiliList() {
   const closeRenameOf = (id) => setRenaming(cur => (cur?.id === id ? null : cur));
 
   const commitRename = async (item) => {
-    const name = renameValue.trim();
+    // Vuoto: lo dice il toast e la rinomina resta aperta; uguale: si chiude.
+    const name = eseguibileNameToSave(item, renameValue, toast);
     if (!name) {
-      toast.error('Il nome non può essere vuoto');
-      return;
-    }
-    if (name === item.name) {
-      closeRenameOf(item.id);
+      if (renameValue.trim()) closeRenameOf(item.id);
       return;
     }
     try {
-      const r = await renameBusy.run(item.id, () => updateEseguibile(item.id, { name }));
+      const r = await renameBusy.run(item.id, () => saveEseguibileName(item, name));
       if (r.skipped) return;
       setItems(current => (current || []).map(existing => (
         existing.id === item.id ? { ...existing, ...r.value, name } : existing
@@ -165,8 +147,8 @@ function EseguibiliList() {
       >
         <div className="esl__grid">
           {items.map(item => {
-            const canEdit = can.manageEseguibile(user, item);
-            const canShare = can.shareResources(user) && item.can_edit !== false;
+            const canEdit = RULES.manageEseguibile(user, item);
+            const canShare = RULES.shareEseguibile(user, item);
             return (
               <div key={item.id} className="esl__card">
                 <div className="esl__card-header">
@@ -223,7 +205,7 @@ function EseguibiliList() {
                       canShare && { label: '🔗 Condividi', onSelect: () => setSharingEseguibile(item), title: 'Gestisci condivisione cross-gruppo (solo superadmin)' },
                       canEdit && { label: '✎ Rinomina', onSelect: () => startRename(item) },
                       canEdit && { label: 'Versioni', onSelect: () => setVersioningEseguibile(item) },
-                      canEdit && { label: '🗑 Elimina', onSelect: () => handleDelete(item.id, item.name), danger: true },
+                      canEdit && { label: '🗑 Elimina', onSelect: () => handleDelete(item), danger: true },
                     ]}
                   />
                   <button type="button" className="esl__btn esl__btn--primary"
@@ -299,29 +281,15 @@ function EseguibiliList() {
         </div>
       )}
 
-      {/* Modal condivisione cross-gruppo */}
+      {/* Condivisione cross-gruppo: la finestra comune (anche della home) */}
       {sharingEseguibile && (
-        <div className="esl__overlay" {...shareDialog.overlayProps}>
-          <div
-            ref={shareDialog.ref}
-            className="esl__selector esl__sharing-modal"
-            {...shareDialog.dialogProps}
-          >
-            <div className="esl__selector-header">
-              <h2 id={shareDialog.titleId}>Condivisione — {sharingEseguibile.name}</h2>
-              <button type="button" className="esl__selector-close" {...shareDialog.closeButtonProps}>×</button>
-            </div>
-            <div className="esl__selector-body">
-              <AllowedGroupsSelector
-                embedded
-                resourceType="eseguibili"
-                resourceId={sharingEseguibile.id}
-                disabled={sharingEseguibile.can_edit === false}
-                onClose={() => setSharingEseguibile(null)}
-              />
-            </div>
-          </div>
-        </div>
+        <ShareDialog
+          resourceType="eseguibili"
+          resourceId={sharingEseguibile.id}
+          name={sharingEseguibile.name}
+          disabled={sharingEseguibile.can_edit === false}
+          onClose={() => setSharingEseguibile(null)}
+        />
       )}
 
       {/* Modal pubblicazione dopo selezione progetto */}

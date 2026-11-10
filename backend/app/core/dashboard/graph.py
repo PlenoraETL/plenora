@@ -13,9 +13,26 @@ Regole (come GET /dashboard/counts):
     dalla route GET /schedules, esecuzioni come
     GET /pipeline-runs/latest-by-project (`latest_runs_by_project`);
   - una parte per volta, indipendenti: una che fallisce e' elencata in
-    `unavailable` ("links", "runs", "eseguibili", "schedules") e le altre
-    restano. La lettura dei progetti non e' una parte: se fallisce, fallisce
-    la risposta; senza progetti la risposta e' valida e vuota (liste vuote).
+    `unavailable` ("links", "runs", "eseguibili", "schedules", "access",
+    "groups") e le altre restano. La lettura dei progetti non e' una parte:
+    se fallisce, fallisce la risposta;
+    senza progetti la risposta e' valida e vuota (liste vuote).
+
+«Visibile a» (10/11/2026) — parti "access" e "groups":
+  - `access`: per ogni Eseguibile e ogni origine (connessione database o
+    ArcGIS, file, Data Source) del grafo, il gruppo proprietario e le
+    condivisioni. Solo le risorse che la lista della risorsa mostrerebbe
+    all'utente (`visible_resource_ids`, la funzione delle route di lista; il
+    superadmin le vede tutte). Tabelle: ACCESS_TABLES, chiavi di
+    `app.core.auth.visibility._SHAREABLE`;
+  - `shared_with` (scelta dichiarata): l'elenco dei gruppi con cui la risorsa
+    e' condivisa ("*" = tutti) arriva SOLO al superadmin, l'unico che puo'
+    leggerle e gestirle (GET/PUT /shares e' `require_superadmin`, il
+    pulsante «Condividi» delle pagine Eseguibili e Connessioni e' solo suo);
+    agli altri arriva `null` = non dichiarate;
+  - i progetti non si condividono tra gruppi: `group_id` del progetto;
+  - `groups`: id -> nome dei gruppi nominati nella risposta (proprietari, e
+    per il superadmin i gruppi delle condivisioni) e del gruppo dell'utente.
 """
 
 from __future__ import annotations
@@ -26,6 +43,9 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.auth import db as auth_db
+from app.core.auth import shares as auth_shares
+from app.core.auth import visibility as auth_visibility
 from app.core.eseguibili import router as eseguibili_routes
 from app.core.logs import runs_router as runs_routes
 from app.core.projects import router as projects_routes
@@ -37,7 +57,12 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Le parti che possono mancare (in `unavailable`).
-GRAPH_PARTS = ("links", "runs", "eseguibili", "schedules")
+GRAPH_PARTS = ("links", "runs", "eseguibili", "schedules", "access", "groups")
+
+# Tabelle condivisibili dei nodi del grafo (chiavi di visibility._SHAREABLE).
+ACCESS_TABLES = ("eseguibili", "connections", "arcgis_connections", "file_sources", "datasources")
+# Tipo del riferimento a una connessione (GraphConnectionRef.kind) -> tabella.
+CONNECTION_TABLES = {"db": "connections", "arcgis": "arcgis_connections"}
 
 
 class GraphRun(BaseModel):
@@ -60,6 +85,8 @@ class GraphProject(BaseModel):
     id: str
     name: str
     project_type: str = "estrai"
+    # Gruppo del progetto: lo vede tutto il gruppo (non si condivide).
+    group_id: Optional[str] = None
     default_connection_id: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     # Titolo personalizzato della catena di cui e' il nodo piu' a valle
@@ -98,9 +125,23 @@ class GraphEseguibile(BaseModel):
     source_changed_since_publish: Optional[bool] = None
 
 
+class GraphAccess(BaseModel):
+    """Chi vede una risorsa condivisibile del grafo («Visibile a»)."""
+
+    # Tabella condivisibile: una di ACCESS_TABLES.
+    resource_type: str
+    id: str
+    group_id: Optional[str] = None
+    # Gruppi della condivisione ("*" = tutti), solo per il superadmin;
+    # None = non dichiarate a questo utente (regola nella docstring).
+    shared_with: Optional[list[str]] = None
+
+
 class DashboardGraph(BaseModel):
     projects: list[GraphProject] = Field(default_factory=list)
     eseguibili: list[GraphEseguibile] = Field(default_factory=list)
+    access: list[GraphAccess] = Field(default_factory=list)
+    groups: dict[str, str] = Field(default_factory=dict)
     unavailable: list[str] = Field(default_factory=list)
 
 
@@ -157,6 +198,7 @@ def build_dashboard_graph(
             name=str(_field(meta, "name") or ""),
             project_type=str(_field(meta, "project_type") or "estrai"),
             default_connection_id=_field(meta, "default_connection_id") or None,
+            group_id=_field(meta, "group_id") or None,
             tags=list(_field(meta, "tags") or []),
             chain_title=_field(meta, "chain_title") or None,
             updated_at=_iso(_field(meta, "updated_at")),
@@ -223,9 +265,58 @@ def build_dashboard_graph(
             if _field(_field(item, "schedule"), "enabled"):
                 p.schedules_active += 1
 
+    is_super = current_user.role == "superadmin"
+
+    def wanted_resources() -> Mapping[str, set[str]]:
+        wanted: dict[str, set[str]] = {table: set() for table in ACCESS_TABLES}
+        wanted["eseguibili"].update(e.id for e in graph.eseguibili)
+        for p in projects.values():
+            if p.default_connection_id:
+                wanted["connections"].add(p.default_connection_id)
+            for ref in p.connections:
+                wanted[CONNECTION_TABLES.get(ref.kind, "connections")].add(ref.id)
+            wanted["file_sources"].update(p.file_source_ids)
+            wanted["datasources"].update(d.id for d in p.datasources)
+        return wanted
+
+    def access() -> None:
+        rows: list[GraphAccess] = []
+        for table, ids in wanted_resources().items():
+            if not ids:
+                continue
+            if not is_super:
+                # La regola delle liste: proprie del gruppo + condivise con lui.
+                ids = ids & auth_visibility.visible_resource_ids(table, current_user.group_id)
+                if not ids:
+                    continue
+            owners = auth_shares.resource_owner_groups(table, ids)
+            shares = auth_shares.resource_shares_by_id(table, owners) if is_super else None
+            rows.extend(
+                GraphAccess(
+                    resource_type=table,
+                    id=rid,
+                    group_id=owners[rid] or None,
+                    shared_with=list(shares.get(rid, [])) if shares is not None else None,
+                )
+                for rid in sorted(owners)
+            )
+        graph.access = rows
+
+    def groups() -> None:
+        named = {current_user.group_id}
+        named.update(p.group_id for p in projects.values() if p.group_id)
+        for a in graph.access:
+            if a.group_id:
+                named.add(a.group_id)
+            named.update(g for g in (a.shared_with or []) if g != auth_visibility.MAGIC_ALL)
+        graph.groups = auth_db.group_names(named)
+
     part("links", links)
     part("runs", runs)
     part("eseguibili", eseguibili)
     part("schedules", schedules)
+    # Dopo links ed eseguibili: le risorse di cui dire «Visibile a».
+    part("access", access)
+    part("groups", groups)
     graph.projects = list(projects.values())
     return graph
