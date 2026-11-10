@@ -20,6 +20,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -142,16 +143,17 @@ def test_output_deletion_has_exactly_two_paths():
 
 def test_dashboard_copy_is_read_only_behind_the_pass():
     """La copia si legge solo dalla regola del lasciapassare
-    (``dashboard.read_rows``) e la sua scadenza solo per emetterlo."""
+    (``dashboard.read_granted``, dopo ``authorize_read``) e la sua scadenza
+    solo per emetterlo; la scrive solo il raccoglitore (``save``, dentro la
+    porta) e la pulisce il beat con il suo ciclo dedicato."""
     calls = {(rel, scope, name) for rel, scope, name, _node in _scan(
         "app.core.eseguibili.dashboard_data", frozenset({"read", "current_key", "write", "delete", "purge_expired"}),
         skip=("app/core/eseguibili/dashboard_data.py",),
     )}
     assert calls == {
         ("app/core/eseguibili/dashboard.py", "issue_pass", "current_key"),
-        ("app/core/eseguibili/dashboard.py", "read_rows", "read"),
-        ("app/core/eseguibili/output_persistence.py", "_write_dashboard_copy", "write"),
-        ("workers/beat_scheduler.py", "_cleanup_eseguibili_outputs", "purge_expired"),
+        ("app/core/eseguibili/dashboard.py", "read_granted", "read"),
+        ("workers/beat_scheduler.py", "_cleanup_dashboard_copies", "purge_expired"),
     }
 
 
@@ -393,7 +395,7 @@ def test_streaming_output_tees_cursor_rows_into_the_copy(monkeypatch):
         assert written == expected
 
 
-def test_copy_failure_never_fails_the_execution(monkeypatch):
+def test_storage_failure_of_the_copy_never_fails_the_execution(monkeypatch):
     pd = pytest.importorskip("pandas")
     from app.core.eseguibili import dashboard_data, output_persistence
 
@@ -458,3 +460,184 @@ def test_enrichment_run_mode_receives_the_flag():
 
     assert enrichment_run_mode.for_task(True, None, dashboard_copy=True).dashboard_copy is True
     assert enrichment_run_mode.for_task(True, None).dashboard_copy is False
+
+
+# ── La copia non fa MAI fallire l'esecuzione (punto 5 della conferma) ───────
+#
+# Enumerazione: i due produttori (DataFrame e cursore in streaming dentro il
+# writer vero) x valori non serializzabili o enormi x un errore forzato nel
+# raccoglitore. L'esecuzione riesce sempre; la copia e' JSON valido o non
+# c'e' (mai parziale).
+
+_HOSTILE_VALUES = {
+    "inf": math.inf,
+    "-inf": -math.inf,
+    "nan": math.nan,
+    "decimal_enorme": Decimal("1E+400"),
+    "decimal_minimo": Decimal("-1E+400"),
+    "decimal_nan": Decimal("NaN"),
+    "decimal_inf": Decimal("Infinity"),
+    "decimal_fine": Decimal("0.1000000000000000055511151231257827"),
+    "intero_enorme": 10 ** 400,
+    "bytes": b"\x00\xff",
+    "memoryview": memoryview(b"abc"),
+    "data": date(2026, 11, 11),
+    "ora": datetime(2026, 11, 11, 9, 30).time(),
+    "data_ora_tz": datetime(2026, 11, 11, 9, 30).astimezone(),
+    "testo_lungo": "x" * 5000,
+    "insieme": {1, 2},
+    "oggetto": object(),
+}
+
+
+class _FakeStreamingResult:
+    def __init__(self, columns, rows):
+        self._columns = list(columns)
+        self._rows = [tuple(row) for row in rows]
+
+    def keys(self):
+        return list(self._columns)
+
+    def fetchmany(self, size):
+        chunk, self._rows = self._rows[:size], self._rows[size:]
+        return chunk
+
+
+class _FakeEngine:
+    def __init__(self, result):
+        self._result = result
+
+    def connect(self):
+        engine = self
+
+        class _Conn:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def execute(self, *_a, **_k):
+                return engine._result
+
+        return _Conn()
+
+
+def _produce(path, monkeypatch, columns, rows):
+    """Esegue il produttore vero e restituisce (risultato, copie scritte)."""
+    pd = pytest.importorskip("pandas")
+    from app.core.eseguibili import dashboard_data, output_persistence
+    from app.core.query_execution import query_streaming
+
+    written = []
+    monkeypatch.setattr(output_persistence.ExecutableOutputPersistence, "_writer", lambda self, f, fmt: _Writer())
+    monkeypatch.setattr(dashboard_data, "write", lambda task_id, *, group_id, collector: written.append(
+        None if collector.failed else json.loads(collector.to_bytes())))
+    if path == "dataframe":
+        persistence = output_persistence.ExecutableOutputPersistence(
+            task_id="task-1", group_id="g1", dashboard_copy=True,
+        )
+        frame = pd.DataFrame([list(row) for row in rows], columns=list(columns), dtype=object)
+        result = persistence.persist_dataframe_output(df=frame, output_format="csv", filename_stem="out")
+        return result, written
+    class _BinaryWriter(BytesIO):  # il writer vero dello storage e' un file binario
+        def finalize(self):
+            return "tenants/g1/eseguibili-outputs/task-1/out.csv"
+
+        def abort(self):
+            pass
+
+    monkeypatch.setattr(output_persistence.ExecutableOutputPersistence, "_writer",
+                        lambda self, f, fmt: _BinaryWriter())
+    monkeypatch.setattr(query_streaming, "_configure_session", lambda conn, connection: None)
+    monkeypatch.setattr(query_streaming, "_columns_from_result", lambda result, connection: list(result.keys()))
+    persistence = output_persistence.ExecutableOutputPersistence(
+        task_id="task-1", group_id="g1", dashboard_copy=True,
+        stream_query_to_writer=query_streaming.execute_streaming_to_writer,
+    )
+    factory = SimpleNamespace(create_engine=lambda connection: _FakeEngine(_FakeStreamingResult(columns, rows)))
+    result = persistence.persist_streaming_query_to_storage(
+        project_id="exec_1", engine_factory=factory, connection=SimpleNamespace(type="postgresql"),
+        sql="select 1", params=None, output_format="csv", output_filename="out.csv",
+    )
+    return result, written
+
+
+@pytest.mark.parametrize("path", ["dataframe", "streaming"])
+@pytest.mark.parametrize("name", sorted(_HOSTILE_VALUES))
+def test_hostile_values_never_fail_the_execution_and_the_copy_is_valid_json(monkeypatch, path, name):
+    if (path, name) == ("dataframe", "intero_enorme"):
+        pytest.skip("e' l'export CSV dell'OUTPUT a rifiutare 10**400 (prima della copia): fuori da questa regola")
+    value = _HOSTILE_VALUES[name]
+    result, written = _produce(path, monkeypatch, ["id", "v"], [(1, value), (2, "ok")])
+    assert result is not None
+    assert len(written) == 1 and written[0] is not None
+    rows = written[0]
+    assert [row["id"] for row in rows] == [1, 2] and rows[1]["v"] == "ok"
+    json.dumps(rows, allow_nan=False)  # JSON valido, niente NaN/Infinity
+
+
+@pytest.mark.parametrize("path", ["dataframe", "streaming"])
+def test_a_failing_collector_never_fails_the_execution_and_writes_no_copy(monkeypatch, path):
+    from app.core.eseguibili import dashboard_data
+
+    def boom(_value):
+        raise RuntimeError("valore impossibile")
+
+    monkeypatch.setattr(dashboard_data, "_jsonable", boom)
+    result, written = _produce(path, monkeypatch, ["id"], [(1,), (2,)])
+    assert result is not None
+    assert written == [None]  # raccoglitore «failed»: nessuna copia
+
+
+def test_failed_collector_removes_a_previous_copy(fake_storage):
+    from app.core.eseguibili import dashboard_data
+
+    _task_folder(fake_storage)
+    first = _write_copy([(1, "x")])
+    collector = dashboard_data.DashboardRowsCollector(max_rows=10, max_bytes=1 << 20)
+    collector.failed = True
+    assert dashboard_data.write("task-1", group_id="g1", collector=collector) is None
+    assert first not in fake_storage.objects
+
+
+def test_huge_decimal_is_kept_as_text_not_infinity():
+    from app.core.eseguibili.dashboard_data import DashboardRowsCollector
+
+    collector = DashboardRowsCollector(max_rows=10, max_bytes=1 << 20)
+    collector.add_rows(["d"], [(Decimal("1E+400"),), (Decimal("2.5"),), (Decimal("12345678901234567890"),)])
+    assert not collector.failed
+    assert json.loads(collector.to_bytes()) == [{"d": "1E+400"}, {"d": 2.5}, {"d": 1.2345678901234567e19}]
+
+
+def test_collector_guards_are_the_only_try_of_the_copy():
+    """Un solo punto intercetta: nei produttori nessun ``try`` dedicato alla
+    copia (``output_persistence`` chiama solo ``add_*`` e ``save``)."""
+    source = (_BACKEND_ROOT / "app/core/eseguibili/output_persistence.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Try):
+            body = ast.unparse(node)
+            assert "collector" not in body and "dashboard" not in body, body[:200]
+
+
+# ── Pulizia fisica delle copie (punto 7 della conferma) ─────────────────────
+
+def test_beat_purges_copies_on_its_own_short_cycle(monkeypatch):
+    from workers import beat_scheduler
+
+    purged = []
+    monkeypatch.setattr(beat_scheduler.object_storage_module, "object_storage_enabled", lambda: True)
+    monkeypatch.setattr(beat_scheduler.users_db, "list_groups", lambda limit=10_000: [SimpleNamespace(id="g1")])
+    monkeypatch.setattr(beat_scheduler.eseguibili_dashboard_data, "purge_expired",
+                        lambda group_ids, now: purged.append(now) or 0)
+    clock = {"now": 10_000.0}
+    monkeypatch.setattr(beat_scheduler._t, "time", lambda: clock["now"])
+    scheduler = beat_scheduler.PlenoraBeatScheduler.__new__(beat_scheduler.PlenoraBeatScheduler)
+    scheduler._last_dashboard_copies_cleanup = 0.0
+    for step in range(0, 1_801, 60):  # 30 minuti, un tick al minuto
+        clock["now"] = 10_000.0 + step
+        scheduler._cleanup_dashboard_copies()
+    # Ogni 5 minuti (DASHBOARD_DATA_PURGE_INTERVAL_SECONDS), non ogni 30.
+    assert len(purged) == 7
+    assert all(b - a == 300 for a, b in zip(purged, purged[1:]))

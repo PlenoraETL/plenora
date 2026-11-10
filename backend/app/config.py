@@ -704,6 +704,15 @@ class Settings:
         # Datasource Infinity creato dall'installer (uid fisso).
         "GRAFANA_DATASOURCE_UID": "plenora-infinity",
         "GRAFANA_TIMEOUT_SECONDS": 5,
+        # Avvisi della dashboard nel dettaglio di un Eseguibile: lettura da
+        # Grafana con timeout breve dedicato e risultato in cache (anche
+        # «non verificabile»): il dettaglio non aspetta mai piu' di cosi'.
+        "GRAFANA_WARNINGS_TIMEOUT_SECONDS": 1.5,
+        "GRAFANA_WARNINGS_CACHE_SECONDS": 60,
+        # forward_auth: ruolo e team dell'utente in Grafana si riallineano
+        # alla prima richiesta e poi al piu' ogni N secondi (subito se
+        # cambiano ruolo, gruppo o nome: grafana.access).
+        "GRAFANA_ACCESS_SYNC_TTL_SECONDS": 300,
         # Cookie di sessione per /grafana (forward_auth): rinnovabile
         # richiamando POST /api/grafana/session.
         "GRAFANA_SESSION_TTL_SECONDS": 1800,
@@ -713,7 +722,12 @@ class Settings:
         "DASHBOARD_PASS_TTL_SECONDS": 1800,
         "DASHBOARD_DATA_MAX_ROWS": 50_000,
         "DASHBOARD_DATA_MAX_BYTES": 64 * 1024 * 1024,
-        # Letture dell'endpoint dati per task al minuto (oltre: 429).
+        # Ogni quanto il beat cancella le copie scadute: una copia resta
+        # nello storage al massimo DASHBOARD_DATA_TTL_SECONDS + questo
+        # intervallo (35 minuti), e nessuno la legge dopo la scadenza.
+        "DASHBOARD_DATA_PURGE_INTERVAL_SECONDS": 300,
+        # Letture dell'endpoint dati per esecuzione e utente al minuto,
+        # contate DOPO la verifica del lasciapassare (oltre: 429).
         "DASHBOARD_DATA_RATE_PER_MINUTE": 120,
     }
 

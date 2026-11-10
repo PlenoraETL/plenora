@@ -54,9 +54,8 @@ class GrafanaApi(Protocol):
     def team_member_logins(self, team_id: int) -> Mapping[str, int]: ...
     def add_team_member(self, team_id: int, user_id: int) -> None: ...
     def remove_team_member(self, team_id: int, user_id: int) -> None: ...
-    def org_users(self) -> Sequence[Mapping[str, Any]]: ...
-    def set_org_role(self, user_id: int, role: str) -> None: ...
-    def ensure_proxy_user(self, login: str, *, admin: bool) -> None: ...
+    def proxy_get(self, headers: Mapping[str, str], path: str) -> Any: ...
+    def delete_folder(self, uid: str) -> bool: ...
     def get_dashboard(self, uid: str) -> Optional[Mapping[str, Any]]: ...
     def upsert_dashboard(self, dashboard: Mapping[str, Any], *, folder_uid: str, message: str) -> Mapping[str, Any]: ...
     def delete_dashboard(self, uid: str) -> bool: ...
@@ -124,19 +123,16 @@ class HttpGrafanaClient:
     def remove_team_member(self, team_id: int, user_id: int) -> None:
         self._request("DELETE", f"/api/teams/{team_id}/members/{user_id}", ok404=True)
 
-    def org_users(self) -> Sequence[Mapping[str, Any]]:
-        return list(self._request("GET", "/api/org/users") or [])
+    def proxy_get(self, headers: Mapping[str, str], path: str) -> Any:
+        """Richiesta COME l'utente (auth proxy, senza Bearer), con le stesse
+        intestazioni che manda il forward_auth (``sync.proxy_headers``): crea
+        o aggiorna l'utente (nome, ruolo) e legge i suoi dati (``/api/user``,
+        ``/api/user/teams``). Grafana accetta l'auth proxy solo da localhost
+        (``[auth.proxy] whitelist``), dove gira il backend."""
+        return self._request("GET", path, auth=False, headers=headers)
 
-    def set_org_role(self, user_id: int, role: str) -> None:
-        self._request("PATCH", f"/api/org/users/{user_id}", json={"role": role})
-
-    def ensure_proxy_user(self, login: str, *, admin: bool) -> None:
-        """Crea l'utente come lo farebbe Caddy (auth proxy), senza Bearer:
-        serve a metterlo nel team prima del suo primo accesso a /grafana."""
-        headers = {"X-WEBAUTH-USER": login}
-        if admin:
-            headers["X-WEBAUTH-ROLE"] = "Admin"
-        self._request("GET", "/api/user", auth=False, headers=headers)
+    def delete_folder(self, uid: str) -> bool:
+        return self._request("DELETE", f"/api/folders/{uid}", ok404=True) is not None
 
     def get_dashboard(self, uid: str) -> Optional[Mapping[str, Any]]:
         """``{dashboard, folder_uid}`` o None se non esiste."""
@@ -160,12 +156,12 @@ _factory_lock = threading.Lock()
 _factory: Optional[ClientFactory] = None
 
 
-def _default_client() -> GrafanaApi:
+def _default_client(timeout: Optional[float] = None) -> GrafanaApi:
     token = grafana_settings.service_token()
     base = grafana_settings.api_url()
     if not token or not base:
         raise GrafanaUnavailable("Grafana non configurato (GRAFANA_URL / GRAFANA_SERVICE_TOKEN)")
-    return HttpGrafanaClient(base, token, timeout=grafana_settings.timeout_seconds())
+    return HttpGrafanaClient(base, token, timeout=timeout if timeout is not None else grafana_settings.timeout_seconds())
 
 
 def set_client_factory(factory: Optional[ClientFactory]) -> None:
@@ -175,13 +171,14 @@ def set_client_factory(factory: Optional[ClientFactory]) -> None:
         _factory = factory
 
 
-def get_client() -> GrafanaApi:
-    """L'unico modo di ottenere un client: rifiuta se la funzione e' spenta."""
+def get_client(*, timeout: Optional[float] = None) -> GrafanaApi:
+    """L'unico modo di ottenere un client: rifiuta se la funzione e' spenta.
+    ``timeout``: timeout dedicato (es. avvisi nel dettaglio, 1,5 s)."""
     if not grafana_settings.enabled():
         raise GrafanaDisabled("Dashboard Grafana disabilitate (GRAFANA_ENABLED=false)")
     with _factory_lock:
-        factory = _factory or _default_client
-    return factory()
+        factory = _factory
+    return factory() if factory is not None else _default_client(timeout)
 
 
 __all__ = [

@@ -546,12 +546,24 @@ Grafana stesso non va mai su internet: `[plugins] preinstall_disabled = true`
 form di login, basic auth spenta. Caddy, per ogni richiesta a `/grafana`:
 toglie dalla richiesta ogni intestazione `X-WEBAUTH-*`, chiede al backend
 (`forward_auth` verso `/api/grafana/auth`) chi e' l'utente e, se il backend
-risponde 2xx, passa a Grafana `X-WEBAUTH-USER`/`X-WEBAUTH-ROLE` (auth proxy di
-Grafana, ruolo predefinito Viewer nell'organizzazione «Plenora Dashboard»);
-altrimenti la risposta del backend (401) torna al browser. Le risposte di
-`/grafana` hanno intestazioni proprie (`frame-ancestors 'self'`, niente
-`X-Frame-Options`, `Referrer-Policy: no-referrer`); tutto il resto ha quelle di
-Plenora, la cui CSP ammette iframe solo dallo stesso origin (`frame-src 'self'`).
+risponde 2xx, passa a Grafana `X-WEBAUTH-USER` (login legato all'ID
+dell'utente Plenora, `plenora-u-<id>`), `X-WEBAUTH-NAME` (nome visualizzato) e
+`X-WEBAUTH-ROLE` (sempre: Admin al superadmin, Viewer agli altri; Grafana lo
+riapplica a ogni accesso), organizzazione «Plenora Dashboard». Prima di
+rispondere il backend allinea i team dell'utente in Grafana (`utenti-<gruppo>`,
+`admin-<gruppo>`); ogni dashboard sta in una cartella propria visibile solo ai
+gruppi che vedono l'Eseguibile in Plenora. Altrimenti la risposta del backend
+(401, o 503 se Grafana non risponde) torna al browser. Le risposte di
+`/grafana` hanno intestazioni proprie (CSP che tiene ogni caricamento sullo
+stesso origin e `frame-ancestors 'self'`, niente `X-Frame-Options`,
+`Referrer-Policy: no-referrer`); tutto il resto ha quelle di Plenora, la cui CSP
+ammette iframe solo dallo stesso origin (`frame-src 'self'`).
+
+Da sapere: Grafana tiene in cache le autorizzazioni per circa 30 secondi (una
+condivisione tolta o un admin spostato perdono l'accesso entro 30 s; con
+`[rbac] permission_cache = false` nel `custom.ini` l'effetto e' immediato).
+Gli utenti `plenora-u-*` in Grafana non si cancellano a mano: li governa
+Plenora (per togliere un accesso si agisce sull'utente in Plenora).
 
 **Bootstrap** (idempotente, `scripts\grafana_bootstrap.py`, a ogni lancio):
 rinomina l'organizzazione 1 in «Plenora Dashboard», crea il service account

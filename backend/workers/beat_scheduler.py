@@ -28,6 +28,7 @@ from app.core.scheduler.beat_schedule_config import beat_schedule_config
 from app import config as app_config
 from app.core.eseguibili import download_claim_store, output_store
 from app.core.eseguibili import dashboard_data as eseguibili_dashboard_data
+from app.core.grafana import settings as grafana_settings
 from app.core.auth import db as users_db
 from app.core.orchestrator import task_cleanup
 from app.core.io import object_storage as object_storage_module
@@ -201,6 +202,7 @@ class PlenoraBeatScheduler:
 
     _last_stuck_check: float = 0.0
     _last_eseguibili_cleanup: float = 0.0
+    _last_dashboard_copies_cleanup: float = 0.0
     _last_logs_retention: float = 0.0
     _last_logs_archive: float = 0.0
     _last_audit_archive: float = 0.0
@@ -228,6 +230,7 @@ class PlenoraBeatScheduler:
         self._write_heartbeat()
         self._check_stuck_tasks()
         self._cleanup_eseguibili_outputs()
+        self._cleanup_dashboard_copies()
         self._archive_old_logs()
         self._cleanup_old_logs()
         self._cleanup_old_schedule_logs()
@@ -814,9 +817,18 @@ class PlenoraBeatScheduler:
         except Exception as e:
             logger.warning(f"Errore cleanup lease download eseguibili: {e}")
 
-        # Copie dei dati per la dashboard Grafana scadute (finestra dei
-        # risultati chiusa senza pulizia): il limite di 30 minuti vale anche
-        # fisicamente, non solo per l'accesso (eseguibili.dashboard_data).
+    def _cleanup_dashboard_copies(self) -> None:
+        """Copie dei dati per la dashboard Grafana scadute (finestra dei
+        risultati chiusa senza pulizia): pulizia PROPRIA, ogni
+        ``DASHBOARD_DATA_PURGE_INTERVAL_SECONDS`` (5 min), non col ciclo da
+        30 min degli output. Una copia resta nello storage al massimo
+        ``DASHBOARD_DATA_TTL_SECONDS`` + l'intervallo (35 min); dopo la
+        scadenza nessuno la legge (lasciapassare e lettura la rifiutano e la
+        cancellano subito, ``eseguibili.dashboard_data.current_key``)."""
+        now = _t.time()
+        if now - self._last_dashboard_copies_cleanup < grafana_settings.data_purge_interval_seconds():
+            return
+        self._last_dashboard_copies_cleanup = now
         try:
             if object_storage_module.object_storage_enabled():
                 group_ids = [group.id for group in users_db.list_groups(limit=10_000)]

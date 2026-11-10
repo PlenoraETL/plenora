@@ -78,7 +78,10 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, Decimal):
         if not value.is_finite():
             return None
-        return int(value) if value == value.to_integral_value() and abs(value) < 2**53 else float(value)
+        if value == value.to_integral_value() and abs(value) < 2**53:
+            return int(value)
+        as_float = float(value)  # 1E+400 -> inf: il testo e' l'unico valore fedele
+        return as_float if math.isfinite(as_float) else str(value)
     if isinstance(value, (_dt.datetime, _dt.date, _dt.time)):
         try:
             return value.isoformat()
@@ -102,13 +105,23 @@ def _jsonable(value: Any) -> Any:
 
 
 class DashboardRowsCollector:
-    """Raccoglie le prime righe dell'output (DataFrame o righe di cursore)."""
+    """Raccoglie le prime righe dell'output (DataFrame o righe di cursore).
+
+    REGOLA (correzione 11/11/2026): la copia per la dashboard non fa MAI
+    fallire l'esecuzione. Il punto unico che lo garantisce e' qui: i due
+    ingressi pubblici (:meth:`add_rows`, chiamato dal «tee» del cursore in
+    streaming dentro il ``fetchmany`` del writer, e :meth:`add_dataframe`)
+    intercettano qualunque errore, registrano e mettono il raccoglitore in
+    ``failed``: da quel momento non raccoglie piu' nulla e :func:`write` non
+    scrive la copia (la dashboard risulta «dati non disponibili», 410).
+    Nessun chiamante ha bisogno di un suo ``try``."""
 
     def __init__(self, *, max_rows: Optional[int] = None, max_bytes: Optional[int] = None) -> None:
         self.max_rows = int(max_rows if max_rows is not None else grafana_settings.data_max_rows())
         self.max_bytes = int(max_bytes if max_bytes is not None else grafana_settings.data_max_bytes())
         self.rows = 0
         self.truncated = False
+        self.failed = False
         self._chunks: List[bytes] = []
         self._size = 2  # "[" + "]"
 
@@ -116,7 +129,28 @@ class DashboardRowsCollector:
     def full(self) -> bool:
         return self.truncated or self.rows >= self.max_rows
 
+    def _fail(self) -> None:
+        self.failed = True
+        self._chunks = []
+        logger.warning("[dashboard] righe per la dashboard non raccolte: copia non scritta", exc_info=True)
+
     def add_rows(self, columns: Sequence[object], rows: Iterable[Sequence[Any]]) -> None:
+        if self.failed:
+            return
+        try:
+            self._add_rows(columns, rows)
+        except Exception:  # regola: la copia non fa mai fallire l'esecuzione
+            self._fail()
+
+    def add_dataframe(self, df: Any, *, skip_columns: Sequence[str] = ()) -> None:
+        if self.failed:
+            return
+        try:
+            self._add_dataframe(df, skip_columns=skip_columns)
+        except Exception:  # regola: la copia non fa mai fallire l'esecuzione
+            self._fail()
+
+    def _add_rows(self, columns: Sequence[object], rows: Iterable[Sequence[Any]]) -> None:
         names = [str(name) for name in columns]
         for row in rows:
             if self.full:
@@ -132,7 +166,7 @@ class DashboardRowsCollector:
             self._size += extra
             self.rows += 1
 
-    def add_dataframe(self, df: Any, *, skip_columns: Sequence[str] = ()) -> None:
+    def _add_dataframe(self, df: Any, *, skip_columns: Sequence[str] = ()) -> None:
         remaining = self.max_rows - self.rows
         if remaining <= 0 or df is None:
             self.truncated = self.truncated or df is not None and len(df) > 0
@@ -140,12 +174,23 @@ class DashboardRowsCollector:
         head = df.head(remaining)
         skipped = {str(name) for name in skip_columns}
         columns = [col for col in head.columns if str(col) not in skipped]
-        self.add_rows(columns, head[columns].itertuples(index=False, name=None))
+        self._add_rows(columns, head[columns].itertuples(index=False, name=None))
         if len(df) > remaining:
             self.truncated = True
 
     def to_bytes(self) -> bytes:
+        if self.failed:
+            raise RuntimeError("raccolta delle righe per la dashboard fallita")
         return b"[" + b",".join(self._chunks) + b"]"
+
+    def save(self, task_id: str, *, group_id: str) -> Optional[str]:
+        """Scrive la copia DOPO l'output riuscito; uno storage che fallisce
+        si registra e basta (stessa regola: mai far fallire l'esecuzione)."""
+        try:
+            return write(task_id, group_id=group_id, collector=self)
+        except Exception:  # regola: la copia non fa mai fallire l'esecuzione
+            logger.warning(f"[Task {task_id}] copia dati per la dashboard non scritta", exc_info=True)
+            return None
 
 
 # ── Porta ───────────────────────────────────────────────────────────────────
@@ -160,8 +205,13 @@ def write(
     group_id: str,
     collector: DashboardRowsCollector,
     now: Optional[float] = None,
-) -> str:
-    """Scrive (o sostituisce) la copia del task; scade dopo il TTL."""
+) -> Optional[str]:
+    """Scrive (o sostituisce) la copia del task; scade dopo il TTL. Con il
+    raccoglitore ``failed`` non scrive nulla e toglie una copia precedente
+    (mai dati di un'altra esecuzione o parziali)."""
+    if collector.failed:
+        delete(task_id, group_id=group_id)
+        return None
     current = time.time() if now is None else now
     expires_at = int(current) + grafana_settings.data_ttl_seconds()
     stale = _task_keys(task_id, group_id)

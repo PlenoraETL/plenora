@@ -43,8 +43,10 @@ class ExecutableOutputPersistence:
     E' il punto unico dei due produttori: DataFrame
     (``persist_dataframe_output``) e query in streaming
     (``persist_streaming_query_to_storage``, «tee» sul cursore). La copia si
-    scrive solo dopo l'output riuscito; un suo errore non fa fallire
-    l'esecuzione (la dashboard risulta «non disponibile»).
+    scrive solo dopo l'output riuscito; un suo errore non fa MAI fallire
+    l'esecuzione: lo garantisce in un punto solo il raccoglitore
+    (``DashboardRowsCollector.add_rows``/``add_dataframe``/``save``), qui
+    nessun ``try`` dedicato.
     """
 
     def __init__(
@@ -70,12 +72,8 @@ class ExecutableOutputPersistence:
     def _write_dashboard_copy(
         self, collector: Optional[executable_dashboard_data.DashboardRowsCollector],
     ) -> None:
-        if collector is None:
-            return
-        try:
-            executable_dashboard_data.write(self.task_id, group_id=self.group_id, collector=collector)
-        except Exception:
-            logger.warning(f"[Task {self.task_id}] copia dati per la dashboard non scritta", exc_info=True)
+        if collector is not None:
+            collector.save(self.task_id, group_id=self.group_id)
 
     def _writer(self, filename: str, output_format: str) -> Any:
         """Scrittore del risultato: lo spazio dell'attivita' nello storage."""
@@ -199,11 +197,7 @@ class ExecutableOutputPersistence:
 
         collector = self._dashboard_collector()
         if collector is not None:
-            try:
-                collector.add_dataframe(df, skip_columns=[resolved_geom] if resolved_geom else ())
-            except Exception:
-                logger.warning(f"[Task {self.task_id}] righe per la dashboard non raccolte", exc_info=True)
-                collector = None
+            collector.add_dataframe(df, skip_columns=[resolved_geom] if resolved_geom else ())
         self._write_dashboard_copy(collector)
 
         output_columns = None

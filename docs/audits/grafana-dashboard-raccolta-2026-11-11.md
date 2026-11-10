@@ -66,7 +66,7 @@ Cartella del task: `tenants/<g>/eseguibili-outputs/<task_id>/`. Oggi contiene l'
 | D5 | pulizia richiesta su un task in corso (`finish_requested_cleanup`, worker o beat sui worker morti) | `purge_terminal_task` | X (stesso percorso) |
 | D6 | `find_output_keys` / `select_output_key` (download) | esclude owner e artifact interni | la copia è un artifact interno: mai «Output ambiguo» |
 | D7 | `execute`/`runs` falliti all'avvio → `delete_task_owner` | toglie solo l'owner | nessuna copia esiste ancora |
-| D8 | beat `_cleanup_eseguibili_outputs` (ogni 30 min) | solo residui locali + lease di download | X delle copie SCADUTE (oltre 30 min) nello storage, per ogni gruppo: il limite di 30 minuti vale anche fisicamente, non solo all'accesso |
+| D8 | beat `_cleanup_dashboard_copies` (ogni 5 min, `DASHBOARD_DATA_PURGE_INTERVAL_SECONDS`; correzione 11/11: prima col ciclo da 30 min degli output) | solo residui locali + lease di download | X delle copie SCADUTE nello storage, per ogni gruppo: una copia resta fisicamente al più 30 + 5 = 35 min; dopo i 30 nessuno la legge (lasciapassare e lettura la rifiutano e la cancellano) |
 | D9 | lifecycle del bucket (`plenora-retention=ephemeral`, 7 giorni) | rimuove gli oggetti effimeri | la copia è taggata effimera come l'output (ultima rete) |
 | D10 | `storage.delete_by_task`, `storage.open_stream` | nessun chiamante fuori dallo storage / owner | invariati; il test di enumerazione dichiara ogni chiamante |
 | D11 | `api_connection_rest_file.py` legge l'artifact interno rest_file (`open_task_stream`) | lettura interna | invariato; non deve mai leggere la copia della dashboard |
@@ -87,12 +87,12 @@ Scelta (vincolo A della richiesta): **artifact interno nella cartella del task**
 
 | # | Punto | Deve succedere |
 |---|---|---|
-| F1 | `GET /api/dash/exec/{task_id}/rows?pass=…` (prefisso reale: le route stanno sotto `/api`, `app_factory.include_router(api_router, prefix="/api")`; porta 5004 nativa) | chiamato da Grafana lato server; nessun Bearer |
+| F1 | `GET /api/dash/exec/{task_id}/rows`, lasciapassare nell'intestazione `X-Dashboard-Pass` (correzione 11/11: mai in query string, finirebbe nel log di accesso; il log di accesso oscura comunque `pass=`/`var-pass=`) (prefisso reale: le route stanno sotto `/api`, `app_factory.include_router(api_router, prefix="/api")`; porta 5004 nativa) | chiamato da Grafana lato server; nessun Bearer |
 | F2 | intestazione `X-Grafana-Secret` | obbligatoria (`GRAFANA_DATA_SECRET`), confronto a tempo costante; assente/errata → 401. NON decide l'accesso: decide SOLO il lasciapassare |
 | F3 | lasciapassare | firma, `typ`, scadenza, `task_id` = quello del path; utente ancora attivo e non eliminato; owner del task ancora uguale; altrimenti 401 |
 | F4 | path | `task_id` solo `[A-Za-z0-9_-]`, rifiuta `..` → 400 |
 | F5 | dati | lettura NON distruttiva; JSON array di oggetti; max 50.000 righe; 410 se la copia non c'è più (download non la tocca, full-cleanup sì, scaduta sì) |
-| F6 | frequenza | limite semplice per task (`DASHBOARD_DATA_RATE_PER_MINUTE`) → 429 |
+| F6 | frequenza | limite semplice per esecuzione+utente (`DASHBOARD_DATA_RATE_PER_MINUTE`) contato DOPO la verifica del lasciapassare → 429 |
 | F7 | datasource | uid fisso `plenora-infinity` (lo crea l'installer), `allowedHosts` = `http://127.0.0.1:5004/api/dash/` (percorso completo con `/` finale) |
 
 ## G. Accesso a `/grafana` (Caddy `forward_auth`)
@@ -100,20 +100,20 @@ Scelta (vincolo A della richiesta): **artifact interno nella cartella del task**
 | # | Punto | Deve succedere |
 |---|---|---|
 | G1 | `POST /api/grafana/session` (Bearer) | cookie dedicato HttpOnly, SameSite=Strict, Path=/grafana, firmato (non il JWT), durata breve (`GRAFANA_SESSION_TTL_SECONDS`) rinnovabile richiamando l'endpoint; `Secure` se la richiesta arriva in https |
-| G2 | `GET /api/grafana/auth` (forward_auth) | legge il cookie: 200 + `X-WEBAUTH-USER: <username>`; superadmin anche `X-WEBAUTH-ROLE: Admin`; gli altri NESSUN ruolo (Grafana li crea Viewer); 401 se cookie assente, malformato, scaduto, utente disattivato o eliminato (lapide: `get_user` non la vede) |
+| G2 | `GET /api/grafana/auth` (forward_auth) | legge il cookie: 200 + `X-WEBAUTH-USER: plenora-u-<id>` (legato all'ID, mai allo username), `X-WEBAUTH-NAME`, `X-WEBAUTH-ROLE` SEMPRE (Admin al superadmin, Viewer agli altri); prima allinea i team dell'utente in Grafana (503 se Grafana non risponde); 401 se cookie assente, malformato, scaduto, utente disattivato o eliminato (lapide: `get_user` non la vede). Correzione 11/11 |
 | G3 | `DELETE /api/grafana/session` | toglie il cookie (logout) |
-| G4 | ruolo che cambia | il nome e il ruolo si rileggono dal DB a ogni richiesta di G2: niente ruolo «congelato» nel cookie |
+| G4 | ruolo che cambia | il nome e il ruolo si rileggono dal DB a ogni richiesta di G2: niente ruolo «congelato» nel cookie; Grafana riallinea il ruolo dall'intestazione a ogni accesso e i team si riallineano al forward_auth (cache per utente, impronta) |
 
 ## H. Sincronizzazione Grafana (team e cartelle)
 
 | # | Punto | Deve succedere |
 |---|---|---|
-| H1 | cartella per gruppo proprietario | `plenora-g-<gruppo>`: Viewer = View, team `admin-<group_id>` = Edit |
-| H2 | stessa regola di modifica dell'Eseguibile | un admin del gruppo NON modifica un Eseguibile creato da un superadmin (`assert_can_modify`): la sua dashboard va in una seconda cartella del gruppo `plenora-g-<gruppo>-riservata` (Viewer = View, nessun team). La cartella si decide con `compute_can_edit` per un admin del gruppo: la stessa funzione, nessuna regola copiata |
-| H3 | membri del team | admin attivi (non eliminati) del gruppo; si aggiungono i mancanti, si tolgono gli altri (utente che cambia ruolo o gruppo, disattivato o eliminato: tolto alla sincronizzazione successiva) |
-| H4 | utente mai entrato in Grafana | Grafana non lo conosce ancora: la sincronizzazione lo crea con una richiesta auth-proxy (`X-WEBAUTH-USER`) prima di aggiungerlo al team |
-| H5 | superadmin retrocesso | Grafana conserva il ruolo Admin (senza intestazione di ruolo non lo cambia): la sincronizzazione riporta a Viewer chi in Plenora non è più superadmin |
-| H6 | quando | creazione della dashboard (A1, A5) e «Modifica in Grafana» (A7); idempotente |
+| H1 | cartella | correzione 11/11: UNA cartella per Eseguibile `plenora-e-<id>`: View ai team `utenti-<g>` dei gruppi che vedono l'Eseguibile (proprietario + condivisioni), ruolo Viewer solo con `*`, team `admin-<proprietario>` = Edit se un admin del gruppo puo' modificare; mai «Viewer = View» su tutto |
+| H2 | stessa regola di modifica dell'Eseguibile | un admin del gruppo NON modifica un Eseguibile creato da un superadmin (`assert_can_modify`): la sua cartella non ha il team `admin-<gruppo>` (prima: cartella «riservata» del gruppo). Si decide con `compute_can_edit` per un admin del gruppo: la stessa funzione, nessuna regola copiata |
+| H3 | membri dei team | `utenti-<g>` = utenti attivi del gruppo, `admin-<g>` = admin attivi; correzione 11/11: applicati al forward_auth dell'utente (G2) e ripuliti a ogni sincronizzazione (H6) |
+| H4 | utente mai entrato in Grafana | Grafana non lo conosce ancora: il backend lo crea con una richiesta auth-proxy con le STESSE intestazioni del forward_auth (login per ID, nome, ruolo) prima di aggiungerlo ai team |
+| H5 | superadmin retrocesso | Grafana conserva il ruolo Admin senza intestazione di ruolo: correzione 11/11, il forward_auth la manda SEMPRE (Viewer ai non superadmin) e Grafana la riapplica a ogni accesso (provato dal vivo) |
+| H6 | quando | creazione della dashboard (A1, A5), «Modifica in Grafana» (A7), ogni modifica delle condivisioni (`auth.share_hooks`) e, per i team di un utente, ogni accesso a `/grafana` (G2); idempotente |
 | H7 | `GRAFANA_ENABLED=false` | nessuna chiamata a Grafana in nessun percorso (creazione rifiutata, eliminazione dell'Eseguibile senza chiamate, lasciapassare e link rifiutati) |
 
 ## I. Schema, configurazione, dipendenze
@@ -155,3 +155,5 @@ Base: `ad31df94` (backend e installer già fatti). Raccolta di ogni punto del fr
 ### M. Sandbox dell'iframe
 
 Grafana gira sotto lo stesso origine di Plenora (`/grafana`, dietro Caddy) e ha bisogno di script e del proprio origine (cookie della sessione, `localStorage`). Con `allow-scripts allow-same-origin` lo `sandbox` non è un confine di sicurezza (un documento dello stesso origine può togliere l'attributo dal proprio iframe); lo teniamo per quello che dà davvero: niente navigazione della pagina di Plenora dall'iframe (`allow-top-navigation` non concesso). Il confine vero è lato server: `forward_auth`, cookie dedicato con `Path=/grafana`, lasciapassare per esecuzione.
+
+Correzione del giro di conferma (11/11/2026): disegno, test e prove dal vivo nel piano, sezione «Dashboard Grafana: correzione del giro di conferma».

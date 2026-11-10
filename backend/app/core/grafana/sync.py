@@ -1,130 +1,235 @@
-"""Sincronizzazione di cartelle, team e ruoli in Grafana (idempotente).
+"""Identita', team e cartelle in Grafana (idempotente) — correzione 11/11/2026.
 
 La sincronizzazione automatica dei team e' una funzione Enterprise: la fa
 Plenora, con dati che il chiamante legge dal proprio DB (questo modulo non
-importa ``auth``). Regole:
+importa ``auth``). Tre regole, ognuna in UNA funzione:
 
-- per gruppo proprietario due cartelle: ``plenora-g-<gruppo>`` (Viewer =
-  View, team ``admin-<gruppo>`` = Edit) e ``plenora-g-<gruppo>-riservata``
-  (Viewer = View, nessun team: Eseguibili creati da un superadmin, che
-  l'admin del gruppo non modifica, ``ownership.assert_can_modify``);
-- membri del team = ESATTAMENTE gli admin attivi del gruppo: chi cambia
-  ruolo o gruppo, e' disattivato o eliminato viene tolto alla
-  sincronizzazione successiva; chi non e' mai entrato in Grafana viene
-  creato con una richiesta auth-proxy prima di essere aggiunto;
-- ruolo di organizzazione: chi in Plenora non e' superadmin ma in Grafana e'
-  Admin (superadmin retrocesso) torna Viewer; il superadmin diventa Admin.
+1. **Identita'** (:func:`grafana_login`, :func:`proxy_headers`): l'utente
+   Grafana e' legato all'ID dell'utente Plenora (``plenora-u-<id>``), mai
+   allo username: uno username liberato da una lapide e riusato da un utente
+   nuovo NON eredita l'utente Grafana precedente (ruolo, team). Il nome
+   visualizzato viaggia a parte (``X-WEBAUTH-NAME``). Il ruolo
+   dell'organizzazione viaggia SEMPRE (``X-WEBAUTH-ROLE``: Admin al
+   superadmin, Viewer a tutti gli altri): Grafana lo riallinea a ogni accesso
+   (provato dal vivo su Grafana 13.3: Admin -> Viewer -> Admin con la sola
+   intestazione; senza intestazione il ruolo resta quello vecchio).
+2. **Team di un utente** (:func:`expected_teams`): ``utenti-<gruppo>`` per
+   ogni utente attivo del gruppo, piu' ``admin-<gruppo>`` per l'admin.
+   :func:`apply_user_access` porta l'appartenenza in Grafana ESATTAMENTE a
+   questa (toglie dai team gestiti che non spettano, aggiunge ai mancanti):
+   la chiama il forward_auth (``grafana.access``) prima di lasciar passare,
+   quindi chi cambia ruolo o gruppo e' riallineato alla prima richiesta.
+3. **Visibilita' di una dashboard** (:func:`folder_permissions`): una
+   cartella per Eseguibile; View ai team ``utenti-<g>`` dei gruppi che
+   vedono l'Eseguibile in Plenora (proprietario + condivisioni), View al
+   ruolo Viewer SOLO se l'Eseguibile e' condiviso con ``*`` (tutti), Edit al
+   team ``admin-<proprietario>`` solo se un admin del gruppo puo' modificare
+   l'Eseguibile. Nessun View «a tutti» altrimenti: un utente non vede
+   elenco ne' JSON delle dashboard di un altro istituto.
 """
 
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from app.utils.logger import get_logger
 
-from . import dashboard_builder
-from .client import PERMISSION_EDIT, PERMISSION_VIEW, GrafanaApi
+from .client import PERMISSION_EDIT, PERMISSION_VIEW, GrafanaApi, GrafanaError
 
 logger = get_logger(__name__)
+
+LOGIN_PREFIX = "plenora-u-"
+USERS_TEAM_PREFIX = "utenti-"
+ADMINS_TEAM_PREFIX = "admin-"
+MANAGED_TEAM_PREFIXES = (USERS_TEAM_PREFIX, ADMINS_TEAM_PREFIX)
+
+USER_HEADER = "X-WEBAUTH-USER"
+NAME_HEADER = "X-WEBAUTH-NAME"
+ROLE_HEADER = "X-WEBAUTH-ROLE"
+ROLE_ADMIN = "Admin"
+ROLE_VIEWER = "Viewer"
+
+_LOGIN_SAFE = re.compile(r"[A-Za-z0-9_.-]{1,64}")
+_NAME_MAX = 100
 
 
 @dataclass(frozen=True)
 class PlenoraUser:
-    """Utente Plenora come lo vede la sincronizzazione."""
+    """Utente Plenora come lo vede Grafana (letto dal DB a ogni uso)."""
 
+    user_id: str
     username: str
     role: str
     group_id: str
     active: bool = True
 
 
-def _login_index(client: GrafanaApi) -> Mapping[str, Mapping[str, object]]:
-    return {str(user.get("login")): user for user in client.org_users() if user.get("login")}
+# ── 1. Identita' ────────────────────────────────────────────────────────────
+
+def grafana_login(user_id: str) -> str:
+    """Login Grafana di un utente Plenora: dall'ID, stabile e mai riusato."""
+    raw = str(user_id)
+    if _LOGIN_SAFE.fullmatch(raw):
+        return f"{LOGIN_PREFIX}{raw}"
+    return f"{LOGIN_PREFIX}h-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:32]}"
 
 
-def ensure_team(client: GrafanaApi, group_id: str) -> int:
-    name = dashboard_builder.team_name(group_id)
+def display_name(username: str) -> str:
+    """Nome visualizzato in Grafana: lo username in ASCII stampabile (le
+    intestazioni HTTP non portano Unicode; i caratteri fuori diventano «?»)."""
+    text = "".join(ch if 32 <= ord(ch) < 127 else "?" for ch in str(username))
+    return (text.strip() or "?")[:_NAME_MAX]
+
+
+def org_role(user: PlenoraUser) -> str:
+    return ROLE_ADMIN if user.active and user.role == "superadmin" else ROLE_VIEWER
+
+
+def proxy_headers(user: PlenoraUser) -> Mapping[str, str]:
+    """Le intestazioni auth-proxy di un utente: le stesse dal forward_auth e
+    dalle richieste del backend (creazione dell'utente prima del team)."""
+    return {
+        USER_HEADER: grafana_login(user.user_id),
+        NAME_HEADER: display_name(user.username),
+        ROLE_HEADER: org_role(user),
+    }
+
+
+# ── 2. Team di un utente ────────────────────────────────────────────────────
+
+def users_team(group_id: str) -> str:
+    return f"{USERS_TEAM_PREFIX}{group_id}"
+
+
+def admins_team(group_id: str) -> str:
+    return f"{ADMINS_TEAM_PREFIX}{group_id}"
+
+
+def is_managed_team(name: object) -> bool:
+    return isinstance(name, str) and name.startswith(MANAGED_TEAM_PREFIXES)
+
+
+def expected_teams(user: PlenoraUser) -> frozenset[str]:
+    if not user.active or not user.group_id:
+        return frozenset()
+    teams = {users_team(user.group_id)}
+    if user.role == "admin":
+        teams.add(admins_team(user.group_id))
+    return frozenset(teams)
+
+
+def access_fingerprint(user: PlenoraUser) -> tuple[Any, ...]:
+    """Tutto cio' che decide l'accesso in Grafana: se cambia, si risincronizza."""
+    return (tuple(sorted(proxy_headers(user).items())), tuple(sorted(expected_teams(user))))
+
+
+def ensure_team(client: GrafanaApi, name: str) -> int:
     team_id = client.find_team(name)
     return team_id if team_id is not None else client.create_team(name)
 
 
-def ensure_folders(client: GrafanaApi, group_id: str, group_title: str, team_id: int) -> None:
-    for reserved in (False, True):
-        uid = dashboard_builder.folder_uid(group_id, reserved=reserved)
-        if client.get_folder(uid) is None:
-            title = f"Plenora — {group_title}" + (" (riservata)" if reserved else "")
-            client.create_folder(uid, title)
-        items: list[dict[str, object]] = [{"role": "Viewer", "permission": PERMISSION_VIEW}]
-        if not reserved:
-            items.append({"teamId": team_id, "permission": PERMISSION_EDIT})
-        client.set_folder_permissions(uid, items)
+def apply_user_access(client: GrafanaApi, user: PlenoraUser) -> None:
+    """Crea/aggiorna l'utente in Grafana (richiesta auth-proxy con le sue
+    intestazioni: login, nome, ruolo) e porta i suoi team gestiti
+    ESATTAMENTE a :func:`expected_teams`."""
+    headers = proxy_headers(user)
+    me = client.proxy_get(headers, "/api/user")
+    if not isinstance(me, Mapping) or not isinstance(me.get("id"), int):
+        raise GrafanaError(502, "auth proxy: utente non creato (whitelist o [auth.proxy] da verificare)")
+    grafana_user_id = int(me["id"])
+    current = {
+        str(team.get("name")): int(team["id"])
+        for team in (client.proxy_get(headers, "/api/user/teams") or [])
+        if isinstance(team, Mapping) and is_managed_team(team.get("name"))
+    }
+    expected = expected_teams(user)
+    for name in sorted(set(current) - expected):
+        client.remove_team_member(current[name], grafana_user_id)
+    for name in sorted(expected - set(current)):
+        client.add_team_member(ensure_team(client, name), grafana_user_id)
 
 
-def sync_team_members(client: GrafanaApi, team_id: int, admins: Sequence[PlenoraUser]) -> None:
-    """Membri = admin attivi del gruppo (aggiunge i mancanti, toglie gli altri)."""
-    desired = {user.username for user in admins if user.active and user.role == "admin"}
-    index = _login_index(client)
-    missing = [login for login in sorted(desired) if login not in index]
-    for login in missing:
-        client.ensure_proxy_user(login, admin=False)
-    if missing:
-        index = _login_index(client)
-    current = client.team_member_logins(team_id)
-    for login in sorted(desired - set(current)):
-        user = index.get(login)
-        if user is None:
-            logger.warning(f"[grafana] utente {login} non creato in Grafana: non aggiunto al team")
-            continue
-        client.add_team_member(team_id, int(user["userId"]))
-    for login in sorted(set(current) - desired):
-        client.remove_team_member(team_id, int(current[login]))
+def prune_team(client: GrafanaApi, name: str, allowed: Iterable[PlenoraUser]) -> None:
+    """Toglie dal team gli utenti Plenora a cui non spetta piu' (disattivati,
+    eliminati, spostati, retrocessi). Non aggiunge nessuno (lo fa
+    :func:`apply_user_access` al loro accesso) e non tocca gli utenti che
+    Plenora non gestisce (service account, amministratore locale)."""
+    team_id = client.find_team(name)
+    if team_id is None:
+        return
+    keep = {grafana_login(user.user_id) for user in allowed if name in expected_teams(user)}
+    for login, member_id in client.team_member_logins(team_id).items():
+        if login.startswith(LOGIN_PREFIX) and login not in keep:
+            client.remove_team_member(team_id, int(member_id))
 
 
-def sync_org_roles(client: GrafanaApi, users: Iterable[PlenoraUser]) -> None:
-    """Admin di Grafana = superadmin attivi di Plenora; tocca solo gli
-    utenti che Plenora conosce (mai l'amministratore locale di Grafana)."""
-    known = {user.username: user for user in users}
-    for grafana_user in client.org_users():
-        login = str(grafana_user.get("login") or "")
-        plenora = known.get(login)
-        if plenora is None:
-            continue
-        desired = "Admin" if plenora.active and plenora.role == "superadmin" else "Viewer"
-        if str(grafana_user.get("role") or "") != desired:
-            client.set_org_role(int(grafana_user["userId"]), desired)
+# ── 3. Visibilita' di una dashboard ─────────────────────────────────────────
+
+@dataclass(frozen=True)
+class FolderAccess:
+    """Chi vede e chi modifica la cartella di UN Eseguibile."""
+
+    viewer_groups: frozenset[str]
+    everyone: bool = False
+    editor_group: Optional[str] = None
 
 
-def ensure_user(client: GrafanaApi, user: PlenoraUser) -> None:
-    """L'utente che apre «Modifica in Grafana» esiste in Grafana."""
-    if user.username not in _login_index(client):
-        client.ensure_proxy_user(user.username, admin=user.role == "superadmin")
+def folder_permissions(client: GrafanaApi, access: FolderAccess) -> list[Mapping[str, int | str]]:
+    items: list[Mapping[str, int | str]] = []
+    if access.everyone:
+        items.append({"role": ROLE_VIEWER, "permission": PERMISSION_VIEW})
+    for group_id in sorted(access.viewer_groups):
+        items.append({"teamId": ensure_team(client, users_team(group_id)), "permission": PERMISSION_VIEW})
+    if access.editor_group:
+        items.append({"teamId": ensure_team(client, admins_team(access.editor_group)),
+                      "permission": PERMISSION_EDIT})
+    return items
 
 
-def sync_group(
-    client: GrafanaApi,
-    *,
-    group_id: str,
-    group_title: str,
-    group_users: Sequence[PlenoraUser],
-    all_users: Iterable[PlenoraUser],
-    requester: PlenoraUser | None = None,
-) -> None:
-    """Una sincronizzazione completa per il gruppo proprietario."""
-    team_id = ensure_team(client, group_id)
-    ensure_folders(client, group_id, group_title, team_id)
-    if requester is not None:
-        ensure_user(client, requester)
-    sync_team_members(client, team_id, [u for u in group_users if u.group_id == group_id])
-    sync_org_roles(client, all_users)
+def sync_folder(client: GrafanaApi, *, folder_uid: str, title: str, access: FolderAccess) -> None:
+    """Cartella dell'Eseguibile con ESATTAMENTE i permessi della regola
+    (``set_folder_permissions`` sostituisce l'elenco intero)."""
+    if client.get_folder(folder_uid) is None:
+        client.create_folder(folder_uid, title)
+    client.set_folder_permissions(folder_uid, folder_permissions(client, access))
+
+
+def prune_teams(client: GrafanaApi, access: FolderAccess, users_by_group: Mapping[str, Sequence[PlenoraUser]]) -> None:
+    """Pulizia dei team toccati dalla cartella (difesa in profondita':
+    l'accesso vero si riallinea comunque al forward_auth)."""
+    for group_id in sorted(access.viewer_groups):
+        prune_team(client, users_team(group_id), users_by_group.get(group_id, ()))
+    if access.editor_group:
+        prune_team(client, admins_team(access.editor_group), users_by_group.get(access.editor_group, ()))
 
 
 __all__ = [
+    "ADMINS_TEAM_PREFIX",
+    "FolderAccess",
+    "LOGIN_PREFIX",
+    "NAME_HEADER",
     "PlenoraUser",
-    "ensure_folders",
+    "ROLE_ADMIN",
+    "ROLE_HEADER",
+    "ROLE_VIEWER",
+    "USERS_TEAM_PREFIX",
+    "USER_HEADER",
+    "access_fingerprint",
+    "admins_team",
+    "apply_user_access",
+    "display_name",
     "ensure_team",
-    "ensure_user",
-    "sync_group",
-    "sync_org_roles",
-    "sync_team_members",
+    "expected_teams",
+    "folder_permissions",
+    "grafana_login",
+    "is_managed_team",
+    "org_role",
+    "prune_team",
+    "prune_teams",
+    "proxy_headers",
+    "sync_folder",
+    "users_team",
 ]

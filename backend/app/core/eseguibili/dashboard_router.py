@@ -10,8 +10,13 @@ Esecuzione (chi vede l'Eseguibile e ha LANCIATO l'esecuzione, o superadmin):
 - ``POST   /eseguibili/{id}/dashboard/pass``       lasciapassare dei dati
 
 Dati per Infinity (chiamato da Grafana lato server, nessun Bearer):
-- ``GET    /dash/exec/{task_id}/rows?pass=...``    intestazione
-  ``X-Grafana-Secret`` obbligatoria, accesso deciso SOLO dal lasciapassare.
+- ``GET    /dash/exec/{task_id}/rows``             intestazioni
+  ``X-Grafana-Secret`` (obbligatoria) e ``X-Dashboard-Pass`` (il
+  lasciapassare, che decide da solo l'accesso). Il lasciapassare NON e' mai
+  nell'URL: il log di accesso del backend registra path e query string.
+  Ordine: segreto, lasciapassare, POI il limite di frequenza per
+  esecuzione+utente (chi non ha un lasciapassare valido non consuma il
+  limite di chi ce l'ha).
 
 Errori: una tabella (``_ERRORS``) dalle eccezioni delle regole
 (``eseguibili.dashboard``) ai codici del catalogo.
@@ -25,11 +30,12 @@ import time
 from collections import deque
 from typing import Mapping, NoReturn, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 
 from app.core.auth.dependencies import get_current_user, require_admin
 from app.core.auth.ownership import assert_can_modify, assert_resource_visible
 from app.core.grafana import client as grafana_client
+from app.core.grafana import dashboard_builder
 from app.core.grafana import settings as grafana_settings
 from app.core.grafana import signing
 from app.observability.audit_action import audit_action
@@ -168,7 +174,7 @@ def issue_eseguibile_dashboard_pass(
 # ── Endpoint dati per Infinity ──────────────────────────────────────────────
 
 class _TaskRateLimit:
-    """Limite semplice per task (finestra di 60 s, nel processo)."""
+    """Limite semplice per esecuzione+utente (finestra di 60 s, nel processo)."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -208,21 +214,28 @@ def _check_grafana_secret(provided: Optional[str]) -> None:
 @data_router.get("/exec/{task_id}/rows")
 def read_dashboard_rows(
     task_id: str,
-    pass_token: Optional[str] = Query(default=None, alias="pass", max_length=signing.MAX_TOKEN_LENGTH),
+    # Nessun vincolo di forma qui: ogni lasciapassare non valido (anche troppo
+    # lungo o non ASCII) e' 401 dalla regola unica di ``grafana.signing``.
+    pass_token: Optional[str] = Header(default=None, alias=dashboard_builder.PASS_HEADER),
     x_grafana_secret: Optional[str] = Header(default=None, alias="X-Grafana-Secret"),
 ) -> Response:
     """Righe della copia per la dashboard (JSON array di oggetti, al massimo
     ``DASHBOARD_DATA_MAX_ROWS``). Lettura non distruttiva. 401 lasciapassare
-    non valido/scaduto/di altro task, 410 dati non piu' disponibili."""
+    non valido/scaduto/di altro task, 410 dati non piu' disponibili, 429
+    oltre il limite per esecuzione e utente (contato DOPO la verifica)."""
     if not grafana_settings.enabled():
         raise_typed_http(error_codes.GRAFANA_DISABLED, status_code=404, message="Dashboard disabilitate")
     if not dashboard_rules.is_safe_task_id(task_id):
         raise HTTPException(status_code=400, detail="task_id non valido")
     _check_grafana_secret(x_grafana_secret)
-    if not rate_limit.allow(task_id, per_minute=grafana_settings.data_rate_per_minute()):
+    try:
+        grant = dashboard_rules.authorize_read(task_id, pass_token)
+    except _HANDLED as exc:
+        _raise_mapped(exc)
+    if not rate_limit.allow(f"{grant.task_id}:{grant.user_id}", per_minute=grafana_settings.data_rate_per_minute()):
         raise HTTPException(status_code=429, detail="Troppe richieste per questa esecuzione", headers={"Retry-After": "10"})
     try:
-        body = dashboard_rules.read_rows(task_id, pass_token)
+        body = dashboard_rules.read_granted(grant)
     except _HANDLED as exc:
         _raise_mapped(exc)
     return Response(

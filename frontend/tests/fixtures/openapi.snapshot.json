@@ -14099,7 +14099,7 @@
     },
     "/api/dash/exec/{task_id}/rows": {
       "get": {
-        "description": "Righe della copia per la dashboard (JSON array di oggetti, al massimo\n``DASHBOARD_DATA_MAX_ROWS``). Lettura non distruttiva. 401 lasciapassare\nnon valido/scaduto/di altro task, 410 dati non piu' disponibili.",
+        "description": "Righe della copia per la dashboard (JSON array di oggetti, al massimo\n``DASHBOARD_DATA_MAX_ROWS``). Lettura non distruttiva. 401 lasciapassare\nnon valido/scaduto/di altro task, 410 dati non piu' disponibili, 429\noltre il limite per esecuzione e utente (contato DOPO la verifica).",
         "operationId": "read_dashboard_rows_api_dash_exec__task_id__rows_get",
         "parameters": [
           {
@@ -14112,20 +14112,19 @@
             }
           },
           {
-            "in": "query",
-            "name": "pass",
+            "in": "header",
+            "name": "X-Dashboard-Pass",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 2048,
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Pass"
+              "title": "X-Dashboard-Pass"
             }
           },
           {

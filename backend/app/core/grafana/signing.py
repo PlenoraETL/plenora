@@ -10,7 +10,11 @@ chiave DERIVATA da ``DASHBOARD_PASS_SECRET`` per dominio (``pass`` /
   diversi); un JWT di login non vale come nessuno dei due (formato a tre
   parti, firma con altra chiave);
 - senza segreto configurato non si emette e non si accetta nulla
-  (``SigningUnavailable``).
+  (``SigningUnavailable``);
+- ogni gettone non valido, per qualunque motivo (forma, caratteri non ASCII,
+  base64 o JSON rotti, campi mancanti o di tipo errato, firma, tipo,
+  scadenza), e' ``InvalidToken``: mai un'altra eccezione (test di
+  enumerazione in ``test_grafana_dashboard_contract``).
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Mapping, Optional
@@ -74,26 +79,44 @@ def _sign(token_type: str, payload: Mapping[str, object]) -> str:
     return f"{body}.{signature}"
 
 
+# Forma di un gettone: due parti base64url senza padding. Qualunque altro
+# testo (non ASCII, spazi, padding, tre parti) e' rifiutato PRIMA di ogni
+# decodifica.
+_TOKEN_FORM = re.compile(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+
+
 def _verify(token_type: str, token: Optional[str], *, now: Optional[float] = None) -> Mapping[str, object]:
-    if not token or not isinstance(token, str) or len(token) > MAX_TOKEN_LENGTH:
+    """Regola unica: OGNI errore di forma o di decodifica e' ``InvalidToken``
+    (401 per chi chiama), mai un'altra eccezione; solo la chiave mancante e'
+    ``SigningUnavailable`` (503)."""
+    key = _key(token_type)
+    if not isinstance(token, str) or not token or len(token) > MAX_TOKEN_LENGTH:
         raise InvalidToken("assente")
-    parts = token.split(".")
-    if len(parts) != 2 or not all(parts):
+    if not _TOKEN_FORM.fullmatch(token):
         raise InvalidToken("malformato")
-    body, signature = parts
-    expected = _b64(hmac.new(_key(token_type), body.encode("ascii"), hashlib.sha256).digest())
+    body, signature = token.split(".")
+    expected = _b64(hmac.new(key, body.encode("ascii"), hashlib.sha256).digest())
     if not hmac.compare_digest(expected, signature):
         raise InvalidToken("firma")
     try:
-        data = json.loads(_unb64(body))
-    except (ValueError, UnicodeDecodeError) as exc:
+        data = json.loads(_unb64(body).decode("utf-8"))
+    except (ValueError, TypeError, RecursionError) as exc:  # base64, utf-8, json: «malformato»
         raise InvalidToken("malformato") from exc
     if not isinstance(data, dict) or data.get("typ") != token_type:
         raise InvalidToken("tipo")
     expires_at = data.get("exp")
-    if not isinstance(expires_at, int) or expires_at <= (time.time() if now is None else now):
+    if isinstance(expires_at, bool) or not isinstance(expires_at, int):
+        raise InvalidToken("malformato")
+    if expires_at <= (time.time() if now is None else now):
         raise InvalidToken("scaduto")
     return data
+
+
+def _text_fields(data: Mapping[str, object], *names: str) -> tuple[str, ...]:
+    values = tuple(data.get(name) for name in names)
+    if not all(isinstance(value, str) and value for value in values):
+        raise InvalidToken("malformato")
+    return tuple(str(value) for value in values)
 
 
 def issue_pass(*, task_id: str, eseguibile_id: str, user_id: str, expires_at: int) -> str:
@@ -102,12 +125,9 @@ def issue_pass(*, task_id: str, eseguibile_id: str, user_id: str, expires_at: in
 
 def verify_pass(token: Optional[str], *, now: Optional[float] = None) -> DashboardPass:
     data = _verify(PASS_TYPE, token, now=now)
-    fields = (data.get("t"), data.get("e"), data.get("u"))
-    if not all(isinstance(value, str) and value for value in fields):
-        raise InvalidToken("malformato")
+    task_id, eseguibile_id, user_id = _text_fields(data, "t", "e", "u")
     return DashboardPass(
-        task_id=str(data["t"]), eseguibile_id=str(data["e"]), user_id=str(data["u"]),
-        expires_at=int(data["exp"]),
+        task_id=task_id, eseguibile_id=eseguibile_id, user_id=user_id, expires_at=int(data["exp"]),
     )
 
 
@@ -117,9 +137,7 @@ def issue_session(*, user_id: str, expires_at: int) -> str:
 
 def verify_session(token: Optional[str], *, now: Optional[float] = None) -> GrafanaSession:
     data = _verify(SESSION_TYPE, token, now=now)
-    user_id = data.get("u")
-    if not isinstance(user_id, str) or not user_id:
-        raise InvalidToken("malformato")
+    (user_id,) = _text_fields(data, "u")
     return GrafanaSession(user_id=user_id, expires_at=int(data["exp"]))
 
 

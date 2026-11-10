@@ -1028,7 +1028,7 @@ if ($InstallObjectStorage) {
 # =============================================================================
 # Servizio plenora-grafana in ascolto SOLO su 127.0.0.1:3300; il browser lo
 # raggiunge da Caddy su /grafana (blocco generato in W4), dove Plenora decide
-# chi e' l'utente (forward_auth -> X-WEBAUTH-USER/ROLE, auth.proxy di Grafana).
+# chi e' l'utente (forward_auth -> X-WEBAUTH-USER/NAME/ROLE, auth.proxy di Grafana).
 # Niente accesso anonimo, niente form di login, niente basic auth: il
 # bootstrap usa lo stesso auth.proxy da localhost con un login amministratore
 # casuale (mai uguale a uno username Plenora).
@@ -1178,7 +1178,7 @@ header_property = username
 auto_sign_up = true
 sync_ttl = 15
 whitelist = 127.0.0.1, ::1
-headers = Role:X-WEBAUTH-ROLE
+headers = Name:X-WEBAUTH-NAME Role:X-WEBAUTH-ROLE
 enable_login_token = false
 
 [snapshots]
@@ -1391,7 +1391,7 @@ if ($InstallFrontend) {
             request_header -X-WEBAUTH-*
             forward_auth 127.0.0.1:5004 {
                 uri /api/grafana/auth
-                copy_headers X-WEBAUTH-USER X-WEBAUTH-ROLE
+                copy_headers X-WEBAUTH-USER X-WEBAUTH-NAME X-WEBAUTH-ROLE
             }
             reverse_proxy 127.0.0.1:$GrafanaPort
         }

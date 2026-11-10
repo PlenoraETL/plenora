@@ -109,7 +109,12 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # schema atteso registrano e proseguono (dashboard_data x3, dashboard x1);
 # l'eliminazione dell'Eseguibile non si blocca se Grafana non risponde
 # (dashboard.delete_dashboard_best_effort).
-_EXPECT_BROAD_BUDGET = 793
+# +2 netti (2026-11-11, correzione del giro di conferma Grafana): la regola
+# «la copia non fa mai fallire l'esecuzione» passa in UN punto, il
+# raccoglitore (dashboard_data.DashboardRowsCollector.add_rows/add_dataframe/
+# save, +3; tolti i 2 di output_persistence); auth.share_hooks.notify (+1):
+# un riallineamento dopo una condivisione gia' scritta registra e prosegue.
+_EXPECT_BROAD_BUDGET = 795
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

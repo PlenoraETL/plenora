@@ -160,7 +160,7 @@ def test_grafana_route_strips_identity_then_asks_plenora_then_proxies_to_loopbac
     assert auth.line == "forward_auth 127.0.0.1:5004"
     assert [c.line for c in auth.children] == [
         "uri /api/grafana/auth",
-        "copy_headers X-WEBAUTH-USER X-WEBAUTH-ROLE",
+        "copy_headers X-WEBAUTH-USER X-WEBAUTH-NAME X-WEBAUTH-ROLE",
     ]
     assert proxy.line == "reverse_proxy 127.0.0.1:3300"
     # Mai le intestazioni di Plenora (X-Frame-Options DENY) su /grafana.
@@ -203,7 +203,13 @@ EXPECTED_INI = {
     ("auth.proxy", "header_name"): "X-WEBAUTH-USER",
     ("auth.proxy", "header_property"): "username",
     ("auth.proxy", "whitelist"): "127.0.0.1, ::1",
-    ("auth.proxy", "headers"): "Role:X-WEBAUTH-ROLE",
+    # Ruolo e nome dalle intestazioni del forward_auth a OGNI accesso: un
+    # superadmin retrocesso torna Viewer (provato dal vivo su Grafana 13.3;
+    # senza intestazione di ruolo Grafana conserva quello vecchio). Il login
+    # (X-WEBAUTH-USER) e' l'ID Plenora, il nome visualizzato viaggia a parte.
+    ("auth.proxy", "headers"): "Name:X-WEBAUTH-NAME Role:X-WEBAUTH-ROLE",
+    ("auth.proxy", "auto_sign_up"): "true",
+    ("auth.proxy", "sync_ttl"): "15",
     ("auth.proxy", "enable_login_token"): "false",
     ("snapshots", "enabled"): "false",
     ("public_dashboards", "enabled"): "false",
@@ -470,13 +476,19 @@ def test_bootstrap_takes_secrets_only_from_the_environment(monkeypatch, capsys):
 # ── Validatore ───────────────────────────────────────────────────────────────
 
 def test_validator_checks_grafana_service_auth_and_plenora_headers():
+    from app.core.security import frontend_headers as fh
+
     validator = VALIDATOR.read_text(encoding="utf-8-sig")
     assert "[switch]$RequireGrafana" in validator
     assert "Test-OptionalService 'plenora-grafana' 'Plenora Grafana' -Required:$RequireGrafana" in validator
     proxy = _function(validator.replace("\r\n", "\n"), "Test-GrafanaProxy([string]$BaseUrl)")
     assert "if ($status -ne 401)" in proxy
     assert "'X-WEBAUTH-USER' = 'validate-windows-install'" in proxy
-    assert "$csp -ne \"frame-ancestors 'self'\"" in proxy
+    for directive in ("frame-ancestors 'self'", "default-src 'self'", "img-src 'self' data: blob:",
+                      "connect-src 'self'"):
+        assert f'"{directive}"' in proxy
+        assert directive in dict(fh.GRAFANA_PROXY_HEADERS)["Content-Security-Policy"]
+    assert '$csp -notlike "*$directive*"' in proxy
     assert "Test-FrontendPage -Url ($BaseUrl.TrimEnd('/') + '/grafana-confine')" in proxy
     assert "notin @('127.0.0.1', '::1')" in proxy
     assert "frame-ancestors 'none'" in _function(validator.replace("\r\n", "\n"), "Test-FrontendPage([string]$Url)")

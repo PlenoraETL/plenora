@@ -7,11 +7,18 @@ Caddy protegge ``/grafana/*`` con ``forward_auth`` verso
   ``plenora_grafana_session`` (HttpOnly, SameSite=Strict, Path=/grafana,
   firmato con ``DASHBOARD_PASS_SECRET`` nel dominio «sessione»: non e' il JWT
   di login), durata ``GRAFANA_SESSION_TTL_SECONDS``; si rinnova richiamandolo.
-- ``GET    /api/grafana/auth`` (forward_auth): 200 con ``X-WEBAUTH-USER`` (e
-  ``X-WEBAUTH-ROLE: Admin`` solo per il superadmin; per gli altri NESSUN
-  ruolo: Grafana li crea Viewer); 401 se il cookie manca, e' malformato o
-  scaduto, o l'utente e' disattivato o eliminato. Nome e ruolo si rileggono
-  dal DB a ogni richiesta (``auth.db.get_user``: mai una lapide).
+- ``GET    /api/grafana/auth`` (forward_auth): 200 con le intestazioni
+  auth-proxy di ``grafana.sync.proxy_headers`` (correzione 11/11/2026):
+  ``X-WEBAUTH-USER`` = login legato all'ID (``plenora-u-<id>``, mai lo
+  username: uno username riusato non eredita nulla), ``X-WEBAUTH-NAME`` =
+  nome visualizzato, ``X-WEBAUTH-ROLE`` SEMPRE (Admin al superadmin, Viewer
+  a tutti gli altri: Grafana riallinea il ruolo a ogni accesso). Prima di
+  rispondere allinea i team dell'utente in Grafana
+  (``grafana.access.ensure_access``, cache per utente); Grafana che non
+  risponde -> 503, mai un passaggio con team non verificati. 401 se il
+  cookie manca, e' malformato o scaduto, o l'utente e' disattivato o
+  eliminato. L'utente si rilegge dal DB a ogni richiesta
+  (``auth.db.get_user``: mai una lapide).
 - ``DELETE /api/grafana/session``: toglie il cookie.
 """
 
@@ -24,17 +31,24 @@ from fastapi import APIRouter, Cookie, Depends, Request, Response
 
 from app.core.auth import db as users_db
 from app.core.auth.dependencies import get_current_user
+from app.core.grafana import access as grafana_access
+from app.core.grafana import client as grafana_client
 from app.core.grafana import settings as grafana_settings
 from app.core.grafana import signing
+from app.core.grafana import sync as grafana_sync
 from app.observability.audit_action import audit_action
 from app.shared import error_codes
 from app.shared.contracts.auth import CurrentUser
 from app.shared.error_envelope import raise_typed_http
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 SESSION_COOKIE = "plenora_grafana_session"
 COOKIE_PATH = "/grafana"
-USER_HEADER = "X-WEBAUTH-USER"
-ROLE_HEADER = "X-WEBAUTH-ROLE"
+USER_HEADER = grafana_sync.USER_HEADER
+NAME_HEADER = grafana_sync.NAME_HEADER
+ROLE_HEADER = grafana_sync.ROLE_HEADER
 
 grafana_router = APIRouter(prefix="/grafana", tags=["grafana"])
 
@@ -88,14 +102,21 @@ def grafana_forward_auth(
     user = users_db.get_user(session.user_id)
     if user is None or not user.is_active or getattr(user, "deleted_at", None):
         return unauthorized
-    headers = {USER_HEADER: str(user.username), "Cache-Control": "no-store"}
-    if user.role == "superadmin":
-        headers[ROLE_HEADER] = "Admin"
-    return Response(status_code=200, headers=headers)
+    plenora = grafana_sync.PlenoraUser(
+        user_id=str(user.id), username=str(user.username), role=str(user.role),
+        group_id=str(user.group_id or ""), active=bool(user.is_active),
+    )
+    try:
+        grafana_access.ensure_access(plenora)
+    except (grafana_client.GrafanaUnavailable, grafana_client.GrafanaError, grafana_client.GrafanaDisabled):
+        logger.warning(f"[grafana] accesso di {user.id} non allineato in Grafana: 503", exc_info=True)
+        return Response(status_code=503, headers={"Cache-Control": "no-store", "Retry-After": "5"})
+    return Response(status_code=200, headers={**grafana_sync.proxy_headers(plenora), "Cache-Control": "no-store"})
 
 
 __all__ = [
     "COOKIE_PATH",
+    "NAME_HEADER",
     "ROLE_HEADER",
     "SESSION_COOKIE",
     "USER_HEADER",

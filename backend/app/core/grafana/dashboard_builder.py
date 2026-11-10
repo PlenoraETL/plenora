@@ -4,9 +4,11 @@ Dashboard generata (riferimento: spike ``setup_grafana.build_dashboard``):
 - variabili textbox NASCOSTE (``hide=2``) ``exec`` (task) e ``pass``
   (lasciapassare), valorizzate dall'URL dell'iframe (``var-exec``,
   ``var-pass``);
-- UNA sola query Infinity nel pannello tabella; il lasciapassare va in
-  ``url_options.params`` e MAI nella stringa ``url`` (Infinity registra l'URL
-  nei log);
+- UNA sola query Infinity nel pannello tabella; il lasciapassare viaggia
+  nell'intestazione ``X-Dashboard-Pass`` (``url_options.headers``, Infinity
+  interpola le variabili anche li': provato dal vivo con Grafana 13.3 e
+  Infinity 4.1.6), MAI nell'URL: ne' nella stringa ``url`` ne' nei parametri
+  (finirebbe nel log di accesso del backend e nei log di Infinity);
 - gli altri pannelli usano la stessa query (datasource «-- Dashboard --»):
   statistica «Righe totali» e, se c'e' una colonna testuale e un'altra
   colonna, grafico a barre del conteggio per quella colonna.
@@ -24,6 +26,8 @@ from app.shared.contracts.payloads import JsonObject
 DASHBOARD_TAGS = ("plenora", "generata")
 _UID_SAFE = re.compile(r"[^A-Za-z0-9_-]")
 GRAFANA_UID_MAX = 40
+# Intestazione del lasciapassare nella richiesta di Infinity all'endpoint dati.
+PASS_HEADER = "X-Dashboard-Pass"
 
 
 @dataclass(frozen=True)
@@ -45,16 +49,10 @@ def dashboard_uid(eseguibile_id: str) -> str:
     return _bounded_uid("plenora-", eseguibile_id)
 
 
-def folder_uid(group_id: str, *, reserved: bool) -> str:
-    """Cartella del gruppo proprietario; ``reserved`` = Eseguibili che l'admin
-    del gruppo non puo' modificare (creati da un superadmin)."""
-    suffix = "-riservata" if reserved else ""
-    base = _bounded_uid("plenora-g-", group_id)
-    return (base[: GRAFANA_UID_MAX - len(suffix)] + suffix) if suffix else base
-
-
-def team_name(group_id: str) -> str:
-    return f"admin-{group_id}"
+def folder_uid(eseguibile_id: str) -> str:
+    """Una cartella per Eseguibile: i permessi della cartella sono quelli
+    della SOLA dashboard di quell'Eseguibile (``grafana.sync.FolderAccess``)."""
+    return _bounded_uid("plenora-e-", eseguibile_id)
 
 
 def _infinity_type(logical: str) -> str:
@@ -84,7 +82,7 @@ def build_dashboard(
         "format": "table",
         "parser": "backend",
         "url": f"{data_url.rstrip('/')}/${{exec}}/rows",
-        "url_options": {"method": "GET", "params": [{"key": "pass", "value": "${pass}"}]},
+        "url_options": {"method": "GET", "headers": [{"key": PASS_HEADER, "value": "${pass}"}]},
         "root_selector": "",
         "columns": [
             {"selector": col.name, "text": col.name, "type": _infinity_type(col.logical)} for col in usable
@@ -193,10 +191,10 @@ def missing_columns(dashboard: Optional[Mapping[str, Any]], expected: Iterable[s
 
 __all__ = [
     "OutputColumnSpec",
+    "PASS_HEADER",
     "build_dashboard",
     "dashboard_uid",
     "folder_uid",
     "missing_columns",
     "referenced_columns",
-    "team_name",
 ]

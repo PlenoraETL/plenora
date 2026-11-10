@@ -132,6 +132,9 @@ def _details_response(
     data["can_edit"] = can_edit
     data.update(_dashboard_fields(record, can_edit))
     # Avvisi letti dalla dashboard in Grafana: solo a chi puo' modificare.
+    # Timeout breve dedicato e cache (``dashboard.dashboard_read_cache``):
+    # Grafana lento o giu' non ferma il dettaglio oltre 1,5 s, e al piu' una
+    # volta al minuto per dashboard.
     data["dashboard_warnings"] = (
         list(extra_warnings or []) + list(eseguibili_dashboard.dashboard_warnings(record))
         if can_edit else []
@@ -381,7 +384,7 @@ def delete_eseguibile(
     eseguibili_db.delete_eseguibile(eseguibile_id)
     # La dashboard Grafana se ne va con l'Eseguibile, best effort: Grafana
     # giu' non blocca mai l'eliminazione (registra e prosegue).
-    eseguibili_dashboard.delete_dashboard_best_effort(getattr(record, "dashboard_uid", None))
+    eseguibili_dashboard.delete_dashboard_best_effort(record)
     # DELETE risponde 204 No Content, body vuoto.
 
 

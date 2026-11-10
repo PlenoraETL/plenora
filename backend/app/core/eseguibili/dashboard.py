@@ -6,9 +6,16 @@ Raccolta: ``docs/audits/grafana-dashboard-raccolta-2026-11-11.md``.
   dalle colonne attese (``expected_output_columns``); ripubblicare non la
   tocca; eliminare l'Eseguibile la elimina in Grafana (best effort).
 - **Chi la modifica**: chi puo' modificare l'Eseguibile (``require_admin`` +
-  ``assert_can_modify`` nel router). In Grafana la stessa regola: la cartella
-  si sceglie con ``compute_can_edit`` per un admin del gruppo (Eseguibile
-  creato da un superadmin -> cartella riservata, senza team).
+  ``assert_can_modify`` nel router). In Grafana la stessa regola: una
+  cartella per Eseguibile, Edit al team ``admin-<gruppo>`` solo se
+  ``compute_can_edit`` lo concede a un admin del gruppo (un Eseguibile creato
+  da un superadmin non lo concede).
+- **Chi la vede in Grafana** (correzione 11/11/2026): chi vede l'Eseguibile
+  in Plenora, e nessun altro (``folder_access``: team ``utenti-<g>`` dei
+  gruppi proprietario e condivisi, ruolo Viewer solo con ``*``). Le
+  condivisioni che cambiano riallineano la cartella (``on_shares_changed``,
+  registrata in ``auth.share_hooks``); ruolo e team di ogni utente si
+  riallineano al forward_auth (``grafana.access``).
 - **Chi vede i dati**: solo con il lasciapassare di UNA esecuzione, emesso a
   chi l'ha lanciata (o al superadmin, come il download); i dati sono la
   copia di ``dashboard_data`` (30 minuti, 50.000 righe).
@@ -20,12 +27,18 @@ Raccolta: ``docs/audits/grafana-dashboard-raccolta-2026-11-11.md``.
 from __future__ import annotations
 
 import re
+import threading
 import time
+from dataclasses import dataclass
 from typing import Any, Iterable, List, Mapping, Optional
 from urllib.parse import urlencode
 
 from app.core.auth import db as users_db
+from app.core.auth import share_hooks
 from app.core.auth.ownership import compute_can_edit
+from app.core.auth.shares import list_resource_shares
+from app.core.auth.visibility import MAGIC_ALL
+from app.core.grafana import access as grafana_access
 from app.core.grafana import client as grafana_client
 from app.core.grafana import dashboard_builder
 from app.core.grafana import settings as grafana_settings
@@ -40,8 +53,8 @@ from . import db as eseguibili_db
 
 logger = get_logger(__name__)
 
-_SAFE_TASK_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
-_USERS_PAGE = 500
+_SAFE_TASK_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+_GROUP_USERS_MAX = 10_000
 
 
 class DashboardDisabled(RuntimeError):
@@ -74,7 +87,7 @@ def assert_enabled() -> None:
 
 
 def is_safe_task_id(task_id: object) -> bool:
-    return isinstance(task_id, str) and bool(_SAFE_TASK_ID.match(task_id)) and ".." not in task_id
+    return isinstance(task_id, str) and bool(_SAFE_TASK_ID.fullmatch(task_id)) and ".." not in task_id
 
 
 # ── Colonne attese ──────────────────────────────────────────────────────────
@@ -120,7 +133,7 @@ def iframe_path(uid: str, task_id: str, token: str) -> str:
     return _with_data(f"{grafana_settings.public_path()}/d/{uid}?orgId=1&kiosk", task_id, token)
 
 
-# ── Grafana: cartella e sincronizzazione ────────────────────────────────────
+# ── Grafana: visibilita' e sincronizzazione ─────────────────────────────────
 
 def _admin_can_modify(record: Any) -> bool:
     """La STESSA regola dell'Eseguibile (``ownership.compute_can_edit``) per un
@@ -130,42 +143,121 @@ def _admin_can_modify(record: Any) -> bool:
 
 
 def folder_for(record: Any) -> str:
-    return dashboard_builder.folder_uid(str(record.group_id), reserved=not _admin_can_modify(record))
+    """Una cartella per Eseguibile (i suoi permessi = quelli della dashboard)."""
+    return dashboard_builder.folder_uid(str(record.id))
+
+
+def folder_access(record: Any) -> grafana_sync.FolderAccess:
+    """Chi vede la dashboard in Grafana = chi vede l'Eseguibile in Plenora
+    (``auth.visibility``: gruppo proprietario + condivisioni, ``*`` = tutti;
+    il superadmin e' Admin in Grafana). Chi la modifica = la regola
+    dell'Eseguibile per un admin del gruppo proprietario."""
+    owner = str(record.group_id)
+    shares = {str(group) for group in list_resource_shares("eseguibili", str(record.id))}
+    return grafana_sync.FolderAccess(
+        viewer_groups=frozenset({owner} | {group for group in shares if group != MAGIC_ALL}),
+        everyone=MAGIC_ALL in shares,
+        editor_group=owner if _admin_can_modify(record) else None,
+    )
+
+
+def _folder_title(record: Any) -> str:
+    return f"{str(record.name)[:120]} ({record.id})"
 
 
 def _plenora(row: Any) -> grafana_sync.PlenoraUser:
     return grafana_sync.PlenoraUser(
-        username=str(row.username), role=str(row.role), group_id=str(row.group_id), active=bool(row.is_active),
+        user_id=str(row.id), username=str(row.username), role=str(row.role),
+        group_id=str(row.group_id or ""), active=bool(row.is_active),
     )
 
 
-def _all_users() -> Iterable[grafana_sync.PlenoraUser]:
-    offset = 0
-    while True:
-        page = users_db.list_all_users(limit=_USERS_PAGE, offset=offset)
-        for row in page:
-            yield _plenora(row)
-        if len(page) < _USERS_PAGE:
-            return
-        offset += _USERS_PAGE
+def _users_by_group(group_ids: Iterable[str]) -> Mapping[str, List[grafana_sync.PlenoraUser]]:
+    return {
+        group_id: [_plenora(row) for row in users_db.list_users(group_id, limit=_GROUP_USERS_MAX)]
+        for group_id in sorted(set(group_ids))
+    }
 
 
-def sync_group_for(record: Any, client: grafana_client.GrafanaApi, requester: Optional[CurrentUser] = None) -> None:
-    """Cartelle, team e ruoli del gruppo proprietario (idempotente)."""
-    group_id = str(record.group_id)
-    group = users_db.get_group(group_id)
-    group_users = [_plenora(row) for row in users_db.list_users(group_id, limit=10_000)]
-    requester_user = (
-        grafana_sync.PlenoraUser(requester.username, requester.role, requester.group_id) if requester else None
-    )
-    grafana_sync.sync_group(
-        client,
-        group_id=group_id,
-        group_title=str(getattr(group, "name", "") or group_id),
-        group_users=group_users,
-        all_users=list(_all_users()),
-        requester=requester_user,
-    )
+def sync_eseguibile(record: Any, client: grafana_client.GrafanaApi, requester: Optional[CurrentUser] = None) -> None:
+    """Cartella dell'Eseguibile con i permessi della regola, pulizia dei team
+    toccati e, se c'e', accesso di chi ha chiesto l'operazione (cosi' il link
+    di modifica funziona subito). Idempotente."""
+    access = folder_access(record)
+    grafana_sync.sync_folder(client, folder_uid=folder_for(record), title=_folder_title(record), access=access)
+    groups = set(access.viewer_groups) | ({access.editor_group} if access.editor_group else set())
+    grafana_sync.prune_teams(client, access, _users_by_group(groups))
+    if requester is not None:
+        row = users_db.get_user(requester.user_id)
+        if row is not None and row.is_active:
+            grafana_access.forget(str(row.id))
+            grafana_access.ensure_access(_plenora(row))
+
+
+def on_shares_changed(eseguibile_id: str) -> None:
+    """Condivisioni dell'Eseguibile cambiate (``auth.share_hooks``): la
+    cartella in Grafana si riallinea subito. Grafana giu': la condivisione
+    resta scritta, il log lo dice e la cartella si riallinea alla prossima
+    creazione o «Modifica in Grafana» (punto aperto dichiarato nel piano)."""
+    if not grafana_settings.enabled():
+        return
+    record = eseguibili_db.get_eseguibile(eseguibile_id)
+    if record is None or not getattr(record, "dashboard_uid", None):
+        return
+    sync_eseguibile(record, grafana_client.get_client())
+
+
+share_hooks.register("eseguibili", on_shares_changed)
+
+
+# ── Avvisi: lettura della dashboard con timeout breve e cache ──────────────
+
+_WARN_OK = "ok"
+_WARN_MISSING = "missing"
+_WARN_UNAVAILABLE = "unavailable"
+
+
+class _DashboardReadCache:
+    """Dashboard lette da Grafana per gli avvisi del dettaglio: timeout
+    dedicato (``GRAFANA_WARNINGS_TIMEOUT_SECONDS``) e risultato in cache
+    (``GRAFANA_WARNINGS_CACHE_SECONDS``), anche quando Grafana non risponde:
+    il dettaglio di un Eseguibile non aspetta mai piu' del timeout breve, e
+    al piu' una volta per intervallo."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, tuple[float, str, Optional[Mapping[str, Any]]]] = {}
+
+    def get(self, uid: str, *, now: Optional[float] = None) -> tuple[str, Optional[Mapping[str, Any]]]:
+        current = time.monotonic() if now is None else now
+        with self._lock:
+            entry = self._entries.get(uid)
+        if entry is not None and entry[0] > current:
+            return entry[1], entry[2]
+        try:
+            found = grafana_client.get_client(timeout=grafana_settings.warnings_timeout_seconds()).get_dashboard(uid)
+            status, dashboard = (_WARN_MISSING, None) if found is None else (_WARN_OK, found["dashboard"])
+        except (grafana_client.GrafanaUnavailable, grafana_client.GrafanaError, grafana_client.GrafanaDisabled):
+            status, dashboard = _WARN_UNAVAILABLE, None
+        self.put(uid, status, dashboard, now=current)
+        return status, dashboard
+
+    def put(self, uid: str, status: str, dashboard: Optional[Mapping[str, Any]], *, now: Optional[float] = None) -> None:
+        current = time.monotonic() if now is None else now
+        with self._lock:
+            if len(self._entries) > 10_000:
+                self._entries = {k: v for k, v in self._entries.items() if v[0] > current}
+            self._entries[uid] = (current + grafana_settings.warnings_cache_seconds(), status, dashboard)
+
+    def forget(self, uid: Optional[str] = None) -> None:
+        with self._lock:
+            if uid is None:
+                self._entries.clear()
+            else:
+                self._entries.pop(uid, None)
+
+
+dashboard_read_cache = _DashboardReadCache()
 
 
 # ── Operazioni ──────────────────────────────────────────────────────────────
@@ -184,49 +276,59 @@ def create_dashboard(record: Any, requester: CurrentUser) -> Any:
         data_url=grafana_settings.data_url(),
         datasource_uid=grafana_settings.datasource_uid(),
     )
-    sync_group_for(record, client, requester)
+    sync_eseguibile(record, client, requester)
     client.upsert_dashboard(dashboard, folder_uid=folder_for(record), message="generata da Plenora")
+    dashboard_read_cache.put(uid, _WARN_OK, dashboard)
     updated = eseguibili_db.set_dashboard_uid(record.id, uid)
     return updated if updated is not None else record
 
 
+def _delete_in_grafana(client: grafana_client.GrafanaApi, record: Any) -> None:
+    client.delete_dashboard(str(record.dashboard_uid))
+    client.delete_folder(folder_for(record))
+    dashboard_read_cache.forget(str(record.dashboard_uid))
+
+
 def delete_dashboard(record: Any) -> Any:
-    """Elimina la dashboard (Grafana 404 = gia' eliminata) e la slega."""
+    """Elimina dashboard e cartella (Grafana 404 = gia' eliminate) e la slega."""
     assert_enabled()
     if not record.dashboard_uid:
         raise DashboardMissing("L'Eseguibile non ha una dashboard")
-    grafana_client.get_client().delete_dashboard(str(record.dashboard_uid))
+    _delete_in_grafana(grafana_client.get_client(), record)
     updated = eseguibili_db.set_dashboard_uid(record.id, None)
     return updated if updated is not None else record
 
 
-def delete_dashboard_best_effort(dashboard_uid: Optional[str]) -> None:
+def delete_dashboard_best_effort(record: Any) -> None:
     """Eliminazione dell'Eseguibile: mai bloccarla se Grafana non risponde."""
-    if not dashboard_uid or not grafana_settings.enabled():
+    if record is None or not getattr(record, "dashboard_uid", None) or not grafana_settings.enabled():
         return
     try:
-        grafana_client.get_client().delete_dashboard(str(dashboard_uid))
+        _delete_in_grafana(grafana_client.get_client(), record)
     except Exception:
         logger.warning(
-            f"[dashboard] eliminazione della dashboard {dashboard_uid} in Grafana non riuscita: resta in Grafana",
+            f"[dashboard] eliminazione della dashboard {record.dashboard_uid} in Grafana non riuscita: resta in Grafana",
             exc_info=True,
         )
 
 
 def edit_link(record: Any, requester: CurrentUser, *, task_id: Optional[str] = None) -> Mapping[str, object]:
-    """«Modifica in Grafana»: sincronizza (team, cartella, utente) e
+    """«Modifica in Grafana»: sincronizza (cartella, team, utente) e
     restituisce il link; con ``task_id`` anche i dati di quell'esecuzione."""
     assert_enabled()
     if not record.dashboard_uid:
         raise DashboardMissing("L'Eseguibile non ha una dashboard")
     uid = str(record.dashboard_uid)
     client = grafana_client.get_client()
-    sync_group_for(record, client, requester)
+    sync_eseguibile(record, client, requester)
     entry = client.get_dashboard(uid)
     if entry is None:
+        dashboard_read_cache.put(uid, _WARN_MISSING, None)
         raise DashboardMissing("La dashboard non esiste piu' in Grafana: eliminala e ricreala")
     current = entry["dashboard"]
-    # La cartella segue la regola anche se il creatore e' cambiato.
+    dashboard_read_cache.put(uid, _WARN_OK, current)
+    # La cartella segue la regola (anche per dashboard nate in una cartella
+    # di gruppo della versione precedente).
     folder = folder_for(record)
     if entry.get("folder_uid") != folder:
         client.upsert_dashboard(current, folder_uid=folder, message="cartella sincronizzata da Plenora")
@@ -242,17 +344,17 @@ def edit_link(record: Any, requester: CurrentUser, *, task_id: Optional[str] = N
 
 
 def dashboard_warnings(record: Any, *, dashboard: Optional[Mapping[str, Any]] = None) -> List[Mapping[str, object]]:
-    """Colonne usate dalla dashboard che non sono tra le colonne attese."""
+    """Colonne usate dalla dashboard che non sono tra le colonne attese.
+    Senza ``dashboard`` la legge da Grafana con timeout breve e cache
+    (:data:`dashboard_read_cache`)."""
     if not getattr(record, "dashboard_uid", None) or not grafana_settings.enabled():
         return []
     if dashboard is None:
-        try:
-            entry = grafana_client.get_client().get_dashboard(str(record.dashboard_uid))
-        except (grafana_client.GrafanaUnavailable, grafana_client.GrafanaError, grafana_client.GrafanaDisabled):
+        status, dashboard = dashboard_read_cache.get(str(record.dashboard_uid))
+        if status == _WARN_UNAVAILABLE:
             return [{"column": None, "motivo": "Dashboard non verificabile: Grafana non risponde"}]
-        if entry is None:
+        if status == _WARN_MISSING or dashboard is None:
             return [{"column": None, "motivo": "La dashboard non esiste piu' in Grafana: eliminala e ricreala"}]
-        dashboard = entry["dashboard"]
     expected = expected_output_columns(record)
     if expected is None:
         return []
@@ -300,8 +402,18 @@ def issue_pass(record: Any, task_id: str, user: CurrentUser, *, now: Optional[fl
     }
 
 
-def read_rows(task_id: str, token: Optional[str], *, now: Optional[float] = None) -> bytes:
-    """Endpoint dati: la decisione d'accesso e' SOLO il lasciapassare."""
+@dataclass(frozen=True)
+class ReadGrant:
+    """Lettura dei dati autorizzata dal lasciapassare (prima di contarla)."""
+
+    task_id: str
+    group_id: str
+    user_id: str
+
+
+def authorize_read(task_id: str, token: Optional[str], *, now: Optional[float] = None) -> ReadGrant:
+    """Endpoint dati: la decisione d'accesso e' SOLO il lasciapassare (firma,
+    tipo, scadenza, task del path, utente attivo, esecuzione sua)."""
     assert_enabled()
     if not is_safe_task_id(task_id):
         raise ValueError("task_id non valido")
@@ -322,7 +434,16 @@ def read_rows(task_id: str, token: Optional[str], *, now: Optional[float] = None
         raise PassRejected("esecuzione di un altro Eseguibile")
     if owner.get("user_id") != user.id and user.role != "superadmin":
         raise PassRejected("esecuzione di un altro utente")
-    return dashboard_data.read(task_id, group_id=str(record.group_id), now=now)
+    return ReadGrant(task_id=task_id, group_id=str(record.group_id), user_id=str(user.id))
+
+
+def read_granted(grant: ReadGrant, *, now: Optional[float] = None) -> bytes:
+    return dashboard_data.read(grant.task_id, group_id=grant.group_id, now=now)
+
+
+def read_rows(task_id: str, token: Optional[str], *, now: Optional[float] = None) -> bytes:
+    """Autorizza e legge (l'endpoint conta le letture tra i due passi)."""
+    return read_granted(authorize_read(task_id, token, now=now), now=now)
 
 
 __all__ = [
@@ -330,19 +451,25 @@ __all__ = [
     "DashboardExists",
     "DashboardMissing",
     "PassRejected",
+    "ReadGrant",
     "TaskNotOwned",
     "assert_enabled",
+    "authorize_read",
     "create_dashboard",
+    "dashboard_read_cache",
     "dashboard_warnings",
     "delete_dashboard",
     "delete_dashboard_best_effort",
     "edit_link",
     "expected_output_columns",
+    "folder_access",
     "folder_for",
     "iframe_path",
     "is_safe_task_id",
     "issue_pass",
+    "on_shares_changed",
+    "read_granted",
     "read_rows",
-    "sync_group_for",
+    "sync_eseguibile",
     "view_path",
 ]

@@ -172,7 +172,11 @@ function Test-GrafanaProxy([string]$BaseUrl) {
     }
     if ($status -ne 401) { Fail "/grafana senza sessione Plenora ha risposto HTTP $status (atteso 401) su $url" }
     $csp = if ($headers) { [string]$headers['Content-Security-Policy'] } else { '' }
-    if ($csp -ne "frame-ancestors 'self'") { Fail "/grafana senza le intestazioni proprie (CSP: '$csp')" }
+    # CSP propria del ramo /grafana (frontend_headers.GRAFANA_CSP): incorporabile
+    # solo da Plenora e nessun caricamento fuori origine (lasciapassare).
+    foreach ($directive in @("frame-ancestors 'self'", "default-src 'self'", "img-src 'self' data: blob:", "connect-src 'self'")) {
+        if ($csp -notlike "*$directive*") { Fail "/grafana senza le intestazioni proprie (CSP senza '$directive': '$csp')" }
+    }
     if ($headers['X-Frame-Options']) { Fail "/grafana con X-Frame-Options ($($headers['X-Frame-Options'])): non incorporabile" }
     if ($headers['Referrer-Policy'] -ne 'no-referrer') { Fail '/grafana senza Referrer-Policy: no-referrer' }
     Ok "/grafana senza sessione Plenora: 401 con intestazioni proprie ($url)"

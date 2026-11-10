@@ -24,7 +24,7 @@ from app.shared.error_envelope import (
     build_error_response,
     normalize_http_exception_detail,
 )
-from app.utils.logger import get_logger
+from app.utils.logger import get_logger, install_access_log_redaction
 
 
 logger = get_logger(__name__)
@@ -90,6 +90,8 @@ def create_app(
     still boots the production ASGI app.
     """
     resolved_deps = deps or _default_deps()
+    # Log di accesso di uvicorn senza lasciapassare (forward_auth di /grafana).
+    install_access_log_redaction()
 
     # Bootstrap must complete before any `app.core.*` module graph is loaded.
     resolved_deps.bootstrap()

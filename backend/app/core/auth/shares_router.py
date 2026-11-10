@@ -14,6 +14,7 @@ from app.core.auth.visibility import (
     ShareableResourceOwner,
     load_shareable_resource_owner,
 )
+from app.core.auth import share_hooks
 from app.core.auth.shares import (
     list_resource_shares,
     set_resource_shares,
@@ -123,6 +124,7 @@ def set_shares(
     """
     owner = _check_owner_access(resource_type, resource_id, current_user)
     set_resource_shares(resource_type, resource_id, data.group_ids)
+    share_hooks.notify(resource_type, resource_id)
     return SharesResponse(
         resource_type=resource_type,
         resource_id=resource_id,
@@ -145,6 +147,7 @@ def add_share(
     """
     owner = _check_owner_access(resource_type, resource_id, current_user)
     add_resource_share(resource_type, resource_id, group_id)
+    share_hooks.notify(resource_type, resource_id)
     return SharesResponse(
         resource_type=resource_type,
         resource_id=resource_id,
@@ -164,6 +167,7 @@ def remove_share(
     """Rimuove una singola riga di sharing."""
     owner = _check_owner_access(resource_type, resource_id, current_user)
     remove_resource_share(resource_type, resource_id, group_id)
+    share_hooks.notify(resource_type, resource_id)
     return SharesResponse(
         resource_type=resource_type,
         resource_id=resource_id,
