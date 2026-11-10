@@ -18,7 +18,8 @@
 # Parametri principali: -WorkerProcesses/-WorkerThreads,
 # -SplitWorkerServices/-DataWorkerServices/-DataWorkerThreads,
 # -AdminUsername/-AdminPassword (-SkipAdminBootstrap),
-# -FrontendPort, -PgSuperPassword. Non-interattivo via env
+# -FrontendPort, -PgSuperPassword, -InstallGrafana (+ -GrafanaArchive /
+# -GrafanaInfinityArchive offline). Non-interattivo via env
 # PLENORA_BOOTSTRAP_ADMIN_* / PLENORA_INSTALL_WORKER_*.
 #
 # Ogni step stampa [STEP]/[OK]/[FAIL] e si ferma al primo errore.
@@ -65,6 +66,17 @@ param(
     # Deploy rapido: installa/aggiorna solo l'exporter e riavvia gli eventuali
     # servizi applicativi, senza rieseguire PostgreSQL/conda/frontend.
     [switch]$XlsxExporterOnly,
+    # Grafana OSS opzionale (vista dashboard degli Eseguibili): servizio
+    # plenora-grafana su 127.0.0.1:3300, servito da Caddy su /grafana solo
+    # agli utenti Plenora (forward_auth). Richiede -InstallFrontend.
+    # Offline: -GrafanaArchive / -GrafanaInfinityArchive con gli zip gia'
+    # scaricati (verificati con gli stessi SHA-256 fissi del download).
+    [switch]$InstallGrafana,
+    [string]$GrafanaArchive = '',
+    [string]$GrafanaInfinityArchive = '',
+    # URL pubblico di Grafana (root_url), es. https://plenora.ente.it/grafana/.
+    # Vuoto = http://localhost[:porta]/grafana/ (i link interni sono relativi).
+    [string]$GrafanaRootUrl = '',
     # W5 — switch a ENVIRONMENT=production coi gates attivi (richiede
     # object storage configurato localmente o tramite endpoint S3 nel .env).
     [switch]$Production
@@ -426,6 +438,84 @@ function ConvertTo-ServiceEnvXml {
     }) -join "`r`n")
 }
 
+function Get-EnvFileValue {
+    # Valore di KEY nel .env ('' se assente o vuoto).
+    param([string]$File, [string]$Key)
+    if (-not (Test-Path -LiteralPath $File)) { return '' }
+    foreach ($line in Get-Content -LiteralPath $File) {
+        if ($line -match "^$([regex]::Escape($Key))=(.*)$") { return $Matches[1].Trim() }
+    }
+    return ''
+}
+
+# -----------------------------------------------------------------------------
+# Grafana OSS (opzionale): artefatti con URL e SHA-256 FISSI. Ogni archivio,
+# scaricato o fornito offline, passa da Get-VerifiedArchive.
+# -----------------------------------------------------------------------------
+$GrafanaVersion = '13.3.0'
+$GrafanaZipUrl = 'https://dl.grafana.com/oss/release/grafana-13.3.0.windows-amd64.zip'
+$GrafanaZipSha256 = '133f0a0c7b905a6c7e4f3df596cf4df535ca78f1e3ef7e5be5f3f2178a51f75d'
+$InfinityPluginId = 'yesoreyeram-infinity-datasource'
+$InfinityVersion = '4.1.6'
+$InfinityZipUrl = 'https://grafana.com/api/plugins/yesoreyeram-infinity-datasource/versions/4.1.6/download?os=windows&arch=amd64'
+$InfinityZipSha256 = 'a8c76c7e54ddd26adbdbc9e4a97568ebbf94316236acdba475a93c3a7a44ca18'
+# Zip (~500 MB) + estrazione (~900 MB) + plugin: 1,5 GB liberi prima di iniziare.
+$GrafanaMinFreeBytes = 1.5GB
+$GrafanaPort = 3300
+
+function Get-VerifiedArchive {
+    # Archivio offline (-LocalPath) oppure download dall'URL fisso; in
+    # entrambi i casi SHA-256 confrontato col valore fisso. Un download
+    # non valido viene cancellato; un file offline non valido no (e' dell'operatore).
+    param([string]$Label, [string]$LocalPath, [string]$Url, [string]$Sha256, [string]$DownloadTo)
+    if ($LocalPath) {
+        if (-not (Test-Path -LiteralPath $LocalPath -PathType Leaf)) { Fail "${Label}: archivio offline non trovato: $LocalPath" }
+        $archive = (Resolve-Path -LiteralPath $LocalPath).Path
+        Write-Host "  ${Label}: archivio offline $archive"
+    } else {
+        $archive = $DownloadTo
+        Write-Host "  ${Label}: download da $Url"
+        $previousProgress = $ProgressPreference
+        $ProgressPreference = 'SilentlyContinue'   # PS 5.1: la barra rallenta il download di 10x
+        try { Invoke-WebRequest $Url -OutFile $archive -UseBasicParsing }
+        catch { Fail "${Label}: download fallito ($($_.Exception.Message)). Senza internet usare l'archivio offline (vedi docs/ops/install-windows.md)" }
+        finally { $ProgressPreference = $previousProgress }
+    }
+    $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $Sha256) {
+        if (-not $LocalPath) { Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue }
+        Fail "${Label}: SHA-256 non valido: atteso $Sha256, ottenuto $actual"
+    }
+    Ok "${Label}: SHA-256 verificato"
+    return $archive
+}
+
+function Expand-ZipInto {
+    # Estrazione .NET (Expand-Archive di PS 5.1 e' lentissimo su 500 MB).
+    param([string]$Archive, [string]$Destination)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    if (Test-Path -LiteralPath $Destination) { Remove-Item -LiteralPath $Destination -Recurse -Force }
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($Archive, $Destination)
+}
+
+function Get-InstalledPluginVersion {
+    param([string]$PluginDir)
+    $manifest = Join-Path $PluginDir 'plugin.json'
+    if (-not (Test-Path -LiteralPath $manifest)) { return '' }
+    try { return [string]((Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json).info.version) }
+    catch { return '' }
+}
+
+function Get-IniValue {
+    # Valore di `key = valore` in un ini generato da noi ('' se assente).
+    param([string]$File, [string]$Key)
+    if (-not (Test-Path -LiteralPath $File)) { return '' }
+    foreach ($line in Get-Content -LiteralPath $File) {
+        if ($line -match "^\s*$([regex]::Escape($Key))\s*=\s*(\S+)\s*$") { return $Matches[1] }
+    }
+    return ''
+}
+
 if ($WorkerProcesses -lt 1) { Fail '-WorkerProcesses deve essere >= 1' }
 if ($WorkerThreads -lt 1) { Fail '-WorkerThreads deve essere >= 1' }
 if ($DataWorkerServices -lt 1) { Fail '-DataWorkerServices deve essere >= 1' }
@@ -433,6 +523,18 @@ if ($DataWorkerThreads -lt 1) { Fail '-DataWorkerThreads deve essere >= 1' }
 if ($ControlWorkerThreads -lt 1) { Fail '-ControlWorkerThreads deve essere >= 1' }
 if ($WorkerQueuePrefetch -lt 1) { Fail '-WorkerQueuePrefetch deve essere >= 1' }
 if ($WorkerDelayQueuePrefetch -lt 1) { Fail '-WorkerDelayQueuePrefetch deve essere >= 1' }
+if ($InstallGrafana) {
+    # Il blocco /grafana vive nel Caddyfile, che solo -InstallFrontend riscrive.
+    if (-not $InstallFrontend) { Fail '-InstallGrafana richiede -InstallFrontend (il Caddyfile con /grafana e'' generato li'')' }
+    foreach ($offline in @($GrafanaArchive, $GrafanaInfinityArchive)) {
+        if ($offline -and -not (Test-Path -LiteralPath $offline -PathType Leaf)) { Fail "Archivio offline Grafana non trovato: $offline" }
+    }
+    if ($GrafanaRootUrl -and $GrafanaRootUrl -notmatch '^https?://[^/\s"]+/grafana/$') {
+        Fail "-GrafanaRootUrl deve essere http(s)://host[:porta]/grafana/ (ricevuto: $GrafanaRootUrl)"
+    }
+} elseif (($GrafanaArchive -or $GrafanaInfinityArchive -or $GrafanaRootUrl)) {
+    Fail '-GrafanaArchive/-GrafanaInfinityArchive/-GrafanaRootUrl hanno effetto solo con -InstallGrafana'
+}
 
 if ($XlsxExporterOnly) {
     Step 'Deploy rapido acceleratore XLSX nativo'
@@ -922,6 +1024,268 @@ if ($InstallObjectStorage) {
 }
 
 # =============================================================================
+# Grafana OSS opzionale — vista dashboard degli Eseguibili
+# =============================================================================
+# Servizio plenora-grafana in ascolto SOLO su 127.0.0.1:3300; il browser lo
+# raggiunge da Caddy su /grafana (blocco generato in W4), dove Plenora decide
+# chi e' l'utente (forward_auth -> X-WEBAUTH-USER/ROLE, auth.proxy di Grafana).
+# Niente accesso anonimo, niente form di login, niente basic auth: il
+# bootstrap usa lo stesso auth.proxy da localhost con un login amministratore
+# casuale (mai uguale a uno username Plenora).
+if ($InstallGrafana) {
+    Step "Grafana OSS $GrafanaVersion + Infinity $InfinityVersion (servizio plenora-grafana su 127.0.0.1:$GrafanaPort)"
+
+    $grafanaSvcDir = Join-Path $ServicesRoot 'plenora-grafana'
+    $grafanaHome = Join-Path $grafanaSvcDir "grafana-$GrafanaVersion"
+    $grafanaExe = Join-Path $grafanaHome 'bin\grafana.exe'
+    $grafanaPlugins = Join-Path $grafanaSvcDir 'plugins'
+    $grafanaLogs = Join-Path $grafanaSvcDir 'log'
+    $grafanaData = Join-Path $DataDir 'grafana'
+    $grafanaIni = Join-Path $grafanaSvcDir 'custom.ini'
+    $infinityDir = Join-Path $grafanaPlugins $InfinityPluginId
+    $grafanaDownloads = Join-Path $grafanaSvcDir '_download'
+    New-Item -ItemType Directory -Force $grafanaSvcDir, $grafanaPlugins, $grafanaLogs, $grafanaData | Out-Null
+
+    # File in uso: il servizio va fermato prima di toccare binari, plugin e ini.
+    if (Get-Service -Name 'plenora-grafana' -ErrorAction SilentlyContinue) {
+        Stop-Service plenora-grafana -Force -ErrorAction SilentlyContinue
+    }
+
+    $needGrafana = -not (Test-Path -LiteralPath $grafanaExe)
+    $needInfinity = (Get-InstalledPluginVersion $infinityDir) -ne $InfinityVersion
+    if ($needGrafana -or $needInfinity) {
+        $drive = New-Object System.IO.DriveInfo ([IO.Path]::GetPathRoot($grafanaSvcDir))
+        if ($drive.AvailableFreeSpace -lt $GrafanaMinFreeBytes) {
+            Fail ("Spazio insufficiente su $($drive.Name): servono 1,5 GB liberi per Grafana, disponibili " +
+                  "$([math]::Round($drive.AvailableFreeSpace / 1GB, 2)) GB")
+        }
+        New-Item -ItemType Directory -Force $grafanaDownloads | Out-Null
+        try {
+            if ($needGrafana) {
+                $zip = Get-VerifiedArchive -Label "Grafana $GrafanaVersion" -LocalPath $GrafanaArchive `
+                    -Url $GrafanaZipUrl -Sha256 $GrafanaZipSha256 `
+                    -DownloadTo (Join-Path $grafanaDownloads "grafana-$GrafanaVersion.windows-amd64.zip")
+                $staging = Join-Path $grafanaDownloads 'grafana-extract'
+                Expand-ZipInto -Archive $zip -Destination $staging
+                $extracted = Join-Path $staging "grafana-$GrafanaVersion"
+                if (-not (Test-Path -LiteralPath (Join-Path $extracted 'bin\grafana.exe'))) {
+                    Fail "Archivio Grafana inatteso: manca grafana-$GrafanaVersion\bin\grafana.exe"
+                }
+                if (Test-Path -LiteralPath $grafanaHome) { Remove-Item -LiteralPath $grafanaHome -Recurse -Force }
+                Move-Item -LiteralPath $extracted -Destination $grafanaHome
+            }
+            if ($needInfinity) {
+                $zip = Get-VerifiedArchive -Label "Plugin Infinity $InfinityVersion" -LocalPath $GrafanaInfinityArchive `
+                    -Url $InfinityZipUrl -Sha256 $InfinityZipSha256 `
+                    -DownloadTo (Join-Path $grafanaDownloads "$InfinityPluginId-$InfinityVersion.windows-amd64.zip")
+                $staging = Join-Path $grafanaDownloads 'infinity-extract'
+                Expand-ZipInto -Archive $zip -Destination $staging
+                $extracted = Join-Path $staging $InfinityPluginId
+                if ((Get-InstalledPluginVersion $extracted) -ne $InfinityVersion) {
+                    Fail "Archivio Infinity inatteso: manca $InfinityPluginId\plugin.json con versione $InfinityVersion"
+                }
+                if (Test-Path -LiteralPath $infinityDir) { Remove-Item -LiteralPath $infinityDir -Recurse -Force }
+                Move-Item -LiteralPath $extracted -Destination $infinityDir
+            }
+        } finally {
+            Remove-Item -LiteralPath $grafanaDownloads -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Ok "Grafana $GrafanaVersion in $grafanaHome, Infinity $InfinityVersion in $infinityDir"
+
+    # Valori da conservare tra un'esecuzione e l'altra, letti dal custom.ini
+    # precedente: secret_key cifra i campi segreti del datasource (cambiarla li
+    # renderebbe illeggibili); admin_user e' il login dell'utente creato al
+    # primo avvio (cambiarlo creerebbe un utente nuovo, non amministratore).
+    $grafanaAdminLogin = Get-IniValue -File $grafanaIni -Key 'admin_user'
+    if (-not $grafanaAdminLogin) { $grafanaAdminLogin = 'plenora-grafana-admin-' + (New-RandomSecret).Substring(0, 16).ToLowerInvariant() }
+    $grafanaSecretKey = Get-IniValue -File $grafanaIni -Key 'secret_key'
+    if (-not $grafanaSecretKey) { $grafanaSecretKey = New-RandomSecret }
+    # Usata solo alla creazione del database; con form di login e basic auth
+    # spenti non serve a nessuno, ma non deve essere quella predefinita.
+    $grafanaAdminPassword = Get-IniValue -File $grafanaIni -Key 'admin_password'
+    if (-not $grafanaAdminPassword) { $grafanaAdminPassword = New-RandomSecret }
+    $grafanaPortSuffix = if ($FrontendPort -eq 80) { '' } else { ":$FrontendPort" }
+    $grafanaRoot = if ($GrafanaRootUrl) { $GrafanaRootUrl } else { "http://localhost$grafanaPortSuffix/grafana/" }
+    $grafanaCookieSecure = if ($grafanaRoot -like 'https://*') { 'true' } else { 'false' }
+    $grafanaDataIni = $grafanaData.Replace('\', '/')
+    $grafanaLogsIni = $grafanaLogs.Replace('\', '/')
+    $grafanaPluginsIni = $grafanaPlugins.Replace('\', '/')
+
+    @"
+; Generato da scripts/install-native.ps1 (-InstallGrafana): non modificare a mano.
+; Grafana OSS per la vista dashboard degli Eseguibili, dietro Caddy su /grafana.
+[paths]
+data = $grafanaDataIni
+logs = $grafanaLogsIni
+plugins = $grafanaPluginsIni
+
+[server]
+http_addr = 127.0.0.1
+http_port = $GrafanaPort
+root_url = $grafanaRoot
+serve_from_sub_path = true
+enforce_domain = false
+router_logging = false
+
+[database]
+type = sqlite3
+
+[analytics]
+reporting_enabled = false
+check_for_updates = false
+check_for_plugin_updates = false
+feedback_links_enabled = false
+
+[news]
+news_feed_enabled = false
+
+[security]
+admin_user = $grafanaAdminLogin
+admin_password = $grafanaAdminPassword
+secret_key = $grafanaSecretKey
+disable_initial_admin_creation = false
+allow_embedding = true
+cookie_secure = $grafanaCookieSecure
+cookie_samesite = strict
+disable_gravatar = true
+hide_version = true
+
+[users]
+allow_sign_up = false
+allow_org_create = false
+auto_assign_org = true
+auto_assign_org_id = 1
+auto_assign_org_role = Viewer
+viewers_can_edit = false
+default_theme = light
+default_language = it-IT
+
+[auth]
+disable_login_form = true
+disable_signout_menu = true
+
+[auth.basic]
+enabled = false
+
+[auth.anonymous]
+enabled = false
+
+[auth.proxy]
+enabled = true
+header_name = X-WEBAUTH-USER
+header_property = username
+auto_sign_up = true
+sync_ttl = 15
+whitelist = 127.0.0.1, ::1
+headers = Role:X-WEBAUTH-ROLE
+enable_login_token = false
+
+[snapshots]
+enabled = false
+
+[public_dashboards]
+enabled = false
+
+[explore]
+enabled = false
+
+[unified_alerting]
+enabled = false
+
+[plugins]
+plugin_admin_enabled = false
+public_key_retrieval_disabled = true
+preinstall_disabled = true
+
+[live]
+max_connections = 0
+
+[log]
+mode = file
+level = info
+"@ | Set-Content -Encoding ascii $grafanaIni
+    # secret_key e credenziali amministratore: leggibili solo da Administrators + SYSTEM.
+    icacls $grafanaIni /inheritance:r /grant:r '*S-1-5-32-544:F' '*S-1-5-18:F' | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail "icacls su $grafanaIni exit=$LASTEXITCODE" }
+
+    $grafanaXml = @"
+<service>
+  <id>plenora-grafana</id>
+  <name>Plenora Grafana</name>
+  <description>Grafana OSS per la vista dashboard degli Eseguibili (solo 127.0.0.1:$GrafanaPort, pubblicato da Caddy su /grafana)</description>
+  <executable>$grafanaExe</executable>
+  <arguments>server --homepath $grafanaHome --config $grafanaIni</arguments>
+  <workingdirectory>$grafanaHome</workingdirectory>
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="10 sec"/>
+  <stoptimeout>30 sec</stoptimeout>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+</service>
+"@
+    Install-WinSWService -Id 'plenora-grafana' -Xml $grafanaXml
+    Start-Service plenora-grafana
+
+    $up = $false
+    foreach ($i in 1..60) {
+        $tnc = Test-NetConnection 127.0.0.1 -Port $GrafanaPort -WarningAction SilentlyContinue
+        if ($tnc.TcpTestSucceeded) { $up = $true; break }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $up) { Fail "Grafana non in ascolto su 127.0.0.1:$GrafanaPort entro 120s (vedi $grafanaLogs\grafana.log)" }
+    Ok "Grafana in ascolto su 127.0.0.1:$GrafanaPort"
+
+    # Segreti verso il backend (solo segreti nel .env: GRAFANA_ENABLED e ogni
+    # altra impostazione restano nei DEFAULTS di config.py). Riusati se presenti.
+    $grafanaEnvChanged = $false
+    foreach ($secretKey in @('GRAFANA_DATA_SECRET', 'DASHBOARD_PASS_SECRET')) {
+        if (-not (Get-EnvFileValue -File $envFile -Key $secretKey)) {
+            Set-EnvValue -File $envFile -Key $secretKey -Value (New-RandomSecret)
+            $grafanaEnvChanged = $true
+        }
+    }
+
+    # Bootstrap idempotente via API (scripts/grafana_bootstrap.py, solo
+    # libreria standard): org 1 «Plenora Dashboard», service account Admin +
+    # token, datasource Infinity uid plenora-infinity. I segreti passano per
+    # variabili d'ambiente del processo, mai sulla riga di comando.
+    $existingGrafanaToken = Get-EnvFileValue -File $envFile -Key 'GRAFANA_SERVICE_TOKEN'
+    $env:GRAFANA_BOOTSTRAP_ADMIN_LOGIN = $grafanaAdminLogin
+    $env:GRAFANA_DATA_SECRET = Get-EnvFileValue -File $envFile -Key 'GRAFANA_DATA_SECRET'
+    $env:GRAFANA_SERVICE_TOKEN = $existingGrafanaToken
+    try {
+        $bootstrapOut = & $condaBat run -n $CondaEnv --cwd $RepoRoot python scripts\grafana_bootstrap.py `
+            --grafana-url "http://127.0.0.1:$GrafanaPort/grafana" --backend-url 'http://127.0.0.1:5004'
+        $bootstrapExit = $LASTEXITCODE
+    } finally {
+        Remove-Item Env:\GRAFANA_BOOTSTRAP_ADMIN_LOGIN, Env:\GRAFANA_DATA_SECRET, Env:\GRAFANA_SERVICE_TOKEN -ErrorAction SilentlyContinue
+    }
+    $bootstrapResult = $bootstrapOut | Where-Object { $_ -match '^\{' } | Select-Object -Last 1
+    if ($bootstrapExit -ne 0 -or -not $bootstrapResult) {
+        $bootstrapOut | Where-Object { $_ -notmatch '^\{' } | ForEach-Object { Write-Host "    $_" }
+        Fail "Bootstrap Grafana fallito (exit=$bootstrapExit)"
+    }
+    $grafanaToken = ($bootstrapResult | ConvertFrom-Json).service_token
+    if (-not $grafanaToken) { Fail 'Bootstrap Grafana senza token del service account' }
+    if ($grafanaToken -ne $existingGrafanaToken) {
+        Set-EnvValue -File $envFile -Key 'GRAFANA_SERVICE_TOKEN' -Value $grafanaToken
+        $grafanaEnvChanged = $true
+    }
+    $bootstrapOut | Where-Object { $_ -notmatch '^\{' } | ForEach-Object { Write-Host "    $_" }
+    if ($grafanaEnvChanged) {
+        $backendSvc = Get-Service plenora-backend -ErrorAction SilentlyContinue
+        if ($backendSvc -and $backendSvc.Status -eq 'Running') { Restart-Service plenora-backend }
+    }
+    Ok 'Grafana configurato: org «Plenora Dashboard», service account, datasource plenora-infinity'
+} elseif (Get-Service -Name 'plenora-grafana' -ErrorAction SilentlyContinue) {
+    Write-Warning ('plenora-grafana e'' installato ma manca -InstallGrafana: con -InstallFrontend ' +
+                   'il Caddyfile viene riscritto SENZA /grafana. Rilanciare con -InstallGrafana per mantenerlo.')
+}
+
+# =============================================================================
 # W4 — Frontend: build Vite + Caddy come servizio Windows
 # =============================================================================
 if ($InstallFrontend) {
@@ -948,7 +1312,9 @@ if ($InstallFrontend) {
     New-Item -ItemType Directory -Force $caddySvcDir | Out-Null
     $headersJson = Join-Path $caddySvcDir 'security-headers.json'
     $headersCaddy = Join-Path $caddySvcDir 'security-headers.caddy'
+    $grafanaHeadersCaddy = Join-Path $caddySvcDir 'grafana-headers.caddy'
     $headerOutputs = [ordered]@{ json = $headersJson; caddy = $headersCaddy }
+    if ($InstallGrafana) { $headerOutputs['caddy-grafana'] = $grafanaHeadersCaddy }
     foreach ($fmt in $headerOutputs.Keys) {
         $out = $headerOutputs[$fmt]
         & $condaBat run -n $CondaEnv --cwd $BackendDir python -m app.core.security.frontend_headers `
@@ -1005,27 +1371,55 @@ if ($InstallFrontend) {
     # Cache: i file in /assets hanno l'hash nel nome (immutabili, e se
     # mancano 404, non index.html); index.html va sempre riconvalidato,
     # altrimenti dopo un deploy il browser chiede i file della build vecchia.
-    # Intestazioni di sicurezza: `import` a livello del sito, quindi su ogni
-    # risposta (statici, index.html, API proxate); mai scritte qui (P31).
+    # Intestazioni di sicurezza: mai scritte qui (P31). Il sito ha due rami
+    # esclusivi: /grafana (solo con -InstallGrafana, intestazioni proprie) e
+    # TUTTO il resto, un unico `handle` che importa per prima cosa quelle di
+    # Plenora e contiene ogni altro handle (statici, index.html, API proxate).
+    #
+    # /grafana: nessuna identita' asserita dal client arriva a Grafana
+    # (request_header toglie X-WEBAUTH-* PRIMA di forward_auth); Plenora
+    # decide chi e' l'utente (/api/grafana/auth: 2xx + X-WEBAUTH-USER/ROLE,
+    # altrimenti la sua risposta, es. 401, torna al browser); le intestazioni
+    # sono importate per prime e `defer`, quindi coprono anche quel 401.
+    $grafanaRoute = ''
+    if ($InstallGrafana) {
+        $grafanaRoute = @"
+    @grafana path /grafana /grafana/*
+    handle @grafana {
+        route {
+            import $grafanaHeadersCaddy
+            request_header -X-WEBAUTH-*
+            forward_auth 127.0.0.1:5004 {
+                uri /api/grafana/auth
+                copy_headers X-WEBAUTH-USER X-WEBAUTH-ROLE
+            }
+            reverse_proxy 127.0.0.1:$GrafanaPort
+        }
+    }
+"@
+    }
     $caddyfile = Join-Path $caddySvcDir 'Caddyfile'
     @"
 :$FrontendPort {
     encode gzip
-    import $headersCaddy
-    @backend path /api/* /health /ready
-    handle @backend {
-        reverse_proxy 127.0.0.1:5004
-    }
-    handle /assets/* {
-        root * $distDir
-        header Cache-Control "public, max-age=31536000, immutable"
-        file_server
-    }
+$grafanaRoute
     handle {
-        root * $distDir
-        header Cache-Control "no-cache"
-        try_files {path} /index.html
-        file_server
+        import $headersCaddy
+        @backend path /api/* /health /ready
+        handle @backend {
+            reverse_proxy 127.0.0.1:5004
+        }
+        handle /assets/* {
+            root * $distDir
+            header Cache-Control "public, max-age=31536000, immutable"
+            file_server
+        }
+        handle {
+            root * $distDir
+            header Cache-Control "no-cache"
+            try_files {path} /index.html
+            file_server
+        }
     }
 }
 "@ | Set-Content -Encoding ascii $caddyfile
@@ -1093,6 +1487,7 @@ Write-Host '  Servizi:    -InstallServices (backend/worker/beat come servizi Win
 Write-Host '  Storage:    SeaweedFS S3 locale installato per default (-InstallObjectStorage:$false per endpoint esterno)'
 Write-Host '  Frontend:   -InstallFrontend (build Vite + Caddy su porta 80)'
 Write-Host '  XLSX:       ZIP + .sha256 in C:\deploy (rilevamento e verifica automatici)'
+Write-Host '  Grafana:    -InstallGrafana (con -InstallFrontend; dashboard su /grafana, solo utenti Plenora)'
 Write-Host '  Production: -Production (gates attivi, richiede object storage)'
 Write-Host ''
 Write-Host '  Checkpoint: curl.exe -s http://127.0.0.1:5004/ready' -ForegroundColor Cyan
