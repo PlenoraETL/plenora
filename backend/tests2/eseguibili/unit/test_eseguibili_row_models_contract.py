@@ -152,6 +152,10 @@ def test_router_serializes_summary_row_at_api_edge(monkeypatch) -> None:
         "has_manifest": False,
         "source_changed": None,
         "binding_warnings": [],
+        # Dashboard Grafana (11/11/2026): funzione spenta nei test.
+        "has_dashboard": False,
+        "dashboard_uid": None,
+        "dashboard_feature_enabled": False,
         "can_edit": False,
     }
 

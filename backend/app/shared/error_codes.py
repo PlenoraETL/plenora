@@ -335,6 +335,27 @@ esegue» con «Gli amministratori possono scegliere il valore» non e' un testo
 o supera la lunghezza massima: la richiesta si rifiuta."""
 
 
+
+# Domain-specific — Dashboard Grafana degli Eseguibili (app/core/grafana)
+
+GRAFANA_DISABLED = "grafana_disabled"
+"""400: le dashboard Grafana sono disabilitate (GRAFANA_ENABLED=false):
+nessuna dashboard si crea, si apre o si modifica."""
+GRAFANA_UNAVAILABLE = "grafana_unavailable"
+"""503: Grafana non risponde o non e' configurato (token, segreti): si
+riprova; nessuno stato di Plenora e' cambiato."""
+DASHBOARD_NOT_FOUND = "dashboard_not_found"
+"""404: l'Eseguibile non ha una dashboard."""
+DASHBOARD_ALREADY_EXISTS = "dashboard_already_exists"
+"""409: l'Eseguibile ha gia' una dashboard (una per Eseguibile)."""
+DASHBOARD_DATA_UNAVAILABLE = "dashboard_data_unavailable"
+"""410: i dati per la dashboard di questa esecuzione non ci sono (mai
+scritti: rest_file o esecuzione senza dashboard; finestra chiusa; scaduti)."""
+DASHBOARD_PASS_INVALID = "dashboard_pass_invalid"
+"""401: lasciapassare dei dati assente, non valido, di un altro task o
+scaduto (endpoint dati chiamato da Grafana)."""
+
+
 # Catalog set — drift detection
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
 # codici NON globali) come `frozenset[str]`. Usato dal test
@@ -437,6 +458,13 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     RUNTIME_IDENTITY_CLIENT_VALUE,
     RUNTIME_IDENTITY_TRANSFORM_FAILED,
     RUNTIME_IDENTITY_OVERRIDE_INVALID,
+    # Dashboard Grafana degli Eseguibili
+    GRAFANA_DISABLED,
+    GRAFANA_UNAVAILABLE,
+    DASHBOARD_NOT_FOUND,
+    DASHBOARD_ALREADY_EXISTS,
+    DASHBOARD_DATA_UNAVAILABLE,
+    DASHBOARD_PASS_INVALID,
 })
 
 # Codici globali (envelope-level): NON domain-specific

@@ -10,7 +10,7 @@ from __future__ import annotations
 import csv
 import io
 from decimal import Decimal
-from typing import Any, BinaryIO, Iterator, List, Optional, Protocol, Tuple
+from typing import Any, BinaryIO, Callable, Iterator, List, Optional, Protocol, Sequence, Tuple
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -213,6 +213,27 @@ def _write_xlsx_to_writer(
     )
 
 
+RowSink = Callable[[List[str], Sequence[Any]], None]
+
+
+class _TeeResult:
+    """Cursore che passa ogni blocco di righe anche a ``row_sink`` (copia per
+    la dashboard di un Eseguibile, ``eseguibili.dashboard_data``): stesso
+    ``fetchmany`` (l'unico metodo che i writer usano dopo le colonne),
+    nessun blocco in piu' in memoria."""
+
+    def __init__(self, result: Any, columns: List[str], row_sink: RowSink) -> None:
+        self._result = result
+        self._columns = columns
+        self._row_sink = row_sink
+
+    def fetchmany(self, size: int) -> Any:
+        chunk = self._result.fetchmany(size)
+        if chunk:
+            self._row_sink(self._columns, chunk)
+        return chunk
+
+
 def execute_streaming_to_writer(
     *,
     engine_factory: StreamingEngineFactory,
@@ -221,13 +242,15 @@ def execute_streaming_to_writer(
     params: Optional[QueryParams],
     output_writer: BinaryIO,
     output_format: str,
+    row_sink: Optional[RowSink] = None,
 ) -> Tuple[int, List[str]]:
     """Execute a query streaming CSV/Parquet/XLSX to `output_writer`.
 
     Sostituisce `execute_streaming_to_file` per i caller storage-first:
     invece di scrivere su un path filesystem, scrive su un file-like
     writable (tipicamente `StreamingResultBlobWriter` per S3 multipart
-    o `io.BytesIO` per testing).
+    o `io.BytesIO` per testing). ``row_sink`` (facoltativo) riceve ogni
+    blocco di righe letto dal cursore («tee» della copia per la dashboard).
     """
     engine = engine_factory.create_engine(connection)
     max_rows = _max_streaming_rows()
@@ -236,6 +259,8 @@ def execute_streaming_to_writer(
         _configure_session(conn, connection)
         result = conn.execute(text(sql), params or {})
         columns = _columns_from_result(result, connection)
+        if row_sink is not None:
+            result = _TeeResult(result, columns, row_sink)
 
         if output_format == "csv":
             total_rows = _write_csv_to_writer(result, columns, output_writer, max_rows)

@@ -17,11 +17,16 @@ from app.core.auth.router import router as auth_router
 from app.core.auth.users_router import users_router
 from app.core.auth.groups_router import groups_router
 from app.core.auth.shares_router import router as shares_router
+from app.core.auth.grafana_router import grafana_router
 from app.core.carica.router import router as carica_router
 from app.core.connections.router import router as connections_router
 from app.core.dashboard.router import router as dashboard_router
 from app.core.datasources.router import router as datasources_router
 from app.core.eseguibili.router import router as eseguibili_router
+from app.core.eseguibili.dashboard_router import (
+    data_router as eseguibili_dashboard_data_router,
+    router as eseguibili_dashboard_router,
+)
 from app.core.estrai.router import functions_router
 from app.core.features.routes import router as features_router
 from app.core.files.router import router as files_router
@@ -86,6 +91,11 @@ api_router.include_router(intermediate_router)
 
 # Eseguibili: catene on-demand.
 api_router.include_router(eseguibili_router)
+# Dashboard Grafana degli Eseguibili: gestione, lasciapassare, dati per
+# Infinity (/api/dash/...) e accesso a /grafana (forward_auth).
+api_router.include_router(eseguibili_dashboard_router)
+api_router.include_router(eseguibili_dashboard_data_router)
+api_router.include_router(grafana_router)
 
 # Admin Backups: superadmin only.
 api_router.include_router(admin_backups_router)

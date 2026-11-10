@@ -195,6 +195,11 @@ class EseguibileRunMode(EnrichmentRunMode):
     is_eseguibile = True
     isolated_output = True
 
+    def __init__(self, dashboard_copy: bool = False) -> None:
+        # Copia per la dashboard Grafana: decisa dal server nel contratto
+        # (shared.execution.dashboard_copy), mai dal client.
+        self.dashboard_copy = bool(dashboard_copy)
+
     def should_recheck_auth(self) -> bool:
         # Gli eseguibili hanno flusso di auth separato (token eseguibile).
         return False
@@ -235,6 +240,7 @@ class EseguibileRunMode(EnrichmentRunMode):
         saved = ExecutableOutputPersistence(
             task_id=task_id,
             group_id=group_id,
+            dashboard_copy=self.dashboard_copy,
         ).persist_dataframe_output(
             df=final_df,
             output_format=final_format,
@@ -313,10 +319,16 @@ class ProjectTestRunMode(EnrichmentRunMode):
         result.update(task_result({"result_id": None}, {"username": self.username}))
 
 
-def for_task(is_eseguibile: bool, test_run: Optional[Mapping[str, Any]] = None) -> EnrichmentRunMode:
-    """Factory: la run-mode appropriata per il task."""
+def for_task(
+    is_eseguibile: bool,
+    test_run: Optional[Mapping[str, Any]] = None,
+    *,
+    dashboard_copy: bool = False,
+) -> EnrichmentRunMode:
+    """Factory: la run-mode appropriata per il task. ``dashboard_copy``
+    viene dal contesto del contratto (``build_runtime_context``)."""
     if is_eseguibile:
-        return EseguibileRunMode()
+        return EseguibileRunMode(dashboard_copy=dashboard_copy)
     if test_run is not None:
         return ProjectTestRunMode(str(test_run.get("username") or ""))
     return StandardRunMode()

@@ -27,6 +27,8 @@ from app.core.scheduler.cron_schedule import (
 from app.core.scheduler.beat_schedule_config import beat_schedule_config
 from app import config as app_config
 from app.core.eseguibili import download_claim_store, output_store
+from app.core.eseguibili import dashboard_data as eseguibili_dashboard_data
+from app.core.auth import db as users_db
 from app.core.orchestrator import task_cleanup
 from app.core.io import object_storage as object_storage_module
 from app.core.scheduler.job_dispatcher import (
@@ -811,6 +813,18 @@ class PlenoraBeatScheduler:
                 )
         except Exception as e:
             logger.warning(f"Errore cleanup lease download eseguibili: {e}")
+
+        # Copie dei dati per la dashboard Grafana scadute (finestra dei
+        # risultati chiusa senza pulizia): il limite di 30 minuti vale anche
+        # fisicamente, non solo per l'accesso (eseguibili.dashboard_data).
+        try:
+            if object_storage_module.object_storage_enabled():
+                group_ids = [group.id for group in users_db.list_groups(limit=10_000)]
+                removed_copies = eseguibili_dashboard_data.purge_expired(group_ids, now=now)
+                if removed_copies:
+                    logger.info(f"Cleanup dati dashboard: rimosse {removed_copies} copie scadute")
+        except Exception as e:
+            logger.warning(f"Errore cleanup dati dashboard: {e}")
 
     # Cleanup orfani DATA_DIR/temp/
 

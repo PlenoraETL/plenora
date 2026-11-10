@@ -20,6 +20,7 @@ from app.core.query_execution.query_executor import QueryExecutor
 from app.core.query_execution.query_streaming import execute_streaming_to_writer
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.eseguibili.output_persistence import ExecutableOutputPersistence, MemoryOutputPersistence
+from app.shared.execution.dashboard_copy import CONTEXT_FIELD as DASHBOARD_COPY_CONTEXT_FIELD
 from app.shared.execution.runtime_bound_fields import RUNTIME_BOUND_REGISTRY
 from app.shared.execution.runtime_identity import (
     ISOLATED_UPSTREAM_RUN_FIELD,
@@ -319,6 +320,8 @@ class OrchestratorService:
                 task_id=str(execution_context["output_task_id"]),
                 group_id=str(execution_context.get("group_id") or ""),
                 stream_query_to_writer=execute_streaming_to_writer,
+                # Copia per la dashboard: solo dal contratto (build_runtime_context).
+                dashboard_copy=execution_context.get(DASHBOARD_COPY_CONTEXT_FIELD) is True,
             )
         output_kwargs = (
             {"output_persistence": output_persistence}

@@ -354,6 +354,12 @@ def find_keys(task_id: str, *, group_id: str) -> List[str]:
     return [o["key"] for o in objs]
 
 
+def list_domain_keys(*, group_id: str) -> List[str]:
+    """Tutte le key degli output del gruppo (cartelle dei task, di vita breve:
+    il beat le scorre per le copie scadute della dashboard)."""
+    return [o["key"] for o in _storage().list_objects(tenant_domain_prefix(group_id, PREFIX))]
+
+
 def open_stream(key: str, *, expected_group_id: str) -> ObjectMap:
     """Apre uno stream di download. Delega al backend cloud."""
     assert_tenant_key(

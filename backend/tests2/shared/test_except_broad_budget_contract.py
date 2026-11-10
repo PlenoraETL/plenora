@@ -103,7 +103,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # +1 (2026-11-09): dashboard.graph.build_dashboard_graph, una parte della home
 # per catene (collegamenti, esecuzioni, Eseguibili, pianificazioni) che fallisce
 # va in `unavailable` e le altre restano, come GET /dashboard/counts.
-_EXPECT_BROAD_BUDGET = 786
+# +7 (2026-11-11): dashboard Grafana degli Eseguibili, tutti best effort
+# dichiarati: la copia per la dashboard non fa mai fallire l'esecuzione
+# (output_persistence x2); cancellazioni di copie scadute e lettura dello
+# schema atteso registrano e proseguono (dashboard_data x3, dashboard x1);
+# l'eliminazione dell'Eseguibile non si blocca se Grafana non risponde
+# (dashboard.delete_dashboard_best_effort).
+_EXPECT_BROAD_BUDGET = 793
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

@@ -36,6 +36,10 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError
 
+from app.core.grafana import settings as grafana_settings
+from app.core.grafana.client import GrafanaDisabled, GrafanaError, GrafanaUnavailable
+
+from . import dashboard as eseguibili_dashboard
 from . import db as eseguibili_db
 from . import output_store as _output_store
 from .download_response import build_consume_once_response
@@ -99,18 +103,39 @@ def _summary_response(
         "binding_warnings": eseguibili_service.binding_warnings(
             list(record.bindings), {"nodes": list(record.binding_target_nodes)},
         ),
+        **_dashboard_fields(record, can_edit),
     }
     data["can_edit"] = can_edit
     return data
 
 
+def _dashboard_fields(record: object, can_edit: bool) -> JsonObject:
+    """Dashboard Grafana: ``has_dashboard`` a tutti, ``dashboard_uid`` solo a
+    chi puo' modificare l'Eseguibile (stesso predicato ``can_edit``)."""
+    enabled = grafana_settings.enabled()
+    uid = getattr(record, "dashboard_uid", None)
+    return {
+        "has_dashboard": bool(uid) and enabled,
+        "dashboard_uid": uid if can_edit else None,
+        "dashboard_feature_enabled": enabled,
+    }
+
+
 def _details_response(
     record: eseguibili_db.EseguibileRow,
     user: CurrentUser,
+    extra_warnings: Optional[List[Mapping[str, object]]] = None,
 ) -> Mapping[str, object]:
     """Serialize detail row at the API edge."""
     data = _to_details(record)
-    data["can_edit"] = compute_can_edit(record, user)
+    can_edit = compute_can_edit(record, user)
+    data["can_edit"] = can_edit
+    data.update(_dashboard_fields(record, can_edit))
+    # Avvisi letti dalla dashboard in Grafana: solo a chi puo' modificare.
+    data["dashboard_warnings"] = (
+        list(extra_warnings or []) + list(eseguibili_dashboard.dashboard_warnings(record))
+        if can_edit else []
+    )
     return data
 
 
@@ -163,6 +188,13 @@ def create_eseguibile(
     Solo gli admin del gruppo possono pubblicare. Il progetto sorgente deve appartenere
     allo stesso gruppo dell'admin (o qualsiasi gruppo se superadmin).
     """
+    # Dashboard chiesta con Grafana spento: rifiuto PRIMA di creare.
+    if payload.create_dashboard and not grafana_settings.enabled():
+        raise_typed_http(
+            error_codes.GRAFANA_DISABLED,
+            status_code=400,
+            message="Le dashboard Grafana sono disabilitate su questo server: pubblica senza dashboard",
+        )
     try:
         record = eseguibili_service.create_from_project(
             source_project_id=payload.source_project_id,
@@ -180,7 +212,19 @@ def create_eseguibile(
         logger.error(f"[CRASH] Errore creazione eseguibile: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
-    return _details_response(record, current_user)
+    warnings: List[Mapping[str, object]] = []
+    if payload.create_dashboard:
+        # L'Eseguibile resta creato anche se Grafana non risponde: avviso e
+        # si riprova da «Crea dashboard» (POST /eseguibili/{id}/dashboard).
+        try:
+            record = eseguibili_dashboard.create_dashboard(record, current_user)
+        except (GrafanaUnavailable, GrafanaError, GrafanaDisabled) as exc:
+            logger.warning(f"Dashboard dell'Eseguibile {record.id} non creata: {exc}", exc_info=True)
+            warnings.append({
+                "column": None,
+                "motivo": "Dashboard non creata (Grafana non risponde): riprova con «Crea dashboard»",
+            })
+    return _details_response(record, current_user, extra_warnings=warnings)
 
 
 # N1 — l'Eseguibile corrisponde ancora al suo progetto? (solo admin: chi puo'
@@ -335,6 +379,9 @@ def delete_eseguibile(
     _check_group_access(record, current_user)
 
     eseguibili_db.delete_eseguibile(eseguibile_id)
+    # La dashboard Grafana se ne va con l'Eseguibile, best effort: Grafana
+    # giu' non blocca mai l'eliminazione (registra e prosegue).
+    eseguibili_dashboard.delete_dashboard_best_effort(getattr(record, "dashboard_uid", None))
     # DELETE risponde 204 No Content, body vuoto.
 
 

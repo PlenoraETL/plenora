@@ -73,6 +73,7 @@ _ALLOWED_UPDATE_FIELDS: dict[str, frozenset[str]] = {
         "default_output_format",
         "default_output_name",
         "icon",
+        "dashboard_uid",
         "updated_at",
     }),
     "tickets": frozenset({

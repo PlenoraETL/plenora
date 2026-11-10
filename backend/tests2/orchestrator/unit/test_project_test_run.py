@@ -491,7 +491,7 @@ def test_enrichment_worker_reads_isolation_from_the_run_mode():
     assert "run_mode.is_eseguibile" not in source
     assert "triggered_by=run_mode.triggered_by()" in source
     assert source.count("triggers_carica_after_dataframe()") == 1
-    assert "for_task(is_eseguibile, test_run)" in source
+    assert "enrichment_run_mode.for_task(\n        is_eseguibile,\n        test_run," in source
     assert "output_task_id=task_id if parsed_contract.isolated_output else None" in source
 
 

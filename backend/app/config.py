@@ -683,6 +683,34 @@ class Settings:
         "NATIVE_PIPELINE_MAX_PLAN_BYTES": 16_777_216,
         # Radice dei workspace temporanei isolati. Vuoto = temp di processo.
         "NATIVE_PIPELINE_WORKSPACE_DIR": "",
+
+        # Dashboard Grafana degli Eseguibili (11/11/2026, app/core/grafana).
+        # Segreti SOLO in .env (DASHBOARD_PASS_SECRET, GRAFANA_DATA_SECRET,
+        # GRAFANA_SERVICE_TOKEN). False = nessuna chiamata a Grafana, creazione
+        # della dashboard rifiutata, «Apri dashboard» non offerto.
+        "GRAFANA_ENABLED": False,
+        # API di Grafana vista dal backend (root_url con sottopercorso).
+        "GRAFANA_URL": "http://127.0.0.1:3300/grafana",
+        # Percorso di Grafana visto dal browser (stessa origine, dietro Caddy):
+        # base dei link dell'iframe e di «Modifica in Grafana».
+        "GRAFANA_PUBLIC_PATH": "/grafana",
+        # Endpoint dati visto da Grafana (lato server, Infinity): il
+        # datasource ha allowedHosts = questo URL senza "/exec" e con "/".
+        "GRAFANA_DATA_URL": "http://127.0.0.1:5004/api/dash/exec",
+        # Datasource Infinity creato dall'installer (uid fisso).
+        "GRAFANA_DATASOURCE_UID": "plenora-infinity",
+        "GRAFANA_TIMEOUT_SECONDS": 5,
+        # Cookie di sessione per /grafana (forward_auth): rinnovabile
+        # richiamando POST /api/grafana/session.
+        "GRAFANA_SESSION_TTL_SECONDS": 1800,
+        # Copia dei dati per la dashboard (solo l'esecuzione corrente) e
+        # durata massima del lasciapassare (mai oltre la copia).
+        "DASHBOARD_DATA_TTL_SECONDS": 1800,
+        "DASHBOARD_PASS_TTL_SECONDS": 1800,
+        "DASHBOARD_DATA_MAX_ROWS": 50_000,
+        "DASHBOARD_DATA_MAX_BYTES": 64 * 1024 * 1024,
+        # Letture dell'endpoint dati per task al minuto (oltre: 429).
+        "DASHBOARD_DATA_RATE_PER_MINUTE": 120,
     }
 
     # Alias env legacy (Plenora 2.0): i deploy esistenti possono avere

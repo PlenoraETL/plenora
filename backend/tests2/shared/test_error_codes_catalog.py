@@ -134,6 +134,13 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "runtime_identity_client_value",
     "runtime_identity_transform_failed",
     "runtime_identity_override_invalid",
+    # Dashboard Grafana degli Eseguibili (11/11/2026)
+    "grafana_disabled",
+    "grafana_unavailable",
+    "dashboard_not_found",
+    "dashboard_already_exists",
+    "dashboard_data_unavailable",
+    "dashboard_pass_invalid",
 }
 
 # Pattern accettati come `http_<status>` fallback intenzionale
@@ -235,7 +242,8 @@ def test_catalog_count_domain_seventy_three():
     # 76: +user_has_history (eliminare un utente con storico: 409, 09/11/2026)
     # 77: +runtime_identity_transform_failed (trasformazione dell'input, 09/11/2026).
     # 78: +runtime_identity_override_invalid (valore scelto dagli amministratori, 09/11/2026).
-    assert len(EXPECTED_DOMAIN_CODES) == 78
+    # 84: +6 dashboard Grafana degli Eseguibili (11/11/2026).
+    assert len(EXPECTED_DOMAIN_CODES) == 84
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 

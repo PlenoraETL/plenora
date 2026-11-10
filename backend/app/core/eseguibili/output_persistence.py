@@ -15,7 +15,9 @@ from typing import Any, Callable, Optional
 from app.core.dataframes import export_writer as export_writer_module
 from app.core.dataframes import frame_io as frame_io_module
 from app.core.dataframes.geodata import detect_geometry_column
+from app.core.eseguibili import dashboard_data as executable_dashboard_data
 from app.core.eseguibili import storage as executable_storage
+from app.utils.logger import get_logger
 from app.shared.execution.query_results import (
     PersistedQueryResult,
     StreamedQueryResult,
@@ -29,8 +31,21 @@ class ExecutableDataFrameResult:
     output_columns: Optional[list[str]] = None
 
 
+logger = get_logger(__name__)
+
+
 class ExecutableOutputPersistence:
-    """Persistence adapter bound to one executable task and tenant."""
+    """Persistence adapter bound to one executable task and tenant.
+
+    ``dashboard_copy`` (deciso dal server nel contratto,
+    ``shared.execution.dashboard_copy``): oltre all'output scrive la copia
+    delle prime righe per la dashboard Grafana (``eseguibili.dashboard_data``).
+    E' il punto unico dei due produttori: DataFrame
+    (``persist_dataframe_output``) e query in streaming
+    (``persist_streaming_query_to_storage``, «tee» sul cursore). La copia si
+    scrive solo dopo l'output riuscito; un suo errore non fa fallire
+    l'esecuzione (la dashboard risulta «non disponibile»).
+    """
 
     def __init__(
         self,
@@ -38,6 +53,7 @@ class ExecutableOutputPersistence:
         task_id: str,
         group_id: str,
         stream_query_to_writer: Optional[Callable[..., tuple[int, list[str]]]] = None,
+        dashboard_copy: bool = False,
     ) -> None:
         if not task_id:
             raise ValueError("task_id output eseguibile mancante")
@@ -46,6 +62,20 @@ class ExecutableOutputPersistence:
         self.task_id = task_id
         self.group_id = group_id
         self._stream_query_to_writer = stream_query_to_writer
+        self.dashboard_copy = bool(dashboard_copy)
+
+    def _dashboard_collector(self) -> Optional[executable_dashboard_data.DashboardRowsCollector]:
+        return executable_dashboard_data.DashboardRowsCollector() if self.dashboard_copy else None
+
+    def _write_dashboard_copy(
+        self, collector: Optional[executable_dashboard_data.DashboardRowsCollector],
+    ) -> None:
+        if collector is None:
+            return
+        try:
+            executable_dashboard_data.write(self.task_id, group_id=self.group_id, collector=collector)
+        except Exception:
+            logger.warning(f"[Task {self.task_id}] copia dati per la dashboard non scritta", exc_info=True)
 
     def _writer(self, filename: str, output_format: str) -> Any:
         """Scrittore del risultato: lo spazio dell'attivita' nello storage."""
@@ -70,6 +100,8 @@ class ExecutableOutputPersistence:
     ) -> StreamedQueryResult:
         del project_id, group_id
         writer = self._writer(output_filename, output_format)
+        collector = self._dashboard_collector()
+        sink_kwargs = {"row_sink": collector.add_rows} if collector is not None else {}
         try:
             if self._stream_query_to_writer is None:
                 raise RuntimeError("Streaming query writer non configurato")
@@ -80,11 +112,13 @@ class ExecutableOutputPersistence:
                 params=params,
                 output_writer=writer,
                 output_format=output_format,
+                **sink_kwargs,
             )
             storage_key = writer.finalize()
         except Exception:
             writer.abort()
             raise
+        self._write_dashboard_copy(collector)
         return StreamedQueryResult(
             result_id=None,
             rows_count=rows_count,
@@ -162,6 +196,15 @@ class ExecutableOutputPersistence:
         except Exception:
             writer.abort()
             raise
+
+        collector = self._dashboard_collector()
+        if collector is not None:
+            try:
+                collector.add_dataframe(df, skip_columns=[resolved_geom] if resolved_geom else ())
+            except Exception:
+                logger.warning(f"[Task {self.task_id}] righe per la dashboard non raccolte", exc_info=True)
+                collector = None
+        self._write_dashboard_copy(collector)
 
         output_columns = None
         if fmt in {"geojson", "gpkg", "shp"}:

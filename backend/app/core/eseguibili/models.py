@@ -203,6 +203,9 @@ class EseguibileCreate(BaseModel):
     default_output_format: str = "xlsx"    # xlsx, csv, json, geojson, ecc
     default_output_name: Optional[str] = None  # se None → "{name}_{timestamp}"
     icon: Optional[str] = None             # emoji/carattere mostrato sulla card (fallback: ▶
+    # Dashboard Grafana di partenza generata dalle colonne dell'output
+    # (11/11/2026). Con GRAFANA_ENABLED=false la pubblicazione si rifiuta.
+    create_dashboard: bool = False
 
 
 class EseguibileUpdate(BaseModel):
@@ -223,6 +226,56 @@ class BindingWarning(BaseModel):
     target_node_id: str
     target_field: Optional[str] = None
     motivo: str
+
+
+class DashboardWarning(BaseModel):
+    """Avviso sulla dashboard Grafana dell'Eseguibile (solo a chi puo'
+    modificarlo): colonna usata dalla dashboard che non c'e' piu' tra le
+    colonne attese della versione attiva, o stato non verificabile."""
+
+    column: Optional[str] = None
+    motivo: str
+
+
+class DashboardInfo(BaseModel):
+    """Dashboard di un Eseguibile per chi puo' modificarlo."""
+
+    dashboard_uid: str
+    # Percorsi relativi all'origine di Plenora (dietro Caddy).
+    view_path: str
+    edit_path: str
+    dashboard_warnings: List[DashboardWarning] = Field(default_factory=list)
+
+
+class DashboardEditLinkRequest(BaseModel):
+    """POST /eseguibili/{id}/dashboard/edit-link. ``task_id`` facoltativo:
+    un'esecuzione lanciata da chi modifica, per vederne i dati mentre
+    modifica (stessa regola del lasciapassare)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: Optional[str] = Field(default=None, max_length=128)
+
+
+class DashboardPassRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str = Field(min_length=1, max_length=128)
+
+
+class DashboardPassResponse(BaseModel):
+    """Lasciapassare dei dati di UNA esecuzione per l'iframe della dashboard."""
+
+    task_id: str
+    dashboard_uid: str
+    # Lasciapassare (HMAC, non e' un login): va solo in ``var-pass``.
+    pass_token: str
+    # Epoch secondi: rinnovare (stesso endpoint) prima di questa scadenza;
+    # mai oltre ``data_expires_at`` (fine della disponibilita' dei dati).
+    expires_at: int
+    data_expires_at: int
+    # /grafana/d/<uid>?orgId=1&kiosk&var-exec=<task_id>&var-pass=<pass>
+    iframe_path: str
 
 
 class InputChange(BaseModel):
@@ -265,6 +318,11 @@ class EseguibileSummary(BaseModel):
     # N1: progetto sorgente cambiato dopo la pubblicazione (None: non si sa,
     # senza progetto sorgente o senza versione attiva).
     source_changed: Optional[bool] = None
+    # Dashboard Grafana (11/11/2026): ``has_dashboard`` a tutti (vero solo
+    # con GRAFANA_ENABLED); ``dashboard_uid`` solo a chi puo' modificare.
+    has_dashboard: bool = False
+    dashboard_uid: Optional[str] = None
+    dashboard_feature_enabled: bool = False
 
 
 class EseguibileSourceStatus(BaseModel):
@@ -343,6 +401,12 @@ class EseguibileDetails(BaseModel):
     # input a monte VIVI che l'esecuzione usera' (chiave «progetto::input»),
     # per la finestra «Prima di avviare».
     upstream_identity_inputs: List[UpstreamIdentityInputRow] = Field(default_factory=list)
+    # Dashboard Grafana (11/11/2026): come la lista; ``dashboard_warnings``
+    # solo a chi puo' modificare (letti dalla dashboard in Grafana).
+    has_dashboard: bool = False
+    dashboard_uid: Optional[str] = None
+    dashboard_feature_enabled: bool = False
+    dashboard_warnings: List[DashboardWarning] = Field(default_factory=list)
 
 
 class EseguibileVersionSummary(BaseModel):

@@ -19,7 +19,7 @@ from app.shared.contracts.payloads import ObjectMap
 from app.core.io.local_cleanup import rmtree_safe
 from app.utils.logger import get_logger
 
-from . import storage
+from . import dashboard_data, storage
 
 
 logger = get_logger(__name__)
@@ -243,6 +243,15 @@ def open_stream(key: str, *, expected_group_id: str) -> ObjectMap:
     return storage.open_stream(key, expected_group_id=expected_group_id)
 
 
+def _is_owner_key(key: str) -> bool:
+    return key.rsplit("/", 1)[-1] == OWNER_SIDECAR_FILENAME
+
+
+# Regola unica di cio' che il consumo del download conserva nella cartella
+# del task (tutto il resto: output e artifact interni di lavoro, si toglie).
+KEPT_BY_DOWNLOAD = (_is_owner_key, dashboard_data.is_dashboard_data_key)
+
+
 def delete_task_outputs(
     task_id: str,
     *,
@@ -251,12 +260,17 @@ def delete_task_outputs(
 ) -> int:
     """Delete task outputs, preserving authorization metadata on failure.
 
-    ``retain_owner`` is used by the consume-once download: the sidecar remains
-    available to authorize the subsequent GDPR full-cleanup request.
+    ``retain_owner=True`` e' il consumo del download (una volta): restano i
+    METADATI del task (``KEPT_BY_DOWNLOAD``): il sidecar owner, che autorizza
+    la successiva pulizia completa, e la copia per la dashboard Grafana, che
+    resta finche' la finestra dei risultati e' aperta (anche dopo «Scarica»).
+    ``retain_owner=False`` e' la pulizia completa (full-cleanup, scarto,
+    pulizia richiesta): toglie tutto, owner per ultimo.
     """
     keys = sorted(set(
         key for key in storage.find_keys(task_id, group_id=group_id)
         if key.rsplit("/", 1)[-1] != OWNER_SIDECAR_FILENAME
+        and not (retain_owner and any(kept(key) for kept in KEPT_BY_DOWNLOAD))
     ))
     deleted = 0
     failures: list[tuple[str, Exception]] = []
@@ -309,6 +323,7 @@ def purge_expired_local_outputs(
 
 
 __all__ = [
+    "KEPT_BY_DOWNLOAD",
     "OWNER_SIDECAR_FILENAME",
     "TaskOwner",
     "delete_task_outputs",

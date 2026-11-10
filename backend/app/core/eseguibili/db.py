@@ -95,6 +95,8 @@ class EseguibileRow:
     active_version_id: str | None = None
     active_version: int = 1
     manifest: JsonObject | None = None
+    # Dashboard Grafana legata 1:1 (11/11/2026); None = nessuna dashboard.
+    dashboard_uid: str | None = None
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -128,6 +130,7 @@ class EseguibileSummaryRow:
     # ne sono bersaglio (per ``binding_warnings`` senza caricare il canvas).
     bindings: tuple[JsonObject, ...] = ()
     binding_target_nodes: tuple[JsonObject, ...] = ()
+    dashboard_uid: str | None = None
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -259,6 +262,7 @@ def eseguibile_row_from_db(row: Mapping[str, object]) -> EseguibileRow:
         active_version_id=_optional_str(row, "active_version_id"),
         active_version=int(row.get("active_version") or 1),
         manifest=active_manifest,
+        dashboard_uid=_optional_str(row, "dashboard_uid"),
     )
 
 
@@ -286,6 +290,7 @@ def eseguibile_summary_row_from_db(row: Mapping[str, object]) -> EseguibileSumma
         has_manifest=bool(row.get("has_manifest")),
         bindings=_parse_json_objects(row.get("bindings")),
         binding_target_nodes=_parse_json_objects(row.get("binding_target_nodes")),
+        dashboard_uid=_optional_str(row, "dashboard_uid"),
     )
 
 
@@ -420,7 +425,7 @@ def list_eseguibili(
     columns = f"""e.id, e.name, e.description, e.default_output_format,
                  e.default_output_name, e.icon, e.source_canvas_id, e.group_id,
                  e.created_by, e.created_at, e.updated_at, e.expected_columns,
-                 e.project_type, COALESCE(v.version_number, 1) AS active_version,
+                 e.project_type, e.dashboard_uid, COALESCE(v.version_number, 1) AS active_version,
                  COALESCE(jsonb_array_length(v.manifest->'inputs'), 1) AS inputs_count,
                  {MANIFEST_PRESENT_SQL} AS has_manifest,
                  v.manifest->'bindings' AS bindings,
@@ -726,6 +731,13 @@ def update_eseguibile(eid: str, **fields: object) -> Optional[EseguibileRow]:
         return get_eseguibile(eid)
     to_update["updated_at"] = _now()
     set_clause, vals = safe_set_clause("eseguibili", to_update)
+    _execute(f"UPDATE eseguibili SET {set_clause} WHERE id = %s", vals + (eid,))
+    return get_eseguibile(eid)
+
+
+def set_dashboard_uid(eid: str, dashboard_uid: Optional[str]) -> Optional[EseguibileRow]:
+    """Lega (o slega, con None) la dashboard Grafana dell'Eseguibile."""
+    set_clause, vals = safe_set_clause("eseguibili", {"dashboard_uid": dashboard_uid, "updated_at": _now()})
     _execute(f"UPDATE eseguibili SET {set_clause} WHERE id = %s", vals + (eid,))
     return get_eseguibile(eid)
 

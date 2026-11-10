@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from app.shared.contracts.payloads import JsonObject
+from app.shared.execution import dashboard_copy as _dashboard_copy
 from app.shared.execution.runtime_bound_fields import RUNTIME_BOUND_REGISTRY, retain_registered
 from app.shared.execution.runtime_identity import (
     ISOLATED_UPSTREAM_RUN_FIELD,
@@ -196,7 +197,19 @@ class PipelineExecutionContract(BaseModel):
         context.pop(ISOLATED_UPSTREAM_RUN_FIELD, None)
         if self.isolated_upstreams:
             context[ISOLATED_UPSTREAMS_FIELD] = dict(self.isolated_upstreams)
+        # Copia per la dashboard Grafana: solo dal soggetto Eseguibile scritto
+        # dal server e solo con output nello spazio dell'attivita'
+        # (shared.execution.dashboard_copy); mai dal runtime_context.
+        context.pop(_dashboard_copy.CONTEXT_FIELD, None)
+        if self.dashboard_copy and output_task_id:
+            context[_dashboard_copy.CONTEXT_FIELD] = True
         return context
+
+    @property
+    def dashboard_copy(self) -> bool:
+        """L'Eseguibile ha una dashboard: l'output va copiato anche per lei."""
+        subject = self.executable_subject
+        return bool(subject) and subject.get(_dashboard_copy.SUBJECT_FIELD) is True
 
     @property
     def executable_subject(self) -> Optional[JsonObject]:

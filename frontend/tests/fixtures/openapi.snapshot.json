@@ -2233,6 +2233,26 @@
         "title": "DashboardCounts",
         "type": "object"
       },
+      "DashboardEditLinkRequest": {
+        "additionalProperties": false,
+        "description": "POST /eseguibili/{id}/dashboard/edit-link. ``task_id`` facoltativo:\nun'esecuzione lanciata da chi modifica, per vederne i dati mentre\nmodifica (stessa regola del lasciapassare).",
+        "properties": {
+          "task_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          }
+        },
+        "title": "DashboardEditLinkRequest",
+        "type": "object"
+      },
       "DashboardGraph": {
         "properties": {
           "access": {
@@ -2272,6 +2292,117 @@
           }
         },
         "title": "DashboardGraph",
+        "type": "object"
+      },
+      "DashboardInfo": {
+        "description": "Dashboard di un Eseguibile per chi puo' modificarlo.",
+        "properties": {
+          "dashboard_uid": {
+            "title": "Dashboard Uid",
+            "type": "string"
+          },
+          "dashboard_warnings": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardWarning"
+            },
+            "title": "Dashboard Warnings",
+            "type": "array"
+          },
+          "edit_path": {
+            "title": "Edit Path",
+            "type": "string"
+          },
+          "view_path": {
+            "title": "View Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dashboard_uid",
+          "view_path",
+          "edit_path"
+        ],
+        "title": "DashboardInfo",
+        "type": "object"
+      },
+      "DashboardPassRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "title": "DashboardPassRequest",
+        "type": "object"
+      },
+      "DashboardPassResponse": {
+        "description": "Lasciapassare dei dati di UNA esecuzione per l'iframe della dashboard.",
+        "properties": {
+          "dashboard_uid": {
+            "title": "Dashboard Uid",
+            "type": "string"
+          },
+          "data_expires_at": {
+            "title": "Data Expires At",
+            "type": "integer"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "integer"
+          },
+          "iframe_path": {
+            "title": "Iframe Path",
+            "type": "string"
+          },
+          "pass_token": {
+            "title": "Pass Token",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "dashboard_uid",
+          "pass_token",
+          "expires_at",
+          "data_expires_at",
+          "iframe_path"
+        ],
+        "title": "DashboardPassResponse",
+        "type": "object"
+      },
+      "DashboardWarning": {
+        "description": "Avviso sulla dashboard Grafana dell'Eseguibile (solo a chi puo'\nmodificarlo): colonna usata dalla dashboard che non c'e' piu' tra le\ncolonne attese della versione attiva, o stato non verificabile.",
+        "properties": {
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "motivo": {
+            "title": "Motivo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "motivo"
+        ],
+        "title": "DashboardWarning",
         "type": "object"
       },
       "DataSource": {
@@ -3489,6 +3620,11 @@
       "EseguibileCreate": {
         "description": "Payload per pubblicare un progetto come eseguibile.",
         "properties": {
+          "create_dashboard": {
+            "default": false,
+            "title": "Create Dashboard",
+            "type": "boolean"
+          },
           "default_output_format": {
             "default": "xlsx",
             "title": "Default Output Format",
@@ -3589,6 +3725,29 @@
             "title": "Created By",
             "type": "string"
           },
+          "dashboard_feature_enabled": {
+            "default": false,
+            "title": "Dashboard Feature Enabled",
+            "type": "boolean"
+          },
+          "dashboard_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dashboard Uid"
+          },
+          "dashboard_warnings": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardWarning"
+            },
+            "title": "Dashboard Warnings",
+            "type": "array"
+          },
           "default_output_format": {
             "title": "Default Output Format",
             "type": "string"
@@ -3626,6 +3785,11 @@
           "group_id": {
             "title": "Group Id",
             "type": "string"
+          },
+          "has_dashboard": {
+            "default": false,
+            "title": "Has Dashboard",
+            "type": "boolean"
           },
           "has_manifest": {
             "default": false,
@@ -3845,6 +4009,22 @@
             "title": "Created By",
             "type": "string"
           },
+          "dashboard_feature_enabled": {
+            "default": false,
+            "title": "Dashboard Feature Enabled",
+            "type": "boolean"
+          },
+          "dashboard_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dashboard Uid"
+          },
           "default_output_format": {
             "title": "Default Output Format",
             "type": "string"
@@ -3869,6 +4049,11 @@
           "group_id": {
             "title": "Group Id",
             "type": "string"
+          },
+          "has_dashboard": {
+            "default": false,
+            "title": "Has Dashboard",
+            "type": "boolean"
           },
           "has_manifest": {
             "default": false,
@@ -13912,6 +14097,80 @@
         ]
       }
     },
+    "/api/dash/exec/{task_id}/rows": {
+      "get": {
+        "description": "Righe della copia per la dashboard (JSON array di oggetti, al massimo\n``DASHBOARD_DATA_MAX_ROWS``). Lettura non distruttiva. 401 lasciapassare\nnon valido/scaduto/di altro task, 410 dati non piu' disponibili.",
+        "operationId": "read_dashboard_rows_api_dash_exec__task_id__rows_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pass",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pass"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Grafana-Secret",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Grafana-Secret"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Dashboard Rows",
+        "tags": [
+          "eseguibili"
+        ]
+      }
+    },
     "/api/dashboard/counts": {
       "get": {
         "description": "Connessioni API, data source, schedule attivi e schedule per progetto.",
@@ -15043,6 +15302,216 @@
           }
         ],
         "summary": "Analyze Upload",
+        "tags": [
+          "eseguibili"
+        ]
+      }
+    },
+    "/api/eseguibili/{eseguibile_id}/dashboard": {
+      "delete": {
+        "description": "Elimina la dashboard (in Grafana e il legame).",
+        "operationId": "delete_eseguibile_dashboard_api_eseguibili__eseguibile_id__dashboard_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eseguibile_id",
+            "required": true,
+            "schema": {
+              "title": "Eseguibile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Eseguibile Dashboard",
+        "tags": [
+          "eseguibili"
+        ]
+      },
+      "post": {
+        "description": "Genera la dashboard di partenza dalle colonne dell'output.",
+        "operationId": "create_eseguibile_dashboard_api_eseguibili__eseguibile_id__dashboard_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eseguibile_id",
+            "required": true,
+            "schema": {
+              "title": "Eseguibile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Eseguibile Dashboard",
+        "tags": [
+          "eseguibili"
+        ]
+      }
+    },
+    "/api/eseguibili/{eseguibile_id}/dashboard/edit-link": {
+      "post": {
+        "description": "«Modifica in Grafana»: sincronizza team e cartelle, poi il link.",
+        "operationId": "get_eseguibile_dashboard_edit_link_api_eseguibili__eseguibile_id__dashboard_edit_link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eseguibile_id",
+            "required": true,
+            "schema": {
+              "title": "Eseguibile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DashboardEditLinkRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Eseguibile Dashboard Edit Link",
+        "tags": [
+          "eseguibili"
+        ]
+      }
+    },
+    "/api/eseguibili/{eseguibile_id}/dashboard/pass": {
+      "post": {
+        "description": "Lasciapassare dei dati di una esecuzione (rinnovabile finche' la\nfinestra dei risultati e' aperta, mai oltre la scadenza dei dati).",
+        "operationId": "issue_eseguibile_dashboard_pass_api_eseguibili__eseguibile_id__dashboard_pass_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eseguibile_id",
+            "required": true,
+            "schema": {
+              "title": "Eseguibile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DashboardPassRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardPassResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Issue Eseguibile Dashboard Pass",
         "tags": [
           "eseguibili"
         ]
@@ -16735,6 +17204,86 @@
         "summary": "Translate Expression",
         "tags": [
           "functions"
+        ]
+      }
+    },
+    "/api/grafana/auth": {
+      "get": {
+        "description": "forward_auth di Caddy per ogni richiesta a /grafana/*.",
+        "operationId": "grafana_forward_auth_api_grafana_auth_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "plenora_grafana_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plenora Grafana Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grafana Forward Auth",
+        "tags": [
+          "grafana"
+        ]
+      }
+    },
+    "/api/grafana/session": {
+      "delete": {
+        "operationId": "close_grafana_session_api_grafana_session_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Close Grafana Session",
+        "tags": [
+          "grafana"
+        ]
+      },
+      "post": {
+        "description": "Cookie per /grafana (iframe della dashboard, «Modifica in Grafana»).",
+        "operationId": "open_grafana_session_api_grafana_session_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Open Grafana Session",
+        "tags": [
+          "grafana"
         ]
       }
     },

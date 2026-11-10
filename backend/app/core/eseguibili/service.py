@@ -41,6 +41,8 @@ from . import upstream_plan as upstream_plan_module
 from app.core.projects.upstream_identity import identity_closure, upstream_input_rows
 from app.shared.execution.runtime_identity import RuntimeIdentity
 from app.shared.execution.runtime_bound_fields import runtime_bound_context
+from app.shared.execution import dashboard_copy as dashboard_copy_fields
+from app.core.grafana import settings as grafana_settings
 from .manifest import (
     binding_problems,
     canvas_nodes_by_id,
@@ -1097,10 +1099,7 @@ def execute(
             group_id=str(eseguibile["group_id"]),
             canvas=canvas,
             artifact_refs={},
-            execution_subject={
-                "kind": "eseguibile",
-                "id": str(eseguibile["id"]),
-            },
+            execution_subject=executable_subject(eseguibile),
             runtime_context={
                 "cleanup_file_source_ids": [temp_file_source_id],
                 "output_format": final_format,
@@ -1206,6 +1205,20 @@ def resolve_version_manifest(
     return version, manifest
 
 
+def executable_subject(eseguibile: object, **extra: object) -> JsonObject:
+    """``execution_subject`` di ogni avvio di un Eseguibile (v1 e versionato).
+
+    Regola unica della copia per la dashboard Grafana: la decide QUI il
+    server (l'Eseguibile ha ``dashboard_uid`` e ``GRAFANA_ENABLED``), mai il
+    client (``shared.execution.dashboard_copy``)."""
+    getter = eseguibile.get if hasattr(eseguibile, "get") else lambda key, default=None: getattr(eseguibile, key, default)
+    subject: JsonObject = {"kind": "eseguibile", "id": str(getter("id"))}
+    subject.update({key: value for key, value in extra.items()})
+    if getter("dashboard_uid") and grafana_settings.enabled():
+        subject[dashboard_copy_fields.SUBJECT_FIELD] = True
+    return subject
+
+
 def discard_temp_file_sources(file_source_ids: Sequence[str]) -> None:
     """Elimina i file temporanei creati per gli input (best-effort)."""
 
@@ -1300,12 +1313,7 @@ def execute_versioned(
                 group_id=eseguibile.group_id,
                 canvas=canvas,
                 artifact_refs={},
-                execution_subject={
-                    "kind": "eseguibile",
-                    "id": eseguibile.id,
-                    "version_id": version.id,
-                    "run_id": run_id,
-                },
+                execution_subject=executable_subject(eseguibile, version_id=version.id, run_id=run_id),
                 runtime_context={
                     "default_connection_id": runtime_connection_id,
                     "cleanup_file_source_ids": cleanup_ids,
@@ -1334,12 +1342,7 @@ def execute_versioned(
                 group_id=eseguibile.group_id,
                 canvas=canvas,
                 artifact_refs={},
-                execution_subject={
-                    "kind": "eseguibile",
-                    "id": eseguibile.id,
-                    "version_id": version.id,
-                    "run_id": run_id,
-                },
+                execution_subject=executable_subject(eseguibile, version_id=version.id, run_id=run_id),
                 runtime_context={
                     "default_connection_id": runtime_connection_id,
                     "cleanup_file_source_ids": cleanup_ids,

@@ -33,6 +33,7 @@ from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import snapshot as intermediate_snapshot
 from app.core.intermediate import writer as intermediate_writer
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
+from app.shared.execution.dashboard_copy import CONTEXT_FIELD as DASHBOARD_COPY_CONTEXT_FIELD
 from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.core.projects import service as project_service_module
 from app.core.resources.bounded_reader import read_stream_bounded
@@ -178,7 +179,13 @@ def execute_enrichment_task(
 
     # #28-B: la run-mode incapsula le divergenze standard vs eseguibile
     # (auth recheck, logger project_id, group_id + intermediate run).
-    run_mode = enrichment_run_mode.for_task(is_eseguibile, test_run)
+    run_mode = enrichment_run_mode.for_task(
+        is_eseguibile,
+        test_run,
+        # Solo dal contratto (build_runtime_context), mai da un contesto legacy.
+        dashboard_copy=parsed_contract is not None
+        and (execution_context or {}).get(DASHBOARD_COPY_CONTEXT_FIELD) is True,
+    )
     if test_run is not None:
         # La prova non ricalcola nulla a monte (gli endpoint lo rifiutano).
         force_recalculate = False
