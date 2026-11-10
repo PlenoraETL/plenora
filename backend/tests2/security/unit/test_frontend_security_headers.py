@@ -18,6 +18,7 @@ import pytest
 
 from app.config import Settings
 from app.core.security import frontend_headers as fh
+from tests2.shared._native_installer_render import CADDY_VALUES, parse_caddyfile, render_caddyfile
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
@@ -64,6 +65,9 @@ def test_default_policy_is_exactly_the_declared_rule():
         ],
         "font-src": ["'self'"],
         "connect-src": ["'self'"],
+        # La vista dashboard incorpora /grafana (stesso origin); Plenora
+        # stessa non si lascia incorporare da nessuno.
+        "frame-src": ["'self'"],
         "object-src": ["'none'"],
         "base-uri": ["'self'"],
         "form-action": ["'self'"],
@@ -107,7 +111,7 @@ def test_external_origins_come_only_from_configuration():
     assert csp["img-src"] == ["'self'", "data:", "blob:", "https://tiles.example.org", "http://*.osm.local:8080"]
     assert csp["connect-src"] == ["'self'", "https://o42.ingest.sentry.io", "https://api.example.org:8443"]
     # Nient'altro si apre: le altre direttive restano solo 'self'/'none'.
-    for name in ("default-src", "script-src", "style-src", "font-src"):
+    for name in ("default-src", "script-src", "style-src", "font-src", "frame-src"):
         assert csp[name] == ["'self'"]
 
 
@@ -217,15 +221,56 @@ def test_installer_generates_caddy_headers_from_the_module_before_the_build():
     assert "Content-Security-Policy" not in installer
 
 
-def test_caddyfile_imports_the_headers_at_site_level():
-    installer = _installer()
-    start = installer.index('@"\n:$FrontendPort {')
-    caddyfile = installer[start: installer.index('"@', start)]
-    lines = [line.strip() for line in caddyfile.splitlines()]
-    site_import = lines.index("import $headersCaddy")
-    first_handle = next(i for i, line in enumerate(lines) if line.startswith("handle"))
-    # Prima di ogni `handle`, nel blocco del sito: vale per statici, index.html e API.
-    assert site_import < first_handle
+PLENORA_IMPORT = f"import {CADDY_VALUES['headersCaddy']}"
+# Le sole direttive che servono una risposta nel Caddyfile.
+TERMINAL_HANDLERS = {"reverse_proxy", "file_server"}
+
+
+@pytest.mark.parametrize("grafana", [False, True], ids=["senza-grafana", "con-grafana"])
+def test_every_non_grafana_response_of_the_generated_caddyfile_gets_the_plenora_headers(grafana):
+    """Regola: OGNI risposta che non e' /grafana porta le intestazioni di Plenora.
+
+    Il sito ha due soli rami esclusivi: `handle @grafana` (facoltativo, con le
+    sue intestazioni) e un `handle` senza matcher che importa per prima cosa
+    quelle di Plenora e contiene tutti gli altri. Il test enumera ogni handle
+    e ogni direttiva che serve una risposta del Caddyfile generato: un handle
+    nuovo fuori dal ramo Plenora, o un import spostato dopo, lo fanno fallire.
+    """
+    site = parse_caddyfile(render_caddyfile(grafana=grafana)).children[0]
+    top_handles = [child.line for child in site.children if child.name == "handle"]
+    assert top_handles == (["handle @grafana", "handle"] if grafana else ["handle"])
+    # A livello del sito niente intestazioni: si applicherebbero anche a /grafana.
+    assert all(child.name not in ("import", "header") for child in site.children)
+
+    plenora = next(child for child in site.children if child.line == "handle")
+    assert plenora.children[0].line == PLENORA_IMPORT, "import prima di ogni altro handle del ramo Plenora"
+
+    served = 0
+    for block, ancestors in site.walk():
+        if block.name not in TERMINAL_HANDLERS and block.name != "handle":
+            continue
+        chain = [*ancestors, block]
+        if any(b.line == "handle @grafana" for b in chain):
+            assert all(PLENORA_IMPORT != c.line for b in chain for c in b.children)
+            continue
+        assert plenora in chain, f"{block.line!r} fuori dal ramo con le intestazioni Plenora"
+        served += block.name in TERMINAL_HANDLERS
+    assert served == 3  # API proxate, /assets, index.html (SPA)
+
+
+def test_grafana_proxy_headers_allow_same_origin_embedding_only():
+    caddy = fh.render_caddy_grafana()
+    lines = [line.strip() for line in caddy.splitlines()]
+    assert lines[1:4] == ["header {", "defer", "-X-Frame-Options"]
+    headers = dict(fh.GRAFANA_PROXY_HEADERS)
+    assert headers[CSP] == "frame-ancestors 'self'"
+    # Il lasciapassare e' nell'URL della dashboard: non deve uscire come Referer.
+    assert headers["Referrer-Policy"] == "no-referrer"
+    assert headers["X-Content-Type-Options"] == "nosniff"
+    assert "X-Frame-Options" not in headers
+    for name, value in headers.items():
+        assert f'    {name} "{value}"' in caddy
+        assert "unsafe-" not in value and '"' not in value
 
 
 def test_validator_checks_the_headers_on_the_real_frontend_response():
@@ -244,7 +289,7 @@ def test_caddy_rendering_matches_the_headers():
 
 
 def test_cli_writes_every_format(tmp_path):
-    for fmt in ("caddy", "nginx", "json"):
+    for fmt in ("caddy", "caddy-grafana", "nginx", "json"):
         out = tmp_path / f"h.{fmt}"
         subprocess.run(
             [sys.executable, "-m", "app.core.security.frontend_headers", "--format", fmt,
@@ -256,5 +301,7 @@ def test_cli_writes_every_format(tmp_path):
             data = json.loads(text)
             assert data["headers"] == fh.build_frontend_security_headers(DEFAULTS)
             assert data["vite_env"] == {"VITE_SENTRY_DSN": ""}
+        elif fmt == "caddy-grafana":
+            assert text == fh.render_caddy_grafana()
         else:
             assert "default-src 'self'" in text

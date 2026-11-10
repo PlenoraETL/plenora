@@ -686,9 +686,13 @@ class Settings:
 
         # Dashboard Grafana degli Eseguibili (11/11/2026, app/core/grafana).
         # Segreti SOLO in .env (DASHBOARD_PASS_SECRET, GRAFANA_DATA_SECRET,
-        # GRAFANA_SERVICE_TOKEN). False = nessuna chiamata a Grafana, creazione
-        # della dashboard rifiutata, «Apri dashboard» non offerto.
-        "GRAFANA_ENABLED": False,
+        # GRAFANA_SERVICE_TOKEN). True di default (11/11/2026): la funzione e'
+        # attiva solo se c'e' anche GRAFANA_SERVICE_TOKEN, che scrive solo
+        # l'installer con -InstallGrafana (grafana.settings.enabled), quindi
+        # senza Grafana resta spenta. False = spenta anche con Grafana
+        # installato: nessuna chiamata, creazione rifiutata, «Apri dashboard»
+        # non offerto.
+        "GRAFANA_ENABLED": True,
         # API di Grafana vista dal backend (root_url con sottopercorso).
         "GRAFANA_URL": "http://127.0.0.1:3300/grafana",
         # Percorso di Grafana visto dal browser (stessa origine, dietro Caddy):

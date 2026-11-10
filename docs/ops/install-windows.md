@@ -25,6 +25,7 @@ sorgente canonico anche per il manuale PDF operativo.
 9. [Checklist operative](#9-checklist-operative)
 10. [Troubleshooting](#10-troubleshooting)
 11. [Disinstallazione](#11-disinstallazione)
+12. [Vista dashboard: Grafana opzionale](#12-vista-dashboard-grafana-opzionale)
 
 ---
 
@@ -40,6 +41,7 @@ sorgente canonico anche per il manuale PDF operativo.
 | Beat APScheduler | servizio `plenora-beat` | repo | — |
 | Object storage SeaweedFS | servizio `plenora-object-storage` | 4.29 | 8333 (S3, loopback) |
 | Frontend (Caddy) | servizio `plenora-caddy` | latest | **80** (configurabile) |
+| Grafana OSS (opzionale, `-InstallGrafana`) | servizio `plenora-grafana` + plugin Infinity | 13.3.0 / 4.1.6 (pinnati) | 3300 (loopback), pubblicato su `/grafana` |
 | Python + GDAL | env conda `plenora` (Miniforge) | 3.12 / GDAL 3.13 | — |
 | Microsoft ODBC Driver | connettore SQL Server/MSSQL | 18.x x64 | — |
 | XLSX exporter nativo | EXE statico opzionale (fallback Python automatico) | release Plenora | — |
@@ -151,6 +153,9 @@ anche dai client remoti.
 | `-SkipXlsxExporter` | off | Salta installazione/verifica dell'acceleratore e conserva il fallback Python |
 | `-XlsxExporterOnly` | off | Deploy rapido del solo acceleratore, con stop/restart dei servizi gia' attivi |
 | `-Production` | off | `ENVIRONMENT=production` coi gates (richiede object storage) |
+| `-InstallGrafana` | off | Grafana OSS per la vista dashboard degli Eseguibili (richiede `-InstallFrontend`; vedi §12) |
+| `-GrafanaArchive` / `-GrafanaInfinityArchive` | download | Zip di Grafana e del plugin Infinity gia' scaricati (installazione offline; stessi SHA-256 fissi) |
+| `-GrafanaRootUrl` | `http://localhost[:porta]/grafana/` | URL pubblico di Grafana (`root_url`); con `https://` i cookie di Grafana diventano `Secure` |
 | `-PgSuperPassword` | prompt | Password del superuser postgres |
 | `-StartProcesses` | off | Modalita' dev: 3 finestre cmd al posto dei servizi |
 
@@ -180,7 +185,9 @@ distribuiti (su PostgreSQL) fail-closed, beat leader fail-closed.
 **Intestazioni di sicurezza del frontend (P31)**: con `-InstallFrontend`
 l'installer genera `C:\plenora-services\plenora-caddy\security-headers.caddy`
 da `backend/app/core/security/frontend_headers.py` (l'unica definizione della
-CSP) e il Caddyfile lo importa: ogni risposta porta
+CSP) e il Caddyfile lo importa in testa al ramo di Plenora: ogni risposta
+(tranne `/grafana`, che con `-InstallGrafana` ha intestazioni proprie dallo
+stesso modulo, vedi §12) porta
 `Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy`,
 `X-Frame-Options`, `Permissions-Policy`. Le uniche origini esterne vengono
 dal `backend\.env`: `FRONTEND_MAP_TILE_ORIGINS` (tile della mappa; vuoto =
@@ -205,6 +212,12 @@ Lo script verifica servizi Windows, `/ready` attraverso Caddy, frontend
 statico con le sue intestazioni di sicurezza (CSP senza `unsafe-*`, `nosniff`),
 e smoke round-trip `dispatch -> RabbitMQ -> worker -> PG`.
 Non riavvia servizi, non modifica `.env`, non cancella dati.
+
+Con Grafana installato (`-InstallGrafana`) lo script controlla anche il servizio
+`plenora-grafana` (obbligatorio con `-RequireGrafana`), che ascolti solo su
+`127.0.0.1:3300`, che `/grafana` senza sessione Plenora risponda **401** con le
+intestazioni proprie (anche se il client manda un `X-WEBAUTH-USER` finto) e che
+`/grafana-confine` (fuori dal blocco) sia ancora Plenora con le sue intestazioni.
 
 Se l'installazione non include Caddy/frontend:
 
@@ -456,7 +469,7 @@ CHIUDE la stringa (parse error fantasma piu' avanti nel file).
 
 ```powershell
 # Servizi applicativi (worker split inclusi)
-foreach ($svc in Get-Service plenora-caddy,plenora-beat,plenora-worker*,plenora-object-storage,plenora-backend -ErrorAction SilentlyContinue) {
+foreach ($svc in Get-Service plenora-caddy,plenora-grafana,plenora-beat,plenora-worker*,plenora-object-storage,plenora-backend -ErrorAction SilentlyContinue) {
     $id = $svc.Name
     Stop-Service $id -Force
     if (Test-Path "C:\plenora-services\$id\$id.exe") {
@@ -473,3 +486,105 @@ winget uninstall PostgreSQL.PostgreSQL.17     # i dati DB sono in Program Files\
 winget uninstall Erlang.ErlangOTP             # prima: disinstallare il servizio RabbitMQ
 winget uninstall CondaForge.Miniforge3
 ```
+
+## 12. Vista dashboard: Grafana opzionale
+
+La «vista dashboard» degli Eseguibili usa **Grafana OSS** incorporato nelle
+pagine Plenora. E' facoltativo: senza `-InstallGrafana` l'installazione e il
+Caddyfile restano quelli di sempre (nessun `/grafana`).
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
+    -SkipWinget -InstallServices -InstallFrontend -InstallGrafana -Production
+```
+
+`-InstallGrafana` richiede `-InstallFrontend` nello stesso lancio (il blocco
+`/grafana` vive nel Caddyfile, che solo `-InstallFrontend` riscrive). **Agli
+aggiornamenti ripassare sempre `-InstallGrafana`**: un lancio con
+`-InstallFrontend` senza lo switch riscrive il Caddyfile senza `/grafana`
+(l'installer lo segnala con un avviso se `plenora-grafana` esiste).
+
+**Cosa installa.**
+
+| Elemento | Dove |
+|---|---|
+| Grafana OSS 13.3.0 (zip ufficiale windows-amd64, SHA-256 fisso) | `C:\plenora-services\plenora-grafana\grafana-13.3.0\` |
+| Plugin Infinity 4.1.6 (windows-amd64, SHA-256 fisso) | `C:\plenora-services\plenora-grafana\plugins\` |
+| Configurazione generata (`custom.ini`, ACL Administrators+SYSTEM) | `C:\plenora-services\plenora-grafana\custom.ini` |
+| Database SQLite di Grafana (dashboard, utenti, datasource) | `C:\plenora-data\grafana\` (da includere nei backup) |
+| Log | `C:\plenora-services\plenora-grafana\log\` |
+| Servizio Windows | `plenora-grafana` (WinSW, avvio automatico), solo `127.0.0.1:3300` |
+
+**Spazio disco: servono 1,5 GB liberi** sul disco di `C:\plenora-services`
+(zip ~500 MB, scompattato ~900 MB, plugin ~60 MB); l'installer lo controlla
+prima di scaricare e si ferma se non ci sono. Una versione successiva si
+installa accanto (cartella `grafana-<versione>`): la precedente si puo'
+cancellare a mano dopo il collaudo.
+
+**Installazione offline.** Il server puo' non avere internet: scaricare
+altrove i due zip dagli URL fissi e passarli all'installer. Vengono
+verificati con gli stessi SHA-256 del download (un file diverso ferma
+l'installazione).
+
+| Artefatto | URL | SHA-256 |
+|---|---|---|
+| Grafana OSS 13.3.0 | `https://dl.grafana.com/oss/release/grafana-13.3.0.windows-amd64.zip` | `133f0a0c7b905a6c7e4f3df596cf4df535ca78f1e3ef7e5be5f3f2178a51f75d` |
+| Infinity 4.1.6 | `https://grafana.com/api/plugins/yesoreyeram-infinity-datasource/versions/4.1.6/download?os=windows&arch=amd64` | `a8c76c7e54ddd26adbdbc9e4a97568ebbf94316236acdba475a93c3a7a44ca18` |
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
+    -SkipWinget -InstallFrontend -InstallGrafana `
+    -GrafanaArchive C:\deploy\grafana-13.3.0.windows-amd64.zip `
+    -GrafanaInfinityArchive C:\deploy\yesoreyeram-infinity-datasource-4.1.6.windows-amd64.zip
+```
+
+Grafana stesso non va mai su internet: `[plugins] preinstall_disabled = true`
+(altrimenti Grafana 13 scarica in background ~550 MB di plugin
+«preinstallati»), controllo aggiornamenti, telemetria e news spenti.
+
+**Come entra un utente.** Solo utenti Plenora, nessun accesso anonimo, nessun
+form di login, basic auth spenta. Caddy, per ogni richiesta a `/grafana`:
+toglie dalla richiesta ogni intestazione `X-WEBAUTH-*`, chiede al backend
+(`forward_auth` verso `/api/grafana/auth`) chi e' l'utente e, se il backend
+risponde 2xx, passa a Grafana `X-WEBAUTH-USER`/`X-WEBAUTH-ROLE` (auth proxy di
+Grafana, ruolo predefinito Viewer nell'organizzazione «Plenora Dashboard»);
+altrimenti la risposta del backend (401) torna al browser. Le risposte di
+`/grafana` hanno intestazioni proprie (`frame-ancestors 'self'`, niente
+`X-Frame-Options`, `Referrer-Policy: no-referrer`); tutto il resto ha quelle di
+Plenora, la cui CSP ammette iframe solo dallo stesso origin (`frame-src 'self'`).
+
+**Bootstrap** (idempotente, `scripts\grafana_bootstrap.py`, a ogni lancio):
+rinomina l'organizzazione 1 in «Plenora Dashboard», crea il service account
+`plenora` (Admin) e scrive il suo token in `backend\.env` come
+`GRAFANA_SERVICE_TOKEN` (riusato se ancora valido; se perso se ne crea uno e i
+vecchi vengono revocati), genera se assenti `GRAFANA_DATA_SECRET` e
+`DASHBOARD_PASS_SECRET`, crea o aggiorna il datasource Infinity (uid fisso
+`plenora-infinity`) che puo' chiamare solo `http://127.0.0.1:5004/api/dash/` e
+manda `X-Grafana-Secret` (campo cifrato). L'installer scrive nel `.env` solo
+questi tre segreti: ogni impostazione (es. `GRAFANA_ENABLED`) resta nei default
+di `config.py`. Il bootstrap si autentica con lo stesso auth proxy, da
+localhost, col login amministratore casuale scritto nel `custom.ini`.
+
+**Rischi da conoscere.**
+
+- **Impersonazione da processi locali.** Grafana si fida di `X-WEBAUTH-USER`
+  da `127.0.0.1` (la whitelist dell'auth proxy): qualunque processo sul server
+  che apre `http://127.0.0.1:3300` puo' presentarsi come un utente qualsiasi,
+  compreso l'amministratore. La porta non e' raggiungibile dalla rete (solo
+  loopback, verificato dal validatore), ma il server va trattato come fidato:
+  niente utenti interattivi o servizi di terzi non necessari.
+- **Token del service account potente.** `GRAFANA_SERVICE_TOKEN` e' Admin
+  dell'organizzazione: crea e modifica dashboard, datasource, utenti. Vive solo
+  nel `.env` (ACL Administrators+SYSTEM). Se esce: revocarlo da Grafana o
+  cancellarlo dal `.env` e rilanciare l'installer (ne crea uno nuovo e revoca
+  gli altri).
+- **Segreti nel `custom.ini`.** `secret_key` (cifra i campi segreti dei
+  datasource: non cambiarla, o diventano illeggibili) e login/password
+  dell'amministratore iniziale; ACL Administrators+SYSTEM, riletti a ogni
+  lancio. Se il `custom.ini` va perso ma `C:\plenora-data\grafana` resta, il
+  bootstrap si ferma («non e' amministratore»): ripristinare il file dal
+  backup oppure, se le dashboard sono rigenerabili, cancellare la cartella dati.
+- **Log di Caddy.** Oggi Caddy non scrive log di accesso. Se si abilitano,
+  filtrare la **query string** delle richieste `/grafana` (contiene il
+  lasciapassare della dashboard), per esempio con un `log` e il filtro
+  `query` di Caddy che cancella il parametro, prima di conservarli.

@@ -23,7 +23,16 @@ altro host (``--api-url``, lo stesso valore che l'installer passa a
 ``VITE_API_URL``). Niente ``'unsafe-inline'`` ne' ``'unsafe-eval'``: la build
 Vite non ha script inline (il tema iniziale e' in ``public/theme-init.js``) e
 gli stili dinamici di React/Leaflet/React Flow passano dal CSSOM
-(``element.style``), che la CSP non blocca.
+(``element.style``), che la CSP non blocca. ``frame-src 'self'``: Plenora
+incorpora solo pagine del proprio origin (``/grafana``); ``frame-ancestors
+'none'``: Plenora non si lascia incorporare da nessuno.
+
+Grafana (opzionale, ``-InstallGrafana``) e' servito da Caddy su ``/grafana``
+con intestazioni PROPRIE (:data:`GRAFANA_PROXY_HEADERS`, ``--format
+caddy-grafana``): Grafana richiede script e stili inline, quindi la CSP di
+Plenora non gli si applica; la sua dice solo che puo' essere incorporato dallo
+stesso origin, e ``Referrer-Policy: no-referrer`` impedisce che il lasciapassare
+nell'URL della dashboard esca come Referer.
 """
 
 from __future__ import annotations
@@ -100,6 +109,10 @@ def build_csp(
         ("img-src", ["'self'", "data:", "blob:", *map_tile_origins]),
         ("font-src", ["'self'"]),
         ("connect-src", ["'self'", *connect_origins]),
+        # Solo iframe dello stesso origin: la vista dashboard incorpora
+        # /grafana (servito da Caddy sullo stesso host). Esplicito anche se
+        # default-src lo darebbe gia'.
+        ("frame-src", ["'self'"]),
         ("object-src", ["'none'"]),
         ("base-uri", ["'self'"]),
         ("form-action", ["'self'"]),
@@ -155,6 +168,18 @@ GENERATED_NOTE = (
 )
 
 
+# Intestazioni delle risposte di /grafana (blocco Caddy dedicato). Grafana si
+# incorpora solo nelle pagine Plenora (stesso origin); X-Frame-Options e' tolta
+# perche' DENY/SAMEORIGIN non distinguerebbe e la CSP basta.
+GRAFANA_PROXY_HEADERS: tuple[tuple[str, str], ...] = (
+    (CSP_HEADER, "frame-ancestors 'self'"),
+    ("X-Content-Type-Options", "nosniff"),
+    ("Referrer-Policy", "no-referrer"),
+    ("Permissions-Policy", dict(STATIC_HEADERS)["Permissions-Policy"]),
+)
+GRAFANA_PROXY_REMOVED_HEADERS: tuple[str, ...] = ("X-Frame-Options",)
+
+
 def render_nginx(headers: Mapping[str, str]) -> str:
     lines = [
         f"# {GENERATED_NOTE}",
@@ -172,9 +197,24 @@ def render_caddy(headers: Mapping[str, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_caddy_grafana() -> str:
+    """Blocco ``header`` per la route /grafana di Caddy.
+
+    ``defer``: si applica quando la risposta e' scritta, quindi vince sulle
+    intestazioni di Grafana e copre anche il 401 di ``forward_auth``.
+    """
+    lines = [f"# {GENERATED_NOTE}", "header {", "    defer"]
+    lines += [f"    -{name}" for name in GRAFANA_PROXY_REMOVED_HEADERS]
+    lines += [f'    {name} "{value}"' for name, value in GRAFANA_PROXY_HEADERS]
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--format", choices=("caddy", "nginx", "json"), required=True)
+    parser.add_argument(
+        "--format", choices=("caddy", "caddy-grafana", "nginx", "json"), required=True
+    )
     parser.add_argument("--api-url", default="", help="VITE_API_URL della build (vuoto = same-origin)")
     parser.add_argument("--output", type=Path, help="file di destinazione (default: stdout)")
     parser.add_argument(
@@ -196,6 +236,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         text = render_nginx(headers)
     elif args.format == "caddy":
         text = render_caddy(headers)
+    elif args.format == "caddy-grafana":
+        text = render_caddy_grafana()
     else:
         payload = {"headers": dict(headers), "vite_env": dict(vite_build_env(settings))}
         text = json.dumps(payload, indent=2) + "\n"

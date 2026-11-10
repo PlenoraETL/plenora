@@ -7,6 +7,8 @@
 #   - servizi Windows attesi;
 #   - /ready attraverso l'URL operativo;
 #   - frontend statico se Caddy e' installato;
+#   - Grafana (se installato): solo su 127.0.0.1:3300, /grafana senza
+#     sessione Plenora = 401, pagine Plenora ancora con le loro intestazioni;
 #   - smoke round-trip dispatch -> RabbitMQ -> worker -> task_results su PG;
 #   - opzionalmente la suite e2e-v2 isolata via scripts/run-e2e-windows.ps1.
 #
@@ -29,6 +31,9 @@ param(
     [switch]$SkipFrontendPage,
     [switch]$RequireFrontend,
     [switch]$RequireObjectStorage = $true,
+    # Grafana opzionale (-InstallGrafana): controllato se installato,
+    # obbligatorio con -RequireGrafana.
+    [switch]$RequireGrafana,
     # Alias deprecato per vecchi runbook.
     [switch]$RequireMinio,
     [switch]$RunE2E,
@@ -127,7 +132,8 @@ function Test-FrontendPage([string]$Url) {
         # generato dall'installer). Report-Only solo se FRONTEND_CSP_REPORT_ONLY.
         $csp = $response.Headers['Content-Security-Policy']
         if (-not $csp) { $csp = $response.Headers['Content-Security-Policy-Report-Only'] }
-        if (-not $csp -or $csp -notmatch "default-src 'self'" -or $csp -match 'unsafe-inline|unsafe-eval') {
+        if (-not $csp -or $csp -notmatch "default-src 'self'" -or $csp -notmatch "frame-ancestors 'none'" -or
+            $csp -match 'unsafe-inline|unsafe-eval') {
             Fail "frontend senza Content-Security-Policy attesa su ${Url}: '$csp'"
         }
         if ($response.Headers['X-Content-Type-Options'] -ne 'nosniff') {
@@ -137,6 +143,42 @@ function Test-FrontendPage([string]$Url) {
     } catch {
         Fail "frontend non raggiungibile su ${Url}: $($_.Exception.Message)"
     }
+}
+
+function Test-GrafanaProxy([string]$BaseUrl) {
+    # Grafana non deve essere raggiungibile se non da Caddy: ascolto solo loopback.
+    # Socket in ascolto = porta remota 0 (alcune build di Windows riportano
+    # State vuoto anche per i listener: non filtrare su -State Listen).
+    $listen = @(Get-NetTCPConnection -LocalPort 3300 -ErrorAction SilentlyContinue |
+        Where-Object { $_.RemotePort -eq 0 })
+    if ($listen.Count -eq 0) { Fail 'Grafana non in ascolto su 3300' }
+    $exposed = @($listen | Where-Object { $_.LocalAddress -notin @('127.0.0.1', '::1') })
+    if ($exposed.Count -gt 0) { Fail "Grafana in ascolto anche su $($exposed[0].LocalAddress):3300 (atteso solo 127.0.0.1)" }
+    Ok 'Grafana in ascolto solo su 127.0.0.1:3300'
+
+    # Senza sessione Plenora (e con un'identita' finta) /grafana deve dire 401:
+    # Caddy toglie X-WEBAUTH-* e forward_auth chiede al backend.
+    $url = $BaseUrl.TrimEnd('/') + '/grafana/'
+    $status = 0
+    $headers = $null
+    try {
+        $response = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 10 -MaximumRedirection 0 `
+            -Headers @{ 'X-WEBAUTH-USER' = 'validate-windows-install'; 'X-WEBAUTH-ROLE' = 'Admin' }
+        $status = [int]$response.StatusCode
+    } catch {
+        if (-not $_.Exception.Response) { Fail "/grafana non raggiungibile su ${url}: $($_.Exception.Message)" }
+        $status = [int]$_.Exception.Response.StatusCode
+        $headers = $_.Exception.Response.Headers
+    }
+    if ($status -ne 401) { Fail "/grafana senza sessione Plenora ha risposto HTTP $status (atteso 401) su $url" }
+    $csp = if ($headers) { [string]$headers['Content-Security-Policy'] } else { '' }
+    if ($csp -ne "frame-ancestors 'self'") { Fail "/grafana senza le intestazioni proprie (CSP: '$csp')" }
+    if ($headers['X-Frame-Options']) { Fail "/grafana con X-Frame-Options ($($headers['X-Frame-Options'])): non incorporabile" }
+    if ($headers['Referrer-Policy'] -ne 'no-referrer') { Fail '/grafana senza Referrer-Policy: no-referrer' }
+    Ok "/grafana senza sessione Plenora: 401 con intestazioni proprie ($url)"
+
+    # Il confine del blocco: /grafana-* e' ancora Plenora (SPA) con le sue intestazioni.
+    Test-FrontendPage -Url ($BaseUrl.TrimEnd('/') + '/grafana-confine')
 }
 
 # -----------------------------------------------------------------------------
@@ -160,6 +202,7 @@ Test-RequiredServicePattern 'plenora-worker*' 'Plenora worker'
 Test-RequiredServicePattern 'plenora-beat' 'Plenora beat'
 $storagePresent = Test-OptionalService 'plenora-object-storage' 'Plenora Object Storage' -Required:$RequireObjectStorage
 $caddyPresent = Test-OptionalService 'plenora-caddy' 'Plenora Caddy' -Required:$RequireFrontend
+$grafanaPresent = Test-OptionalService 'plenora-grafana' 'Plenora Grafana' -Required:$RequireGrafana
 
 # -----------------------------------------------------------------------------
 Step 'Readiness applicativa'
@@ -173,6 +216,12 @@ if (-not $SkipFrontendPage) {
     } else {
         Warn 'frontend page check saltato: plenora-caddy non installato'
     }
+}
+
+if ($grafanaPresent) {
+    Step 'Grafana dietro Caddy (/grafana)'
+    if (-not $caddyPresent) { Fail 'plenora-grafana installato senza plenora-caddy: /grafana non e'' pubblicato' }
+    Test-GrafanaProxy -BaseUrl $FrontendUrl
 }
 
 # -----------------------------------------------------------------------------

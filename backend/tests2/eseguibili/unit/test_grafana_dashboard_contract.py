@@ -658,7 +658,9 @@ def test_secrets_are_env_only_and_rest_in_defaults():
 
     for secret in ("DASHBOARD_PASS_SECRET", "GRAFANA_DATA_SECRET", "GRAFANA_SERVICE_TOKEN"):
         assert secret not in Settings.DEFAULTS
-    assert Settings.DEFAULTS["GRAFANA_ENABLED"] is False
+    # Acceso di default: senza GRAFANA_SERVICE_TOKEN (scritto solo
+    # dall'installer con -InstallGrafana) la funzione resta spenta.
+    assert Settings.DEFAULTS["GRAFANA_ENABLED"] is True
     assert Settings.DEFAULTS["GRAFANA_URL"] == "http://127.0.0.1:3300/grafana"
     assert Settings.DEFAULTS["DASHBOARD_DATA_MAX_ROWS"] == 50_000
     assert Settings.DEFAULTS["DASHBOARD_DATA_TTL_SECONDS"] == 1800
@@ -699,3 +701,12 @@ def test_json_rows_are_array_of_objects(env):
     _run(env, rows=1)
     body = _rows(_app(), "task-1", _pass_for(env)).content
     assert isinstance(json.loads(body), list) and isinstance(json.loads(body)[0], dict)
+
+
+def test_default_without_token_is_off(monkeypatch):
+    """Default acceso + nessun token (server senza Grafana) = spenta."""
+    from app.core.grafana import settings as grafana_settings
+
+    monkeypatch.delenv("GRAFANA_ENABLED", raising=False)
+    monkeypatch.setenv("GRAFANA_SERVICE_TOKEN", "")
+    assert grafana_settings.flag_enabled() and not grafana_settings.enabled()
