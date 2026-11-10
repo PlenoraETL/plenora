@@ -16,7 +16,12 @@ from pydantic import (
 
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.runtime_bound_fields import RUNTIME_BOUND_REGISTRY, retain_registered
-from app.shared.execution.runtime_identity import TEST_RUN_SUBJECT_KIND, is_test_run_trigger
+from app.shared.execution.runtime_identity import (
+    ISOLATED_UPSTREAM_RUN_FIELD,
+    ISOLATED_UPSTREAMS_FIELD,
+    TEST_RUN_SUBJECT_KIND,
+    is_test_run_trigger,
+)
 
 
 SUPPORTED_PIPELINE_EXECUTION_CONTRACT_VERSIONS = frozenset({1, 2})
@@ -56,6 +61,11 @@ class PipelineExecutionContract(BaseModel):
     retention_n: Optional[int] = None
     execution_subject: Optional[JsonObject] = None
     runtime_context: JsonObject = Field(default_factory=dict)
+    # «Utente che esegue» negli Estrai a monte (runtime_identity U2): il
+    # piano dei ricalcoli isolati, {id progetto a monte: {project_type,
+    # name, canvas risolto, default_connection_id, registro}}. Lo scrive
+    # solo il server all'avvio (eseguibili.upstream_identity).
+    isolated_upstreams: JsonObject = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -81,6 +91,16 @@ class PipelineExecutionContract(BaseModel):
         canvas = values.get("canvas")
         if isinstance(canvas, Mapping):
             values["canvas"] = retain_registered(canvas, context.get(RUNTIME_BOUND_REGISTRY))
+        # Stessa regola del lettore per ogni canvas del piano a monte.
+        upstreams = values.get("isolated_upstreams")
+        if isinstance(upstreams, Mapping):
+            values["isolated_upstreams"] = {
+                str(pid): (
+                    {**entry, "canvas": retain_registered(entry.get("canvas"), entry.get(RUNTIME_BOUND_REGISTRY))}
+                    if isinstance(entry, Mapping) and isinstance(entry.get("canvas"), Mapping) else entry
+                )
+                for pid, entry in upstreams.items()
+            }
         return values
 
     @field_validator("project_id", "project_type", "group_id")
@@ -145,6 +165,8 @@ class PipelineExecutionContract(BaseModel):
             payload["execution_subject"] = dict(self.execution_subject)
         if self.runtime_context:
             payload["runtime_context"] = dict(self.runtime_context)
+        if self.isolated_upstreams:
+            payload[ISOLATED_UPSTREAMS_FIELD] = dict(self.isolated_upstreams)
         return payload
 
     def build_runtime_context(
@@ -168,6 +190,12 @@ class PipelineExecutionContract(BaseModel):
             # Esecuzione di prova: gli executor non ricalcolano a monte
             # (runtime_identity.guard_upstream_recompute).
             context["test_run"] = True
+        # Il piano a monte arriva agli executor (porta route_upstream_source);
+        # mai dal runtime_context del client (il contesto lo scrive il server).
+        context.pop(ISOLATED_UPSTREAMS_FIELD, None)
+        context.pop(ISOLATED_UPSTREAM_RUN_FIELD, None)
+        if self.isolated_upstreams:
+            context[ISOLATED_UPSTREAMS_FIELD] = dict(self.isolated_upstreams)
         return context
 
     @property

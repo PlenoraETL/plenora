@@ -141,6 +141,19 @@ function useSignedInUser() {
   }
 }
 
+// Input di un progetto a monte (backend runtime_identity, NEGLI ESTRAI A
+// MONTE): il filtro sta nel progetto a monte, che si riesegue solo per
+// questa esecuzione.
+function UpstreamHint({ definition }) {
+  if (!definition.upstream) return null;
+  return (
+    <span className="before-run__hint">
+      Filtro del progetto a monte «{definition.upstream.project_name}»: si riesegue solo per questa
+      esecuzione, con la sua regola.
+    </span>
+  );
+}
+
 // «Utente che esegue» con «Gli amministratori possono scegliere il valore»,
 // per admin e superadmin negli Eseguibili: campo facoltativo, il valore e'
 // gia' quello finale (nessuna trasformazione); vuoto = il proprio nome utente.
@@ -164,6 +177,7 @@ function ChosenIdentityField({ definition, value, onChange, username }) {
         Vuoto: si usa il tuo nome utente{definition.transform ? ' (con la trasformazione dell’input)' : ''}.
         Un valore scritto qui si usa così com’è e resta nella cronologia dell’esecuzione.
       </span>
+      <UpstreamHint definition={definition} />
       {definition.description && <span className="before-run__hint">{definition.description}</span>}
     </div>
   );
@@ -184,6 +198,7 @@ function IdentityField({ definition, username, testRun = false }) {
           ? `${inputKindLabel('current_user')}: nell'esecuzione di prova il server usa il nome utente di prova salvato nell'input; non si può cambiare qui.`
           : `${inputKindLabel('current_user')}: lo imposta il server con l'utente che avvia l'esecuzione${username ? '' : ' (utente non disponibile in questa finestra)'}; non si può cambiare.`}
       </span>
+      <UpstreamHint definition={definition} />
       {definition.description && <span className="before-run__hint">{definition.description}</span>}
     </div>
   );
@@ -207,8 +222,9 @@ function TestRunNotice({ username, problem, recalculateIgnored = false }) {
           {' '}Il risultato si scarica una volta dalla finestra di esecuzione: non diventa l&apos;Output del
           progetto, non aggiorna chi lo usa come sorgente e non avvia Carica. Non ricalcola i progetti a monte:
           usa il loro risultato salvato e, se manca o non è aggiornato, si ferma e chiede di eseguire prima il
-          progetto a monte. Pianificazioni e progetti collegati restano bloccati: per gli utenti veri pubblica il progetto
-          come Eseguibile.
+          progetto a monte. Fanno eccezione i progetti a monte con «Utente che esegue»: si rieseguono solo per
+          questa prova, con lo stesso utente di prova, senza salvare nulla. Pianificazioni e progetti collegati
+          restano bloccati: per gli utenti veri pubblica il progetto come Eseguibile.
           {recalculateIgnored && (
             <>
               {' '}<strong>«Ricalcola tutto» non vale per la prova</strong>: si usa la cache.

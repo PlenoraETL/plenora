@@ -22,6 +22,8 @@ from app.core.artifacts import SourceLoader, SourceRef
 from app.core.artifacts.types import ArtifactResolutionError, SourceLoadingError
 from app.core.dataframes.tabular import DATAFRAME_PARSE_ERRORS, filter_visible_columns, rename_duplicate_columns
 from app.core.resources.exceptions import MemoryLimitExceededError
+from app.core.projects.upstream_identity import source_identity_need
+from app.shared.execution.runtime_identity import RuntimeIdentityError, route_upstream_source
 
 
 FrameResults = dict[str, tuple[Any, bool, str | None]]
@@ -95,6 +97,18 @@ class CanvasDataPreparation:
             return None, False, "Input file runtime: dati non disponibili nel canvas"
         if node.type in {"staticValues", "file_source", "project_source"}:
             data = {key: node_field(node, key) for key in ("fields", "file_source_id", "source_project_id")}
+            if node.type == "project_source" and data.get("source_project_id"):
+                # La porta unica (runtime_identity U1): un progetto a monte
+                # con «Utente che esegue» non ha dati conoscibili qui (il
+                # risultato salvato non e' filtrato per chi esegue).
+                try:
+                    route_upstream_source(
+                        source_project_id=str(data["source_project_id"]),
+                        need=source_identity_need(str(data["source_project_id"]), group_id=self.group_id),
+                        isolated_upstreams=None,
+                    )
+                except RuntimeIdentityError as exc:
+                    return None, False, exc.message
             ref = SourceRef.from_node_data(node.type, data)
             frame, reason = SourceLoader().load_in_memory(ref, expected_group_id=self.group_id)
             if frame is None:

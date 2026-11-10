@@ -185,6 +185,12 @@ def build_orchestrator_stack(
             raise RuntimeError("Orchestrator dispatcher used before wiring")
         return orchestrator.execute_pipeline(*args, **kwargs)
 
+    def dispatch_isolated_upstream(*args: Any, **kwargs: Any) -> Any:
+        # Ricalcolo isolato a monte («Utente che esegue», runtime_identity U3).
+        if orchestrator is None:
+            raise RuntimeError("Orchestrator dispatcher used before wiring")
+        return orchestrator.execute_isolated_upstream(*args, **kwargs)
+
     estrai_executor = estrai_executor_module.EstraiExecutor(
         project_service=project_service,
         executor=query_executor,
@@ -195,6 +201,7 @@ def build_orchestrator_stack(
     manipola_executor = manipola_executor_module.ManipolaExecutor(
         project_service=project_service,
         pipeline_dispatcher=dispatch_pipeline,
+        isolated_dispatcher=dispatch_isolated_upstream,
     )
     enrich_executor = enrich_executor_module.EnrichExecutor(
         project_service=project_service

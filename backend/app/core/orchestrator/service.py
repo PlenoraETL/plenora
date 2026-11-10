@@ -19,7 +19,14 @@ from app.core.resources import memory_guard
 from app.core.query_execution.query_executor import QueryExecutor
 from app.core.query_execution.query_streaming import execute_streaming_to_writer
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
-from app.shared.execution.runtime_identity import RuntimeIdentityError, assert_identity_resolved
+from app.core.eseguibili.output_persistence import ExecutableOutputPersistence, MemoryOutputPersistence
+from app.shared.execution.runtime_bound_fields import RUNTIME_BOUND_REGISTRY
+from app.shared.execution.runtime_identity import (
+    ISOLATED_UPSTREAM_RUN_FIELD,
+    ISOLATED_UPSTREAMS_FIELD,
+    RuntimeIdentityError,
+    assert_identity_resolved,
+)
 from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult
@@ -195,6 +202,48 @@ class OrchestratorService:
             ),
         )
 
+    def execute_isolated_upstream(
+        self,
+        project_id: str,
+        entry: Mapping[str, Any],
+        *,
+        group_id: str,
+        isolated_upstreams: Mapping[str, Any],
+        test_run: bool = False,
+    ) -> tuple[PipelineArtifact, Optional[tuple[str, bytes]]]:
+        """Ricalcolo isolato di un progetto a monte con «Utente che esegue»
+        (``runtime_identity``, NEGLI ESTRAI A MONTE, U3): il canvas risolto
+        del piano, il risultato in memoria (``(formato, byte)``), nessuna
+        scrittura fuori dall'esecuzione che lo chiede: nessun
+        ``output_contract`` (``persist_contract`` falso), nessuna riga
+        ``results`` (persistenza in memoria), nessuna run intermedia
+        (``run_id`` assente), nessun Carica, nessun ricalcolo che scrive
+        dentro (``isolated_upstream_run``)."""
+        project_type = str(entry.get("project_type") or "").lower()
+        persistence = MemoryOutputPersistence(group_id=group_id, stream_query_to_writer=execute_streaming_to_writer)
+        context: dict[str, Any] = {
+            "group_id": group_id,
+            "default_connection_id": entry.get("default_connection_id"),
+            "persist_contract": False,
+            ISOLATED_UPSTREAMS_FIELD: dict(isolated_upstreams),
+            ISOLATED_UPSTREAM_RUN_FIELD: True,
+        }
+        if entry.get(RUNTIME_BOUND_REGISTRY):
+            context[RUNTIME_BOUND_REGISTRY] = entry[RUNTIME_BOUND_REGISTRY]
+        if test_run:
+            context["test_run"] = True
+        artifact = self._execute_loaded_pipeline(
+            project_id=project_id,
+            project_type=project_type,
+            canvas=self._coerce_canvas(entry.get("canvas") or {}),
+            force_recalculate=False,
+            skip_carica=True,
+            run_id=None,
+            execution_context=context,
+            output_persistence=persistence,
+        )
+        return artifact, persistence.captured
+
     def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None, user_id: Optional[str] = None, intermediate_mode_override: Optional[str] = None) -> PipelineArtifact:
         """Punto di ingresso principale: decide se estrarre, manipolare o arricchire.
 
@@ -251,6 +300,7 @@ class OrchestratorService:
         intermediate_mode_override: Optional[str] = None,
         execution_context: Optional[Mapping[str, Any]] = None,
         carica_group_id: str = "",
+        output_persistence: Any = None,
     ) -> PipelineArtifact:
         if project_type not in self._executor_dispatch:
             return PipelineArtifact.failure(
@@ -264,12 +314,7 @@ class OrchestratorService:
         except RuntimeIdentityError as exc:
             return PipelineArtifact.failure(project_id=project_id, message=exc.message, error=exc.code)
 
-        output_persistence = None
-        if execution_context is not None and execution_context.get("output_task_id"):
-            from app.core.eseguibili.output_persistence import (
-                ExecutableOutputPersistence,
-            )
-
+        if output_persistence is None and execution_context is not None and execution_context.get("output_task_id"):
             output_persistence = ExecutableOutputPersistence(
                 task_id=str(execution_context["output_task_id"]),
                 group_id=str(execution_context.get("group_id") or ""),

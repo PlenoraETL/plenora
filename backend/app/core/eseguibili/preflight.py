@@ -34,6 +34,7 @@ from . import db as eseguibili_db
 from . import service as eseguibili_service
 from .identity_transform import identity_values
 from .runtime import resolve_runtime_inputs
+from .upstream_plan import plan_for_version
 
 PREFLIGHT_CHECKS = {
     "runtime_inputs": "verified",
@@ -76,6 +77,7 @@ def preparation_fingerprint(
     raw_inputs: Mapping[str, Any],
     connections: JsonObject,
     identity_values: Mapping[str, str],
+    upstream: Optional[Mapping[str, Any]] = None,
 ) -> str:
     content = {
         "eseguibile_id": eseguibile_id,
@@ -87,6 +89,10 @@ def preparation_fingerprint(
         "identity": dict(identity_values),
         "connections": connections,
     }
+    if upstream:
+        # «Utente che esegue» negli Estrai a monte (runtime_identity U2): i
+        # canvas risolti a monte; un Estrai cambiato tra stima e avvio = 409.
+        content["upstream"] = dict(upstream)
     return hashlib.sha256(
         json.dumps(content, sort_keys=True, ensure_ascii=False, default=str, separators=(",", ":")).encode()
     ).hexdigest()
@@ -101,13 +107,18 @@ def fingerprint_for(
 ) -> str:
     """Impronta della preparazione di questa esecuzione (per l'avvio)."""
     version, manifest = eseguibili_service.resolve_version_manifest(eseguibile, version_id)
+    own_inputs, plan = plan_for_version(
+        canvas=version.canvas, manifest=manifest, group_id=eseguibile.group_id,
+        raw_inputs=raw_inputs, identity=identity,
+    )
     return preparation_fingerprint(
         eseguibile_id=eseguibile.id,
         version_id=version.id,
         group_id=eseguibile.group_id,
         raw_inputs=raw_inputs,
         connections=api_connections_of(version.canvas),
-        identity_values=identity_values(manifest.inputs, identity=identity, client_values=raw_inputs),
+        identity_values=identity_values(manifest.inputs, identity=identity, client_values=own_inputs),
+        upstream=plan.isolated,
     )
 
 
@@ -122,14 +133,22 @@ def preflight_versioned(
     ``ValueError`` con il motivo (il router risponde 400)."""
     version, manifest = eseguibili_service.resolve_version_manifest(eseguibile, version_id)
     connections = api_connections_of(version.canvas)
+    # Stessi controlli dell'avvio per gli Estrai a monte con «Utente che
+    # esegue» (runtime_identity U2): un blocco si vede gia' alla stima.
+    own_inputs, plan = plan_for_version(
+        canvas=version.canvas, manifest=manifest, group_id=eseguibile.group_id,
+        raw_inputs=raw_inputs, identity=identity,
+    )
     fingerprint = preparation_fingerprint(
         eseguibile_id=eseguibile.id,
         version_id=version.id,
         group_id=eseguibile.group_id,
         raw_inputs=raw_inputs,
         connections=connections,
-        identity_values=identity_values(manifest.inputs, identity=identity, client_values=raw_inputs),
+        identity_values=identity_values(manifest.inputs, identity=identity, client_values=own_inputs),
+        upstream=plan.isolated,
     )
+    raw_inputs = own_inputs
     if manifest.project_type != "arricchisci":
         return {"valid": True, "nodes": [], "preparation_fingerprint": fingerprint, "checks": dict(PREFLIGHT_CHECKS)}
 

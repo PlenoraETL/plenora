@@ -63,7 +63,7 @@ from app.core.io.http_streaming import (
 )
 from app.core.projects.canvas_preview_scope import preview_canvas
 from app.core.orchestrator.runtime_inputs import (
-    apply_identity_inputs,
+    apply_preview_inputs,
     apply_project_runtime_inputs,
     apply_test_run_inputs,
     register_test_run_owner,
@@ -359,12 +359,10 @@ def preview_project(
                 message="Progetto non trovato",
             )
         # Anteprima: «Utente che esegue» vale lo username di prova del nodo
-        # (mai l'utente reale, mai per un risultato salvato).
+        # (mai l'utente reale, mai per un risultato salvato), anche per i
+        # progetti a monte che ne hanno bisogno (runtime_identity U2).
         try:
-            execution_contract = apply_identity_inputs(
-                execution_contract,
-                RuntimeIdentity.preview_of(execution_contract.canvas),
-            )
+            execution_contract = apply_preview_inputs(execution_contract)
         except RuntimeIdentityError as exc:
             raise_typed_http(exc.code, status_code=400, message=exc.message)
         except ValueError as exc:

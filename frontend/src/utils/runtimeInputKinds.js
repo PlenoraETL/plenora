@@ -111,9 +111,33 @@ export const projectRunBlockReason = (mode, value) => {
 export const unsupportedInputNodes = (nodes, mode) => (nodes || []).filter(n =>
   n?.type === 'project_input' && projectRunBlockReason(mode, n.data?.input_kind) === 'mode');
 
-/** Nodi «Utente che esegue»: dall'editor solo l'esecuzione di prova. */
-export const serverInputNodes = (nodes) => (nodes || []).filter(n =>
-  n?.type === 'project_input' && isServerInjectedKind(n.data?.input_kind));
+/**
+ * Input «Utente che esegue» dei progetti a monte (backend runtime_identity,
+ * NEGLI ESTRAI A MONTE): il server annota ogni nodo project_source che ne
+ * dipende (`data.upstream_identity`, transitoria come `source_freshness`).
+ * Un nodo per input, con l'id del nodo project_source (per «Vai al nodo»).
+ */
+export const upstreamIdentityNodes = (nodes) => (nodes || [])
+  .filter(n => n?.type === 'project_source')
+  .flatMap(n => (n.data?.upstream_identity?.inputs || []).map(row => ({
+    id: n.id,
+    type: 'project_input',
+    upstream: { project_id: row.project_id, project_name: row.project_name },
+    data: {
+      input_kind: row.kind || 'current_user', input_key: row.key, label: row.label,
+      preview_username: row.preview_username ?? null,
+    },
+  })));
+
+/**
+ * Nodi «Utente che esegue»: dall'editor solo l'esecuzione di prova. Anche
+ * quelli dei progetti a monte: il progetto li ricalcola per l'utente che
+ * esegue, quindi «Esegui» diventa la prova (stesso username di prova).
+ */
+export const serverInputNodes = (nodes) => [
+  ...(nodes || []).filter(n => n?.type === 'project_input' && isServerInjectedKind(n.data?.input_kind)),
+  ...upstreamIdentityNodes(nodes),
+];
 
 /**
  * Username dell'esecuzione di prova: la regola del backend

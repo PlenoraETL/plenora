@@ -14,7 +14,9 @@ from app.core.dataframes.tabular import (
     dataframe_from_rows,
     select_and_rename_columns,
 )
+from app.core.projects.upstream_identity import source_identity_need
 from app.shared.contracts.payloads import JsonObject
+from app.shared.execution.runtime_identity import RuntimeIdentityError, route_upstream_source
 
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -122,6 +124,20 @@ def _load_project_conflict_dataframe(
     logger: Any,
 ) -> ConflictInput:
     project_visible_checker(request.project_id, current_user)
+    # La porta unica (runtime_identity U1): un progetto con «Utente che
+    # esegue» (anche a monte) non ha un risultato salvato filtrato (e il suo
+    # Carica si blocca): nessun controllo sul risultato di prima del filtro.
+    try:
+        route_upstream_source(
+            source_project_id=str(request.project_id),
+            need=source_identity_need(str(request.project_id), group_id=current_user.group_id),
+            isolated_upstreams=None,
+        )
+    except RuntimeIdentityError as exc:
+        return ConflictInput(early_response={
+            "has_conflicts": False, "total_conflicts": 0, "internal_duplicates": 0,
+            "db_conflicts": 0, "details": [], "message": exc.message,
+        })
 
     try:
         df = source_loader_cls().load(

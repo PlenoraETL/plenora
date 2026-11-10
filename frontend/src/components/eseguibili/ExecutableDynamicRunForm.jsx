@@ -41,6 +41,23 @@ export const scalarDefinitions = (manifest) => [...(manifest?.inputs || [])]
   .filter(d => d.kind !== 'file')
   .map(d => ({ ...d, input_key: d.key, input_kind: d.kind }));
 
+/**
+ * Input «Utente che esegue» dei progetti a monte, vivi (dettaglio
+ * `upstream_identity_inputs`, backend runtime_identity NEGLI ESTRAI A MONTE):
+ * riga in sola lettura o, per l'amministratore con `admin_override`, campo
+ * facoltativo con la chiave «progetto::input» (stessa regola degli input
+ * dell'Eseguibile).
+ */
+export const upstreamDefinitions = (eseguibile) => (eseguibile?.upstream_identity_inputs || [])
+  .map(row => ({
+    ...row,
+    input_key: row.key,
+    input_kind: row.kind,
+    label: `${row.label} (${row.project_name})`,
+    required: false,
+    upstream: { project_id: row.project_id, project_name: row.project_name },
+  }));
+
 const fileDefinitions = (manifest) => [...(manifest?.inputs || [])]
   .sort((a, b) => (a.order || 0) - (b.order || 0))
   .filter(d => d.kind === 'file');
@@ -208,6 +225,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
   const projectType = String(eseguibile.project_type || 'estrai').toLowerCase();
   const modalVariant = ['estrai', 'manipola', 'arricchisci'].includes(projectType) ? projectType : 'estrai';
   const scalars = useMemo(() => scalarDefinitions(manifest), [manifest]);
+  const upstream = useMemo(() => upstreamDefinitions(eseguibile), [eseguibile]);
   const fileDefs = useMemo(() => fileDefinitions(manifest), [manifest]);
   const fileBased = Boolean(eseguibile.output_is_file_based && eseguibile.inferred_output_extension);
 
@@ -224,7 +242,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
     mode: projectType,
     title: eseguibile.name,
     subtitle: `Versione ${eseguibile.active_version} · ${projectTypeChip(projectType)}`,
-    inputDefinitions: scalars,
+    inputDefinitions: [...scalars, ...upstream],
     omitEmptyOptional: true,
     user: null,
     values: Object.fromEntries(scalars.map(d => [d.input_key, d.default_value ?? ''])),
@@ -261,7 +279,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
       // Preparazione cambiata dalla stima: la finestra si riapre con il
       // motivo e la stima si rifa' con gli stessi input.
       setLaunched(false);
-      const scalarValues = Object.fromEntries(scalars.map(d => [d.input_key, inputs[d.input_key] ?? d.default_value ?? '']));
+      const scalarValues = Object.fromEntries([...scalars, ...upstream].map(d => [d.input_key, inputs[d.input_key] ?? d.default_value ?? '']));
       setRequest(newRequest({
         values: scalarValues,
         preflightKey: null,

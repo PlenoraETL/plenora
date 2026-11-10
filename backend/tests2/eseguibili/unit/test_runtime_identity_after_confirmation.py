@@ -297,9 +297,13 @@ def test_every_preview_identity_is_enumerated():
     import app.core.orchestrator.router as orchestrator_router
     import app.core.projects.router as projects_router
 
+    import app.core.orchestrator.runtime_inputs as runtime_inputs
+
     count = sum(inspect.getsource(m).count("RuntimeIdentity.preview_of(") for m in (
         arricchisci_router, orchestrator_router, projects_router))
-    # anteprima, valori distinti, Valida, stima del nodo API (validate + estimate).
+    # anteprima (runtime_inputs.apply_preview_inputs, con i progetti a monte),
+    # valori distinti, Valida, stima del nodo API (validate + estimate).
+    count += inspect.getsource(runtime_inputs.apply_preview_inputs).count("RuntimeIdentity.preview_of(")
     assert count == 4 and len(PREVIEW_ENDPOINTS) == 5
 
 

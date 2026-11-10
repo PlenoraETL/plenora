@@ -54,6 +54,7 @@ from app.core import output_contract as output_contract_module
 from app.core.projects import canvas_access as _canvas_access
 from app.core.projects import schema_inference as schema_inference_module
 from app.core.projects import source_freshness as source_freshness_module
+from app.core.projects import upstream_identity as upstream_identity_module
 from app.core.results import orphan_cleanup as orphan_cleanup_module
 from app.core.projects.types import (
     CanvasResourceRefs,
@@ -544,9 +545,16 @@ def get_project(
                 canvas,
                 expected_group_id=_metadata_group_id(metadata),
             )
+            # «Utente che esegue» a monte (runtime_identity U2): l'editor sa
+            # che «Esegui» diventa la prova e quale utente di prova vale.
+            # Senza annotazione (errore) «Esegui» resta quello normale e il
+            # server blocca con il motivo: nessun dato non filtrato.
+            upstream_identity_module.annotate_canvas_upstream_identity(
+                canvas, group_id=_metadata_group_id(metadata),
+            )
         except Exception as exc:
             logger.warning(
-                f"annotazione freshness project_source fallita per {project_id}: {exc}",
+                f"annotazione project_source (freshness, utente a monte) fallita per {project_id}: {exc}",
                 exc_info=True,
             )
 
@@ -811,6 +819,8 @@ def _prepare_canvas_for_owner(
 
     try:
         source_freshness_module.clear_canvas_project_source_freshness(canvas)
+        # Annotazione transitoria «Utente che esegue» a monte: mai salvata.
+        upstream_identity_module.clear_canvas_upstream_identity(canvas)
     except Exception as exc:
         logger.warning(
             f"clear freshness project_source fallito per {project_id}: {exc}",

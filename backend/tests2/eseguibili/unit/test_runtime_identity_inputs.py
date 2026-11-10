@@ -520,10 +520,13 @@ def test_every_path_is_enumerated():
     sources = {m.__name__: inspect.getsource(m) for m in (
         arricchisci_router, eseguibili_router, orchestrator_router, projects_router)}
     identities = sum(src.count("RuntimeIdentity.") for src in sources.values())
-    # eseguibili: preflight + avvio; orchestrator: Esegui + anteprima;
-    # arricchisci: stima progetto + enrich-async + stima nodo; progetti:
-    # Valida + valori distinti.
-    assert identities == 9
+    # eseguibili: preflight + avvio; orchestrator: Esegui; arricchisci:
+    # stima progetto + enrich-async + stima nodo; progetti: Valida + valori
+    # distinti. L'anteprima costruisce l'identita' in runtime_inputs
+    # (apply_preview_inputs: anche i progetti a monte, runtime_identity U2).
+    assert identities == 8
+    import app.core.orchestrator.runtime_inputs as runtime_inputs
+    assert "RuntimeIdentity.preview_of(execution_contract.canvas, upstream_nodes=" in inspect.getsource(runtime_inputs)
     assert inspect.getsource(orchestrator_service).count("assert_identity_resolved(") == 3
     assert "assert_identity_resolved(canvas)" in inspect.getsource(enrichment_task)
     assert len(PATHS) == 11

@@ -37,6 +37,8 @@ from .models import (
     ConnectionInputOption,
 )
 from .runtime import resolve_runtime_inputs
+from . import upstream_plan as upstream_plan_module
+from app.core.projects.upstream_identity import identity_closure, upstream_input_rows
 from app.shared.execution.runtime_identity import RuntimeIdentity
 from app.shared.execution.runtime_bound_fields import runtime_bound_context
 from .manifest import (
@@ -149,6 +151,26 @@ def get_eseguibile_run(run_id: str) -> JsonObject | None:
     return eseguibili_db.get_eseguibile_run(run_id)
 
 
+# «Utente che esegue» negli Estrai a monte (runtime_identity U2, raccolta
+# U7): la chiusura dei progetti a monte e lo snapshot della pubblicazione.
+
+def _upstream_closure(canvas: object, project_type: str, *, group_id: str) -> Mapping[str, object]:
+    if str(project_type or "").lower() == "estrai" or not isinstance(canvas, Mapping):
+        return {}
+    return identity_closure(canvas, group_id=group_id)
+
+
+def _with_upstream_snapshot(manifest: ExecutableManifest, canvas: object, *, group_id: str) -> ExecutableManifest:
+    closure = _upstream_closure(canvas, manifest.project_type, group_id=group_id)
+    return manifest.model_copy(update={"upstream_identity": upstream_plan_module.upstream_snapshot(closure)})
+
+
+def upstream_identity_inputs(record: eseguibili_db.EseguibileRow) -> list[JsonObject]:
+    """Input a monte VIVI della versione attiva, per la finestra di avvio
+    (``EseguibileDetails.upstream_identity_inputs``)."""
+    return upstream_input_rows(_upstream_closure(record.canvas, record.project_type, group_id=record.group_id))
+
+
 # CREATE — compila una versione immutabile da qualsiasi tipo progetto
 
 def create_from_project(
@@ -200,6 +222,7 @@ def create_from_project(
         default_connection_id=getattr(proj, "default_connection_id", None),
     )
     manifest = hydrate_manifest_connection_options(manifest, group_id=group_id)
+    manifest = _with_upstream_snapshot(manifest, cloned_canvas, group_id=group_id)
     first_file_input = next(
         (item for item in manifest.inputs if item.kind == "file"), None
     )
@@ -268,8 +291,13 @@ def publish_new_version(
         canvas=cloned_canvas,
         default_connection_id=getattr(proj, "default_connection_id", None),
     )
+    published = _active_manifest(eseguibile)
+    closure = _upstream_closure(cloned_canvas, project_type, group_id=eseguibile.group_id)
     changes = [
-        change for change in input_changes(_active_manifest(eseguibile), manifest.inputs, manifest.bindings)
+        change for change in [
+            *input_changes(published, manifest.inputs, manifest.bindings),
+            *upstream_plan_module.upstream_identity_changes(published, closure),
+        ]
         if change.get("blocking", True)
     ]
     if changes and not confirm_removed_inputs:
@@ -278,6 +306,7 @@ def publish_new_version(
         manifest,
         group_id=eseguibile.group_id,
     )
+    manifest = manifest.model_copy(update={"upstream_identity": upstream_plan_module.upstream_snapshot(closure)})
     version = eseguibili_db.create_eseguibile_version(
         eseguibile_id=eseguibile.id,
         canvas=cloned_canvas,
@@ -626,8 +655,16 @@ def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = 
     canvas = _parsed_canvas(proj.canvas) if proj is not None else None
     if proj is None or not isinstance(canvas, dict):
         return {**base, "state": "no_source", "changed": None}
+    # Un input «Utente che esegue» a monte tolto dopo la pubblicazione
+    # (raccolta U7, C5): «cambiato» anche se il canvas del progetto e' uguale.
+    upstream_rows = upstream_plan_module.upstream_identity_changes(
+        version.manifest,
+        _upstream_closure(canvas, str(proj.project_type or ""), group_id=eseguibile.group_id),
+    )
     if not source_changed(version.canvas, canvas):
-        return base
+        if not upstream_rows:
+            return base
+        return {**base, "state": "changed", "changed": True, "input_changes": upstream_rows}
     problems, changes, error = republish_preview(
         canvas,
         project_type=str(proj.project_type or "").lower(),
@@ -637,7 +674,7 @@ def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = 
     )
     return {
         **base, "state": "changed", "changed": True, "binding_problems": problems,
-        "input_changes": changes, "publish_error": error,
+        "input_changes": [*changes, *upstream_rows], "publish_error": error,
     }
 
 
@@ -1201,6 +1238,12 @@ def execute_versioned(
     from app.core.orchestrator.task_service import task_service
 
     version, manifest = resolve_version_manifest(eseguibile, version_id)
+    # «Utente che esegue» negli Estrai a monte (runtime_identity U2): il
+    # piano prima di ogni file temporaneo (un blocco non lascia file).
+    raw_inputs, upstream = upstream_plan_module.plan_for_version(
+        canvas=version.canvas, manifest=manifest, group_id=eseguibile.group_id,
+        raw_inputs=raw_inputs, identity=identity,
+    )
 
     canvas, cleanup_ids, input_summary = resolve_runtime_inputs(
         eseguibile_id=eseguibile.id,
@@ -1210,6 +1253,8 @@ def execute_versioned(
         group_id=eseguibile.group_id,
         identity=identity,
     )
+    if upstream.summary:
+        input_summary = {**input_summary, upstream_plan_module.UPSTREAM_SUMMARY_KEY: upstream.summary}
     # Regola unica dei file temporanei (punto 5): da qui ogni uscita con
     # errore li elimina (except sotto); con successo li possiede il task.
     run_id: str | None = None
@@ -1268,6 +1313,7 @@ def execute_versioned(
                     "output_name": base_name,
                     **runtime_bound_context(canvas),
                 },
+                isolated_upstreams=upstream.isolated,
             )
             task_info = task_service.create_enrichment_task(
                 project_id=eseguibile.id,
@@ -1301,6 +1347,7 @@ def execute_versioned(
                     "output_name": base_name,
                     **runtime_bound_context(canvas),
                 },
+                isolated_upstreams=upstream.isolated,
             )
             task_info = task_service.create_pipeline_task(
                 project_id=eseguibile.id,

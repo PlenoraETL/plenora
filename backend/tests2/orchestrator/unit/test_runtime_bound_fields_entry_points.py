@@ -237,8 +237,12 @@ def test_every_resolution_site_hands_its_registry_to_the_contract():
         if "resolve_runtime_inputs(" in path.read_text(encoding="utf-8")
         and "def resolve_runtime_inputs(" not in path.read_text(encoding="utf-8")
     )
+    # upstream_plan: canvas dei progetti a monte (registro in ogni voce del
+    # piano, ``PipelineExecutionContract.isolated_upstreams``).
     assert callers == ["core/eseguibili/preflight.py", "core/eseguibili/service.py",
-                       "core/orchestrator/runtime_inputs.py"]
+                       "core/eseguibili/upstream_plan.py", "core/orchestrator/runtime_inputs.py"]
+    from app.core.eseguibili import upstream_plan
+    assert "plan_entry[RUNTIME_BOUND_REGISTRY] = registry" in inspect.getsource(upstream_plan)
 
 
 def test_runtime_bound_context_is_empty_without_resolved_fields():

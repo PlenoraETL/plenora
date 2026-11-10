@@ -2,6 +2,7 @@
 
 import copy
 from collections.abc import Mapping
+from typing import Optional
 
 from app.config import settings
 from app.core.eseguibili import output_store as _output_store
@@ -9,7 +10,9 @@ from app.core.eseguibili.manifest import compile_manifest
 from app.core.eseguibili.models import ExecutableManifest
 from app.core.eseguibili.runtime import resolve_runtime_inputs
 from app.core.eseguibili.service import resolve_runtime_connection_id
+from app.core.eseguibili.upstream_plan import UPSTREAM_SUMMARY_KEY, plan_isolated_upstreams, split_upstream_inputs
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
+from app.core.projects.upstream_identity import ClosureEntry, identity_closure, upstream_identity_nodes
 from app.shared.execution.runtime_bound_fields import RUNTIME_BOUND_REGISTRY, runtime_bound_context
 from app.shared.execution.runtime_identity import RuntimeIdentity, identity_input_nodes, subject_for_test_run
 from app.shared.execution.runtime_input_kinds import node_value, project_input_role
@@ -31,14 +34,55 @@ def apply_project_runtime_inputs(
     raw_inputs: Mapping[str, object],
     *,
     identity: RuntimeIdentity,
+    closure: Optional[Mapping[str, ClosureEntry]] = None,
 ) -> PipelineExecutionContract:
     """Congela canvas e connessione risolti prima dell'invio al worker.
 
     ``identity`` e' obbligatoria: «Esegui» e la stima del progetto passano
     ``RuntimeIdentity.project_run()`` (un input «Utente che esegue» blocca),
     anteprima e Valida ``RuntimeIdentity.preview_of(canvas)``.
+
+    Progetti a monte con «Utente che esegue» (runtime_identity U2): dopo gli
+    input del progetto, il piano dei ricalcoli isolati con la STESSA
+    identita' (``_with_upstream_plan``); senza identita' («Esegui») si blocca
+    qui, subito. ``closure``: chiusura gia' letta (prova).
     """
 
+    raw_inputs, upstream_values = split_upstream_inputs(raw_inputs)
+    resolved = _apply_own_runtime_inputs(execution_contract, raw_inputs, identity=identity)
+    return _with_upstream_plan(resolved, identity, upstream_values, closure=closure)
+
+
+def _with_upstream_plan(
+    execution_contract: PipelineExecutionContract,
+    identity: RuntimeIdentity,
+    upstream_values: Mapping[str, Mapping[str, object]],
+    *,
+    closure: Optional[Mapping[str, ClosureEntry]] = None,
+) -> PipelineExecutionContract:
+    plan = plan_isolated_upstreams(
+        canvas=execution_contract.canvas,
+        reader_type=execution_contract.project_type,
+        group_id=execution_contract.group_id,
+        identity=identity,
+        upstream_values=upstream_values,
+        closure=closure,
+    )
+    if not plan.isolated:
+        return execution_contract
+    context = dict(execution_contract.runtime_context)
+    summary = dict(context.get("runtime_input_summary") or {})
+    summary[UPSTREAM_SUMMARY_KEY] = plan.summary
+    context["runtime_input_summary"] = summary
+    return execution_contract.model_copy(update={"isolated_upstreams": plan.isolated, "runtime_context": context})
+
+
+def _apply_own_runtime_inputs(
+    execution_contract: PipelineExecutionContract,
+    raw_inputs: Mapping[str, object],
+    *,
+    identity: RuntimeIdentity,
+) -> PipelineExecutionContract:
     nodes = execution_contract.canvas.get("nodes") or []
     has_explicit_inputs = any(
         isinstance(node, Mapping) and node.get("type") == "project_input"
@@ -197,11 +241,27 @@ def apply_test_run_inputs(
     esegue con «Esegui».
     """
 
-    if not identity_input_nodes(execution_contract.canvas):
+    # Anche un progetto che legge, a monte, un input «Utente che esegue»
+    # (runtime_identity U2): lo username di prova e' UNO per tutti i nodi.
+    closure = identity_closure(execution_contract.canvas, group_id=execution_contract.group_id)
+    if not identity_input_nodes(execution_contract.canvas) and not closure:
         raise ProjectTestRunNotApplicable(
-            "L'esecuzione di prova serve ai progetti con un input «Utente che esegue»: "
-            "questo progetto si esegue con «Esegui»."
+            "L'esecuzione di prova serve ai progetti con un input «Utente che esegue» "
+            "(anche in un progetto a monte): questo progetto si esegue con «Esegui»."
         )
-    identity = RuntimeIdentity.test_run(execution_contract.canvas)
-    resolved = apply_project_runtime_inputs(execution_contract, raw_inputs, identity=identity)
+    # Senza un nome di prova valido si blocca nella risoluzione del progetto
+    # o, se il progetto non ha input propri, nel piano a monte (stesso motivo).
+    identity = RuntimeIdentity.test_run(execution_contract.canvas, upstream_nodes=upstream_identity_nodes(closure))
+    resolved = apply_project_runtime_inputs(execution_contract, raw_inputs, identity=identity, closure=closure)
     return resolved.model_copy(update={"execution_subject": subject_for_test_run(identity)})
+
+
+def apply_preview_inputs(execution_contract: PipelineExecutionContract) -> PipelineExecutionContract:
+    """Anteprima dell'editor (``GET /pipeline/{id}/preview``): gli input
+    «Utente che esegue» del progetto (:func:`apply_identity_inputs`) e il
+    piano dei progetti a monte che ne hanno bisogno, con lo stesso username
+    di prova (runtime_identity U2). Mai per un risultato salvato."""
+    closure = identity_closure(execution_contract.canvas, group_id=execution_contract.group_id)
+    identity = RuntimeIdentity.preview_of(execution_contract.canvas, upstream_nodes=upstream_identity_nodes(closure))
+    resolved = apply_identity_inputs(execution_contract, identity)
+    return _with_upstream_plan(resolved, identity, {}, closure=closure)

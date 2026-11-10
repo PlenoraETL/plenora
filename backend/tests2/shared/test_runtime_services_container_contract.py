@@ -142,10 +142,12 @@ def test_build_runtime_services_constructs_in_canonical_order():
         assert features_service is features_instance
         return estrai_executor_instance
 
-    def _ManipolaExecutor(*, project_service, pipeline_dispatcher):
+    def _ManipolaExecutor(*, project_service, pipeline_dispatcher, isolated_dispatcher):
         construction_order.append("ManipolaExecutor")
         assert project_service is project_instance
         assert callable(pipeline_dispatcher)
+        # Ricalcolo isolato a monte («Utente che esegue», runtime_identity U3).
+        assert callable(isolated_dispatcher)
         manipola_executor_instance.pipeline_dispatcher = pipeline_dispatcher
         return manipola_executor_instance
 

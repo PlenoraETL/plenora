@@ -24,7 +24,8 @@ from app.core.output_contract import (
 )
 from app.core.projects.service import ProjectService
 from app.core.projects.source_freshness import get_project_source_freshness
-from app.shared.execution.runtime_identity import guard_upstream_recompute
+from app.core.projects.upstream_identity import source_identity_need
+from app.shared.execution.runtime_identity import guard_upstream_recompute, route_upstream_source
 from app.shared.security.outbound_url import check_outbound_address
 from app.utils.logger import get_logger
 
@@ -212,6 +213,14 @@ class ApiConnectionSourceLoadingMixin:
                 "Contesto di sicurezza non determinabile (group_id mancante)"
             )
 
+        # La porta unica (runtime_identity U1, U5): un progetto a monte che
+        # ha bisogno di «Utente che esegue» blocca (Arricchisci non ha il
+        # ricalcolo isolato): mai il suo risultato salvato non filtrato.
+        route_upstream_source(
+            source_project_id=source_project_id,
+            need=source_identity_need(source_project_id, group_id=executing_group_id),
+            isolated_upstreams=None,
+        )
         ref = SourceRef.from_node_data('project_source', node_data)
         loader = SourceLoader()
         # Esecuzione di prova: nessun ricalcolo a monte (force ignorato;

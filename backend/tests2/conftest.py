@@ -479,6 +479,27 @@ def _stub_connection_test_store(request, monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _stub_upstream_identity_projects(request, monkeypatch):
+    """Lettura dei progetti a monte per «Utente che esegue» (porta
+    ``runtime_identity.route_upstream_source``) nei test non integration.
+
+    Stesso motivo di `_stub_connection_test_store`: ogni lettore di un
+    progetto a monte legge, prima, i canvas dei progetti a monte
+    (``projects.upstream_identity.load_upstream_project``); senza DB ogni
+    chiamata aspetterebbe il pool. Qui nessun progetto a monte ha bisogno
+    dell'identita' (il caso di tutti i test che non ne parlano); i test della
+    regola sostituiscono la lettura dopo (l'ultimo monkeypatch vince).
+    """
+    if request.node.get_closest_marker("integration") is not None:
+        yield
+        return
+    from app.core.projects import upstream_identity as _upstream_mod
+
+    monkeypatch.setattr(_upstream_mod, "load_upstream_project", lambda project_id, *, group_id: None)
+    yield
+
+
 # DB-logger isolation for unit/contract tests
 #
 # Problema simmetrico ad audit_action: `PostgresLogHandler.emit` (definito

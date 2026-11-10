@@ -146,6 +146,19 @@ class ExecutableInputBinding(BaseModel):
         return self
 
 
+class UpstreamIdentityInput(BaseModel):
+    """Input «Utente che esegue» di un progetto a monte al momento della
+    pubblicazione (runtime_identity, NEGLI ESTRAI A MONTE): se dopo non c'e'
+    piu', avvio e stima si fermano finche' non si ripubblica."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str = Field(min_length=1, max_length=200)
+    project_name: str = Field("", max_length=300)
+    input_key: str = Field(min_length=1, max_length=80)
+    label: str = Field("", max_length=160)
+
+
 class ExecutableManifest(BaseModel):
     """Contratto immutabile prodotto dalla pubblicazione del canvas."""
 
@@ -157,6 +170,7 @@ class ExecutableManifest(BaseModel):
     inputs: list[ExecutableInputDefinition] = Field(default_factory=list)
     bindings: list[ExecutableInputBinding] = Field(default_factory=list)
     default_connection_id: Optional[str] = None
+    upstream_identity: list[UpstreamIdentityInput] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_references(self):
@@ -216,7 +230,10 @@ class InputChange(BaseModel):
     cambierebbe (regola unica ``service.input_changes``)."""
 
     input_key: str
-    change: Literal["removed", "kind_changed", "binding_lost", "target_changed", "admin_override_removed"]
+    change: Literal[
+        "removed", "kind_changed", "binding_lost", "target_changed", "admin_override_removed",
+        "upstream_identity_removed",
+    ]
     target_node_id: Optional[str] = None
     target_field: Optional[str] = None
     motivo: str
@@ -280,6 +297,21 @@ class RepublishRequest(BaseModel):
     confirm_removed_inputs: bool = False
 
 
+class UpstreamIdentityInputRow(BaseModel):
+    """Input «Utente che esegue» di un progetto a monte, come lo vede chi
+    avvia (``projects.upstream_identity.upstream_input_rows``)."""
+
+    key: str
+    input_key: str
+    project_id: str
+    project_name: str
+    label: str
+    kind: str
+    transform: Optional[str] = None
+    admin_override: bool = False
+    admin_override_label: Optional[str] = None
+
+
 class EseguibileDetails(BaseModel):
     """Dettaglio completo (usato dal wizard)."""
     id: str
@@ -307,6 +339,10 @@ class EseguibileDetails(BaseModel):
     # perche' l'estensione e' determinata dal connettore, non dall'utente
     output_is_file_based: bool = False
     inferred_output_extension: Optional[str] = None  # senza punto, es. "zip"
+    # «Utente che esegue» negli Estrai a monte (runtime_identity U4): gli
+    # input a monte VIVI che l'esecuzione usera' (chiave «progetto::input»),
+    # per la finestra «Prima di avviare».
+    upstream_identity_inputs: List[UpstreamIdentityInputRow] = Field(default_factory=list)
 
 
 class EseguibileVersionSummary(BaseModel):

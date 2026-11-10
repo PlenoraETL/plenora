@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextvars import ContextVar
 from types import SimpleNamespace
 from typing import Any, List, Optional
@@ -15,11 +16,14 @@ from app.core.intermediate.run_lifecycle import (
 from app.core.projects.execution_context import get_upstream_run_context
 from app.core.projects.lineage import ProjectLineageCycleError
 from app.core.projects.source_freshness import get_project_source_freshness
+from app.core.projects.upstream_identity import source_identity_need
 from app.core.resources.memory_guard import cleanup_worker_memory
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
 from app.shared.execution.runtime_identity import (
+    RuntimeIdentityError,
     TestRunUpstreamRefused,
     guard_upstream_recompute,
+    route_upstream_source,
 )
 from app.core.artifacts import (
     ArtifactResolver,
@@ -202,6 +206,49 @@ def _load_materialized_project_source(
     dataframes[node.id] = loaded.data
 
 
+def _load_isolated_upstream(
+    node: Any,
+    source_project_id: str,
+    group_id: str,
+    dataframes: FrameMap,
+    *,
+    isolated_upstreams: Mapping[str, Any],
+    isolated_dispatcher: Any,
+    test_run: bool,
+) -> Optional[JsonObject]:
+    """Ricalcolo isolato del progetto a monte dal piano (runtime_identity U3):
+    il risultato resta in memoria e si carica come il risultato salvato
+    (stesso ``output_contract`` pubblico, stesso caricatore)."""
+    entry = isolated_upstreams.get(source_project_id)
+    name = str((entry or {}).get("name") or source_project_id)
+    if not isinstance(entry, Mapping) or isolated_dispatcher is None:
+        return {"success": False, "message": f"Ricalcolo isolato del progetto a monte «{name}» non configurato"}
+    _assert_no_lineage_cycle_on_chain(source_project_id)
+    _push_to_execution_chain(source_project_id)
+    try:
+        artifact, captured = isolated_dispatcher(
+            source_project_id, entry, group_id=group_id,
+            isolated_upstreams=isolated_upstreams, test_run=test_run,
+        )
+    finally:
+        _pop_from_execution_chain(source_project_id)
+    if not getattr(artifact, "success", False):
+        message = getattr(artifact, "message", None) or "errore non specificato"
+        return {"success": False, "message": f"Progetto a monte «{name}» (per l'utente che esegue): {message}",
+                "user_error": True}
+    if not captured:
+        return {"success": False, "message": f"Progetto a monte «{name}»: nessun risultato prodotto"}
+    fmt, data = captured
+    try:
+        _load_materialized_project_source(
+            MaterializedArtifact(path=None, data=data, format=fmt),
+            node, source_project_id, group_id, dataframes,
+        )
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        return {"success": False, "message": f"Errore progetto {name}: {exc}"}
+    return None
+
+
 def load_project_sources(
     canvas: Any,
     dataframes: FrameMap,
@@ -212,6 +259,9 @@ def load_project_sources(
     group_id: Optional[str] = None,
     logger=None,
     test_run: bool = False,
+    isolated_upstreams: Optional[Mapping[str, Any]] = None,
+    isolated_run: bool = False,
+    isolated_dispatcher: Any = None,
 ) -> Optional[JsonObject]:
     """Load ``project_source`` nodes, recomputing upstream projects as needed.
 
@@ -219,8 +269,15 @@ def load_project_sources(
     a monte. ``force_recalculate`` si ignora e un artefatto mancante o
     scaduto ferma la prova con il messaggio di
     :func:`guard_upstream_recompute` (l'unica porta del ricalcolo).
+
+    «Utente che esegue» negli Estrai a monte (``runtime_identity`` U1-U3):
+    ogni sorgente passa PRIMA dalla porta :func:`route_upstream_source`. Un
+    progetto a monte che ha bisogno dell'identita' si ricalcola isolato dal
+    piano (``isolated_upstreams``) o blocca; mai il suo risultato salvato.
+    ``isolated_run``: questo canvas E' un ricalcolo isolato (nessun
+    ricalcolo che scrive, come la prova).
     """
-    if test_run:
+    if test_run or isolated_run:
         force_recalculate = False
     del run_id  # The upstream recompute path opens its own cascade run id.
     log = logger or globals()["logger"]
@@ -243,12 +300,32 @@ def load_project_sources(
             log.warning(f"Nodo {node.id}: source_project_id mancante")
             continue
 
+        # La porta unica (runtime_identity U1): prima di ogni lettura.
+        try:
+            route = route_upstream_source(
+                source_project_id=source_project_id,
+                need=source_identity_need(source_project_id, group_id=executing_group_id),
+                isolated_upstreams=isolated_upstreams,
+            )
+        except RuntimeIdentityError as exc:
+            return {"success": False, "message": exc.message, "error": exc.code, "user_error": True}
+        if route == "isolated":
+            err = _load_isolated_upstream(
+                node, source_project_id, executing_group_id, dataframes,
+                isolated_upstreams=isolated_upstreams or {},
+                isolated_dispatcher=isolated_dispatcher,
+                test_run=test_run,
+            )
+            if err:
+                return err
+            continue
+
         freshness = get_project_source_freshness(
             source_project_id,
             expected_group_id=executing_group_id,
         )
         stale = bool(freshness and freshness.stale)
-        if stale and not force_recalculate and not test_run:
+        if stale and not force_recalculate and not test_run and not isolated_run:
             return {
                 "success": False,
                 "message": freshness.message,
@@ -315,6 +392,7 @@ def load_project_sources(
         try:
             guard_upstream_recompute(
                 test_run=test_run,
+                isolated=isolated_run,
                 source_name=str(
                     (freshness.source_project_name if freshness else None)
                     or source_project_id

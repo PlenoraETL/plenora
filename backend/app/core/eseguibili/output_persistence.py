@@ -7,6 +7,7 @@ to the executable object namespace without creating rows in ``results``.
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -46,6 +47,15 @@ class ExecutableOutputPersistence:
         self.group_id = group_id
         self._stream_query_to_writer = stream_query_to_writer
 
+    def _writer(self, filename: str, output_format: str) -> Any:
+        """Scrittore del risultato: lo spazio dell'attivita' nello storage."""
+        del output_format
+        return executable_storage.ExecutableOutputWriter(
+            self.task_id,
+            filename,
+            group_id=self.group_id,
+        )
+
     def persist_streaming_query_to_storage(
         self,
         *,
@@ -59,11 +69,7 @@ class ExecutableOutputPersistence:
         group_id: Optional[str] = None,
     ) -> StreamedQueryResult:
         del project_id, group_id
-        writer = executable_storage.ExecutableOutputWriter(
-            self.task_id,
-            output_filename,
-            group_id=self.group_id,
-        )
+        writer = self._writer(output_filename, output_format)
         try:
             if self._stream_query_to_writer is None:
                 raise RuntimeError("Streaming query writer non configurato")
@@ -131,11 +137,7 @@ class ExecutableOutputPersistence:
             resolved_geom = detect_geometry_column(df)
         filename = f"{filename_stem}.zip" if fmt == "shp" else f"{filename_stem}.{fmt}"
 
-        writer = executable_storage.ExecutableOutputWriter(
-            self.task_id,
-            filename,
-            group_id=self.group_id,
-        )
+        writer = self._writer(filename, fmt)
         try:
             if fmt in {"csv", "json", "parquet"}:
                 for chunk in export_writer_module.dataframe_to_export_chunks(df, fmt):
@@ -182,4 +184,44 @@ class ExecutableOutputPersistence:
         )
 
 
-__all__ = ["ExecutableDataFrameResult", "ExecutableOutputPersistence"]
+class _MemoryWriter(io.BytesIO):
+    """Scrittore in memoria (interfaccia di ``ExecutableOutputWriter``:
+    ``write``, ``finalize``, ``abort``; piu' quella di un file binario)."""
+
+    def __init__(self, owner: "MemoryOutputPersistence", filename: str, output_format: str) -> None:
+        super().__init__()
+        self._owner = owner
+        self._filename = filename
+        self._format = output_format
+
+    def write(self, chunk: Any) -> int:
+        return super().write(chunk.encode("utf-8") if isinstance(chunk, str) else chunk)
+
+    def finalize(self) -> str:
+        self._owner.captured = (self._format, self.getvalue())
+        return f"memory://{self._filename}"
+
+    def abort(self) -> None:
+        self._owner.captured = None
+
+
+class MemoryOutputPersistence(ExecutableOutputPersistence):
+    """Ricalcolo isolato di un progetto a monte («Utente che esegue» negli
+    Estrai a monte, U3): il risultato resta in memoria, solo per
+    l'esecuzione che lo ha chiesto. Nessun oggetto nello storage, nessuna
+    riga ``results``. ``captured`` = ``(formato, byte)`` dopo la scrittura."""
+
+    def __init__(
+        self,
+        *,
+        group_id: str,
+        stream_query_to_writer: Optional[Callable[..., tuple[int, list[str]]]] = None,
+    ) -> None:
+        super().__init__(task_id="memoria", group_id=group_id, stream_query_to_writer=stream_query_to_writer)
+        self.captured: Optional[tuple[str, bytes]] = None
+
+    def _writer(self, filename: str, output_format: str) -> Any:
+        return _MemoryWriter(self, filename, export_writer_module.normalize_export_format(output_format))
+
+
+__all__ = ["ExecutableDataFrameResult", "ExecutableOutputPersistence", "MemoryOutputPersistence"]

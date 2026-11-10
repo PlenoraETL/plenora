@@ -72,6 +72,7 @@ describe('2. the guide says what the system does', () => {
       "Provare dall'editor: Anteprima, Valida, Esegui di prova",
       'Pubblicare come Eseguibile',
       'Amministratori che scelgono il valore',
+      'Il filtro negli Estrai a monte',
       'Pianificazioni e progetti collegati',
       'Errori comuni',
     ]);

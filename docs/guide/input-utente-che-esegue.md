@@ -74,7 +74,7 @@ Nell'editor non c'è un utente che esegue: al suo posto si usa il nome utente di
 - «Esegui» diventa un'esecuzione di prova. Può farla solo chi può modificare il progetto (non i visualizzatori, non gli esecutori).
 - L'esecuzione di prova usa il nome utente di prova SALVATO nel progetto: salva prima di eseguire. La finestra «Prima di avviare» mostra con quale utente parte.
 - Il risultato si scarica una volta dalla finestra di esecuzione. Non diventa l'Output del progetto: non cambia i progetti che lo usano come sorgente, non avvia Carica e non aggiorna le colonne pubblicate.
-- La prova non ricalcola i progetti a monte: usa il loro risultato salvato. «Ricalcola tutto» non vale per la prova. Se un progetto a monte non ha un risultato o è stato modificato dopo l'ultima esecuzione, la prova si ferma con «Esegui prima il progetto a monte»: eseguilo, poi rilancia la prova.
+- La prova non ricalcola i progetti a monte: usa il loro risultato salvato. «Ricalcola tutto» non vale per la prova. Se un progetto a monte non ha un risultato o è stato modificato dopo l'ultima esecuzione, la prova si ferma con «Esegui prima il progetto a monte»: eseguilo, poi rilancia la prova. Fanno eccezione i progetti a monte con «Utente che esegue» (sezione «Il filtro negli Estrai a monte»).
 - Nella cronologia delle esecuzioni compare come «Esecuzione di prova (utente: …)» e non conta come ultima esecuzione del progetto.
 
 ## Pubblicare come Eseguibile
@@ -97,6 +97,21 @@ Un amministratore a volte deve vedere il risultato di un istituto preciso, per e
 Nell'editor, con l'opzione spuntata, puoi scrivere anche un «Valore di prova scelto»: Anteprima, Valida ed Esegui di prova usano quel valore al posto del nome utente di prova trasformato. Il nome utente di prova serve comunque. Il valore di prova non entra nell'Eseguibile.
 
 > **Attenzione:** Togliere l'opzione e ripubblicare non chiede una conferma: la ripubblicazione lo elenca solo come informazione, perché da quel momento anche gli amministratori useranno il proprio nome utente.
+
+## Il filtro negli Estrai a monte
+
+Un Manipola che legge progetti Estrai (sorgente «Progetto») può lasciare il filtro negli Estrai: metti l'input «Utente che esegue» nell'Estrai, con la sua trasformazione, e pubblica come Eseguibile il Manipola. Il filtro si fa nel database di ogni Estrai, quindi è veloce.
+
+- Quando qualcuno avvia l'Eseguibile, ogni Estrai a monte con «Utente che esegue» si riesegue solo per quella esecuzione, con lo stesso utente e con la trasformazione scritta nel SUO input. Anche attraverso altri Manipola (un Manipola che legge un Manipola che legge l'Estrai).
+- Gli Estrai a monte senza «Utente che esegue» si leggono come sempre, dal loro risultato salvato.
+- Il risultato rieseguito resta dentro quell'esecuzione: non diventa il risultato dell'Estrai, non cambia gli altri progetti che lo leggono e non avvia Carica.
+- Il risultato salvato di un Estrai con «Utente che esegue» (di prima del filtro, con i dati di tutti) non si usa mai al posto di quello filtrato: Pianificazioni, progetti collegati, Carica, «Esegui» del progetto e i valori distinti si fermano con un messaggio che lo spiega.
+- Nell'editor del Manipola «Esegui» diventa l'esecuzione di prova e l'Anteprima usa il nome utente di prova degli Estrai a monte: deve essere uno solo.
+- Gli amministratori che possono scegliere il valore vedono in «Prima di avviare» un campo per ogni input a monte con l'opzione spuntata (con il nome del progetto a monte).
+- Se dopo la pubblicazione qualcuno toglie «Utente che esegue» da un Estrai a monte, l'Eseguibile si ferma finché chi lo gestisce non lo ripubblica: senza conferma non vedrebbe i dati di tutti.
+- Arricchisci non riesegue i progetti a monte per l'utente che esegue: se legge un Estrai con «Utente che esegue», si ferma. Usa un Manipola tra i due.
+
+> **Attenzione:** Un Estrai nuovo con «Utente che esegue» deve aver avuto almeno un'esecuzione normale prima di aggiungere l'input: il Manipola legge da lì le sue colonne.
 
 ## Pianificazioni e progetti collegati
 

@@ -140,12 +140,57 @@ utente di prova trasformato. E' lo stesso potere che chi modifica ha gia'
 con nome di prova e trasformazione; il nome utente di prova resta
 obbligatorio (e' chi «esegue» la prova). Non entra mai nel manifest; il
 riepilogo lo segna con ``test_value``.
+
+UTENTE CHE ESEGUE NEGLI ESTRAI A MONTE (10/11/2026)
+---------------------------------------------------
+Raccolta: ``docs/audits/identita-a-monte-raccolta-2026-11-10.md``. Un
+progetto a monte (nodo ``project_source``) «ha bisogno dell'identita'» se il
+suo canvas ha un input «Utente che esegue» oppure se legge, anche
+indirettamente, un progetto che ne ha bisogno (chiusura transitiva,
+``app.core.projects.upstream_identity``). Regola unica:
+
+- U1, una sola porta: OGNI lettore di un progetto a monte (esecuzione e
+  anteprima di Manipola, Arricchisci, sorgente REST_FILE, valori distinti e
+  stima, richiesta di stima di Arricchisci) chiama :func:`route_upstream_source`
+  prima di leggere il risultato salvato o di ricalcolare. Senza bisogno
+  d'identita' -> ``standard`` (come prima: risultato salvato, ricalcolo,
+  :func:`guard_upstream_recompute`). Con bisogno d'identita' -> ``isolated``
+  solo se il progetto e' nel piano dell'esecuzione
+  (:data:`ISOLATED_UPSTREAMS_FIELD`), altrimenti si BLOCCA con
+  :func:`upstream_identity_error`: il risultato salvato (di prima del filtro,
+  tutti gli istituti) non si legge MAI al posto di quello filtrato.
+- U2, il piano lo fa solo il server all'avvio (API, ``app.core.eseguibili.
+  upstream_identity.plan_isolated_upstreams``), per le identita'
+  :data:`UPSTREAM_IDENTITY_ORIGINS` (Eseguibile, prova, anteprima): ogni
+  progetto a monte che ne ha bisogno si risolve sul suo canvas VIVO con la
+  STESSA identita' dell'avvio e con la PROPRIA definizione dell'input
+  (trasformazione, valore scelto, solo ``=``/``IN``: la stessa
+  ``resolve_runtime_inputs`` del suo «Esegui»). Il canvas risolto viaggia nel
+  contratto. Schedule, catene, Carica, worker e «Esegui» del progetto non
+  hanno piano: si bloccano.
+- U3, ricalcolo isolato (regola H / REGOLA MADRE): il risultato resta in
+  memoria, solo per quell'esecuzione: nessun ``output_contract``, nessuna
+  riga ``results``, nessuna run intermedia ne' ``log_runs`` del progetto a
+  monte, nessun Carica, nessuna sorgente a valle cambiata. Dentro il
+  ricalcolo isolato nessun altro ricalcolo scrive: le altre sorgenti si
+  leggono dal risultato salvato (``guard_upstream_recompute`` con
+  ``isolated``).
+- U4, valore scelto: un amministratore che puo' scegliere
+  (:meth:`RuntimeIdentity.may_choose`, gruppo PROPRIETARIO dell'Eseguibile)
+  sceglie il valore di ogni input a monte con ``admin_override`` con la
+  chiave :func:`upstream_input_key` (``"<progetto>::<input>"``); vuoto ->
+  nome utente con la trasformazione dell'input a monte. Prova e anteprima:
+  lo username di prova e' UNO per tutta l'esecuzione (nodi del progetto e
+  dei progetti a monte, :meth:`RuntimeIdentity.test_run` con
+  ``upstream_nodes``); il valore di prova scelto si legge dal nodo a monte.
+- U5, Arricchisci: come lettore o come progetto a monte con bisogno
+  d'identita' non ha il ricalcolo isolato: si blocca (dichiarato).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 import unicodedata
 
@@ -302,35 +347,54 @@ class RuntimeIdentity:
         return cls("absent", None, "unattended")
 
     @classmethod
-    def preview_of(cls, canvas: Any) -> "RuntimeIdentity":
-        """Username di prova scritto nei nodi «Utente che esegue» del canvas."""
-        return cls._test_username(canvas, origin="preview", missing="preview_missing")
+    def preview_of(cls, canvas: Any, *, upstream_nodes: Iterable[tuple[str, Any]] = ()) -> "RuntimeIdentity":
+        """Username di prova scritto nei nodi «Utente che esegue» del canvas
+        (e dei progetti a monte che ne hanno bisogno: ``upstream_nodes`` =
+        ``(id progetto, nodo)``, sezione NEGLI ESTRAI A MONTE, U4)."""
+        return cls._test_username(canvas, origin="preview", missing="preview_missing", upstream_nodes=upstream_nodes)
 
     @classmethod
-    def test_run(cls, saved_canvas: Any) -> "RuntimeIdentity":
+    def test_run(cls, saved_canvas: Any, *, upstream_nodes: Iterable[tuple[str, Any]] = ()) -> "RuntimeIdentity":
         """«Esegui di prova» dall'editor (regola H): lo username di prova del
         canvas SALVATO (chi chiama passa quello letto dal server). Stessa
         regola di :meth:`preview_of`, origine distinta: contratto e impronta
         sanno che e' una prova."""
-        return cls._test_username(saved_canvas, origin="test_run", missing="test_run_missing")
+        return cls._test_username(saved_canvas, origin="test_run", missing="test_run_missing",
+                                  upstream_nodes=upstream_nodes)
 
     @classmethod
-    def _test_username(cls, canvas: Any, *, origin: IdentityOrigin, missing: AbsentReason) -> "RuntimeIdentity":
-        names = {
-            str(node_value(node, PREVIEW_USERNAME_FIELD) or "").strip()
-            for node in identity_input_nodes(canvas)
-        }
+    def _test_username(
+        cls, canvas: Any, *, origin: IdentityOrigin, missing: AbsentReason,
+        upstream_nodes: Iterable[tuple[str, Any]] = (),
+    ) -> "RuntimeIdentity":
+        # Nodi del progetto (chiave = input) e dei progetti a monte (chiave
+        # = progetto::input): UNO username di prova per tutta l'esecuzione.
+        keyed = [(str(node_value(node, "input_key") or ""), node) for node in identity_input_nodes(canvas)]
+        keyed += [
+            (upstream_input_key(project_id, str(node_value(node, "input_key") or "")), node)
+            for project_id, node in upstream_nodes
+        ]
+        names = {str(node_value(node, PREVIEW_USERNAME_FIELD) or "").strip() for _key, node in keyed}
         names.discard("")
         if len(names) > 1:
             return cls("absent", None, "preview_conflict")
         if not names:
             return cls("absent", None, missing)
         chosen = tuple(
-            (str(node_value(node, "input_key") or ""), str(node_value(node, PREVIEW_ADMIN_VALUE_FIELD)))
-            for node in identity_input_nodes(canvas)
+            (key, str(node_value(node, PREVIEW_ADMIN_VALUE_FIELD)))
+            for key, node in keyed
             if admin_override_enabled(node) and node_value(node, PREVIEW_ADMIN_VALUE_FIELD) is not None
         )
         return cls(origin, names.pop(), test_values=chosen)
+
+    def for_upstream(self, project_id: str) -> "RuntimeIdentity":
+        """La stessa identita' vista dagli input del progetto a monte
+        ``project_id`` (U2): stesso utente, ruolo e permesso di scegliere; i
+        valori di prova sono quelli dei SUOI nodi, con la sua chiave."""
+        prefix = upstream_input_key(project_id, "")
+        return replace(self, test_values=tuple(
+            (key[len(prefix):], value) for key, value in self.test_values if key.startswith(prefix)
+        ))
 
 
 def _canvas_nodes(canvas: Any) -> list[Any]:
@@ -626,14 +690,106 @@ class TestRunUpstreamRefused(ValueError):
         )
 
 
-def guard_upstream_recompute(*, test_run: bool, source_name: str) -> None:
+class IsolatedUpstreamRecomputeRefused(TestRunUpstreamRefused):
+    """Dentro un ricalcolo isolato a monte (U3) nessun ricalcolo scrive."""
+
+    def __init__(self, source_name: str) -> None:
+        ValueError.__init__(
+            self,
+            f"Il progetto a monte «{source_name}» non ha un risultato aggiornato: dentro il "
+            "ricalcolo per «Utente che esegue» non si ricalcola nulla che scriva risultati. "
+            f"Esegui prima il progetto a monte «{source_name}», poi rilancia.",
+        )
+        self.source_name = source_name
+
+
+def guard_upstream_recompute(*, test_run: bool, source_name: str, isolated: bool = False) -> None:
     """L'UNICA porta del ricalcolo di un progetto a monte (Manipola e
     Arricchisci, sorgente «progetto»): chiamata prima di qualunque scrittura
     del ricalcolo (run intermedia, ``results``, ``output_contract``,
     ``log_runs``, Carica). In un'esecuzione di prova solleva
-    :class:`TestRunUpstreamRefused`; altrimenti non fa nulla."""
+    :class:`TestRunUpstreamRefused`, dentro un ricalcolo isolato a monte
+    (``isolated``, U3) :class:`IsolatedUpstreamRecomputeRefused`; altrimenti
+    non fa nulla."""
     if test_run:
         raise TestRunUpstreamRefused(source_name)
+    if isolated:
+        raise IsolatedUpstreamRecomputeRefused(source_name)
+
+
+# NEGLI ESTRAI A MONTE (sezione del docstring): chiavi, campi, porta.
+UPSTREAM_KEY_SEPARATOR = "::"
+# Campo del contratto (e del contesto dell'esecuzione) con il piano: {id
+# progetto a monte: {project_type, name, canvas risolto, ...}}.
+ISOLATED_UPSTREAMS_FIELD = "isolated_upstreams"
+# Contesto di un ricalcolo isolato a monte (U3): nessun ricalcolo che scrive.
+ISOLATED_UPSTREAM_RUN_FIELD = "isolated_upstream_run"
+# Identita' che possono ricalcolare a monte: Eseguibile, prova, anteprima.
+UPSTREAM_IDENTITY_ORIGINS: tuple[str, ...] = ("authenticated", "test_run", "preview")
+UpstreamRoute = Literal["standard", "isolated"]
+
+
+def upstream_input_key(project_id: str, input_key: str) -> str:
+    """Chiave di un input a monte nel payload dell'avvio (U4)."""
+    return f"{project_id}{UPSTREAM_KEY_SEPARATOR}{input_key}"
+
+
+def split_upstream_input_key(key: Any) -> tuple[str, str] | None:
+    """``(progetto, input)`` di una chiave a monte; ``None`` se non lo e'."""
+    if not isinstance(key, str) or UPSTREAM_KEY_SEPARATOR not in key:
+        return None
+    project_id, _sep, input_key = key.partition(UPSTREAM_KEY_SEPARATOR)
+    return (project_id, input_key) if project_id and input_key else None
+
+
+@dataclass(frozen=True)
+class UpstreamIdentityNeed:
+    """Perche' un progetto a monte ha bisogno dell'identita': ``via`` sono i
+    nomi dal progetto letto a quello che ha l'input (``via[-1]``)."""
+
+    project_id: str
+    project_name: str
+    project_type: str
+    via: tuple[str, ...]
+    input_label: str
+
+
+def upstream_identity_error(need: UpstreamIdentityNeed) -> RuntimeIdentityError:
+    """Blocco della porta (U1): mai il risultato salvato al posto di quello
+    filtrato."""
+    owner = need.via[-1] if need.via else need.project_name
+    through = (
+        f" (attraverso {' → '.join(f'«{name}»' for name in need.via[1:])})"
+        if len(need.via) > 1 else ""
+    )
+    return RuntimeIdentityError(
+        error_codes.RUNTIME_IDENTITY_REQUIRED,
+        f"Il progetto a monte «{need.project_name}» dipende dall'input «{need.input_label}» "
+        f"({KIND_LABEL}) di «{owner}»{through}: i suoi dati si filtrano per chi esegue e il "
+        "risultato salvato non si usa mai al loro posto. Si esegue solo come Eseguibile, con "
+        "«Esegui di prova» o in anteprima dall'editor; Pianificazioni, catene, Carica e "
+        "«Esegui» del progetto si bloccano.",
+    )
+
+
+def route_upstream_source(
+    *,
+    source_project_id: str,
+    need: UpstreamIdentityNeed | None,
+    isolated_upstreams: Mapping[str, Any] | None,
+) -> UpstreamRoute:
+    """L'UNICA porta di ogni lettura di un progetto a monte (U1): chiamata
+    prima di leggere il suo risultato salvato o di ricalcolarlo.
+
+    - nessun bisogno d'identita' -> ``"standard"`` (percorso di sempre);
+    - bisogno d'identita' e progetto nel piano dell'esecuzione ->
+      ``"isolated"`` (ricalcolo isolato dal canvas risolto del piano);
+    - altrimenti -> :class:`RuntimeIdentityError` (blocco)."""
+    if need is None:
+        return "standard"
+    if isinstance(isolated_upstreams, Mapping) and source_project_id in isolated_upstreams:
+        return "isolated"
+    raise upstream_identity_error(need)
 
 
 def assert_identity_resolved(canvas: Any) -> None:
@@ -661,6 +817,17 @@ __all__ = [
     "TEST_RUN_NO_RECALCULATE_MESSAGE",
     "TEST_RUN_ROLE_REVOKED_MESSAGE",
     "TestRunUpstreamRefused",
+    "IsolatedUpstreamRecomputeRefused",
+    "ISOLATED_UPSTREAMS_FIELD",
+    "ISOLATED_UPSTREAM_RUN_FIELD",
+    "UPSTREAM_IDENTITY_ORIGINS",
+    "UPSTREAM_KEY_SEPARATOR",
+    "UpstreamIdentityNeed",
+    "UpstreamRoute",
+    "route_upstream_source",
+    "split_upstream_input_key",
+    "upstream_identity_error",
+    "upstream_input_key",
     "can_test_run",
     "client_trigger",
     "guard_upstream_recompute",

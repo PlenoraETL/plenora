@@ -1036,4 +1036,6 @@ def _to_details(record: eseguibili_db.EseguibileRow) -> Mapping[str, object]:
         ),
         "output_is_file_based": is_file_based,
         "inferred_output_extension": inferred_ext,
+        # Input «Utente che esegue» degli Estrai a monte, vivi (U4).
+        "upstream_identity_inputs": eseguibili_service.upstream_identity_inputs(record),
     }

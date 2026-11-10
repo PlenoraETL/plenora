@@ -3701,6 +3701,13 @@
           "updated_at": {
             "title": "Updated At",
             "type": "string"
+          },
+          "upstream_identity_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/UpstreamIdentityInputRow"
+            },
+            "title": "Upstream Identity Inputs",
+            "type": "array"
           }
         },
         "required": [
@@ -4526,6 +4533,13 @@
           "source_project_id": {
             "title": "Source Project Id",
             "type": "string"
+          },
+          "upstream_identity": {
+            "items": {
+              "$ref": "#/components/schemas/UpstreamIdentityInput"
+            },
+            "title": "Upstream Identity",
+            "type": "array"
           }
         },
         "required": [
@@ -5701,7 +5715,8 @@
               "kind_changed",
               "binding_lost",
               "target_changed",
-              "admin_override_removed"
+              "admin_override_removed",
+              "upstream_identity_removed"
             ],
             "title": "Change",
             "type": "string"
@@ -10594,6 +10609,108 @@
           "timestamp"
         ],
         "title": "UncertainCaricaRunStatus",
+        "type": "object"
+      },
+      "UpstreamIdentityInput": {
+        "additionalProperties": false,
+        "description": "Input «Utente che esegue» di un progetto a monte al momento della\npubblicazione (runtime_identity, NEGLI ESTRAI A MONTE): se dopo non c'e'\npiu', avvio e stima si fermano finche' non si ripubblica.",
+        "properties": {
+          "input_key": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Input Key",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "maxLength": 160,
+            "title": "Label",
+            "type": "string"
+          },
+          "project_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Project Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "input_key"
+        ],
+        "title": "UpstreamIdentityInput",
+        "type": "object"
+      },
+      "UpstreamIdentityInputRow": {
+        "description": "Input «Utente che esegue» di un progetto a monte, come lo vede chi\navvia (``projects.upstream_identity.upstream_input_rows``).",
+        "properties": {
+          "admin_override": {
+            "default": false,
+            "title": "Admin Override",
+            "type": "boolean"
+          },
+          "admin_override_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Override Label"
+          },
+          "input_key": {
+            "title": "Input Key",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "transform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transform"
+          }
+        },
+        "required": [
+          "key",
+          "input_key",
+          "project_id",
+          "project_name",
+          "label",
+          "kind"
+        ],
+        "title": "UpstreamIdentityInputRow",
         "type": "object"
       },
       "UserCreate": {

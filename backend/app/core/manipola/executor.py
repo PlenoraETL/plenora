@@ -29,6 +29,7 @@ from app.config import settings
 from app.core.projects.execution_context import get_project_group_id
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
+from app.shared.execution.runtime_identity import ISOLATED_UPSTREAM_RUN_FIELD, ISOLATED_UPSTREAMS_FIELD
 from app.shared.execution.failed_node import failed_node_fields, mark_failed_node, node_step
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
@@ -208,10 +209,13 @@ class ManipolaExecutor:
         project_service: object,
         pipeline_dispatcher: Optional[PipelineDispatcherProtocol] = None,
         group_id_resolver: Any = None,
+        isolated_dispatcher: Any = None,
     ) -> None:
         self.project_service = project_service
         self.pipeline_dispatcher = pipeline_dispatcher
         self.group_id_resolver = group_id_resolver
+        # Ricalcolo isolato a monte («Utente che esegue», runtime_identity U3).
+        self.isolated_dispatcher = isolated_dispatcher
 
     def set_pipeline_dispatcher(self, dispatcher: PipelineDispatcherProtocol) -> None:
         """Set the dispatcher used for recursive upstream project execution."""
@@ -288,6 +292,7 @@ class ManipolaExecutor:
                 lambda: self._carica_sorgenti_progetto(
                     canvas, dataframes, force_recalculate, run_id=run_id, group_id=executing_group_id,
                     test_run=bool((execution_context or {}).get("test_run")),
+                    execution_context=execution_context,
                 ),
                 lambda: self._carica_sorgenti_file(canvas, dataframes, group_id=executing_group_id),
                 lambda: self._carica_sorgenti_datasource(canvas, dataframes, group_id=executing_group_id),
@@ -516,6 +521,10 @@ class ManipolaExecutor:
                 lambda: self._carica_sorgenti_progetto(
                     canvas, dataframes, force_recalculate=False,
                     group_id=executing_group_id,
+                    # Anteprima: nessun ricalcolo che scrive; gli Estrai a
+                    # monte con identita' dal piano (runtime_identity U2).
+                    test_run=bool((execution_context or {}).get("test_run")),
+                    execution_context=execution_context,
                 ),
                 lambda: self._carica_sorgenti_file(
                     canvas, dataframes, group_id=executing_group_id,
@@ -616,6 +625,7 @@ class ManipolaExecutor:
         run_id: Optional[str] = None,
         *, group_id: Optional[str] = None,
         test_run: bool = False,
+        execution_context: Optional[Mapping[str, Any]] = None,
     ) -> Optional[JsonObject]:
         """Carica DataFrame dai progetti sorgente (type=project_source).
 
@@ -638,6 +648,9 @@ class ManipolaExecutor:
             group_id=group_id,
             logger=logger,
             test_run=test_run,
+            isolated_upstreams=(execution_context or {}).get(ISOLATED_UPSTREAMS_FIELD),
+            isolated_run=bool((execution_context or {}).get(ISOLATED_UPSTREAM_RUN_FIELD)),
+            isolated_dispatcher=self.isolated_dispatcher,
         )
 
     def _carica_sorgenti_file(

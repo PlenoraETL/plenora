@@ -219,4 +219,7 @@ def test_binding_lost_and_tolerant_old_manifests():
 def test_preview_and_republish_use_the_same_rule():
     import inspect
     assert "input_changes(published_manifest" in inspect.getsource(eseguibili_service.republish_preview)
-    assert "input_changes(_active_manifest(eseguibile)" in inspect.getsource(eseguibili_service.publish_new_version)
+    assert "input_changes(published, manifest.inputs" in inspect.getsource(eseguibili_service.publish_new_version)
+    # «Utente che esegue» a monte tolto: stessa regola in ripubblicazione e N1.
+    assert "upstream_identity_changes(published, closure)" in inspect.getsource(eseguibili_service.publish_new_version)
+    assert "upstream_identity_changes(" in inspect.getsource(eseguibili_service.source_status)

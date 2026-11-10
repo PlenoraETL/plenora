@@ -46,6 +46,8 @@ from app.core.resources.bounded_reader import read_stream_bounded
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.core.resources import resource_caps as resource_caps_module
 from app.core.results import blob_writer as blob_writer_module
+from app.core.projects.upstream_identity import source_identity_need
+from app.shared.execution.runtime_identity import route_upstream_source
 from app.shared.security.tls_policy import resolve_tls_verify
 from app.utils.logger import get_logger
 
@@ -886,6 +888,13 @@ class ApiConnectionRestFileMixin:
                     "Contesto di sicurezza non determinabile (group_id mancante)"
                 )
 
+            # La porta unica (runtime_identity U1, U5): un progetto a monte
+            # con «Utente che esegue» non si legge dal risultato salvato.
+            route_upstream_source(
+                source_project_id=source_project_id,
+                need=source_identity_need(source_project_id, group_id=executing_group_id),
+                isolated_upstreams=None,
+            )
             try:
                 # Bytes-first: il caller `_build_files_for_post` gia' accetta
                 # `tuple(bytes, filename)` come input_path
