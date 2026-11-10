@@ -1181,6 +1181,9 @@ whitelist = 127.0.0.1, ::1
 headers = Name:X-WEBAUTH-NAME Role:X-WEBAUTH-ROLE
 enable_login_token = false
 
+[rbac]
+permission_cache = false
+
 [snapshots]
 enabled = false
 

@@ -211,6 +211,10 @@ EXPECTED_INI = {
     ("auth.proxy", "auto_sign_up"): "true",
     ("auth.proxy", "sync_ttl"): "15",
     ("auth.proxy", "enable_login_token"): "false",
+    # Revoca immediata: senza, Grafana tiene in cache i permessi ~30 s
+    # (misurato su 13.3) e un admin spostato di gruppo o una condivisione
+    # revocata valgono ancora per mezzo minuto.
+    ("rbac", "permission_cache"): "false",
     ("snapshots", "enabled"): "false",
     ("public_dashboards", "enabled"): "false",
     ("explore", "enabled"): "false",
