@@ -1059,7 +1059,7 @@ def distinct_node_values(project_id: str, node_id: str, body: DistinctRequest,
             canvas = CanvasState(**apply_identity_inputs(PipelineExecutionContract(
                 project_id=project_id, project_type=metadata.project_type, group_id=metadata.group_id,
                 canvas=canvas.model_dump(), runtime_context={"default_connection_id": getattr(metadata, "default_connection_id", None)}),
-                editor_identity(canvas, group_id=metadata.group_id)[0]).canvas)
+                editor_identity(canvas, group_id=metadata.group_id)[0], node_id=node_id).canvas)
     except RuntimeIdentityError as exc:
         raise_typed_http(exc.code, status_code=400, message=exc.message)
     except ValueError as exc:

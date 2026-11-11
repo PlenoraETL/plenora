@@ -15,7 +15,9 @@ from dataclasses import replace
 from app.core.arricchisci.canvas_orchestrator import _merge_node_data
 from app.core.arricchisci.enrichment_service import build_enrichment_executor
 from app.core.arricchisci.request_preparation import prepare_api_request
+from app.core.projects.identity_effect import identity_binding_problems
 from app.core.eseguibili.manifest import compile_manifest
+from app.shared import error_codes
 from app.core.estrai.query_generator import QueryGenerator
 from app.core.manipola.node_validator import ManipolaNodeValidator
 from app.core.manipola.preparation import empty_dataframe_from_column_metadata
@@ -28,7 +30,7 @@ from app.core.manipola.transform_ordering import incoming_edge_sort_key_for_node
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from app.core.projects.canvas_access import ORPHAN_STEP_MESSAGE, find_orphan_processing_nodes
-from app.core.projects.canvas_preview_scope import FINAL_NODE_TYPES, run_canvas, unreached_node_ids
+from app.core.projects.canvas_preview_scope import FINAL_NODE_TYPES, is_join_edge, run_canvas, unreached_node_ids
 from app.core.projects.schema_inference import SchemaInferenceService
 from app.core.projects.canvas_schema_preparation import infer_canvas_columns
 from app.core.projects.canvas_models import CanvasState
@@ -147,11 +149,24 @@ def _canvas_issues(
     edges = list(getattr(canvas, "edges", None) or [])
     node_ids = {n.id for n in nodes}
     if project_type in {"estrai", "manipola", "arricchisci"} and nodes:
+        canvas_dict = (canvas.model_dump() if hasattr(canvas, "model_dump")
+                       else {"nodes": [vars(n) for n in nodes], "edges": [vars(e) for e in edges]})
         try:
-            compile_manifest(for_project=True, source_project_id=project_id, project_type=project_type,
-                             canvas=canvas.model_dump() if hasattr(canvas, "model_dump") else {"nodes": [vars(n) for n in nodes], "edges": [vars(e) for e in edges]})
+            manifest = compile_manifest(for_project=True, source_project_id=project_id, project_type=project_type,
+                                        canvas=canvas_dict)
         except ValueError as exc:
             issues.append(Issue(node_id="", severity="error", code="runtime_inputs.invalid", message=str(exc)))
+        else:
+            # Filtro «Utente che esegue» senza effetto (11/11/2026): errore,
+            # canvas non valido. Sul nodo dell'input (mai declassato ad
+            # avviso dalla regola dei rami scollegati).
+            issues.extend(
+                Issue(node_id=problem.input_node_id, severity="error",
+                      code=error_codes.RUNTIME_IDENTITY_UNBOUND, message=problem.message,
+                      suggestion={"target_node_id": problem.target_node_id,
+                                  "target_field": problem.target_field})
+                for problem in identity_binding_problems(canvas_dict, manifest)
+            )
     if project_type == "estrai" and any(getattr(n, "table_name", None) for n in nodes):
         try:
             connection_id = (execution_context or {}).get("default_connection_id")
@@ -266,6 +281,15 @@ def _source_node_issues(nodes: list, edges: list) -> List[Issue]:
     """SOURCE_ISOLATED (warning) + SOURCE_NO_VISIBLE_COLUMNS (error). No inferenza."""
     out: List[Issue] = []
     touched = {getattr(e, "source", None) for e in edges} | {getattr(e, "target", None) for e in edges}
+    # Una tabella SQL in JOIN con un'altra puo' non avere colonne visibili:
+    # restringe le righe con i suoi filtri e la JOIN, o fa da ponte (filtro
+    # «Utente che esegue» ignorato, 11/11/2026). Se la query intera non ha
+    # colonne, lo dice la costruzione del SQL («Nessuna colonna selezionata»).
+    types_by_id = {getattr(n, "id", None): getattr(n, "type", None) for n in nodes}
+    joined_tables = {
+        endpoint for e in edges if is_join_edge(e, types_by_id)
+        for endpoint in (getattr(e, "source", None), getattr(e, "target", None))
+    }
     for n in nodes:
         ntype = getattr(n, "type", None)
         if ntype not in _SOURCE_NODE_TYPES:
@@ -278,7 +302,8 @@ def _source_node_issues(nodes: list, edges: list) -> List[Issue]:
                 message="Sorgente non collegata ad alcun nodo — verrà ignorata durante l'esecuzione.",
                 suggestion=None,
             ))
-        if ntype in _DECLARED_COLUMN_SOURCE_TYPES and _raw_columns(n) and not _visible_columns(n):
+        if (ntype in _DECLARED_COLUMN_SOURCE_TYPES and _raw_columns(n) and not _visible_columns(n)
+                and n.id not in joined_tables):
             out.append(Issue(
                 node_id=str(n.id), severity="error", code="SOURCE_NO_VISIBLE_COLUMNS",
                 message="Tutte le colonne sono state deselezionate. Seleziona almeno una colonna.",

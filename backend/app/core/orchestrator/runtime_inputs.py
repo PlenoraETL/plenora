@@ -132,9 +132,15 @@ def _apply_own_runtime_inputs(
 def apply_identity_inputs(
     execution_contract: PipelineExecutionContract,
     identity: RuntimeIdentity,
+    *,
+    node_id: object = None,
 ) -> PipelineExecutionContract:
     """Anteprime dell'editor: valorizza SOLO gli input «Utente che esegue»
     (con lo username di prova) e lascia gli altri input come oggi.
+
+    ``node_id``: anteprima di un passo. La verifica dell'effetto dei binding
+    (``projects.identity_effect``) guarda il passo e i suoi antenati; senza
+    passo l'Output.
 
     REGOLA (correzione dopo la conferma, punto 4): la presenza di un input
     «Utente che esegue» cambia SOLO quell'input. Il manifest si compila sul
@@ -186,6 +192,7 @@ def apply_identity_inputs(
         values={},
         group_id=execution_contract.group_id,
         identity=identity,
+        scope_node_id=node_id,
     )
     # Gli altri input tornano come erano (stesso ordine del canvas).
     resolved_by_id = {
@@ -289,5 +296,5 @@ def apply_preview_inputs(
     identity, closure = editor_identity(
         execution_contract.canvas, group_id=execution_contract.group_id, node_id=node_id,
     )
-    resolved = apply_identity_inputs(execution_contract, identity)
+    resolved = apply_identity_inputs(execution_contract, identity, node_id=node_id)
     return _with_upstream_plan(resolved, identity, {}, closure=closure)

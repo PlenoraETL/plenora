@@ -13,6 +13,7 @@ passano da qui:
 
 from __future__ import annotations
 
+import re
 from typing import Any, List, Optional
 
 from app.core.estrai.types import JsonObject
@@ -72,13 +73,75 @@ def feature_service_query(nodes: List[Any], result_node: Any) -> Optional[JsonOb
 
 
 def sql_query(generator: Any, nodes: List[Any], edges: List[Any], result_node: Any, sql_options: JsonObject) -> JsonObject:
-    """SQL e parametri dell'esecuzione (``generate_sql`` con le opzioni della connessione)."""
-    return generator.generate_sql(nodes, edges, result_node.id, **sql_options)
+    """SQL e parametri dell'esecuzione (``generate_sql`` con le opzioni della connessione).
+
+    Difesa nell'esecutore (filtro «Utente che esegue» ignorato, 11/11/2026):
+    ogni filtro con un valore impostato dal server (``value_literal``) di una
+    tabella del canvas eseguito deve essere entrato nella WHERE, con i suoi
+    parametri nel SQL. Altrimenti ``ValueError`` e la query non parte. La
+    regola completa (ogni binding, prima dell'avvio) e'
+    ``projects.identity_effect``."""
+    info = generator.generate_sql(nodes, edges, result_node.id, **sql_options)
+    missing = unbound_literal_filters(nodes, info)
+    if missing:
+        raise ValueError(literal_filters_message(missing))
+    return info
+
+
+def _literal_filters(nodes: List[Any]) -> List[tuple[Any, int, Any]]:
+    out = []
+    for node in nodes:
+        if getattr(node, "type", None) not in ("source", "feature_source"):
+            continue
+        for index, item in enumerate(getattr(node, "filters", None) or []):
+            literal = item.get("value_literal") if isinstance(item, dict) else getattr(item, "value_literal", None)
+            if literal:
+                out.append((node, index, item))
+    return out
+
+
+def _describe_filter(node: Any, item: Any) -> str:
+    column = item.get("column") if isinstance(item, dict) else getattr(item, "column", None)
+    table = getattr(node, "alias", None) or getattr(node, "table_name", None) or getattr(node, "id", "?")
+    return f"{table}.{column or '?'}"
+
+
+def unbound_literal_filters(nodes: List[Any], query_info: JsonObject) -> List[str]:
+    """I filtri ``value_literal`` delle tabelle che la query costruita NON
+    lega (``tabella.colonna``): tabella fuori dalla query, filtro saltato,
+    parametro assente dal SQL."""
+    sql = str(query_info.get("sql") or "")
+    bound = {
+        (str(entry.get("node_id")), entry.get("filter_index"))
+        for entry in query_info.get("bound_filters") or []
+        if entry.get("params") and all(re.search(rf":{re.escape(str(name))}\b", sql) for name in entry["params"])
+    }
+    return [
+        _describe_filter(node, item)
+        for node, index, item in _literal_filters(nodes)
+        if (str(getattr(node, "id", "")), index) not in bound
+    ]
+
+
+def feature_service_unbound_literal_filters(nodes: List[Any]) -> List[str]:
+    """Lettura ArcGIS: nessun filtro di tabella SQL entra nella lettura del
+    layer, quindi ogni filtro ``value_literal`` resterebbe senza effetto."""
+    return [_describe_filter(node, item) for node, _index, item in _literal_filters(nodes)]
+
+
+def literal_filters_message(missing: List[str]) -> str:
+    return (
+        "Il filtro «Utente che esegue» collegato a " + ", ".join(missing)
+        + " non entra nella query: il filtro per utente verrebbe ignorato e l'esecuzione si blocca."
+    )
 
 
 __all__ = [
     "estrai_result_node",
     "feature_service_query",
+    "feature_service_unbound_literal_filters",
+    "literal_filters_message",
+    "unbound_literal_filters",
     "is_column_visible",
     "sql_query",
     "visible_column_names",

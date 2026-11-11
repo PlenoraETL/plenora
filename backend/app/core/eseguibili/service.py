@@ -37,6 +37,7 @@ from .models import (
     EseguibileExecutionResult,
     ConnectionInputOption,
 )
+from app.core.projects.identity_effect import assert_identity_bindings_effective, identity_binding_problems
 from .runtime import resolve_runtime_inputs
 from . import upstream_plan as upstream_plan_module
 from app.shared.execution.runtime_identity import RuntimeIdentity
@@ -248,6 +249,8 @@ def create_from_project(
         canvas=cloned_canvas,
         default_connection_id=getattr(proj, "default_connection_id", None),
     )
+    # Un filtro «Utente che esegue» senza effetto non si pubblica (11/11/2026).
+    assert_identity_bindings_effective(cloned_canvas, manifest)
     manifest = hydrate_manifest_connection_options(manifest, group_id=group_id)
     manifest = _with_upstream_snapshot(manifest, _manifest_closure(manifest, cloned_canvas, group_id=group_id))
     first_file_input = next(
@@ -318,6 +321,7 @@ def publish_new_version(
         canvas=cloned_canvas,
         default_connection_id=getattr(proj, "default_connection_id", None),
     )
+    assert_identity_bindings_effective(cloned_canvas, manifest)
     published = _active_manifest(eseguibile)
     closure = _manifest_closure(manifest, cloned_canvas, group_id=eseguibile.group_id)
     changes = [
@@ -685,6 +689,9 @@ def republish_preview(
         else:
             # Gli input del manifest compilato (compreso l'adattatore legacy).
             inputs, bindings = manifest.inputs, manifest.bindings
+            # Filtro «Utente che esegue» senza effetto: la ripubblicazione si
+            # rifiuterebbe (stessa regola, identity_effect).
+            error = " ".join(problem.message for problem in identity_binding_problems(canvas, manifest)) or None
     changes = input_changes(published_manifest, inputs, bindings, canvas)
     return problems, changes, error
 

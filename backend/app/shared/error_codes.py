@@ -333,6 +333,11 @@ RUNTIME_IDENTITY_OVERRIDE_INVALID = "runtime_identity_override_invalid"
 """400: il valore scelto da un amministratore per un input «Utente che
 esegue» con «Gli amministratori possono scegliere il valore» non e' un testo
 o supera la lunghezza massima: la richiesta si rifiuta."""
+RUNTIME_IDENTITY_UNBOUND = "runtime_identity_unbound"
+"""400: un input «Utente che esegue» e' collegato a un filtro o a un
+parametro che non entra nella query o nel passo eseguito (tabella fuori dalla
+query, filtro saltato, nodo non collegato all'Output, nodo sostituito da un
+file): il filtro per utente non avrebbe effetto, l'esecuzione si blocca."""
 
 
 
@@ -458,6 +463,7 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     RUNTIME_IDENTITY_CLIENT_VALUE,
     RUNTIME_IDENTITY_TRANSFORM_FAILED,
     RUNTIME_IDENTITY_OVERRIDE_INVALID,
+    RUNTIME_IDENTITY_UNBOUND,
     # Dashboard Grafana degli Eseguibili
     GRAFANA_DISABLED,
     GRAFANA_UNAVAILABLE,

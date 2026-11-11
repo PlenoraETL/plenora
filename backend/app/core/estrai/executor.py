@@ -494,6 +494,10 @@ class EstraiExecutor:
         plan = query_plan_module.feature_service_query(canvas.nodes, result_node)
         if plan is None:
             return {"success": False, "message": "Nessun nodo Feature Source trovato nel canvas"}
+        unbound = query_plan_module.feature_service_unbound_literal_filters(canvas.nodes)
+        if unbound:
+            return {"success": False, "user_error": True,
+                    "message": query_plan_module.literal_filters_message(unbound)}
         layer_url = plan["layer_url"]
         where = plan["where"]
         out_fields = plan["out_fields"]
@@ -731,6 +735,10 @@ class EstraiExecutor:
         feature_nodes = [n for n in canvas.nodes if n.type == "feature_source"]
         if not feature_nodes:
             return {"success": False, "message": "Nessun nodo Feature Source trovato nel canvas"}
+        unbound = query_plan_module.feature_service_unbound_literal_filters(canvas.nodes)
+        if unbound:
+            return {"success": False, "user_error": True,
+                    "message": query_plan_module.literal_filters_message(unbound)}
 
         node = feature_nodes[0]
         layer_url = node.layer_url or (node.data or {}).get('layer_url', '')

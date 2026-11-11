@@ -18,6 +18,8 @@ import { dataFlowEdges } from './runtimeBindingEdges';
 import { projectInputRole } from './runtimeInputKinds';
 
 const OUTPUT_TYPES = ['result', 'resultNode'];
+// Tabelle SQL di Estrai (editor: tableNode; salvate: source).
+const SQL_TABLE_TYPES = ['tableNode', 'source'];
 
 /**
  * Ruolo di un nodo:
@@ -120,8 +122,15 @@ export function analyzeCanvas(nodes, edges) {
   // Senza Output il canvas e' in costruzione: nessuno e' "scollegato".
   const hasOutput = queue.length > 0;
   queue.forEach(id => reaching.add(id));
+  // JOIN di Estrai (filtro «Utente che esegue» ignorato, 11/11/2026): un
+  // collegamento fra due tabelle vale nei due versi, come nel backend
+  // (canvas_preview_scope.is_join_edge): la tabella collegata «in avanti»
+  // alla radice arriva all'Output ed entra nella query.
+  const isTable = (id) => SQL_TABLE_TYPES.includes(byId.get(id)?.type);
   while (queue.length) {
-    for (const prev of ins.get(queue.shift()) || []) {
+    const current = queue.shift();
+    const joined = isTable(current) ? (outs.get(current) || []).filter(isTable) : [];
+    for (const prev of [...(ins.get(current) || []), ...joined]) {
       if (!reaching.has(prev)) { reaching.add(prev); queue.push(prev); }
     }
   }

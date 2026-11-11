@@ -38,6 +38,19 @@ describe('canvasGraph', () => {
     expect(danglingNodeIds(nodes.filter(x => x.type !== 'result'), edges).size).toBe(0);
   });
 
+  it('Estrai: a table joined "forward" from the root reaches the Output (JOIN in both directions)', () => {
+    // Filtro «Utente che esegue» ignorato (11/11/2026): radice -> collegata,
+    // la collegata non ha archi verso l'Output ma entra nella query.
+    const tables = [n('val', 'tableNode'), n('cd', 'tableNode'), n('cd2', 'source'), n('lone', 'tableNode'),
+      n('out', 'result')];
+    const joins = [e('val', 'cd'), e('cd', 'cd2'), e('val', 'out')];
+    expect([...reachingOutput(tables, joins)].sort()).toEqual(['cd', 'cd2', 'out', 'val']);
+    expect([...danglingNodeIds(tables, joins)]).toEqual(['lone']);
+    // Fuori da Estrai la direzione resta quella del flusso dei dati.
+    const flow = [n('s', 'project_source'), n('a'), n('b'), n('out', 'result')];
+    expect([...danglingNodeIds(flow, [e('s', 'a'), e('a', 'b'), e('a', 'out')])]).toEqual(['b']);
+  });
+
   it('lanes in flow order; the Output lane continues into its loads; a fork opens new lanes', () => {
     const lanes = stepLanes(nodes, edges).map(l => [l.kind, l.steps.map(x => x.id), l.addAfterId, l.dangling]);
     expect(lanes).toEqual([

@@ -8,6 +8,7 @@ import re
 from typing import Any, List, Optional
 
 from app.core.projects.canvas_models import Node, Edge
+from app.core.projects.canvas_preview_scope import is_join_edge
 from app.core.estrai.types import JsonObject
 from app.core.estrai.query_aliases import with_unique_aliases
 from app.core.estrai.query_filters import WhereClauseBuilder
@@ -78,6 +79,9 @@ class QueryGenerator:
             self.db_schema = self._get_default_schema()
 
         params = {}
+        # Registro della costruzione: i filtri entrati nella WHERE con i
+        # loro parametri (verifica «Utente che esegue» dopo la costruzione).
+        bound_filters: list = []
 
         # Trova il nodo risultato
         result_node = next((n for n in nodes if n.id == result_node_id), None)
@@ -111,7 +115,7 @@ class QueryGenerator:
         sql_parts = {
             "select": self._genera_select(table_nodes, result_node, group_by_config),
             "from": self._genera_from(table_nodes, edges),
-            "where": self._genera_where(table_nodes, params),
+            "where": self._genera_where(table_nodes, params, bound_filters),
             "group_by": self._genera_group_by(group_by_config, table_nodes),
             "having": self._genera_having(having_config, group_by_config, params, table_nodes),
             "order_by": self._genera_order_by(order_by_config, table_nodes, group_by_config),
@@ -126,7 +130,8 @@ class QueryGenerator:
             "sql": sql,
             "params": params,
             "tables_used": [self._get_node_table_name(n) for n in table_nodes],
-            "columns_count": len(self._get_colonne_visibili(table_nodes))
+            "columns_count": len(self._get_colonne_visibili(table_nodes)),
+            "bound_filters": bound_filters,
         }
 
     def query_tables(self, nodes: List[Node], edges: List[Edge], result_node_id: str) -> List[Node]:
@@ -318,6 +323,14 @@ class QueryGenerator:
         tabelle sorgente connesse. Usa BFS (Breadth-First Search) per
         visitare tutti i nodi raggiungibili seguendo gli edges al contrario.
 
+        REGOLA DELLE JOIN (filtro «Utente che esegue» ignorato, 11/11/2026):
+        un arco fra due tabelle SQL e' una JOIN e vale nei due versi
+        (``canvas_preview_scope.is_join_edge``, la stessa regola dell'ambito
+        dell'esecuzione). Una tabella collegata alla radice «in avanti»
+        (radice -> collegata) entra nella query con le sue colonne, i suoi
+        filtri e la JOIN, anche senza colonne visibili. Prima restava fuori
+        in silenzio, e con lei i suoi filtri.
+
         Returns:
             Lista ordinata dei nodi tabella connessi (dal più lontano al più vicino)
         """
@@ -343,6 +356,21 @@ class QueryGenerator:
                         table_nodes.append(source_node)
                     # Continua a risalire il grafo
                     queue.append(edge.source)
+
+        # JOIN nei due versi: le tabelle collegate «in avanti» alle tabelle
+        # gia' trovate (in coda: l'ordine delle tabelle di prima non cambia).
+        types_by_id = {n.id: n.type for n in nodes}
+        by_id = {n.id: n for n in nodes}
+        pending = [n.id for n in table_nodes]
+        while pending:
+            current_id = pending.pop(0)
+            for edge in edges:
+                if not is_join_edge(edge, types_by_id) or current_id not in (edge.source, edge.target):
+                    continue
+                other = by_id.get(edge.target if edge.source == current_id else edge.source)
+                if other is not None and other not in table_nodes:
+                    table_nodes.append(other)
+                    pending.append(other.id)
 
         return table_nodes
 
@@ -508,8 +536,8 @@ class QueryGenerator:
 
     # GENERAZIONE CLAUSOLA WHERE
 
-    def _genera_where(self, table_nodes: List[Node], params: JsonObject) -> str:
-        return self._where_builder().generate_where(table_nodes, params)
+    def _genera_where(self, table_nodes: List[Node], params: JsonObject, rendered: Optional[list] = None) -> str:
+        return self._where_builder().generate_where(table_nodes, params, rendered)
 
     def _crea_condizione(
         self,

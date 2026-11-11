@@ -44,6 +44,7 @@ from app.shared.execution.runtime_identity import (
 )
 
 from . import db as eseguibili_db
+from app.core.projects.identity_effect import assert_identity_bindings_effective
 from .manifest import compile_manifest
 from .models import UpstreamIdentityInput
 from .runtime import resolve_runtime_inputs
@@ -503,7 +504,12 @@ def plan_for_version(
     """Avvio e stima di un Eseguibile: ``(input del progetto, piano)``. Lo
     snapshot della pubblicazione si controlla prima del piano (U7) sulla
     chiusura della versione; il piano usa la chiusura di QUESTO avvio (un file
-    dato sostituisce la sua sorgente, A5)."""
+    dato sostituisce la sua sorgente, A5).
+
+    Per primo: ogni binding «Utente che esegue» della versione deve avere
+    effetto (``identity_effect``, filtro ignorato 11/11/2026), anche nella
+    stima di un Estrai o di un Manipola (che non risolve gli input)."""
+    assert_identity_bindings_effective(version.canvas, manifest, values=raw_inputs)
     loader = cached_loader(group_id)
     common: dict[str, Any] = dict(
         canvas=version.canvas, project_type=manifest.project_type, inputs=manifest.inputs,

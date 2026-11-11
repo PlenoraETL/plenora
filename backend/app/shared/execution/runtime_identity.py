@@ -210,6 +210,16 @@ indirettamente, un progetto che ne ha bisogno (chiusura transitiva,
   trova ogni lettura (anche in ``backend/workers``, anche via
   ``SourceLoader().load`` e ``materialize_run``) e verifica che la porta
   venga chiamata PRIMA della lettura.
+
+BINDING SENZA EFFETTO (11/11/2026)
+----------------------------------
+Raccolta: ``docs/audits/identita-binding-ignorato-raccolta-2026-11-11.md``.
+Ogni binding di un input di tipo server deve avere effetto sull'esecuzione
+(filtro nella query costruita, passo o sorgente nel flusso che arriva
+all'Output): altrimenti ``runtime_identity_unbound``, mai un filtro ignorato
+in silenzio. La regola e i suoi chiamanti: ``app.core.projects.
+identity_effect``; le JOIN di Estrai valgono nei due versi
+(``app.core.projects.canvas_preview_scope.is_join_edge``).
 """
 
 from __future__ import annotations

@@ -19,15 +19,12 @@ from app.shared.execution.runtime_identity import (
     identity_source_column,
     identity_source_fields,
 )
-from app.shared.execution.runtime_bound_fields import (
-    RUNTIME_BOUND_FIELDS,
-    execution_path,
-    literal_marker_path,
-    strip_runtime_bound_fields,
-)
+from app.shared.execution.runtime_bound_fields import strip_runtime_bound_fields
 from app.shared.execution.runtime_input_kinds import is_server_injected, project_input_role
 
 from . import db as eseguibili_db
+from .binding_write import _apply_scalar_binding
+from app.core.projects.identity_effect import assert_identity_bindings_effective
 from .identity_transform import identity_values
 from .models import ExecutableInputDefinition, ExecutableManifest
 
@@ -92,75 +89,6 @@ def _coerce_scalar(definition: ExecutableInputDefinition, value: Any) -> Any:
     if kind == "select" and coerced not in validation.options:
         raise ValueError(f"Opzione non valida per '{definition.label}'")
     return coerced
-
-
-def _set_existing_path(
-    container: dict[str, Any],
-    path: str,
-    value: Any,
-    *,
-    allow_missing_leaf: bool = False,
-) -> None:
-    parts = path.split(".")
-    current: Any = container
-    for part in parts[:-1]:
-        if isinstance(current, list):
-            index = int(part)
-            if index >= len(current):
-                raise ValueError(f"Indice binding fuori range: {path}")
-            current = current[index]
-        elif isinstance(current, dict):
-            if part not in current:
-                raise ValueError(f"Campo binding inesistente: {path}")
-            current = current[part]
-        else:
-            raise ValueError(f"Campo binding non attraversabile: {path}")
-    leaf = parts[-1]
-    if isinstance(current, list):
-        index = int(leaf)
-        if index >= len(current):
-            raise ValueError(f"Indice binding fuori range: {path}")
-        current[index] = value
-    elif isinstance(current, dict):
-        if leaf not in current and not allow_missing_leaf:
-            raise ValueError(f"Campo binding inesistente: {path}")
-        current[leaf] = value
-    else:
-        raise ValueError(f"Campo binding non scrivibile: {path}")
-
-
-# Contenitori che la risoluzione crea se mancano: ``config`` dei passi e i
-# campi scritti solo dalla risoluzione (runtime_bound_fields).
-_CREATABLE_HEADS = frozenset({"config"}) | RUNTIME_BOUND_FIELDS
-
-
-def _apply_scalar_binding(node: dict[str, Any], path: str, value: Any, *, literal: bool = False) -> None:
-    """``literal``: valore impostato dal server («Utente che esegue»). Dove il
-    lettore del bersaglio interpreterebbe il testo (funzioni SQL, liste con la
-    virgola, ``BETWEEN`` nei filtri di Estrai) si scrive anche il segno
-    ``literal_marker_path``: il valore entra sempre come dato (parametro SQL)."""
-    marker = literal_marker_path(path) if literal else None
-    if marker:
-        _apply_scalar_binding(node, marker, True)
-    # Il bersaglio offerto (binding_capabilities) puo' essere letto
-    # dall'esecuzione in un campo dedicato: si scrive li'.
-    path = execution_path(path)
-    data = node.get("data")
-    applied = False
-    if isinstance(data, dict) and path.split(".", 1)[0] in data:
-        _set_existing_path(data, path, value, allow_missing_leaf=True)
-        applied = True
-    if path.split(".", 1)[0] in node:
-        _set_existing_path(node, path, value, allow_missing_leaf=True)
-        applied = True
-    head = path.split(".", 1)[0]
-    if not applied and head in _CREATABLE_HEADS:
-        container = data if isinstance(data, dict) else node
-        container[head] = {}
-        _set_existing_path(container, path, value, allow_missing_leaf=True)
-        applied = True
-    if not applied:
-        raise ValueError(f"Nodo {node.get('id')} senza campo binding {path}")
 
 
 def _as_identity_source(node: dict[str, Any], username: str) -> None:
@@ -420,8 +348,16 @@ def resolve_runtime_inputs(
     values: Mapping[str, Any],
     group_id: str,
     identity: RuntimeIdentity,
+    scope_node_id: Any = None,
 ) -> tuple[JsonObject, list[str], JsonObject]:
     """Valida gli input e restituisce canvas risolto, cleanup ids e audit.
+
+    Ogni binding di un input «Utente che esegue» deve avere effetto
+    sull'esecuzione (``identity_effect``, filtro ignorato 11/11/2026): un
+    filtro su una tabella che non entra nella query, saltato, su un nodo
+    scollegato o sostituito da un file -> ``runtime_identity_unbound``,
+    prima di ogni file temporaneo. ``scope_node_id``: anteprima di un passo
+    (None = l'Output).
 
     ``identity`` e' obbligatoria (nessun default): ogni percorso dichiara chi
     esegue. Gli input «Utente che esegue» prendono SOLO il suo username,
@@ -439,6 +375,8 @@ def resolve_runtime_inputs(
     server_values = identity_values(
         manifest.inputs, identity=identity, client_values=values,
     )
+    if server_values:
+        assert_identity_bindings_effective(canvas, manifest, node_id=scope_node_id, values=values)
     values = {**values, **server_values}
 
     resolved_canvas = copy.deepcopy(dict(canvas))

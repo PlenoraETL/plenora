@@ -23,6 +23,15 @@ arriva a un nodo finale. E' la stessa regola del pannello del frontend
   (``projects.upstream_identity``, correzioni minori 11/11/2026, A5) legge i
   nodi ``project_source`` SOLO da qui, cosi' un ramo scollegato non blocca.
 
+- ``flow_node_ids``: i nodi che entrano davvero nel risultato (senza i nodi
+  fuori dal flusso scollegati), per la verifica degli input «Utente che
+  esegue» (``projects.identity_effect``).
+
+JOIN (filtro «Utente che esegue» ignorato, 11/11/2026): un arco fra due
+tabelle SQL di Estrai e' una JOIN e vale nei due versi (:func:`is_join_edge`):
+una tabella collegata alla radice «in avanti» arriva all'Output come una
+collegata «all'indietro». Prima restava fuori dalla query, con i suoi filtri.
+
 Da portare in plenora-data-tools2: la stessa regola nel motore Manipola.
 """
 
@@ -53,7 +62,36 @@ def _parts(canvas: Any) -> tuple[list[Any], list[Any]]:
     return list(getattr(canvas, "nodes", None) or []), list(getattr(canvas, "edges", None) or [])
 
 
-def _walk(start: set[str], edges: list[Any], *, upstream: bool) -> set[str]:
+#: Tabelle SQL di Estrai: un arco fra due di loro e' una JOIN (relazione
+#: simmetrica), non un flusso di dati con una direzione.
+SQL_TABLE_TYPES = frozenset({"source"})
+
+
+def is_join_edge(edge: Any, types_by_id: Mapping[str, Any]) -> bool:
+    """REGOLA UNICA DELLE JOIN (filtro «Utente che esegue» ignorato,
+    11/11/2026): un arco fra due tabelle SQL di Estrai e' una JOIN e vale nei
+    due versi. L'utente lo disegna dalla tabella radice verso quella
+    collegata (radice -> collegata -> nessun arco verso l'Output): la tabella
+    collegata entra comunque nella query, con le sue colonne, i suoi filtri e
+    la JOIN. La usano l'ambito dell'esecuzione (:func:`unreached_node_ids`,
+    :func:`run_canvas`, :func:`flow_node_ids`) e il costruttore SQL
+    (``estrai.query_generator.query_tables``)."""
+    return (
+        types_by_id.get(_field(edge, "source")) in SQL_TABLE_TYPES
+        and types_by_id.get(_field(edge, "target")) in SQL_TABLE_TYPES
+    )
+
+
+def _types_by_id(nodes: list[Any]) -> Mapping[Any, Any]:
+    return {_field(node, "id"): _field(node, "type") for node in nodes}
+
+
+def _walk(
+    start: set[str], edges: list[Any], *, upstream: bool,
+    types_by_id: Mapping[str, Any] | None = None,
+) -> set[str]:
+    """Visita del grafo. Con ``types_by_id`` le JOIN (:func:`is_join_edge`)
+    si percorrono nei due versi."""
     seen = set(start)
     pending = list(start)
     while pending:
@@ -64,23 +102,66 @@ def _walk(start: set[str], edges: list[Any], *, upstream: bool) -> set[str]:
             if here == current and there not in seen:
                 seen.add(there)
                 pending.append(there)
+            elif (
+                types_by_id is not None and there == current and here not in seen
+                and is_join_edge(edge, types_by_id)
+            ):
+                seen.add(here)
+                pending.append(here)
     return seen
+
+
+def _output_flow(nodes: list[Any], edges: list[Any]) -> tuple[set[Any], set[Any]]:
+    """``(finali, nodi a monte dei finali)``: le JOIN valgono nei due versi."""
+    finals = {_field(node, "id") for node in nodes if _field(node, "type") in FINAL_NODE_TYPES}
+    if not finals:
+        return set(), set()
+    return finals, _walk(finals, edges, upstream=True, types_by_id=_types_by_id(nodes))
 
 
 def unreached_node_ids(canvas: Any) -> set[str]:
     """Nodi dei rami che non arrivano all'Output (vuoto senza Output).
 
     ``canvas``: ``CanvasState`` o il dict del canvas (worker di Arricchisci).
+    Una tabella collegata da una JOIN a una tabella che arriva all'Output
+    arriva all'Output (:func:`is_join_edge`).
     """
     nodes, edges = _parts(canvas)
-    finals = {_field(node, "id") for node in nodes if _field(node, "type") in FINAL_NODE_TYPES}
+    finals, upstream = _output_flow(nodes, edges)
     if not finals:
         return set()
-    reached = _walk(finals, edges, upstream=True) | _walk(finals, edges, upstream=False)
+    reached = upstream | _walk(finals, edges, upstream=False)
     return {
         _field(node, "id") for node in nodes
         if _field(node, "id") not in reached and _field(node, "type") not in OFF_BRANCH_TYPES
     }
+
+
+def flow_node_ids(canvas: Any, node_id: Any = None) -> set[Any]:
+    """I nodi i cui dati o parametri entrano davvero nel risultato
+    dell'esecuzione (``node_id`` None: l'Output e i nodi a monte, con le JOIN
+    nei due versi) o dell'anteprima di un passo (il passo e i suoi antenati,
+    come :func:`preview_canvas`). A differenza di :func:`run_canvas` non
+    tiene i nodi fuori dal flusso (``OFF_BRANCH_TYPES``) scollegati: un nodo
+    che non arriva al risultato non ha effetto. Lo usa la verifica degli
+    input «Utente che esegue» (``projects.identity_effect``)."""
+    nodes, edges = _parts(canvas)
+    if node_id is None:
+        finals, upstream = _output_flow(nodes, edges)
+        return finals | upstream
+    if not any(_field(node, "id") == str(node_id) for node in nodes):
+        return set()
+    return _step_ancestors(nodes, edges, str(node_id))
+
+
+def _step_ancestors(nodes: list[Any], edges: list[Any], node_id: str) -> set[Any]:
+    """Il passo e i suoi antenati. Se il passo e' l'Output, le JOIN valgono
+    nei due versi (la stessa query dell'esecuzione); per una tabella o un
+    passo resta la visita di prima (i soli antenati)."""
+    types_by_id = _types_by_id(nodes)
+    if types_by_id.get(node_id) in FINAL_NODE_TYPES:
+        return _walk({node_id}, edges, upstream=True, types_by_id=types_by_id)
+    return _walk({node_id}, edges, upstream=True)
 
 
 def run_canvas(canvas: Any) -> Any:
@@ -118,7 +199,7 @@ def executed_canvas(canvas: Any, node_id: Any = None) -> Any:
     nodes, edges = _parts(canvas)
     if not any(_field(node, "id") == str(node_id) for node in nodes):
         return canvas
-    ancestors = _walk({str(node_id)}, edges, upstream=True)
+    ancestors = _step_ancestors(nodes, edges, str(node_id))
     kept_nodes = [node for node in nodes if _field(node, "id") in ancestors]
     kept_edges = [
         edge for edge in edges
@@ -139,7 +220,7 @@ def preview_canvas(
     nodes = {node.id: node for node in canvas.nodes}
     if node_id not in nodes:
         raise ValueError(f"Preview: nodo '{node_id}' non trovato nel canvas.")
-    ancestors = _walk({node_id}, list(canvas.edges), upstream=True)
+    ancestors = _step_ancestors(list(canvas.nodes), list(canvas.edges), node_id)
     scoped = canvas.model_copy(update={
         "nodes": [node for node in canvas.nodes if node.id in ancestors],
         "edges": [edge for edge in canvas.edges if edge.source in ancestors and edge.target in ancestors],

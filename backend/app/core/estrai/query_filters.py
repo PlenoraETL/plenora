@@ -42,8 +42,16 @@ class WhereClauseBuilder:
         self._is_valid_identifier = is_valid_identifier
         self._get_node_table_name = get_node_table_name
 
-    def generate_where(self, table_nodes: List[Any], params: JsonObject) -> str:
+    def generate_where(
+        self, table_nodes: List[Any], params: JsonObject, rendered: list | None = None,
+    ) -> str:
         """WHERE dei filtri dei nodi tabella: nodi in AND tra loro.
+
+        ``rendered`` (facoltativo): riceve una voce ``{node_id, filter_index,
+        params, literal}`` per ogni filtro che entra nella WHERE, con i nomi
+        dei parametri che ha legato. E' il registro della costruzione che la
+        verifica degli input «Utente che esegue» legge DOPO la costruzione
+        (``projects.identity_effect``, ``estrai.executor``).
 
         Gruppi E/O (``shared.execution.condition_groups``): per ogni nodo le
         condizioni dello stesso ``group`` sono in AND, gruppi diversi in OR.
@@ -70,18 +78,25 @@ class WhereClauseBuilder:
                 if col_name:
                     column_type_map[col_name] = col_type
 
+            index_of = {id(item): index for index, item in enumerate(filters)}
             groups = []
             for group in condition_groups(filters):
-                rendered = [
-                    condition
-                    for condition in (
-                        self._filter_condition(item, table_alias, column_type_map, params)
-                        for item in group
-                    )
-                    if condition
-                ]
-                if rendered:
-                    groups.append(rendered)
+                group_conditions = []
+                for item in group:
+                    before = list(params)
+                    condition = self._filter_condition(item, table_alias, column_type_map, params)
+                    if not condition:
+                        continue
+                    group_conditions.append(condition)
+                    if rendered is not None:
+                        rendered.append({
+                            "node_id": getattr(node, "id", None),
+                            "filter_index": index_of.get(id(item)),
+                            "params": [name for name in params if name not in before],
+                            "literal": bool(getattr(item, "value_literal", None)),
+                        })
+                if group_conditions:
+                    groups.append(group_conditions)
 
             if len(groups) > 1 and any(getattr(item, "value_literal", None) for item in filters):
                 raise ValueError(LITERAL_IN_OR_GROUP_MESSAGE)

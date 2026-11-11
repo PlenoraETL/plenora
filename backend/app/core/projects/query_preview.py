@@ -9,8 +9,12 @@ dallo stesso codice).
 
 Input runtime: un filtro collegato a un input prende il valore al momento
 dell'esecuzione. Qui il campo collegato riceve un segnaposto, applicato con
-la STESSA scrittura dell'esecuzione (``eseguibili.runtime._apply_scalar_binding``);
+la STESSA scrittura dell'esecuzione (``eseguibili.binding_write._apply_scalar_binding``);
 il parametro che lo contiene si restituisce come "valore dall'input X".
+
+Un input «Utente che esegue» il cui binding non entra nella query
+(``projects.identity_effect``, 11/11/2026) diventa ``error``: la query si
+mostra comunque, con il motivo.
 """
 
 from __future__ import annotations
@@ -19,8 +23,9 @@ import copy
 import datetime as _dt
 from typing import Any, Callable, Mapping, NamedTuple
 
+from app.core.projects.identity_effect import identity_binding_problems
 from app.core.eseguibili.manifest import compile_manifest
-from app.core.eseguibili.runtime import _apply_scalar_binding
+from app.core.eseguibili.binding_write import _apply_scalar_binding
 from app.core.estrai import query_plan
 from app.core.estrai.query_generator import QueryGenerator
 from app.core.projects.canvas_models import CanvasState
@@ -82,6 +87,8 @@ class _BoundCanvas(NamedTuple):
     canvas: JsonObject
     labels: StringMap
     notes: list[str]
+    # Binding «Utente che esegue» senza effetto (identity_effect): errore.
+    identity_errors: list[str]
 
 
 def _bind_runtime_inputs(canvas_dict: JsonObject, *, project_id: str, project_type: str,
@@ -91,13 +98,16 @@ def _bind_runtime_inputs(canvas_dict: JsonObject, *, project_id: str, project_ty
     labels: StringMap = {}
     nodes = canvas_dict.get("nodes") or []
     if not any(isinstance(n, Mapping) and n.get("type") == "project_input" for n in nodes):
-        return _BoundCanvas(canvas_dict, labels, notes)
+        return _BoundCanvas(canvas_dict, labels, notes, [])
     try:
         manifest = compile_manifest(for_project=True, source_project_id=project_id, project_type=project_type,
                                     canvas=canvas_dict, default_connection_id=default_connection_id)
     except ValueError as exc:
         notes.append(f"Input runtime non validi: {exc}")
-        return _BoundCanvas(canvas_dict, labels, notes)
+        return _BoundCanvas(canvas_dict, labels, notes, [])
+    # Verifica sulla query costruita, prima dei segnaposti (stessa regola
+    # di Valida e dell'esecuzione).
+    identity_errors = [problem.message for problem in identity_binding_problems(canvas_dict, manifest)]
     by_id = {str(n.get("id")): n for n in nodes if isinstance(n, dict)}
     for definition in manifest.inputs:
         labels[definition.key] = definition.label
@@ -115,7 +125,7 @@ def _bind_runtime_inputs(canvas_dict: JsonObject, *, project_id: str, project_ty
         except (ValueError, TypeError, IndexError):
             continue
         _between_sentinels(node)
-    return _BoundCanvas(canvas_dict, labels, notes)
+    return _BoundCanvas(canvas_dict, labels, notes, identity_errors)
 
 
 def describe_estrai_query(
@@ -128,14 +138,14 @@ def describe_estrai_query(
 ) -> JsonObject:
     """La query che l'esecuzione lancerebbe sul canvas dato."""
     canvas_dict = copy.deepcopy(canvas.model_dump())
-    canvas_dict, labels, notes = _bind_runtime_inputs(
+    canvas_dict, labels, notes, identity_errors = _bind_runtime_inputs(
         canvas_dict, project_id=project_id, project_type=project_type,
         default_connection_id=default_connection_id,
     )
     bound = CanvasState(**canvas_dict)
     result_node = query_plan.estrai_result_node(bound.nodes)
     base: JsonObject = {"kind": "none", "sql": None, "params": [], "tables_used": [],
-                        "feature_service": None, "error": None, "notes": notes}
+                        "feature_service": None, "error": " ".join(identity_errors) or None, "notes": notes}
     if result_node is None:
         return {**base, "error": "Aggiungi un Output per vedere la query"}
     if not default_connection_id:

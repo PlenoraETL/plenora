@@ -134,6 +134,7 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "runtime_identity_client_value",
     "runtime_identity_transform_failed",
     "runtime_identity_override_invalid",
+    "runtime_identity_unbound",
     # Dashboard Grafana degli Eseguibili (11/11/2026)
     "grafana_disabled",
     "grafana_unavailable",
@@ -243,7 +244,8 @@ def test_catalog_count_domain_seventy_three():
     # 77: +runtime_identity_transform_failed (trasformazione dell'input, 09/11/2026).
     # 78: +runtime_identity_override_invalid (valore scelto dagli amministratori, 09/11/2026).
     # 84: +6 dashboard Grafana degli Eseguibili (11/11/2026).
-    assert len(EXPECTED_DOMAIN_CODES) == 84
+    # 85: +runtime_identity_unbound (filtro «Utente che esegue» senza effetto, 11/11/2026).
+    assert len(EXPECTED_DOMAIN_CODES) == 85
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 
