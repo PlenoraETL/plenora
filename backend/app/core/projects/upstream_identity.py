@@ -13,6 +13,15 @@ chiusura transitiva sui canvas VIVI dei progetti a monte dello stesso gruppo.
   ``project_source`` per l'editor (come ``source_freshness``): l'editor sa che
   «Esegui» diventa la prova e quale utente di prova vale.
 
+Raggiungibilita' (correzioni minori 11/11/2026, A5): si seguono SOLO i nodi
+``project_source`` che l'esecuzione legge davvero, con la regola degli
+esecutori (``canvas_preview_scope.executed_canvas``: rami che arrivano
+all'Output, oppure il passo dell'anteprima e i suoi antenati), sia nel canvas
+del lettore sia in quello di ogni progetto a monte; e senza le sorgenti che
+un input dell'Eseguibile sostituisce (``replaced_node_ids``: le calcola
+``eseguibili.upstream_plan.replaced_source_node_ids``). Un ramo scollegato
+non blocca piu' nulla.
+
 Un progetto di un altro gruppo non si segue (la sorgente e' gia' rifiutata da
 chi la legge: tenant fail-closed). Una lettura una volta per progetto per
 chiamata (memoria ``_Loader``).
@@ -26,12 +35,17 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from app.core.projects import db as project_db
+from app.core.projects.canvas_preview_scope import executed_canvas
 from app.shared.contracts.payloads import JsonObject
+from app.shared.error_envelope import raise_typed_http
 from app.shared.execution.runtime_identity import (
     KIND_LABEL,
     PREVIEW_ADMIN_VALUE_FIELD,
     PREVIEW_USERNAME_FIELD,
+    SAVED_RESULT_EXEMPT_ROLES,
+    RuntimeIdentityError,
     UpstreamIdentityNeed,
+    route_saved_result,
     admin_override_enabled,
     admin_override_label,
     identity_input_nodes,
@@ -93,12 +107,21 @@ def _nodes(canvas: Any) -> list[Any]:
     return list(getattr(canvas, "nodes", None) or [])
 
 
-def source_project_ids(canvas: Any) -> list[str]:
-    """Id dei progetti letti dai nodi ``project_source`` (ordine del canvas)."""
+def _node_id(node: Any) -> str:
+    return str(node.get("id") if isinstance(node, Mapping) else getattr(node, "id", ""))
+
+
+def source_project_ids(
+    canvas: Any, *, node_id: Any = None, replaced_node_ids: frozenset[str] | set[str] = frozenset(),
+) -> list[str]:
+    """Id dei progetti letti dai nodi ``project_source`` che l'esecuzione
+    legge davvero (ordine del canvas): la parte eseguita
+    (``executed_canvas``, ``node_id`` = passo dell'anteprima) senza i nodi
+    sostituiti da un input (``replaced_node_ids``)."""
     seen: list[str] = []
-    for node in _nodes(canvas):
+    for node in _nodes(executed_canvas(canvas, node_id)):
         node_type = node.get("type") if isinstance(node, Mapping) else getattr(node, "type", None)
-        if node_type != "project_source":
+        if node_type != "project_source" or _node_id(node) in replaced_node_ids:
             continue
         source_id = str(node_value(node, "source_project_id") or "").strip()
         if source_id and source_id not in seen:
@@ -146,6 +169,26 @@ def source_identity_need(
     return _need_of(str(source_project_id), _Loader(group_id, load), ())
 
 
+def assert_saved_result_available(project_id: str, current_user: Any) -> None:
+    """Porta U6 del risultato SALVATO di ``project_id`` usato fuori da
+    un'esecuzione (download del progetto, di un suo task, di una
+    Pianificazione; pubblicazione Feature Service): se il progetto ha bisogno
+    dell'identita' risponde 409 «questo progetto filtra per utente: usa
+    l'Eseguibile» (salvo il superadmin, ``SAVED_RESULT_EXEMPT_ROLES``).
+    Chi chiama ha gia' verificato il gruppo (il progetto e' del gruppo
+    dell'utente). Va chiamata PRIMA di leggere (test di enumerazione)."""
+    role = getattr(current_user, "role", None)
+    if role in SAVED_RESULT_EXEMPT_ROLES:
+        return
+    try:
+        route_saved_result(
+            need=source_identity_need(str(project_id), group_id=getattr(current_user, "group_id", None)),
+            role=role,
+        )
+    except RuntimeIdentityError as exc:
+        raise_typed_http(exc.code, status_code=409, message=exc.message)
+
+
 @dataclass(frozen=True)
 class ClosureEntry:
     """Un progetto della chiusura: il progetto, il motivo, i suoi input
@@ -157,11 +200,18 @@ class ClosureEntry:
 
 
 def identity_closure(
-    canvas: Any, *, group_id: Optional[str], load: Optional[ProjectLoader] = None,
+    canvas: Any,
+    *,
+    group_id: Optional[str],
+    load: Optional[ProjectLoader] = None,
+    node_id: Any = None,
+    replaced_node_ids: frozenset[str] | set[str] = frozenset(),
 ) -> Mapping[str, ClosureEntry]:
     """Ogni progetto a monte di ``canvas`` (anche indiretto) che ha bisogno
     dell'identita', in ordine di visita. Un progetto che NON ne ha bisogno
-    non c'e' (si legge come sempre)."""
+    non c'e' (si legge come sempre). Si seguono solo le sorgenti lette
+    (:func:`source_project_ids`: ``node_id`` = passo dell'anteprima,
+    ``replaced_node_ids`` = sorgenti sostituite da un input)."""
     loader = _Loader(group_id, load)
     closure: dict[str, ClosureEntry] = {}
 
@@ -177,9 +227,15 @@ def identity_closure(
         for source_id in source_project_ids(project.canvas):
             visit(source_id, (*visiting, project_id))
 
-    for source_id in source_project_ids(canvas):
+    for source_id in source_project_ids(canvas, node_id=node_id, replaced_node_ids=replaced_node_ids):
         visit(source_id, ())
     return closure
+
+
+def cached_loader(group_id: Optional[str]) -> ProjectLoader:
+    """Un caricatore con memoria da passare a piu' chiusure della stessa
+    chiamata (una lettura per progetto anche con due chiusure)."""
+    return _Loader(group_id, None)
 
 
 def upstream_identity_nodes(closure: Mapping[str, ClosureEntry]) -> list[tuple[str, Any]]:
@@ -261,6 +317,8 @@ __all__ = [
     "UPSTREAM_IDENTITY_ANNOTATION",
     "UpstreamProject",
     "annotate_canvas_upstream_identity",
+    "assert_saved_result_available",
+    "cached_loader",
     "clear_canvas_upstream_identity",
     "identity_closure",
     "load_upstream_project",

@@ -11,6 +11,7 @@ import copy
 import hashlib
 import json
 import uuid
+from types import SimpleNamespace
 from typing import BinaryIO, Callable, Mapping, Optional, Sequence, Union
 
 from app.utils.logger import get_logger
@@ -38,7 +39,6 @@ from .models import (
 )
 from .runtime import resolve_runtime_inputs
 from . import upstream_plan as upstream_plan_module
-from app.core.projects.upstream_identity import identity_closure, upstream_input_rows
 from app.shared.execution.runtime_identity import RuntimeIdentity
 from app.shared.execution.runtime_bound_fields import runtime_bound_context
 from app.shared.execution import dashboard_copy as dashboard_copy_fields
@@ -156,21 +156,46 @@ def get_eseguibile_run(run_id: str) -> JsonObject | None:
 # «Utente che esegue» negli Estrai a monte (runtime_identity U2, raccolta
 # U7): la chiusura dei progetti a monte e lo snapshot della pubblicazione.
 
-def _upstream_closure(canvas: object, project_type: str, *, group_id: str) -> Mapping[str, object]:
-    if str(project_type or "").lower() == "estrai" or not isinstance(canvas, Mapping):
-        return {}
-    return identity_closure(canvas, group_id=group_id)
+def _manifest_closure(manifest: ExecutableManifest, canvas: object, *, group_id: str) -> Mapping[str, object]:
+    """La chiusura a monte di ``canvas`` con gli input di ``manifest`` (le
+    sorgenti che sostituiscono non si leggono: ``upstream_plan.executable_closure``)."""
+    return upstream_plan_module.executable_closure(
+        canvas=canvas, project_type=manifest.project_type, inputs=manifest.inputs,
+        bindings=manifest.bindings, group_id=group_id,
+    )
 
 
-def _with_upstream_snapshot(manifest: ExecutableManifest, canvas: object, *, group_id: str) -> ExecutableManifest:
-    closure = _upstream_closure(canvas, manifest.project_type, group_id=group_id)
+def _with_upstream_snapshot(
+    manifest: ExecutableManifest, closure: Mapping[str, object],
+) -> ExecutableManifest:
+    """Manifest con lo snapshot a monte validato (A3: righe del modello,
+    nessun ``model_copy`` con dizionari)."""
     return manifest.model_copy(update={"upstream_identity": upstream_plan_module.upstream_snapshot(closure)})
+
+
+def _tolerant_manifest(raw: object) -> Optional[ExecutableManifest]:
+    try:
+        return ExecutableManifest.model_validate(raw) if isinstance(raw, Mapping) and raw else None
+    except ValueError:
+        return None
 
 
 def upstream_identity_inputs(record: eseguibili_db.EseguibileRow) -> list[JsonObject]:
     """Input a monte VIVI della versione attiva, per la finestra di avvio
-    (``EseguibileDetails.upstream_identity_inputs``)."""
-    return upstream_input_rows(_upstream_closure(record.canvas, record.project_type, group_id=record.group_id))
+    (``EseguibileDetails.upstream_identity_inputs``): la chiusura della
+    versione come la legge l'avvio (stessa funzione). UNA riga per gruppo
+    (B6, ``upstream_plan.identity_groups``): input con la stessa
+    trasformazione e la stessa etichetta sono un solo campo, la chiave e'
+    quella del gruppo e ``members`` dice a quali input vale (anche quello
+    proprio dell'Eseguibile, che la finestra allora non ripete)."""
+    manifest = _tolerant_manifest(record.manifest)
+    if manifest is None:
+        closure = upstream_plan_module.executable_closure(
+            canvas=record.canvas, project_type=record.project_type, group_id=record.group_id,
+        )
+        return upstream_plan_module.identity_groups(closure)
+    closure = _manifest_closure(manifest, record.canvas, group_id=record.group_id)
+    return upstream_plan_module.identity_groups(closure, manifest.inputs)
 
 
 # CREATE — compila una versione immutabile da qualsiasi tipo progetto
@@ -224,7 +249,7 @@ def create_from_project(
         default_connection_id=getattr(proj, "default_connection_id", None),
     )
     manifest = hydrate_manifest_connection_options(manifest, group_id=group_id)
-    manifest = _with_upstream_snapshot(manifest, cloned_canvas, group_id=group_id)
+    manifest = _with_upstream_snapshot(manifest, _manifest_closure(manifest, cloned_canvas, group_id=group_id))
     first_file_input = next(
         (item for item in manifest.inputs if item.kind == "file"), None
     )
@@ -294,11 +319,11 @@ def publish_new_version(
         default_connection_id=getattr(proj, "default_connection_id", None),
     )
     published = _active_manifest(eseguibile)
-    closure = _upstream_closure(cloned_canvas, project_type, group_id=eseguibile.group_id)
+    closure = _manifest_closure(manifest, cloned_canvas, group_id=eseguibile.group_id)
     changes = [
         change for change in [
             *input_changes(published, manifest.inputs, manifest.bindings),
-            *upstream_plan_module.upstream_identity_changes(published, closure),
+            *upstream_plan_module.upstream_identity_changes(_republish_removed(eseguibile, closure)),
         ]
         if change.get("blocking", True)
     ]
@@ -308,7 +333,7 @@ def publish_new_version(
         manifest,
         group_id=eseguibile.group_id,
     )
-    manifest = manifest.model_copy(update={"upstream_identity": upstream_plan_module.upstream_snapshot(closure)})
+    manifest = _with_upstream_snapshot(manifest, closure)
     version = eseguibili_db.create_eseguibile_version(
         eseguibile_id=eseguibile.id,
         canvas=cloned_canvas,
@@ -446,9 +471,27 @@ def source_changed_by_id(eseguibile_ids: Sequence[str]) -> Mapping[str, Optional
     if not eseguibile_ids:
         return {}
     return {
-        row.id: _source_changed_or_unknown(row.version_canvas, row.project_canvas)
+        row.id: _source_or_upstream_changed(row)
         for row in eseguibili_db.list_source_canvases(list(eseguibile_ids))
     }
+
+
+def _source_or_upstream_changed(row: object) -> bool | None:
+    """Distintivo della lista (A7): la STESSA regola del dettaglio N1, cioe'
+    canvas diverso (``source_changed``) oppure avvio fermo per un input a
+    monte tolto (``_launch_removed``, chiusura della versione pubblicata)."""
+    changed = _source_changed_or_unknown(row.version_canvas, row.project_canvas)
+    if changed is not False:
+        return changed
+    version = SimpleNamespace(
+        id=getattr(row, "version_id", None), canvas=row.version_canvas,
+        manifest=getattr(row, "version_manifest", None),
+    )
+    try:
+        return bool(_launch_removed(version, str(getattr(row, "group_id", "") or "")))
+    except Exception:  # una riga che non si controlla non rompe la lista (come D2)
+        logger.warning("Controllo degli input a monte non riuscito: nessun avviso per questa riga", exc_info=True)
+        return None
 
 
 # Ripubblicazione sicura (09/11/2026) — REGOLA UNICA dell'anteprima e della
@@ -493,6 +536,29 @@ def _active_manifest(eseguibile: eseguibili_db.EseguibileRow) -> object:
         return None
     version = eseguibili_db.get_eseguibile_version(eseguibile.active_version_id, eseguibile_id=eseguibile.id)
     return version.manifest if version is not None else None
+
+
+def _republish_removed(eseguibile: eseguibili_db.EseguibileRow, live_closure: Mapping[str, object]) -> list[JsonObject]:
+    """Input a monte della versione attiva (snapshot, con backfill A2) che la
+    nuova versione non avrebbe piu' (chiusura del canvas vivo)."""
+    if not eseguibile.active_version_id:
+        return []
+    version = eseguibili_db.get_eseguibile_version(eseguibile.active_version_id, eseguibile_id=eseguibile.id)
+    manifest = _tolerant_manifest(version.manifest) if version is not None else None
+    if manifest is None:
+        return []
+    return upstream_plan_module.republish_removed_inputs(
+        version=version, manifest=manifest, group_id=eseguibile.group_id, live_closure=live_closure,
+    )
+
+
+def _launch_removed(version: object, group_id: str) -> list[JsonObject]:
+    """Input a monte tolti dopo la pubblicazione che FERMANO l'avvio (stessa
+    funzione dell'avvio: chiusura della versione pubblicata, A6/A7)."""
+    manifest = _tolerant_manifest(getattr(version, "manifest", None))
+    if manifest is None:
+        return []
+    return upstream_plan_module.launch_removed_inputs(version=version, manifest=manifest, group_id=group_id)
 
 
 def _binding_key(binding: Mapping[str, object]) -> tuple[str, str, str]:
@@ -658,15 +724,17 @@ def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = 
     if proj is None or not isinstance(canvas, dict):
         return {**base, "state": "no_source", "changed": None}
     # Un input «Utente che esegue» a monte tolto dopo la pubblicazione
-    # (raccolta U7, C5): «cambiato» anche se il canvas del progetto e' uguale.
-    upstream_rows = upstream_plan_module.upstream_identity_changes(
-        version.manifest,
-        _upstream_closure(canvas, str(proj.project_type or ""), group_id=eseguibile.group_id),
+    # (raccolta U7, C5; correzioni minori A6): «cambiato» anche se il canvas
+    # del progetto e' uguale. Due confronti, ognuno con la funzione di chi
+    # agisce: l'avvio (chiusura della VERSIONE pubblicata: e' gia' fermo) e
+    # la ripubblicazione (chiusura del canvas VIVO: chiederebbe conferma).
+    launch_rows = upstream_plan_module.upstream_identity_changes(
+        _launch_removed(version, eseguibile.group_id), launch=True,
     )
     if not source_changed(version.canvas, canvas):
-        if not upstream_rows:
+        if not launch_rows:
             return base
-        return {**base, "state": "changed", "changed": True, "input_changes": upstream_rows}
+        return {**base, "state": "changed", "changed": True, "input_changes": launch_rows}
     problems, changes, error = republish_preview(
         canvas,
         project_type=str(proj.project_type or "").lower(),
@@ -676,8 +744,35 @@ def source_status(eseguibile: eseguibili_db.EseguibileRow, *, project: object = 
     )
     return {
         **base, "state": "changed", "changed": True, "binding_problems": problems,
-        "input_changes": [*changes, *upstream_rows], "publish_error": error,
+        "input_changes": [
+            *changes,
+            *upstream_plan_module.merge_upstream_changes(
+                launch_rows, _republish_preview_rows(version, canvas, proj, eseguibile.group_id),
+            ),
+        ],
+        "publish_error": error,
     }
+
+
+def _republish_preview_rows(version: object, canvas: Mapping[str, object], proj: object, group_id: str) -> list[JsonObject]:
+    """Le righe a monte che la ripubblicazione del canvas vivo chiederebbe
+    di confermare (stessa chiusura di ``publish_new_version``)."""
+    manifest = _tolerant_manifest(getattr(version, "manifest", None))
+    if manifest is None:
+        return []
+    project_type = str(getattr(proj, "project_type", "") or "").lower()
+    try:
+        live_inputs, live_bindings = compile_project_inputs(canvas, project_type)
+    except ValueError:
+        live_inputs, live_bindings = [], []
+    live_closure = upstream_plan_module.executable_closure(
+        canvas=canvas, project_type=project_type, inputs=live_inputs, bindings=live_bindings, group_id=group_id,
+    )
+    return upstream_plan_module.upstream_identity_changes(
+        upstream_plan_module.republish_removed_inputs(
+            version=version, manifest=manifest, group_id=group_id, live_closure=live_closure,
+        ),
+    )
 
 
 def source_status_for_project(
@@ -1254,7 +1349,7 @@ def execute_versioned(
     # «Utente che esegue» negli Estrai a monte (runtime_identity U2): il
     # piano prima di ogni file temporaneo (un blocco non lascia file).
     raw_inputs, upstream = upstream_plan_module.plan_for_version(
-        canvas=version.canvas, manifest=manifest, group_id=eseguibile.group_id,
+        version=version, manifest=manifest, group_id=eseguibile.group_id,
         raw_inputs=raw_inputs, identity=identity,
     )
 

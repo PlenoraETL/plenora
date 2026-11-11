@@ -179,12 +179,37 @@ indirettamente, un progetto che ne ha bisogno (chiusura transitiva,
   (:meth:`RuntimeIdentity.may_choose`, gruppo PROPRIETARIO dell'Eseguibile)
   sceglie il valore di ogni input a monte con ``admin_override`` con la
   chiave :func:`upstream_input_key` (``"<progetto>::<input>"``); vuoto ->
-  nome utente con la trasformazione dell'input a monte. Prova e anteprima:
+  nome utente con la trasformazione dell'input a monte. Input con la stessa
+  trasformazione e la stessa etichetta sono UN campo (gruppo deciso dal
+  server, ``eseguibili.upstream_plan.identity_groups``, correzioni minori
+  B6): il valore vale per ognuno, ``may_choose`` per ognuno. Prova e anteprima:
   lo username di prova e' UNO per tutta l'esecuzione (nodi del progetto e
   dei progetti a monte, :meth:`RuntimeIdentity.test_run` con
   ``upstream_nodes``); il valore di prova scelto si legge dal nodo a monte.
 - U5, Arricchisci: come lettore o come progetto a monte con bisogno
   d'identita' non ha il ricalcolo isolato: si blocca (dichiarato).
+- U6, il risultato SALVATO del progetto stesso (correzioni minori
+  11/11/2026, A1/A1b). Un progetto che ha bisogno dell'identita' (input
+  proprio o a monte) non ha mai un risultato salvato filtrato. Tabella della
+  porta (chi usa il risultato salvato fuori da un'esecuzione, e cosa fa):
+
+  =====================================  ===============================
+  Carica del progetto (worker)           :func:`route_upstream_source`
+                                         sul progetto stesso: blocco,
+                                         prima di leggere o ricalcolare
+  controllo conflitti di Carica          :func:`route_upstream_source`
+  download del risultato del progetto,   :func:`route_saved_result`:
+  di un suo task (non prova, non         409 «questo progetto filtra per
+  Eseguibile) e di una Pianificazione    utente: usa l'Eseguibile»,
+                                         salvo il superadmin
+  pubblicazione Feature Service          :func:`route_saved_result`
+  (``/features/write``, ``create-service``)
+  =====================================  ===============================
+
+  Il test di enumerazione (``tests2/eseguibili/unit/test_identity_upstream``)
+  trova ogni lettura (anche in ``backend/workers``, anche via
+  ``SourceLoader().load`` e ``materialize_run``) e verifica che la porta
+  venga chiamata PRIMA della lettura.
 """
 
 from __future__ import annotations
@@ -792,6 +817,31 @@ def route_upstream_source(
     raise upstream_identity_error(need)
 
 
+# Chi vede comunque il risultato salvato di un progetto che filtra per utente
+# (U6): il superadmin (vede tutti gli istituti per ruolo).
+SAVED_RESULT_EXEMPT_ROLES: tuple[str, ...] = ("superadmin",)
+SAVED_RESULT_FILTERED_MESSAGE = (
+    "Questo progetto filtra per utente: usa l'Eseguibile. Il suo risultato salvato non e' "
+    "filtrato («{kind}»{through}) e non si scarica ne' si pubblica."
+)
+
+
+def route_saved_result(*, need: UpstreamIdentityNeed | None, role: Any) -> None:
+    """La porta del risultato SALVATO usato fuori da un'esecuzione (U6:
+    download, pubblicazione Feature Service). ``need``: il progetto stesso
+    ha bisogno dell'identita' (``source_identity_need`` del progetto). Con
+    bisogno e un ruolo fuori da :data:`SAVED_RESULT_EXEMPT_ROLES` ->
+    :class:`RuntimeIdentityError` (chi chiama risponde 409)."""
+    if need is None or role in SAVED_RESULT_EXEMPT_ROLES:
+        return
+    owner = need.via[-1] if need.via else need.project_name
+    through = f", input «{need.input_label}» di «{owner}»"
+    raise RuntimeIdentityError(
+        error_codes.RUNTIME_IDENTITY_REQUIRED,
+        SAVED_RESULT_FILTERED_MESSAGE.format(kind=KIND_LABEL, through=through),
+    )
+
+
 def assert_identity_resolved(canvas: Any) -> None:
     """Ultima difesa agli executor: un nodo «Utente che esegue» ancora nel
     canvas vuol dire che nessuno ha risolto l'utente (Schedule, catene,
@@ -825,6 +875,9 @@ __all__ = [
     "UpstreamIdentityNeed",
     "UpstreamRoute",
     "route_upstream_source",
+    "route_saved_result",
+    "SAVED_RESULT_EXEMPT_ROLES",
+    "SAVED_RESULT_FILTERED_MESSAGE",
     "split_upstream_input_key",
     "upstream_identity_error",
     "upstream_input_key",

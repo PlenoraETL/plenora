@@ -108,7 +108,7 @@ def fingerprint_for(
     """Impronta della preparazione di questa esecuzione (per l'avvio)."""
     version, manifest = eseguibili_service.resolve_version_manifest(eseguibile, version_id)
     own_inputs, plan = plan_for_version(
-        canvas=version.canvas, manifest=manifest, group_id=eseguibile.group_id,
+        version=version, manifest=manifest, group_id=eseguibile.group_id,
         raw_inputs=raw_inputs, identity=identity,
     )
     return preparation_fingerprint(
@@ -136,7 +136,7 @@ def preflight_versioned(
     # Stessi controlli dell'avvio per gli Estrai a monte con «Utente che
     # esegue» (runtime_identity U2): un blocco si vede gia' alla stima.
     own_inputs, plan = plan_for_version(
-        canvas=version.canvas, manifest=manifest, group_id=eseguibile.group_id,
+        version=version, manifest=manifest, group_id=eseguibile.group_id,
         raw_inputs=raw_inputs, identity=identity,
     )
     fingerprint = preparation_fingerprint(

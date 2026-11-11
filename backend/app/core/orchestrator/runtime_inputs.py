@@ -40,7 +40,7 @@ def apply_project_runtime_inputs(
 
     ``identity`` e' obbligatoria: «Esegui» e la stima del progetto passano
     ``RuntimeIdentity.project_run()`` (un input «Utente che esegue» blocca),
-    anteprima e Valida ``RuntimeIdentity.preview_of(canvas)``.
+    anteprima e Valida l'identita' di prova di :func:`editor_identity`.
 
     Progetti a monte con «Utente che esegue» (runtime_identity U2): dopo gli
     input del progetto, il piano dei ricalcoli isolati con la STESSA
@@ -243,7 +243,9 @@ def apply_test_run_inputs(
 
     # Anche un progetto che legge, a monte, un input «Utente che esegue»
     # (runtime_identity U2): lo username di prova e' UNO per tutti i nodi.
-    closure = identity_closure(execution_contract.canvas, group_id=execution_contract.group_id)
+    identity, closure = editor_identity(
+        execution_contract.canvas, group_id=execution_contract.group_id, origin="test_run",
+    )
     if not identity_input_nodes(execution_contract.canvas) and not closure:
         raise ProjectTestRunNotApplicable(
             "L'esecuzione di prova serve ai progetti con un input «Utente che esegue» "
@@ -251,17 +253,41 @@ def apply_test_run_inputs(
         )
     # Senza un nome di prova valido si blocca nella risoluzione del progetto
     # o, se il progetto non ha input propri, nel piano a monte (stesso motivo).
-    identity = RuntimeIdentity.test_run(execution_contract.canvas, upstream_nodes=upstream_identity_nodes(closure))
     resolved = apply_project_runtime_inputs(execution_contract, raw_inputs, identity=identity, closure=closure)
     return resolved.model_copy(update={"execution_subject": subject_for_test_run(identity)})
 
 
-def apply_preview_inputs(execution_contract: PipelineExecutionContract) -> PipelineExecutionContract:
+def editor_identity(
+    canvas: object, *, group_id: Optional[str], origin: str = "preview", node_id: object = None,
+) -> tuple[RuntimeIdentity, Mapping[str, ClosureEntry]]:
+    """L'UNICA costruzione dell'identita' di prova dell'editor (correzioni
+    minori 11/11/2026, A4): anteprima, Valida con input, valori distinti,
+    stima di un nodo (``origin="preview"``) e «Esegui di prova»
+    (``origin="test_run"``, canvas SALVATO). Lo username di prova si legge
+    dai nodi del progetto E da quelli dei progetti a monte che ne hanno
+    bisogno (la chiusura delle sorgenti che l'esecuzione legge, ``node_id`` =
+    passo dell'anteprima): un Manipola senza input proprio che legge un
+    Estrai con «Utente che esegue» ha il suo utente di prova. Restituisce
+    anche la chiusura (il piano a monte la riusa)."""
+    closure = identity_closure(canvas, group_id=group_id, node_id=node_id)
+    upstream_nodes = upstream_identity_nodes(closure)
+    if origin == "test_run":
+        return RuntimeIdentity.test_run(canvas, upstream_nodes=upstream_nodes), closure
+    if origin != "preview":
+        raise ValueError(f"origine dell'identita' di prova non valida: {origin}")
+    return RuntimeIdentity.preview_of(canvas, upstream_nodes=upstream_nodes), closure
+
+
+def apply_preview_inputs(
+    execution_contract: PipelineExecutionContract, *, node_id: object = None,
+) -> PipelineExecutionContract:
     """Anteprima dell'editor (``GET /pipeline/{id}/preview``): gli input
     «Utente che esegue» del progetto (:func:`apply_identity_inputs`) e il
     piano dei progetti a monte che ne hanno bisogno, con lo stesso username
-    di prova (runtime_identity U2). Mai per un risultato salvato."""
-    closure = identity_closure(execution_contract.canvas, group_id=execution_contract.group_id)
-    identity = RuntimeIdentity.preview_of(execution_contract.canvas, upstream_nodes=upstream_identity_nodes(closure))
+    di prova (runtime_identity U2). Mai per un risultato salvato.
+    ``node_id``: anteprima di un passo (la chiusura segue i suoi antenati)."""
+    identity, closure = editor_identity(
+        execution_contract.canvas, group_id=execution_contract.group_id, node_id=node_id,
+    )
     resolved = apply_identity_inputs(execution_contract, identity)
     return _with_upstream_plan(resolved, identity, {}, closure=closure)

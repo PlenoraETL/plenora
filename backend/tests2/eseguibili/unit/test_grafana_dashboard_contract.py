@@ -135,6 +135,21 @@ class FakeGrafana:
         self._log("delete_dashboard", uid)
         return self.dashboards.pop(uid, None) is not None
 
+    def managed_teams(self):
+        self._log("managed_teams")
+        return {name: tid for name, tid in self.teams.items() if name.startswith(("utenti-", "admin-"))}
+
+    def delete_team(self, team_id):
+        self._log("delete_team", team_id)
+        name = next((n for n, t in self.teams.items() if t == team_id), None)
+        if name is None:
+            return False
+        del self.teams[name]
+        self.members.pop(team_id, None)
+        for uid in self.permissions:
+            self.permissions[uid] = [i for i in self.permissions[uid] if i.get("teamId") != team_id]
+        return True
+
     # Risoluzione dei permessi come Grafana: Admin vede e modifica tutto;
     # altrimenti la cartella (ruolo Viewer o team di cui e' membro).
     def permission(self, login, dashboard_uid):
@@ -867,7 +882,8 @@ def test_pass_only_for_who_launched_the_run_or_superadmin(env):
     mine = _app("u-exec").post("/api/eseguibili/exec_1/dashboard/pass", json=body)
     assert mine.status_code == 200
     data = mine.json()
-    assert data["iframe_path"].startswith("/grafana/d/plenora-exec_1?orgId=1&kiosk&var-exec=task-1&var-pass=")
+    assert data["iframe_path"].startswith(
+        "/grafana/d/plenora-exec_1?orgId=1&kiosk&_dash.hideTimePicker&var-exec=task-1&var-pass=")
     assert data["expires_at"] <= data["data_expires_at"] <= int(time.time()) + 1_800
     assert _app("u-other").post("/api/eseguibili/exec_1/dashboard/pass", json=body).status_code == 403
     assert _app("u-super").post("/api/eseguibili/exec_1/dashboard/pass", json=body).status_code == 200
@@ -907,8 +923,11 @@ def test_create_builds_dashboard_in_its_own_folder_with_the_rule(env):
     assert query["url"].startswith("http://127.0.0.1:5004/api/dash/exec/")
     assert [c["selector"] for c in query["columns"]] == ["istituto", "importo"]  # geometria esclusa
     shared = [p for p in dashboard["panels"][1:]]
-    assert {p["type"] for p in shared} == {"stat", "barchart"}
+    # «istituto» e' la colonna dell'istituto (un solo valore per chi esegue)
+    # e «importo» non e' testo: nessun grafico, solo «Righe totali» (B2).
+    assert {p["type"] for p in shared} == {"stat"}
     assert all(p["datasource"]["uid"] == "-- Dashboard --" for p in shared)
+    assert dashboard["timepicker"] == {"hidden": True}  # B1
     teams = env.grafana.teams
     assert env.grafana.permissions["plenora-e-exec_1"] == [
         {"teamId": teams["utenti-g1"], "permission": 1},
@@ -1194,3 +1213,196 @@ def test_access_log_masks_the_pass_in_forwarded_grafana_queries():
     access = logging.getLogger("uvicorn.access")
     assert sum(isinstance(f, app_logger.AccessLogRedactionFilter) for f in access.filters) == 1
     assert "install_access_log_redaction()" in inspect.getsource(app_factory.create_app)
+
+
+# ── Correzioni minori (11/11/2026): B1-B4 ───────────────────────────────────
+
+
+def test_b1_time_controls_are_hidden_in_new_and_existing_dashboards(env):
+    """B1: la dashboard generata nasconde i controlli del tempo; l'iframe li
+    nasconde anche per le dashboard gia' create (parametro del kiosk)."""
+    from app.core.eseguibili import dashboard as rules
+
+    _with_dashboard(env)
+    assert env.grafana.dashboards["plenora-exec_1"]["dashboard"]["timepicker"] == {"hidden": True}
+    assert rules.iframe_path("uid-vecchia", "t1", "tok").startswith(
+        "/grafana/d/uid-vecchia?orgId=1&kiosk&_dash.hideTimePicker&")
+
+
+CHART_CASES = [
+    # (colonne (nome, tipo), colonne dell'identita' dal canvas, categoria attesa)
+    ([("istituto", "string"), ("comune", "string"), ("importo", "number")], (), "comune"),
+    ([("ac_id", "string"), ("stato", "string"), ("x", "number")], (), "stato"),
+    ([("id", "string"), ("codice_immobile", "string"), ("tipo_uso", "string")], (), "tipo_uso"),
+    ([("data_inizio", "string"), ("descrizione", "string"), ("n", "integer")], (), "descrizione"),
+    ([("sede", "string"), ("catasto", "string"), ("categoria", "string")], (), "catasto"),
+    ([("sede", "string"), ("comune", "string")], ("sede",), "comune"),
+    ([("sede", "string"), ("valore", "number")], ("sede",), None),
+    ([("utente", "string"), ("username", "string"), ("owner", "string")], (), None),
+    ([("aggiornato", "datetime"), ("attivo", "boolean"), ("n", "integer")], (), "attivo"),
+    ([("uuid", "string"), ("guid", "string")], (), None),
+]
+
+
+@pytest.mark.parametrize("columns,excluded,expected", CHART_CASES)
+def test_b2_chart_column_follows_the_declarative_table(columns, excluded, expected):
+    from app.core.grafana import dashboard_builder as builder
+
+    specs = [builder.OutputColumnSpec(name, logical) for name, logical in columns]
+    chosen = builder.chart_column(specs, excluded)
+    assert (chosen.name if chosen else None) == expected
+    dashboard = builder.build_dashboard(uid="u", title="t", columns=specs, data_url="http://x/exec",
+                                        datasource_uid="ds", excluded_chart_columns=excluded)
+    charts = [p for p in dashboard["panels"] if p["type"] in {"barchart", "piechart"}]
+    if expected is None:
+        assert charts == []
+        return
+    # Barre E torta sulla stessa colonna, con «Group by» + «Count» e la query della tabella.
+    assert sorted(p["type"] for p in charts) == ["barchart", "piechart"]
+    for panel in charts:
+        assert panel["datasource"] == {"type": "datasource", "uid": "-- Dashboard --"}
+        assert panel["targets"] == [{"refId": "A", "datasource": panel["datasource"], "panelId": 1}]
+        fields = panel["transformations"][0]["options"]["fields"]
+        assert fields[expected] == {"operation": "groupby", "aggregations": []}
+        assert any(f["aggregations"] == ["count"] for name, f in fields.items() if name != expected)
+    assert expected in builder.referenced_columns(dashboard)
+
+
+def test_b2_every_rule_of_the_table_excludes_its_names():
+    """Enumerazione: ogni riga della tabella esclude almeno il suo esempio;
+    ogni nome preferito vince su una colonna neutra che lo precede."""
+    from app.core.grafana import dashboard_builder as builder
+
+    examples = {"utente che esegue": "istituto", "identificativo": "codice", "data": "data_fine"}
+    assert {reason for reason, _pattern in builder.CHART_COLUMN_RULES} == set(examples)
+    for reason, name in examples.items():
+        assert builder.chart_exclusion(builder.OutputColumnSpec(name)) == reason
+    assert builder.chart_exclusion(builder.OutputColumnSpec("valore", "number")) == "tipo"
+    assert builder.chart_exclusion(builder.OutputColumnSpec("x"), frozenset({"x"})) == "utente che esegue"
+    preferred = ["catasto", "stato", "tipologia", "categoria", "comune", "provincia", "regione", "classe",
+                 "destinazione"]
+    assert len(preferred) == len(builder.CHART_PREFERRED_NAMES)
+    for name in preferred:
+        specs = [builder.OutputColumnSpec("descrizione"), builder.OutputColumnSpec(name)]
+        assert builder.chart_column(specs).name == name
+
+
+def test_b2_identity_columns_are_read_from_the_canvas(env, monkeypatch):
+    """La colonna filtrata da «Utente che esegue» (anche con un nome
+    qualunque) non fa mai da categoria."""
+    import dataclasses
+
+    from app.core.eseguibili import dashboard as rules
+    from tests2.eseguibili.unit.test_runtime_identity_inputs import _estrai_canvas
+
+    canvas = _estrai_canvas()
+    canvas["nodes"][0]["filters"][0]["column"] = "sede"
+    env.records["exec_1"] = dataclasses.replace(env.records["exec_1"], canvas=canvas, project_type="estrai")
+    assert rules.identity_columns(env.records["exec_1"]) == frozenset({"sede"})
+    env.contract["columns"] = [
+        {"physical_name": "sede", "type": {"logical": "string"}, "ordinal": 0},
+        {"physical_name": "descrizione", "type": {"logical": "string"}, "ordinal": 1},
+    ]
+    _with_dashboard(env)
+    panels = env.grafana.dashboards["plenora-exec_1"]["dashboard"]["panels"]
+    assert {p["title"] for p in panels if p["type"] in {"barchart", "piechart"}} == {
+        "Conteggio per descrizione", "Ripartizione per descrizione"}
+
+
+def test_b3_periodic_resync_realigns_folders_changed_while_grafana_was_down(env, monkeypatch):
+    from app.core.eseguibili import dashboard as rules
+    from app.core.eseguibili import db as eseguibili_db
+
+    record = _with_dashboard(env)
+    monkeypatch.setattr(eseguibili_db, "list_dashboard_eseguibili", lambda: [env.records["exec_1"]])
+    monkeypatch.setattr(rules.users_db, "list_groups", lambda limit=200, offset=0: [
+        SimpleNamespace(id=g) for g in ("g0", "g1", "g2", "g3")])
+    assert _enter_grafana("u-g2").status_code == 200
+    # Condivisione scritta con Grafana giu': la cartella resta vecchia.
+    env.grafana.fail = True
+    env.shares["exec_1"] = ["g2"]
+    env.grafana.fail = False
+    assert env.grafana.permission(_login("u-g2"), record.dashboard_uid) == 0
+    report = rules.resync_all()
+    assert report.folders == 1 and report.failed == 0
+    assert env.grafana.permission(_login("u-g2"), record.dashboard_uid) == 1
+    before = len(env.grafana.calls)
+    rules.resync_all()  # idempotente: stessi permessi
+    assert env.grafana.permission(_login("u-g2"), record.dashboard_uid) == 1
+    assert len(env.grafana.calls) > before
+    # Grafana spento: nessuna chiamata.
+    monkeypatch.setenv("GRAFANA_ENABLED", "false")
+    env.grafana.calls.clear()
+    assert rules.resync_all() == rules.ResyncReport()
+    assert env.grafana.calls == []
+
+
+def test_b3_beat_resyncs_every_interval_only_with_grafana_enabled(env, monkeypatch):
+    from app.core.eseguibili import dashboard as rules
+    from workers import beat_scheduler
+
+    clock = {"now": 10_000.0}
+    calls: list[float] = []
+    monkeypatch.setattr(beat_scheduler._t, "time", lambda: clock["now"])
+    monkeypatch.setattr(rules, "resync_all", lambda: calls.append(clock["now"]) or rules.ResyncReport())
+    scheduler = beat_scheduler.PlenoraBeatScheduler.__new__(beat_scheduler.PlenoraBeatScheduler)
+    scheduler._last_grafana_resync = 0.0
+    for step in range(0, 3_601, 60):
+        clock["now"] = 10_000.0 + step
+        scheduler._resync_grafana_folders()
+    assert len(calls) == 5 and all(b - a == 900 for a, b in zip(calls, calls[1:]))
+    monkeypatch.setenv("GRAFANA_ENABLED", "false")
+    calls.clear()
+    scheduler._last_grafana_resync = 0.0
+    scheduler._resync_grafana_folders()
+    assert calls == []
+
+
+def test_b4_deleting_a_group_deletes_its_teams_and_realigns_shared_folders(env, monkeypatch):
+    from app.core.auth import share_hooks
+    from app.core.auth import db as users_db
+    from app.core.eseguibili import dashboard as rules
+    from app.core.eseguibili import db as eseguibili_db
+
+    env.shares["exec_1"] = ["g2"]
+    record = _with_dashboard(env)
+    assert _enter_grafana("u-g2").status_code == 200
+    assert env.grafana.permission(_login("u-g2"), record.dashboard_uid) == 1
+    assert "utenti-g2" in env.grafana.teams
+    # Il gruppo g2 viene cancellato (la condivisione resta nel DB).
+    monkeypatch.setattr(users_db, "get_group", lambda gid: None if gid == "g2" else SimpleNamespace(id=gid))
+    monkeypatch.setattr(eseguibili_db, "list_eseguibili_shared_with",
+                        lambda gid: [rid for rid, groups in env.shares.items() if gid in groups])
+    assert rules.on_group_deleted in share_hooks.registered_group_deleted()
+    share_hooks.notify_group_deleted("g2")
+    assert "utenti-g2" not in env.grafana.teams and "admin-g2" not in env.grafana.teams
+    # La cartella non nomina piu' g2 (riallineata, e nessun team ricreato).
+    assert all(i.get("teamId") in env.grafana.teams.values()
+               for i in env.grafana.permissions[rules.folder_for(record)] if "teamId" in i)
+    assert env.grafana.permission(_login("u-g2"), record.dashboard_uid) == 0
+    # Grafana giu': nessuna eccezione (best effort); il periodico lo completa.
+    env.grafana.fail = True
+    share_hooks.notify_group_deleted("g2")
+    env.grafana.fail = False
+
+
+def test_b4_periodic_resync_deletes_teams_of_deleted_groups(env, monkeypatch):
+    from app.core.eseguibili import dashboard as rules
+    from app.core.eseguibili import db as eseguibili_db
+
+    env.grafana.create_team("utenti-cancellato")
+    env.grafana.create_team("admin-cancellato")
+    env.grafana.create_team("altro-team")
+    monkeypatch.setattr(eseguibili_db, "list_dashboard_eseguibili", lambda: [])
+    monkeypatch.setattr(rules.users_db, "list_groups", lambda limit=200, offset=0: [SimpleNamespace(id="g1")])
+    assert rules.resync_all().teams_deleted == 2
+    assert set(env.grafana.teams) == {"altro-team"}
+
+
+def test_b4_group_router_notifies_after_the_cascade():
+    import inspect
+
+    from app.core.auth import groups_router
+
+    source = inspect.getsource(groups_router.delete_group)
+    assert source.index("delete_group_cascade(") < source.index("share_hooks.notify_group_deleted(group_id)")

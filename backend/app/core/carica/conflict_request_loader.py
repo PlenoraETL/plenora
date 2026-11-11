@@ -124,9 +124,11 @@ def _load_project_conflict_dataframe(
     logger: Any,
 ) -> ConflictInput:
     project_visible_checker(request.project_id, current_user)
-    # La porta unica (runtime_identity U1): un progetto con «Utente che
-    # esegue» (anche a monte) non ha un risultato salvato filtrato (e il suo
-    # Carica si blocca): nessun controllo sul risultato di prima del filtro.
+    # La porta unica (runtime_identity U1/U6): un progetto con «Utente che
+    # esegue» (anche a monte) non ha un risultato salvato filtrato: nessun
+    # controllo sul risultato di prima del filtro. Il suo Carica si blocca
+    # alla stessa porta, nel worker, prima di leggere o ricalcolare
+    # (``workers/tasks/carica_task.execute_carica_task``).
     try:
         route_upstream_source(
             source_project_id=str(request.project_id),

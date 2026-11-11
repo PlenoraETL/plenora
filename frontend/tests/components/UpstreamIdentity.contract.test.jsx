@@ -15,7 +15,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 
 import { serverInputNodes, testRunIdentity, upstreamIdentityNodes } from '../../src/utils/runtimeInputKinds';
 import { canChooseIdentity, chosenIdentityInputs, runInputs } from '../../src/utils/beforeRun';
-import { upstreamDefinitions } from '../../src/components/eseguibili/ExecutableDynamicRunForm';
+import { groupedOwnKeys, upstreamDefinitions } from '../../src/components/eseguibili/ExecutableDynamicRunForm';
 import BeforeRunModal from '../../src/components/editor/BeforeRunModal';
 
 afterEach(() => { cleanup(); });
@@ -66,6 +66,19 @@ describe('2. Eseguibile', () => {
     const [d] = upstreamDefinitions({ upstream_identity_inputs: [row({ admin_override: true })] });
     expect(chosenIdentityInputs([d], { 'e1::utente': ' 004_IS ' }, admin)).toEqual({ 'e1::utente': '004_IS' });
     expect(chosenIdentityInputs([d], { 'e1::utente': '004_IS' }, esecutore)).toEqual({});
+  });
+
+  it('a server group is ONE field whose value goes under the group key (B6)', () => {
+    const group = row({
+      key: '@gruppo::abc123', input_key: '@gruppo::abc123', project_name: 'Estrai A, Estrai B',
+      admin_override: true, admin_override_label: 'Codice istituto', members: ['a::utente', 'b::utente', 'utente'],
+    });
+    const definitions = upstreamDefinitions({ upstream_identity_inputs: [group] });
+    expect(definitions).toHaveLength(1);
+    expect(chosenIdentityInputs(definitions, { '@gruppo::abc123': '035_IS' }, admin))
+      .toEqual({ '@gruppo::abc123': '035_IS' });
+    // L'input proprio nello stesso gruppo non si ripete nella finestra.
+    expect([...groupedOwnKeys({ upstream_identity_inputs: [group] })]).toEqual(['utente']);
   });
 
   it('the window says the filter is in the upstream project', () => {

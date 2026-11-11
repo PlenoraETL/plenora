@@ -17,6 +17,11 @@ arriva a un nodo finale. E' la stessa regola del pannello del frontend
   con il suo messaggio).
 - ``preview_canvas``: anteprima di un passo: il passo e cio' che sta a monte.
 - ``scoped_canvas``: l'unico ingresso degli esecutori (passo o Output).
+- ``executed_canvas``: la stessa scelta (Output, oppure il passo e cio' che
+  sta a monte) per chi deve sapere cosa un'esecuzione LEGGERA', non per
+  eseguirla: la chiusura dei progetti a monte con «Utente che esegue»
+  (``projects.upstream_identity``, correzioni minori 11/11/2026, A5) legge i
+  nodi ``project_source`` SOLO da qui, cosi' un ramo scollegato non blocca.
 
 Da portare in plenora-data-tools2: la stessa regola nel motore Manipola.
 """
@@ -98,6 +103,32 @@ def run_canvas(canvas: Any) -> Any:
     if hasattr(canvas, "model_copy"):
         return canvas.model_copy(update={"nodes": kept_nodes, "edges": kept_edges})
     scoped = copy.copy(canvas)  # oggetti semplici (chiamanti interni, test)
+    scoped.nodes, scoped.edges = kept_nodes, kept_edges
+    return scoped
+
+
+def executed_canvas(canvas: Any, node_id: Any = None) -> Any:
+    """La parte del canvas che un'esecuzione (``node_id`` None: l'Output, con
+    :func:`run_canvas`) o l'anteprima di un passo (``node_id``: il passo e i
+    suoi antenati, come :func:`preview_canvas`) esegue. Accetta e restituisce
+    ``CanvasState`` o dict; un passo che non c'e' lascia il canvas com'e'
+    (l'anteprima lo rifiuta col suo messaggio)."""
+    if node_id is None:
+        return run_canvas(canvas)
+    nodes, edges = _parts(canvas)
+    if not any(_field(node, "id") == str(node_id) for node in nodes):
+        return canvas
+    ancestors = _walk({str(node_id)}, edges, upstream=True)
+    kept_nodes = [node for node in nodes if _field(node, "id") in ancestors]
+    kept_edges = [
+        edge for edge in edges
+        if _field(edge, "source") in ancestors and _field(edge, "target") in ancestors
+    ]
+    if isinstance(canvas, Mapping):
+        return {**canvas, "nodes": kept_nodes, "edges": kept_edges}
+    if hasattr(canvas, "model_copy"):
+        return canvas.model_copy(update={"nodes": kept_nodes, "edges": kept_edges})
+    scoped = copy.copy(canvas)
     scoped.nodes, scoped.edges = kept_nodes, kept_edges
     return scoped
 

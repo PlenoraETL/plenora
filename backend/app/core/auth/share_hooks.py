@@ -39,6 +39,35 @@ def registered(resource_table: str) -> tuple[ShareHook, ...]:
         return tuple(_hooks.get(resource_table, ()))
 
 
+GroupDeletedHook = Callable[[str], None]
+_group_deleted_hooks: list[GroupDeletedHook] = []
+
+
+def register_group_deleted(hook: GroupDeletedHook) -> None:
+    """Chi tiene una copia fuori dal DB di cio' che dipende da un gruppo
+    (oggi: team e cartelle Grafana, ``eseguibili.dashboard``) si registra
+    qui; il router dei gruppi la chiama DOPO la cancellazione riuscita.
+    Idempotente."""
+    with _lock:
+        if hook not in _group_deleted_hooks:
+            _group_deleted_hooks.append(hook)
+
+
+def registered_group_deleted() -> tuple[GroupDeletedHook, ...]:
+    with _lock:
+        return tuple(_group_deleted_hooks)
+
+
+def notify_group_deleted(group_id: str) -> None:
+    """Best effort dichiarato: la cancellazione del gruppo e' gia' fatta."""
+    for hook in registered_group_deleted():
+        try:
+            hook(group_id)
+        except Exception:  # best effort dichiarato (come notify)
+            logger.warning(f"[gruppi] riallineamento dopo la cancellazione del gruppo {group_id} non riuscito",
+                           exc_info=True)
+
+
 def notify(resource_table: str, resource_id: str) -> None:
     for hook in registered(resource_table):
         try:
@@ -50,4 +79,13 @@ def notify(resource_table: str, resource_id: str) -> None:
             )
 
 
-__all__ = ["ShareHook", "notify", "register", "registered"]
+__all__ = [
+    "GroupDeletedHook",
+    "ShareHook",
+    "notify",
+    "notify_group_deleted",
+    "register",
+    "register_group_deleted",
+    "registered",
+    "registered_group_deleted",
+]

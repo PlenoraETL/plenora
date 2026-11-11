@@ -70,3 +70,22 @@ Legenda dell'esito atteso: **I** = gli Estrai a monte con identità si ricalcola
 ## E. Verdetto della raccolta
 
 Disegno fattibile senza cambiare il modello dati (nessuna migrazione): campo nuovo del contratto d'esecuzione (`isolated_upstreams`), campo nuovo del manifest (`upstream_identity`), una porta unica nel modulo `runtime_identity`. Rischi dichiarati e ridotti: (1) Arricchisci come lettore o come progetto a monte con identità resta bloccato (B3, B7, B14, B23); (2) il ricalcolo isolato tiene il risultato in memoria (limite: memoria del worker, come il caricamento del risultato salvato); (3) A9 resta aperto. Si procede con la correzione unica.
+
+
+## F. Correzioni minori 11/11/2026 — raccolta
+
+Raccolta breve sui giri di conferma (base `8f7ce1b2`), senza correggere; la correzione unica è nel piano, sezione «Correzioni minori (11/11/2026)».
+
+| # | Classe | Dove | Difetto |
+|---|---|---|---|
+| A1 | lettura del risultato salvato senza porta | `workers/tasks/carica_task._load_upstream_data` (e `carica/dispatch.maybe_multilayer_arcgis_write`) | il Carica di un Estrai con «Utente che esegue», o di un Manipola che ne legge uno ed è «aggiornato» (caso A5), legge e scrive tutti gli istituti. Il test di enumerazione guardava solo `backend/app`, non riconosceva `SourceLoader().load` né `materialize_run`, e verificava solo che la porta ci fosse nella funzione, non che venisse PRIMA. Commento sbagliato in `carica/conflict_request_loader.py` («il suo Carica si blocca»). |
+| A1b | risultato salvato esposto fuori da un'esecuzione | `GET /pipeline/{id}/download`, `GET /tasks/{id}/download` (task del progetto), `GET /schedules/{id}/download`, `POST /features/write`, `POST /features/create-service` | dichiarati «invariati» (B19): il risultato di prima del filtro si scarica o si pubblica. |
+| A2 | Eseguibile pubblicato senza snapshot | `ExecutableManifest.upstream_identity` assente | togliere l'input dall'Estrai a monte allarga i dati senza avviso. |
+| A3 | snapshot non validato | `service._with_upstream_snapshot`, `publish_new_version` (`model_copy(update=dict)`) | `PydanticSerializationUnexpectedValue`; etichetta > 160 o chiave > 80 → manifest illeggibile, Eseguibile bloccato. |
+| A4 | identità di prova senza i progetti a monte | `projects/router` Valida con input (anche valori distinti, stima del nodo API) | `RuntimeIdentity.preview_of(canvas)` senza `upstream_nodes`: falso «nome utente di prova mancante», `canvas_validated=False`. |
+| A5 | chiusura su tutto il canvas | `upstream_identity.identity_closure` / `source_identity_need` | rami non collegati all'Output (che `run_canvas` non esegue) e sorgenti sostituite da un file dell'Eseguibile bloccano senza motivo. |
+| A6 | N1 e avvio confrontano chiusure diverse | `service.source_status` | N1 usa il canvas vivo, l'avvio la versione pubblicata: messaggio fuorviante. |
+| A7 | distintivo della lista diverso dal dettaglio | `service.source_changed_by_id` | considera solo il canvas, non l'input a monte tolto. |
+| B6 | un campo per ogni input a monte | `service.upstream_identity_inputs`, finestra «Prima di avviare» | caso reale «Archibus->v1GEO->Esri del mio istituto»: fino a 7 Estrai con la STESSA trasformazione (`utente.str.slice(1, 4) + '_IS'`) e la STESSA etichetta per gli amministratori: l'admin vede 7 campi uguali (`<progetto>::<input>`); se ne compila uno solo, gli altri Estrai filtrano sul suo username → righe incoerenti. |
+
+Trovati nella raccolta, fuori elenco (dichiarati, non corretti): i dati intermedi delle esecuzioni passate (`GET /intermediate/{run}/nodes/{node}/data`, chi modifica il progetto) di un progetto che oggi filtra per utente possono essere di prima del filtro: sono strumenti dell'editor del progetto (anche per l'anteprima filtrata), da decidere a parte.

@@ -28,6 +28,7 @@ from app.core.scheduler.beat_schedule_config import beat_schedule_config
 from app import config as app_config
 from app.core.eseguibili import download_claim_store, output_store
 from app.core.eseguibili import dashboard_data as eseguibili_dashboard_data
+from app.core.eseguibili import dashboard as eseguibili_dashboard
 from app.core.grafana import settings as grafana_settings
 from app.core.auth import db as users_db
 from app.core.orchestrator import task_cleanup
@@ -203,6 +204,7 @@ class PlenoraBeatScheduler:
     _last_stuck_check: float = 0.0
     _last_eseguibili_cleanup: float = 0.0
     _last_dashboard_copies_cleanup: float = 0.0
+    _last_grafana_resync: float = 0.0
     _last_logs_retention: float = 0.0
     _last_logs_archive: float = 0.0
     _last_audit_archive: float = 0.0
@@ -231,6 +233,7 @@ class PlenoraBeatScheduler:
         self._check_stuck_tasks()
         self._cleanup_eseguibili_outputs()
         self._cleanup_dashboard_copies()
+        self._resync_grafana_folders()
         self._archive_old_logs()
         self._cleanup_old_logs()
         self._cleanup_old_schedule_logs()
@@ -837,6 +840,29 @@ class PlenoraBeatScheduler:
                     logger.info(f"Cleanup dati dashboard: rimosse {removed_copies} copie scadute")
         except Exception as e:
             logger.warning(f"Errore cleanup dati dashboard: {e}")
+
+    def _resync_grafana_folders(self) -> None:
+        """Riallineamento periodico delle cartelle Grafana degli Eseguibili
+        con dashboard (correzioni minori 11/11/2026, B3/B4): ogni
+        ``GRAFANA_FOLDER_RESYNC_INTERVAL_SECONDS`` (15 min), SOLO con Grafana
+        attivo; la stessa funzione della creazione e delle condivisioni
+        (``eseguibili.dashboard.resync_all``), idempotente. Grafana giu': si
+        riprova al giro dopo."""
+        now = _t.time()
+        if now - self._last_grafana_resync < grafana_settings.folder_resync_interval_seconds():
+            return
+        self._last_grafana_resync = now
+        if not grafana_settings.enabled():
+            return
+        try:
+            report = eseguibili_dashboard.resync_all()
+            if report.failed or report.teams_deleted:
+                logger.info(
+                    f"Riallineamento Grafana: {report.folders} cartelle, {report.failed} non riuscite, "
+                    f"{report.teams_deleted} team di gruppi cancellati eliminati"
+                )
+        except Exception as e:
+            logger.warning(f"Riallineamento delle cartelle Grafana non riuscito (si riprova): {e}")
 
     # Cleanup orfani DATA_DIR/temp/
 

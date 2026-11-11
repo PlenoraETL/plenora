@@ -10,8 +10,22 @@ Dashboard generata (riferimento: spike ``setup_grafana.build_dashboard``):
   Infinity 4.1.6), MAI nell'URL: ne' nella stringa ``url`` ne' nei parametri
   (finirebbe nel log di accesso del backend e nei log di Infinity);
 - gli altri pannelli usano la stessa query (datasource «-- Dashboard --»):
-  statistica «Righe totali» e, se c'e' una colonna testuale e un'altra
-  colonna, grafico a barre del conteggio per quella colonna.
+  statistica «Righe totali» e, se c'e' una colonna adatta (regola sotto) e
+  un'altra colonna, grafico a barre E torta del conteggio per quella colonna
+  (trasformazione «Group by» + «Count», come la torta fatta a mano);
+- controlli del tempo nascosti (``timepicker.hidden``): i dati non hanno un
+  intervallo di tempo (correzioni minori 11/11/2026, B1). Per le dashboard
+  gia' create vale anche il parametro ``_dash.hideTimePicker`` dell'iframe
+  (``eseguibili.dashboard.iframe_path``), senza toccarle.
+
+Colonna dei grafici di partenza (B2, tabella dichiarativa
+:data:`CHART_COLUMN_RULES`, nell'ordine): esclusa se e' legata all'«Utente
+che esegue» (``excluded``: la colonna filtrata dall'input, letta dal canvas;
+e i nomi tipici dell'istituto: chi esegue ne vede un solo valore), se e' un
+identificativo (id, codici univoci), una data o non e' testo; tra le restanti
+vince la prima che corrisponde a un nome a poche categorie note
+(:data:`CHART_PREFERRED_NAMES`, nell'ordine), altrimenti la prima rimasta;
+nessuna rimasta = nessun grafico.
 """
 
 from __future__ import annotations
@@ -34,6 +48,55 @@ PASS_HEADER = "X-Dashboard-Pass"
 class OutputColumnSpec:
     name: str
     logical: str = "string"  # string | integer | number | boolean | datetime | geometry
+
+
+# Tipi che possono fare da categoria in un grafico di conteggio.
+CHART_LOGICAL_TYPES = frozenset({"string", "boolean"})
+# Esclusioni (motivo, espressione sul nome in minuscolo): una colonna che
+# corrisponde non e' mai la categoria dei grafici di partenza.
+CHART_COLUMN_RULES: tuple[tuple[str, str], ...] = (
+    ("utente che esegue", r"istitut|(^|_)ac_id$|(^|_)utente(_|$)|username|(^|_)user(_|$)|(^|_)owner(_|$)"),
+    ("identificativo", r"(^|_)(id|uuid|guid|pk|key|chiave|cod|codice|code|matricola|progressivo)(_|$)|^id[a-z]"),
+    ("data", r"(^|_)(data|date|datetime|ora|time|timestamp|anno|mese|giorno|dt)(_|$)"),
+)
+# Nomi a poche categorie note, in ordine di preferenza.
+CHART_PREFERRED_NAMES: tuple[str, ...] = (
+    r"catast",
+    r"(^|_)stato(_|$)|(^|_)status(_|$)",
+    r"(^|_)tipo|tipolog|(^|_)type(_|$)",
+    r"categori",
+    r"comun",
+    r"provinc",
+    r"region",
+    r"classe|classif",
+    r"destinaz|(^|_)uso(_|$)",
+)
+
+
+def chart_exclusion(column: OutputColumnSpec, excluded: frozenset[str] = frozenset()) -> Optional[str]:
+    """Perche' ``column`` non fa da categoria dei grafici (None = puo')."""
+    if column.name in excluded:
+        return "utente che esegue"
+    if column.logical not in CHART_LOGICAL_TYPES:
+        return "tipo"
+    name = column.name.lower()
+    for reason, pattern in CHART_COLUMN_RULES:
+        if re.search(pattern, name):
+            return reason
+    return None
+
+
+def chart_column(
+    columns: Sequence[OutputColumnSpec], excluded: Iterable[str] = (),
+) -> Optional[OutputColumnSpec]:
+    """La colonna categoria dei grafici di partenza (regola nel docstring)."""
+    excluded_set = frozenset(excluded)
+    candidates = [col for col in columns if chart_exclusion(col, excluded_set) is None]
+    for pattern in CHART_PREFERRED_NAMES:
+        for col in candidates:
+            if re.search(pattern, col.name.lower()):
+                return col
+    return candidates[0] if candidates else None
 
 
 def _bounded_uid(prefix: str, raw: str) -> str:
@@ -70,8 +133,11 @@ def build_dashboard(
     columns: Sequence[OutputColumnSpec],
     data_url: str,
     datasource_uid: str,
+    excluded_chart_columns: Iterable[str] = (),
 ) -> JsonObject:
-    """Dashboard di partenza dalle colonne dell'output (geometrie escluse)."""
+    """Dashboard di partenza dalle colonne dell'output (geometrie escluse).
+    ``excluded_chart_columns``: colonne legate all'«Utente che esegue» lette
+    dal canvas (mai categoria dei grafici)."""
     datasource = {"type": "yesoreyeram-infinity-datasource", "uid": datasource_uid}
     usable = [col for col in columns if col.name and col.logical != "geometry"]
     query: dict[str, Any] = {
@@ -89,9 +155,13 @@ def build_dashboard(
         ],
     }
     shared = {"type": "datasource", "uid": "-- Dashboard --"}
+    count_column = chart_column(usable, excluded_chart_columns)
+    other = next((col for col in usable if count_column is not None and col.name != count_column.name), None)
+    charts = count_column is not None and other is not None
+    top = 8 if charts else 4
     panels: list[dict[str, Any]] = [
         {"id": 1, "type": "table", "title": "Righe", "datasource": datasource, "targets": [query],
-         "gridPos": {"x": 0, "y": 4, "w": 24, "h": 12}},
+         "gridPos": {"x": 0, "y": top, "w": 24, "h": 12}},
     ]
     if usable:
         panels.append({
@@ -99,20 +169,34 @@ def build_dashboard(
             "targets": [{"refId": "A", "datasource": shared, "panelId": 1}],
             "options": {"reduceOptions": {"calcs": ["count"], "fields": f"/^{re.escape(usable[0].name)}$/",
                                           "values": False}},
-            "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+            "gridPos": {"x": 0, "y": 0, "w": 4 if charts else 6, "h": top},
         })
-    count_column = next((col for col in usable if col.logical == "string"), None)
-    other = next((col for col in usable if count_column is not None and col.name != count_column.name), None)
-    if count_column is not None and other is not None:
+    if charts:
+        assert count_column is not None and other is not None
+        group_by = [{"id": "groupBy", "options": {"fields": {
+            count_column.name: {"operation": "groupby", "aggregations": []},
+            other.name: {"operation": "aggregate", "aggregations": ["count"]},
+        }}}]
         panels.append({
             "id": 2, "type": "barchart", "title": f"Conteggio per {count_column.name}", "datasource": shared,
             "targets": [{"refId": "A", "datasource": shared, "panelId": 1}],
-            "transformations": [{"id": "groupBy", "options": {"fields": {
-                count_column.name: {"operation": "groupby", "aggregations": []},
-                other.name: {"operation": "aggregate", "aggregations": ["count"]},
-            }}}],
+            "transformations": group_by,
             "options": {"xField": count_column.name},
-            "gridPos": {"x": 6, "y": 0, "w": 18, "h": 4},
+            # La legenda dice «Righe», non «<altra colonna> (count)».
+            "fieldConfig": {"defaults": {"displayName": "Righe"}, "overrides": []},
+            "gridPos": {"x": 4, "y": 0, "w": 10, "h": top},
+        })
+        panels.append({
+            "id": 4, "type": "piechart", "title": f"Ripartizione per {count_column.name}", "datasource": shared,
+            "targets": [{"refId": "A", "datasource": shared, "panelId": 1}],
+            "transformations": [dict(item) for item in group_by],
+            "options": {
+                "reduceOptions": {"values": True, "calcs": ["lastNotNull"], "fields": ""},
+                "pieType": "pie",
+                "displayLabels": ["name", "percent"],
+                "legend": {"displayMode": "list", "placement": "right", "showLegend": True},
+            },
+            "gridPos": {"x": 14, "y": 0, "w": 10, "h": top},
         })
     return {
         "uid": uid,
@@ -120,6 +204,8 @@ def build_dashboard(
         "tags": list(DASHBOARD_TAGS),
         "editable": True,
         "time": {"from": "now-1h", "to": "now"},
+        # B1: nessun intervallo di tempo da scegliere (i dati sono di UNA esecuzione).
+        "timepicker": {"hidden": True},
         "templating": {"list": [
             {"name": "pass", "type": "textbox", "hide": 2, "query": "", "current": {"value": ""}},
             {"name": "exec", "type": "textbox", "hide": 2, "query": "", "current": {"value": ""}},
@@ -190,7 +276,12 @@ def missing_columns(dashboard: Optional[Mapping[str, Any]], expected: Iterable[s
 
 
 __all__ = [
+    "CHART_COLUMN_RULES",
+    "CHART_LOGICAL_TYPES",
+    "CHART_PREFERRED_NAMES",
     "OutputColumnSpec",
+    "chart_column",
+    "chart_exclusion",
     "PASS_HEADER",
     "build_dashboard",
     "dashboard_uid",

@@ -146,6 +146,20 @@ class ExecutableInputBinding(BaseModel):
         return self
 
 
+# Lunghezze dello snapshot a monte (correzioni minori 11/11/2026, A3): UNA
+# tabella per i limiti dei campi e per la normalizzazione. Un testo piu'
+# lungo si TRONCA (mai un errore): lo snapshot si costruisce e si rilegge
+# sempre (un'etichetta di 200 caratteri non rende illeggibile il manifest ne'
+# blocca l'Eseguibile), e il confronto «input tolto» usa le chiavi troncate
+# da entrambe le parti (``upstream_plan.removed_upstream_inputs``).
+UPSTREAM_IDENTITY_LIMITS: dict[str, int] = {
+    "project_id": 200,
+    "project_name": 300,
+    "input_key": 80,
+    "label": 160,
+}
+
+
 class UpstreamIdentityInput(BaseModel):
     """Input «Utente che esegue» di un progetto a monte al momento della
     pubblicazione (runtime_identity, NEGLI ESTRAI A MONTE): se dopo non c'e'
@@ -153,10 +167,24 @@ class UpstreamIdentityInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    project_id: str = Field(min_length=1, max_length=200)
-    project_name: str = Field("", max_length=300)
-    input_key: str = Field(min_length=1, max_length=80)
-    label: str = Field("", max_length=160)
+    project_id: str = Field(min_length=1, max_length=UPSTREAM_IDENTITY_LIMITS["project_id"])
+    project_name: str = Field("", max_length=UPSTREAM_IDENTITY_LIMITS["project_name"])
+    input_key: str = Field(min_length=1, max_length=UPSTREAM_IDENTITY_LIMITS["input_key"])
+    label: str = Field("", max_length=UPSTREAM_IDENTITY_LIMITS["label"])
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize(cls, data: Any) -> Any:
+        """Testo dei campi della tabella, troncato al limite (in lettura e in
+        scrittura: anche uno snapshot salvato prima del limite si rilegge)."""
+        if not isinstance(data, dict):
+            return data
+        normalized = dict(data)
+        for name, limit in UPSTREAM_IDENTITY_LIMITS.items():
+            value = normalized.get(name)
+            if value is not None:
+                normalized[name] = str(value)[:limit]
+        return normalized
 
 
 class ExecutableManifest(BaseModel):
@@ -368,6 +396,10 @@ class UpstreamIdentityInputRow(BaseModel):
     transform: Optional[str] = None
     admin_override: bool = False
     admin_override_label: Optional[str] = None
+    # B6: la riga e' un GRUPPO (stessa trasformazione ed etichetta): ``key``
+    # e' la chiave del gruppo, ``members`` le chiavi degli input a cui vale
+    # il valore (``progetto::input`` o la chiave di un input dell'Eseguibile).
+    members: List[str] = Field(default_factory=list)
 
 
 class EseguibileDetails(BaseModel):

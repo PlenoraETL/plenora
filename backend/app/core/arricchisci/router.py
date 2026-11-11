@@ -50,6 +50,7 @@ from app.core.orchestrator.runtime_inputs import (
     ProjectTestRunNotApplicable,
     apply_project_runtime_inputs,
     apply_test_run_inputs,
+    editor_identity,
     register_test_run_owner,
 )
 from app.shared.execution.runtime_identity import (
@@ -936,7 +937,7 @@ def _compatibility_node_preflight(request: ValidateRequest | EstimateRequest, cu
     # username di prova del nodo (runtime_identity).
     response = _preflight_enrichment(request.project_id,
                                      EnrichPreflightRequest(canvas=subcanvas, inputs=request.inputs),
-                                     current_user, identity=RuntimeIdentity.preview_of(subcanvas))
+                                     current_user, identity=editor_identity(subcanvas, group_id=current_user.group_id)[0])
     estimate = next((value for value in response["nodes"] if value["node_id"] == node_id), None)
     if estimate is None:
         raise_typed_http(error_codes.VALIDATION_ERROR, status_code=422, message="Nodo API non preparabile",

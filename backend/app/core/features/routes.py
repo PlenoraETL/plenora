@@ -42,7 +42,7 @@ from app.shared.connection_tests.results import (
     records_connection_test,
     resets_connection_test,
 )
-from app.core.auth.resource_access import assert_project_visible
+from app.core.auth.resource_access import assert_project_visible, assert_saved_result_available
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef
 from app.core.auth.visibility import visible_resource_ids
@@ -457,6 +457,8 @@ def write_features(request: WriteRequest, current_user: CurrentUser = Depends(re
     # usando i dati di un progetto di un altro tenant conoscendone l'id
     if request.project_id:
         assert_project_visible(request.project_id, current_user)
+        # Risultato salvato di un progetto che filtra per utente: 409 (U6).
+        assert_saved_result_available(request.project_id, current_user)
     try:
         df, _fmt = _resolve_input_dataframe(
             request.input_path,
@@ -517,6 +519,8 @@ def create_service(request: CreateServiceRequest, current_user: CurrentUser = De
     # validiamo l'accesso al progetto prima di leggerne l'output
     if request.project_id:
         assert_project_visible(request.project_id, current_user)
+        # Risultato salvato di un progetto che filtra per utente: 409 (U6).
+        assert_saved_result_available(request.project_id, current_user)
     try:
         df, _fmt = _resolve_input_dataframe(
             request.input_path,

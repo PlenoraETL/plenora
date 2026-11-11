@@ -59,6 +59,12 @@ class GrafanaApi(Protocol):
     def get_dashboard(self, uid: str) -> Optional[Mapping[str, Any]]: ...
     def upsert_dashboard(self, dashboard: Mapping[str, Any], *, folder_uid: str, message: str) -> Mapping[str, Any]: ...
     def delete_dashboard(self, uid: str) -> bool: ...
+    def managed_teams(self) -> Mapping[str, int]: ...
+    def delete_team(self, team_id: int) -> bool: ...
+
+
+# Prefissi dei team che Plenora gestisce (``sync.MANAGED_TEAM_PREFIXES``).
+_MANAGED_TEAM_PREFIXES = ("utenti-", "admin-")
 
 
 class HttpGrafanaClient:
@@ -149,6 +155,24 @@ class HttpGrafanaClient:
 
     def delete_dashboard(self, uid: str) -> bool:
         return self._request("DELETE", f"/api/dashboards/uid/{uid}", ok404=True) is not None
+
+    def managed_teams(self) -> Mapping[str, int]:
+        """``{nome: id}`` dei team gestiti da Plenora (a pagine)."""
+        found: dict[str, int] = {}
+        page = 1
+        while True:
+            result = self._request("GET", "/api/teams/search", params={"perpage": 1000, "page": page}) or {}
+            teams = result.get("teams") or []
+            for team in teams:
+                name = str(team.get("name") or "")
+                if name.startswith(_MANAGED_TEAM_PREFIXES):
+                    found[name] = int(team["id"])
+            if len(teams) < 1000:
+                return found
+            page += 1
+
+    def delete_team(self, team_id: int) -> bool:
+        return self._request("DELETE", f"/api/teams/{team_id}", ok404=True) is not None
 
 
 ClientFactory = Callable[[], GrafanaApi]

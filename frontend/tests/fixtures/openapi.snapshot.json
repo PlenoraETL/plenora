@@ -10867,6 +10867,13 @@
             "title": "Label",
             "type": "string"
           },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Members",
+            "type": "array"
+          },
           "project_id": {
             "title": "Project Id",
             "type": "string"
@@ -18362,7 +18369,7 @@
     },
     "/api/projects/{project_id}/download": {
       "get": {
-        "description": "Scarica il file risultato di un progetto.",
+        "description": "Scarica il file risultato di un progetto.\n\nUn progetto che filtra per utente (``runtime_identity`` U6) non ha un\nrisultato salvato filtrato: 409, salvo il superadmin.",
         "operationId": "download_project_result_api_projects__project_id__download_get",
         "parameters": [
           {

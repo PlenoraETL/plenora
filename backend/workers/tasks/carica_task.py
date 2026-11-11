@@ -43,7 +43,8 @@ from app.core.intermediate import runs_db as intermediate_runs_db
 from app.core.intermediate.run_idempotency import is_already_completed
 from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.core.orchestrator.execution_contract import CaricaExecutionContract
-from app.shared.execution.runtime_identity import is_test_run_trigger
+from app.shared.execution.runtime_identity import RuntimeIdentityError, is_test_run_trigger, route_upstream_source
+from app.core.projects.upstream_identity import source_identity_need
 from app.core.projects.service import ProjectService
 from app.db.pg_connection import close_connection as _close_config_connection
 from app.runtime import services as runtime_services_module
@@ -247,6 +248,33 @@ def execute_carica_task(
     write_started = False
     try:
         _update_progress(self, 0, progress_text("load_start"))
+        # La porta unica (runtime_identity U1/U6) PRIMA di ogni lettura o
+        # ricalcolo del risultato da caricare (anche multi-layer): un progetto
+        # che ha bisogno dell'«Utente che esegue» (input proprio o a monte)
+        # non ha mai un risultato salvato filtrato, e Carica non ha il piano
+        # dell'esecuzione: si blocca col motivo, nessuna scrittura.
+        try:
+            route_upstream_source(
+                source_project_id=str(project_id),
+                need=source_identity_need(str(project_id), group_id=_group_id),
+                isolated_upstreams=None,
+            )
+        except RuntimeIdentityError as identity_error:
+            _update_progress(self, -1, identity_error.message)
+            close_run(
+                run_id=run_id, status="failure",
+                duration_ms=int((_time.time() - _run_start) * 1000),
+                error_module="carica", error_message=identity_error.message,
+            )
+            return {
+                "status": "validation_error",
+                "success": False,
+                "error": identity_error.code,
+                "message": identity_error.message,
+                "error_message": identity_error.message,
+                "rows_written": 0,
+                "total_rows": 0,
+            }
         write_branch = carica_dispatch.select_carica_write_branch(carica_node_data)
         target_lock_handle = _acquire_target_lock_or_return_busy(
             carica_node_data=carica_node_data,

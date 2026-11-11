@@ -299,12 +299,18 @@ def test_every_preview_identity_is_enumerated():
 
     import app.core.orchestrator.runtime_inputs as runtime_inputs
 
-    count = sum(inspect.getsource(m).count("RuntimeIdentity.preview_of(") for m in (
-        arricchisci_router, orchestrator_router, projects_router))
+    routers = (arricchisci_router, orchestrator_router, projects_router)
+    # Correzioni minori A4: l'identita' di prova si costruisce SOLO in
+    # runtime_inputs.editor_identity (con gli input dei progetti a monte).
+    assert sum(inspect.getsource(m).count("RuntimeIdentity.preview_of(") for m in routers) == 0
+    count = sum(inspect.getsource(m).count("editor_identity(") for m in routers)
     # anteprima (runtime_inputs.apply_preview_inputs, con i progetti a monte),
     # valori distinti, Valida, stima del nodo API (validate + estimate).
-    count += inspect.getsource(runtime_inputs.apply_preview_inputs).count("RuntimeIdentity.preview_of(")
+    count += inspect.getsource(runtime_inputs.apply_preview_inputs).count("editor_identity(")
     assert count == 4 and len(PREVIEW_ENDPOINTS) == 5
+    source = inspect.getsource(runtime_inputs)
+    assert source.count("RuntimeIdentity.preview_of(") == 1 and source.count("RuntimeIdentity.test_run(") == 1
+    assert "RuntimeIdentity.preview_of(" in inspect.getsource(runtime_inputs.editor_identity)
 
 
 # ---------------------------------------------------------------- 4. solo quell'input

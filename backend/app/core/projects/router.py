@@ -7,8 +7,8 @@ from app.core.eseguibili.identity_transform import preview_transform
 from app.core.eseguibili.manifest import compile_manifest
 from app.core.manipola.canvas_data_preparation import CanvasDataPreparation, PREPARATION_ERRORS, classify_preparation_error
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
-from app.core.orchestrator.runtime_inputs import apply_identity_inputs, apply_project_runtime_inputs
-from app.shared.execution.runtime_identity import RuntimeIdentity, RuntimeIdentityError, identity_input_nodes
+from app.core.orchestrator.runtime_inputs import apply_identity_inputs, apply_project_runtime_inputs, editor_identity
+from app.shared.execution.runtime_identity import RuntimeIdentityError, identity_input_nodes
 from app.shared.execution.runtime_bound_fields import strip_runtime_bound_fields
 from app.core.orchestrator.carica_payload_validation import assert_canvas_rest_auth_usable
 from app.core.projects.canvas_validation import _StaticCanvasService
@@ -1059,7 +1059,7 @@ def distinct_node_values(project_id: str, node_id: str, body: DistinctRequest,
             canvas = CanvasState(**apply_identity_inputs(PipelineExecutionContract(
                 project_id=project_id, project_type=metadata.project_type, group_id=metadata.group_id,
                 canvas=canvas.model_dump(), runtime_context={"default_connection_id": getattr(metadata, "default_connection_id", None)}),
-                RuntimeIdentity.preview_of(canvas)).canvas)
+                editor_identity(canvas, group_id=metadata.group_id)[0]).canvas)
     except RuntimeIdentityError as exc:
         raise_typed_http(exc.code, status_code=400, message=exc.message)
     except ValueError as exc:
@@ -1240,11 +1240,13 @@ def validate_project_canvas(
             manifest = compile_manifest(for_project=True, source_project_id=project_id, project_type=metadata.project_type,
                                         canvas=selected_canvas.model_dump(), default_connection_id=getattr(metadata, "default_connection_id", None) if isinstance(getattr(metadata, "default_connection_id", None), str) else None)
             if body and body.inputs is not None:
+                preview_identity, preview_closure = editor_identity(selected_canvas, group_id=metadata.group_id)
                 contract = apply_project_runtime_inputs(PipelineExecutionContract(
                     project_id=project_id, project_type=metadata.project_type, group_id=metadata.group_id,
                     canvas=selected_canvas.model_dump(), runtime_context={"default_connection_id": getattr(metadata, "default_connection_id", None)}), body.inputs,
-                    # Valida con input = anteprima: username di prova.
-                    identity=RuntimeIdentity.preview_of(selected_canvas))
+                    # Valida con input = anteprima: username di prova, anche
+                    # dei progetti a monte (editor_identity, A4).
+                    identity=preview_identity, closure=preview_closure)
                 selected_canvas = CanvasState(**contract.canvas)
         except RuntimeIdentityError as exc:
             input_error, input_error_code = exc.message, exc.code

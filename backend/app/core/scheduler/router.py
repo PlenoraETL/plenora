@@ -17,7 +17,7 @@ from app.core.auth.dependencies import (
 )
 from app.core.auth.owner_dependencies import require_schedule_owner
 from app.core.auth.ownership import assert_group_access
-from app.core.auth.resource_access import assert_project_access
+from app.core.auth.resource_access import assert_project_access, assert_saved_result_available
 from app.core.io.http_streaming import CloseableStreamingResponse, safe_download_filename
 from app.core.results import blob as _results_blob
 from app.core.scheduler import db as scheduler_db
@@ -376,6 +376,8 @@ def download_schedule_output(
             assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")
 
         project_id = schedule.pipeline.project_id
+        # Risultato salvato di un progetto che filtra per utente: 409 (U6).
+        assert_saved_result_available(project_id, current_user)
         catalog = ScheduleRunsCatalog()
 
         # Branch 1: run specifica via ?run=... — sanitize + lookup nel catalog

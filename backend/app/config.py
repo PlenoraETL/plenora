@@ -713,6 +713,10 @@ class Settings:
         # alla prima richiesta e poi al piu' ogni N secondi (subito se
         # cambiano ruolo, gruppo o nome: grafana.access).
         "GRAFANA_ACCESS_SYNC_TTL_SECONDS": 300,
+        # Riallineamento periodico (beat) delle cartelle degli Eseguibili con
+        # dashboard e dei team di gruppi cancellati, solo con Grafana attivo:
+        # chiude le modifiche (condivisioni, gruppi) fatte con Grafana giu'.
+        "GRAFANA_FOLDER_RESYNC_INTERVAL_SECONDS": 900,
         # Cookie di sessione per /grafana (forward_auth): rinnovabile
         # richiamando POST /api/grafana/session.
         "GRAFANA_SESSION_TTL_SECONDS": 1800,

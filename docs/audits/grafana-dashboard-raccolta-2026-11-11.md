@@ -157,3 +157,18 @@ Base: `ad31df94` (backend e installer già fatti). Raccolta di ogni punto del fr
 Grafana gira sotto lo stesso origine di Plenora (`/grafana`, dietro Caddy) e ha bisogno di script e del proprio origine (cookie della sessione, `localStorage`). Con `allow-scripts allow-same-origin` lo `sandbox` non è un confine di sicurezza (un documento dello stesso origine può togliere l'attributo dal proprio iframe); lo teniamo per quello che dà davvero: niente navigazione della pagina di Plenora dall'iframe (`allow-top-navigation` non concesso). Il confine vero è lato server: `forward_auth`, cookie dedicato con `Path=/grafana`, lasciapassare per esecuzione.
 
 Correzione del giro di conferma (11/11/2026): disegno, test e prove dal vivo nel piano, sezione «Dashboard Grafana: correzione del giro di conferma».
+
+
+### N. Correzioni minori 11/11/2026 — raccolta
+
+Raccolta breve (base `8f7ce1b2`, in produzione), senza correggere; correzione unica nel piano, sezione «Correzioni minori (11/11/2026)».
+
+| # | Dove | Difetto |
+|---|---|---|
+| B1 | `grafana/dashboard_builder.build_dashboard`, iframe `?kiosk` | i controlli del tempo («Last 1 hour», «Refresh») restano nel kiosk; i dati sono di UNA esecuzione, non hanno un intervallo. Le dashboard già create non si rigenerano. |
+| B2 | grafico di partenza | sceglie la prima colonna testuale: spesso «istituto» (per chi esegue un solo valore), o un id/codice univoco/data; manca la torta (l'utente l'ha fatta a mano: «-- Dashboard --» + Group by + Count). |
+| B3 | `eseguibili.dashboard.on_shares_changed` | Grafana giù durante una modifica delle condivisioni: la cartella si riallinea solo alla prossima creazione/«Modifica in Grafana». |
+| B4 | `DELETE /groups/{id}` | non tocca Grafana: team `utenti-<g>`/`admin-<g>` restano; la condivisione rimasta in `eseguibile_shares` (nessun FK sul gruppo) farebbe ricreare il team al prossimo riallineamento. |
+| B5 | `backend/.env.example`, documenti | da allineare dopo le modifiche. |
+
+Trovato fuori elenco (dichiarato): `eseguibili.group_id` ha un FK verso `groups` senza cascata e la cancellazione del gruppo non elimina i suoi Eseguibili, quindi un gruppo con Eseguibili non si cancella (errore del DB): invariato.

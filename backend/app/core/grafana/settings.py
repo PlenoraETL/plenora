@@ -61,6 +61,10 @@ def access_sync_ttl_seconds() -> float:
     return float(settings.get("GRAFANA_ACCESS_SYNC_TTL_SECONDS") or 300)
 
 
+def folder_resync_interval_seconds() -> float:
+    return float(settings.get("GRAFANA_FOLDER_RESYNC_INTERVAL_SECONDS") or 900)
+
+
 def data_purge_interval_seconds() -> float:
     return float(settings.get("DASHBOARD_DATA_PURGE_INTERVAL_SECONDS") or 300)
 
@@ -118,6 +122,7 @@ __all__ = [
     "datasource_uid",
     "enabled",
     "flag_enabled",
+    "folder_resync_interval_seconds",
     "pass_secret",
     "pass_ttl_seconds",
     "public_path",

@@ -47,8 +47,9 @@ export const scalarDefinitions = (manifest) => [...(manifest?.inputs || [])]
  * Input «Utente che esegue» dei progetti a monte, vivi (dettaglio
  * `upstream_identity_inputs`, backend runtime_identity NEGLI ESTRAI A MONTE):
  * riga in sola lettura o, per l'amministratore con `admin_override`, campo
- * facoltativo con la chiave «progetto::input» (stessa regola degli input
- * dell'Eseguibile).
+ * facoltativo (stessa regola degli input dell'Eseguibile). Ogni riga è un
+ * GRUPPO deciso dal server (stessa trasformazione ed etichetta): un solo
+ * campo, con la chiave del gruppo, il cui valore vale per tutti i `members`.
  */
 export const upstreamDefinitions = (eseguibile) => (eseguibile?.upstream_identity_inputs || [])
   .map(row => ({
@@ -59,6 +60,11 @@ export const upstreamDefinitions = (eseguibile) => (eseguibile?.upstream_identit
     required: false,
     upstream: { project_id: row.project_id, project_name: row.project_name },
   }));
+
+/** Chiavi degli input dell'Eseguibile già coperte da un gruppo a monte. */
+export const groupedOwnKeys = (eseguibile) => new Set(
+  (eseguibile?.upstream_identity_inputs || []).flatMap(row => (row.members || []).filter(key => !key.includes('::'))),
+);
 
 const fileDefinitions = (manifest) => [...(manifest?.inputs || [])]
   .sort((a, b) => (a.order || 0) - (b.order || 0))
@@ -233,7 +239,12 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
   const manifest = eseguibile.manifest;
   const projectType = String(eseguibile.project_type || 'estrai').toLowerCase();
   const modalVariant = ['estrai', 'manipola', 'arricchisci'].includes(projectType) ? projectType : 'estrai';
-  const scalars = useMemo(() => scalarDefinitions(manifest), [manifest]);
+  // Un input proprio nello stesso gruppo di quelli a monte è il campo del
+  // gruppo (B6): non si ripete.
+  const scalars = useMemo(() => {
+    const grouped = groupedOwnKeys(eseguibile);
+    return scalarDefinitions(manifest).filter(d => !grouped.has(d.input_key));
+  }, [manifest, eseguibile]);
   const upstream = useMemo(() => upstreamDefinitions(eseguibile), [eseguibile]);
   const fileDefs = useMemo(() => fileDefinitions(manifest), [manifest]);
   const fileBased = Boolean(eseguibile.output_is_file_based && eseguibile.inferred_output_extension);

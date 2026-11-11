@@ -468,10 +468,16 @@ def list_eseguibili(
 
 @dataclass(frozen=True)
 class EseguibileSourceCanvasesRow:
-    """N1/P5: i due canvas da confrontare (versione attiva, progetto sorgente)."""
+    """N1/P5: i due canvas da confrontare (versione attiva, progetto sorgente)
+    e, per l'avvio bloccato da un input a monte tolto (correzioni minori
+    11/11/2026, A7), versione attiva, suo manifest, tipo e gruppo."""
     id: str
     version_canvas: object
     project_canvas: object
+    version_id: Optional[str] = None
+    version_manifest: object = None
+    project_type: str = ""
+    group_id: str = ""
 
 
 def list_source_canvases(eseguibile_ids: list[str]) -> list[EseguibileSourceCanvasesRow]:
@@ -483,7 +489,8 @@ def list_source_canvases(eseguibile_ids: list[str]) -> list[EseguibileSourceCanv
         return []
     placeholders = ", ".join(["%s"] * len(eseguibile_ids))
     rows = _fetchall(
-        "SELECT e.id, v.canvas AS version_canvas, p.canvas AS project_canvas "
+        "SELECT e.id, v.canvas AS version_canvas, p.canvas AS project_canvas, "
+        "v.id AS version_id, v.manifest AS version_manifest, e.project_type, e.group_id "
         "FROM eseguibili e JOIN eseguibile_versions v ON v.id = e.active_version_id "
         "JOIN projects p ON p.id = e.source_canvas_id "
         f"WHERE e.id IN ({placeholders})",
@@ -492,9 +499,42 @@ def list_source_canvases(eseguibile_ids: list[str]) -> list[EseguibileSourceCanv
     return [
         EseguibileSourceCanvasesRow(
             id=str(row["id"]), version_canvas=row["version_canvas"], project_canvas=row["project_canvas"],
+            version_id=str(row["version_id"]) if row.get("version_id") else None,
+            version_manifest=_parse_json_object(row.get("version_manifest"), field_name="version_manifest")
+            if row.get("version_manifest") is not None else None,
+            project_type=str(row.get("project_type") or ""),
+            group_id=str(row.get("group_id") or ""),
         )
         for row in rows
     ]
+
+
+def backfill_version_upstream_identity(version_id: str, snapshot: list[JsonObject]) -> None:
+    """Snapshot a monte di una versione pubblicata PRIMA dello snapshot
+    (correzioni minori 11/11/2026, A2): la chiave si aggiunge UNA volta
+    (solo se ``manifest -> 'upstream_identity'`` e' NULL: idempotente, il primo vince);
+    il resto del manifest resta com'e'."""
+    _execute(
+        "UPDATE eseguibile_versions "
+        "SET manifest = jsonb_set(COALESCE(manifest, '{}'::jsonb), '{upstream_identity}', %s::jsonb, true) "
+        "WHERE id = %s AND (COALESCE(manifest, '{}'::jsonb) -> 'upstream_identity') IS NULL",
+        (json.dumps(snapshot, ensure_ascii=False), version_id),
+    )
+
+
+def list_dashboard_eseguibili() -> list[EseguibileRow]:
+    """Eseguibili con una dashboard Grafana (riallineamento periodico delle
+    cartelle, correzioni minori 11/11/2026, B3)."""
+    rows = _fetchall("SELECT id FROM eseguibili WHERE dashboard_uid IS NOT NULL ORDER BY id")
+    records = [get_eseguibile(str(row["id"])) for row in rows]
+    return [record for record in records if record is not None]
+
+
+def list_eseguibili_shared_with(group_id: str) -> list[str]:
+    """Id degli Eseguibili condivisi con ``group_id`` (riallineamento delle
+    cartelle Grafana alla cancellazione del gruppo, B4)."""
+    rows = _fetchall("SELECT eseguibile_id FROM eseguibile_shares WHERE group_id = %s", (group_id,))
+    return [str(row["eseguibile_id"]) for row in rows]
 
 
 def list_eseguibili_by_source(source_canvas_id: str) -> list[EseguibileSourceRefRow]:

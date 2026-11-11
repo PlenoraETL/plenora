@@ -26,6 +26,7 @@ from app.utils.logger import get_logger
 
 from app.core.auth import db as _groups
 from app.core.auth import group_cleanup as _group_cleanup
+from app.core.auth import share_hooks
 
 
 logger = get_logger(__name__)
@@ -164,4 +165,6 @@ def delete_group(group_id: str,
             message="Errore interno del server",
         )
 
+    # Copie fuori dal DB (team e cartelle Grafana): best effort, mai bloccare.
+    share_hooks.notify_group_deleted(group_id)
     return {"deleted": True, "group_id": group_id, "report": report}

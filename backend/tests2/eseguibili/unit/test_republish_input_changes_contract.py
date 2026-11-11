@@ -220,6 +220,14 @@ def test_preview_and_republish_use_the_same_rule():
     import inspect
     assert "input_changes(published_manifest" in inspect.getsource(eseguibili_service.republish_preview)
     assert "input_changes(published, manifest.inputs" in inspect.getsource(eseguibili_service.publish_new_version)
-    # «Utente che esegue» a monte tolto: stessa regola in ripubblicazione e N1.
-    assert "upstream_identity_changes(published, closure)" in inspect.getsource(eseguibili_service.publish_new_version)
-    assert "upstream_identity_changes(" in inspect.getsource(eseguibili_service.source_status)
+    # «Utente che esegue» a monte tolto: stessa regola in ripubblicazione e N1
+    # (correzioni minori A6: la ripubblicazione e l'anteprima confrontano lo
+    # snapshot con la chiusura del canvas VIVO, l'avvio e N1 con quella
+    # della versione pubblicata).
+    assert "upstream_identity_changes(_republish_removed(eseguibile, closure))" in inspect.getsource(
+        eseguibili_service.publish_new_version)
+    assert "republish_removed_inputs(" in inspect.getsource(eseguibili_service._republish_removed)
+    assert "republish_removed_inputs(" in inspect.getsource(eseguibili_service._republish_preview_rows)
+    status_src = inspect.getsource(eseguibili_service.source_status)
+    assert "_launch_removed(version, eseguibile.group_id)" in status_src
+    assert "_republish_preview_rows(version, canvas, proj, eseguibile.group_id)" in status_src

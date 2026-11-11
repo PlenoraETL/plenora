@@ -18,6 +18,7 @@ from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.core.projects.canvas_models import CanvasState, ExecuteRequest
+from app.core.projects.upstream_identity import assert_saved_result_available
 from app.core.orchestrator.task_service import (
     TaskType,
 )
@@ -362,7 +363,7 @@ def preview_project(
         # (mai l'utente reale, mai per un risultato salvato), anche per i
         # progetti a monte che ne hanno bisogno (runtime_identity U2).
         try:
-            execution_contract = apply_preview_inputs(execution_contract)
+            execution_contract = apply_preview_inputs(execution_contract, node_id=node_id)
         except RuntimeIdentityError as exc:
             raise_typed_http(exc.code, status_code=400, message=exc.message)
         except ValueError as exc:
@@ -411,8 +412,12 @@ def download_project_result(
     file: Optional[str] = None,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ) -> Response:
-    """Scarica il file risultato di un progetto."""
+    """Scarica il file risultato di un progetto.
+
+    Un progetto che filtra per utente (``runtime_identity`` U6) non ha un
+    risultato salvato filtrato: 409, salvo il superadmin."""
     _assert_project_group(project_id, current_user)
+    assert_saved_result_available(project_id, current_user)
     try:
         return _download_response.project_result_response(
             project_id,
@@ -932,6 +937,9 @@ def download_task_result(
         project_id = result.get("project_id")
         if not project_id:
             raise HTTPException(status_code=404, detail="project_id non trovato nel risultato del task")
+        # Il risultato di un task del progetto (non prova, non Eseguibile) e'
+        # un risultato salvato: stessa porta del download del progetto (U6).
+        assert_saved_result_available(str(project_id), current_user)
 
         result_id = result.get("result_id")
         if not result_id:

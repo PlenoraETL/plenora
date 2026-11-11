@@ -187,8 +187,13 @@ def test_p2_one_rule_for_list_detail_editor_and_home():
     by_id_src = inspect.getsource(eseguibili_service.source_changed_by_id)
     assert "source_changed(version.canvas, canvas)" in status_src
     # La lista passa dall'involucro che isola una riga non confrontabile (D2),
-    # che a sua volta usa la stessa funzione.
-    assert "_source_changed_or_unknown(row.version_canvas, row.project_canvas)" in by_id_src
+    # che a sua volta usa la stessa funzione; e (A7) dall'avvio fermo per un
+    # input a monte tolto, la stessa funzione del dettaglio.
+    assert "_source_or_upstream_changed(row)" in by_id_src
+    row_src = inspect.getsource(eseguibili_service._source_or_upstream_changed)
+    assert "_source_changed_or_unknown(row.version_canvas, row.project_canvas)" in row_src
+    assert "_launch_removed(version" in row_src
+    assert "_launch_removed(version, eseguibile.group_id)" in status_src
     assert "source_changed(version_canvas, project_canvas)" in inspect.getsource(
         eseguibili_service._source_changed_or_unknown
     )

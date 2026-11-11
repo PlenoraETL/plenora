@@ -114,7 +114,14 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # raccoglitore (dashboard_data.DashboardRowsCollector.add_rows/add_dataframe/
 # save, +3; tolti i 2 di output_persistence); auth.share_hooks.notify (+1):
 # un riallineamento dopo una condivisione gia' scritta registra e prosegue.
-_EXPECT_BROAD_BUDGET = 795
+# +6 (2026-11-11, correzioni minori), tutti best effort dichiarati e
+# commentati: backfill dello snapshot a monte (upstream_plan.version_snapshot,
+# vale comunque per la lettura); riga della lista non controllabile
+# (service._source_or_upstream_changed, come D2); grafici di partenza
+# (dashboard.identity_columns); riallineamento periodico di un Eseguibile
+# (dashboard.resync_all) e del gruppo cancellato (dashboard.on_group_deleted,
+# share_hooks.notify_group_deleted): mai bloccare.
+_EXPECT_BROAD_BUDGET = 801
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

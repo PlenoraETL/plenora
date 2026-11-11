@@ -19,6 +19,7 @@ from app.core.auth.ports import FileSourceReader, ProjectMetadataReader
 from app.core.files.ownership import FileSourceAccess
 from app.core.projects.access_context import ProjectMetadataAccess
 from app.core.projects.models import ProjectMetadata
+from app.core.projects.upstream_identity import assert_saved_result_available as _assert_saved_result_available
 
 if TYPE_CHECKING:
     from app.core.files.db import FileSourcePublicRow
@@ -84,6 +85,14 @@ def assert_project_access(
         raise HTTPException(status_code=404, detail=f"Progetto '{project_id}' non trovato")
     assert_group_access(meta, current_user, f"Progetto '{project_id}'")
     return meta
+
+
+def assert_saved_result_available(project_id: str, current_user: CurrentUser) -> None:
+    """Porta U6 del risultato SALVATO (``projects.upstream_identity``):
+    409 se il progetto filtra per utente, salvo il superadmin. Qui per i
+    domini che passano gia' dal confine d'accesso (Pianificazioni, Feature
+    Service)."""
+    _assert_saved_result_available(project_id, current_user)
 
 
 def assert_project_visible(

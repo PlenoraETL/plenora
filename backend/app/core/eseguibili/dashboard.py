@@ -22,6 +22,15 @@ Raccolta: ``docs/audits/grafana-dashboard-raccolta-2026-11-11.md``.
 - **Grafana spento** (``GRAFANA_ENABLED=false``): ``client.get_client``
   rifiuta prima di qualunque connessione; qui ogni operazione lo controlla
   per prima (``DashboardDisabled``).
+- **Riallineamento** (correzioni minori 11/11/2026, B3/B4): UNA funzione,
+  :func:`sync_eseguibile`, per creazione, «Modifica in Grafana», modifica
+  delle condivisioni, cancellazione di un gruppo (:func:`on_group_deleted`:
+  team ``utenti-<g>``/``admin-<g>`` eliminati, cartelle condivise
+  riallineate) e riallineamento periodico del beat
+  (:func:`resync_all`, ogni ``GRAFANA_FOLDER_RESYNC_INTERVAL_SECONDS``, solo
+  con Grafana attivo): idempotente, chiude anche le modifiche fatte mentre
+  Grafana era giu' e i team di gruppi che non esistono piu'. Un gruppo che
+  non esiste piu' non entra mai in una cartella (:func:`folder_access`).
 """
 
 from __future__ import annotations
@@ -46,9 +55,12 @@ from app.core.grafana import signing
 from app.core.grafana import sync as grafana_sync
 from app.core.projects.output_contract_service import ProjectOutputContractService
 from app.shared.contracts.auth import CurrentUser
+from app.shared.execution.runtime_identity import identity_source_column
+from app.shared.execution.runtime_input_kinds import is_server_injected
 from app.utils.logger import get_logger
 
-from . import dashboard_data, output_store
+from . import dashboard_data, output_store, upstream_plan
+from .manifest import compile_project_inputs
 from . import db as eseguibili_db
 
 logger = get_logger(__name__)
@@ -129,8 +141,77 @@ def _with_data(path: str, task_id: Optional[str], token: Optional[str]) -> str:
     return f"{path}&{urlencode({'var-exec': task_id, 'var-pass': token})}"
 
 
+# Parametri del kiosk dell'iframe (B1): niente controlli del tempo, anche
+# per le dashboard create prima di ``timepicker.hidden`` (Grafana 13).
+KIOSK_PARAMS = "kiosk&_dash.hideTimePicker"
+
+
 def iframe_path(uid: str, task_id: str, token: str) -> str:
-    return _with_data(f"{grafana_settings.public_path()}/d/{uid}?orgId=1&kiosk", task_id, token)
+    return _with_data(f"{grafana_settings.public_path()}/d/{uid}?orgId=1&{KIOSK_PARAMS}", task_id, token)
+
+
+# ── Colonne legate all'«Utente che esegue» (grafici di partenza, B2) ───────
+
+def _parent_column(node: Mapping[str, Any], path: str) -> Optional[str]:
+    """La colonna dell'oggetto che contiene il campo collegato (es.
+    ``filters.0.value`` -> ``filters[0].column``; ``config.value`` ->
+    ``config.column``), nel nodo o nei suoi ``data``."""
+    parts = str(path).split(".")[:-1]
+    for root in (node.get("data"), node):
+        current: Any = root
+        for part in parts:
+            if isinstance(current, Mapping):
+                current = current.get(part)
+            elif isinstance(current, list) and part.isdigit() and int(part) < len(current):
+                current = current[int(part)]
+            else:
+                current = None
+                break
+        if isinstance(current, Mapping) and isinstance(current.get("column"), str) and current["column"]:
+            return str(current["column"])
+    return None
+
+
+def _canvas_identity_columns(canvas: Any, project_type: str) -> set[str]:
+    if not isinstance(canvas, Mapping):
+        return set()
+    try:
+        inputs, bindings = compile_project_inputs(canvas, project_type)  # type: ignore[arg-type]
+    except ValueError:
+        return set()
+    injected = {item.key for item in inputs if is_server_injected(item.kind)}
+    nodes = {str(n.get("id")): n for n in canvas.get("nodes") or [] if isinstance(n, Mapping)}
+    columns: set[str] = set()
+    for binding in bindings:
+        node = nodes.get(str(binding.target_node_id))
+        if binding.input_key not in injected or node is None:
+            continue
+        if binding.mode == "data_source":
+            columns.add(identity_source_column(node))
+        elif binding.target_field:
+            column = _parent_column(node, binding.target_field)
+            if column:
+                columns.add(column)
+    return columns
+
+
+def identity_columns(record: Any) -> frozenset[str]:
+    """Colonne filtrate da un input «Utente che esegue» del progetto e dei
+    progetti a monte che ne hanno bisogno (la stessa chiusura dell'avvio):
+    per chi esegue hanno un solo valore, mai categoria di un grafico."""
+    project_type = str(getattr(record, "project_type", "") or "")
+    columns = _canvas_identity_columns(getattr(record, "canvas", None), project_type)
+    try:
+        closure = upstream_plan.executable_closure(
+            canvas=getattr(record, "canvas", None), project_type=project_type, group_id=str(record.group_id),
+        )
+    except Exception:  # i grafici di partenza non fermano la creazione della dashboard
+        logger.warning("[dashboard] progetti a monte non leggibili: colonne dell'identita' solo del progetto",
+                       exc_info=True)
+        closure = {}
+    for entry in closure.values():
+        columns |= _canvas_identity_columns(entry.project.canvas, entry.project.project_type)
+    return frozenset(columns)
 
 
 # ── Grafana: visibilita' e sincronizzazione ─────────────────────────────────
@@ -154,6 +235,8 @@ def folder_access(record: Any) -> grafana_sync.FolderAccess:
     dell'Eseguibile per un admin del gruppo proprietario."""
     owner = str(record.group_id)
     shares = {str(group) for group in list_resource_shares("eseguibili", str(record.id))}
+    # B4: un gruppo cancellato (condivisione rimasta) non entra in Grafana.
+    shares = {group for group in shares if group == MAGIC_ALL or users_db.get_group(group) is not None}
     return grafana_sync.FolderAccess(
         viewer_groups=frozenset({owner} | {group for group in shares if group != MAGIC_ALL}),
         everyone=MAGIC_ALL in shares,
@@ -179,14 +262,27 @@ def _users_by_group(group_ids: Iterable[str]) -> Mapping[str, List[grafana_sync.
     }
 
 
-def sync_eseguibile(record: Any, client: grafana_client.GrafanaApi, requester: Optional[CurrentUser] = None) -> None:
+def sync_eseguibile(
+    record: Any,
+    client: grafana_client.GrafanaApi,
+    requester: Optional[CurrentUser] = None,
+    *,
+    users_by_group: Optional[dict[str, List[grafana_sync.PlenoraUser]]] = None,
+) -> None:
     """Cartella dell'Eseguibile con i permessi della regola, pulizia dei team
     toccati e, se c'e', accesso di chi ha chiesto l'operazione (cosi' il link
-    di modifica funziona subito). Idempotente."""
+    di modifica funziona subito). Idempotente. ``users_by_group``: utenti
+    gia' letti (riallineamento di piu' Eseguibili: una lettura per gruppo)."""
     access = folder_access(record)
     grafana_sync.sync_folder(client, folder_uid=folder_for(record), title=_folder_title(record), access=access)
     groups = set(access.viewer_groups) | ({access.editor_group} if access.editor_group else set())
-    grafana_sync.prune_teams(client, access, _users_by_group(groups))
+    if users_by_group is None:
+        users = _users_by_group(groups)
+    else:
+        missing = sorted(group for group in groups if group not in users_by_group)
+        users_by_group.update(_users_by_group(missing))
+        users = users_by_group
+    grafana_sync.prune_teams(client, access, users)
     if requester is not None:
         row = users_db.get_user(requester.user_id)
         if row is not None and row.is_active:
@@ -197,8 +293,9 @@ def sync_eseguibile(record: Any, client: grafana_client.GrafanaApi, requester: O
 def on_shares_changed(eseguibile_id: str) -> None:
     """Condivisioni dell'Eseguibile cambiate (``auth.share_hooks``): la
     cartella in Grafana si riallinea subito. Grafana giu': la condivisione
-    resta scritta, il log lo dice e la cartella si riallinea alla prossima
-    creazione o «Modifica in Grafana» (punto aperto dichiarato nel piano)."""
+    resta scritta, il log lo dice e la cartella si riallinea al prossimo
+    riallineamento periodico (:func:`resync_all`, B3) o alla prossima
+    creazione o «Modifica in Grafana»."""
     if not grafana_settings.enabled():
         return
     record = eseguibili_db.get_eseguibile(eseguibile_id)
@@ -208,6 +305,77 @@ def on_shares_changed(eseguibile_id: str) -> None:
 
 
 share_hooks.register("eseguibili", on_shares_changed)
+
+
+@dataclass(frozen=True)
+class ResyncReport:
+    folders: int = 0
+    failed: int = 0
+    teams_deleted: int = 0
+
+
+def _delete_orphan_teams(client: grafana_client.GrafanaApi) -> int:
+    """Team gestiti (``utenti-<g>``/``admin-<g>``) di gruppi che non esistono
+    piu' in Plenora (cancellazione fatta con Grafana giu')."""
+    existing = {str(group.id) for group in users_db.list_groups(limit=10_000)}
+    if not existing:
+        return 0  # elenco dei gruppi non letto (c'e' sempre «default»): non si cancella nulla
+    deleted = 0
+    for name, team_id in sorted(client.managed_teams().items()):
+        group_id = name.split("-", 1)[1] if "-" in name else ""
+        if group_id and group_id not in existing:
+            client.delete_team(int(team_id))
+            deleted += 1
+    return deleted
+
+
+def resync_all() -> ResyncReport:
+    """Riallineamento periodico (beat, B3): cartella di OGNI Eseguibile con
+    dashboard e team di gruppi cancellati. Solo con Grafana attivo; un
+    Eseguibile che non si riallinea non ferma gli altri (si riprova al giro
+    dopo). Idempotente."""
+    if not grafana_settings.enabled():
+        return ResyncReport()
+    client = grafana_client.get_client()
+    users: dict[str, List[grafana_sync.PlenoraUser]] = {}
+    folders = failed = 0
+    for record in eseguibili_db.list_dashboard_eseguibili():
+        try:
+            sync_eseguibile(record, client, users_by_group=users)
+            folders += 1
+        except grafana_client.GrafanaUnavailable:
+            raise  # Grafana giu': si riprova al prossimo giro
+        except Exception:  # un Eseguibile non ferma il riallineamento degli altri
+            failed += 1
+            logger.warning(f"[dashboard] riallineamento della cartella di {record.id} non riuscito", exc_info=True)
+    return ResyncReport(folders=folders, failed=failed, teams_deleted=_delete_orphan_teams(client))
+
+
+def on_group_deleted(group_id: str) -> None:
+    """Gruppo cancellato (``auth.share_hooks.notify_group_deleted``, B4):
+    elimina i suoi team in Grafana e riallinea le cartelle degli Eseguibili
+    condivisi con lui. Best effort, MAI bloccare la cancellazione: con
+    Grafana giu' lo completa il riallineamento periodico (:func:`resync_all`)."""
+    if not grafana_settings.enabled():
+        return
+    try:
+        client = grafana_client.get_client()
+        for name in (grafana_sync.users_team(group_id), grafana_sync.admins_team(group_id)):
+            team_id = client.find_team(name)
+            if team_id is not None:
+                client.delete_team(int(team_id))
+        for eseguibile_id in eseguibili_db.list_eseguibili_shared_with(group_id):
+            record = eseguibili_db.get_eseguibile(eseguibile_id)
+            if record is not None and getattr(record, "dashboard_uid", None):
+                sync_eseguibile(record, client)
+    except Exception:  # best effort dichiarato: mai bloccare la cancellazione del gruppo
+        logger.warning(
+            f"[dashboard] pulizia in Grafana del gruppo {group_id} non riuscita: la completa il riallineamento "
+            "periodico", exc_info=True,
+        )
+
+
+share_hooks.register_group_deleted(on_group_deleted)
 
 
 # ── Avvisi: lettura della dashboard con timeout breve e cache ──────────────
@@ -275,6 +443,7 @@ def create_dashboard(record: Any, requester: CurrentUser) -> Any:
         columns=expected_output_columns(record) or [],
         data_url=grafana_settings.data_url(),
         datasource_uid=grafana_settings.datasource_uid(),
+        excluded_chart_columns=identity_columns(record),
     )
     sync_eseguibile(record, client, requester)
     client.upsert_dashboard(dashboard, folder_uid=folder_for(record), message="generata da Plenora")
@@ -467,7 +636,12 @@ __all__ = [
     "iframe_path",
     "is_safe_task_id",
     "issue_pass",
+    "on_group_deleted",
     "on_shares_changed",
+    "identity_columns",
+    "resync_all",
+    "ResyncReport",
+    "KIOSK_PARAMS",
     "read_granted",
     "read_rows",
     "sync_eseguibile",
