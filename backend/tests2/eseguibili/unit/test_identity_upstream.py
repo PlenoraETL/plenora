@@ -38,6 +38,7 @@ from app.core.projects import upstream_identity
 from app.core.projects.canvas_models import CanvasState
 from app.core.projects.upstream_identity import UpstreamProject
 from app.shared import error_codes
+from app.shared.execution.executor_protocol import CanvasExecutorProtocol
 from app.shared.execution.runtime_identity import (
     ISOLATED_UPSTREAM_RUN_FIELD,
     ISOLATED_UPSTREAMS_FIELD,
@@ -363,10 +364,12 @@ def test_isolated_upstream_writes_nothing():
             df=pd.DataFrame({"owner": ["E0041"]}), output_format="csv", filename_stem="o")
         return {"success": True, "rows_count": 1, "output_path": "o.csv"}
 
-    estrai = MagicMock()
+    estrai = MagicMock(spec=CanvasExecutorProtocol)
     estrai.execute.side_effect = estrai_execute
     service = OrchestratorService(MagicMock(), MagicMock(), MagicMock(), MagicMock(),
-                                  estrai_executor=estrai, manipola_executor=MagicMock(), enrich_executor=MagicMock())
+                                  estrai_executor=estrai,
+                                  manipola_executor=MagicMock(spec=CanvasExecutorProtocol),
+                                  enrich_executor=MagicMock(spec=CanvasExecutorProtocol))
     service._execute_carica_if_present = MagicMock(side_effect=AssertionError("mai Carica"))
     resolved = copy.deepcopy(_plain_estrai())
     artifact, captured = service.execute_isolated_upstream(
@@ -387,8 +390,9 @@ def test_isolated_upstream_with_identity_still_unresolved_is_blocked():
     from app.core.orchestrator.service import OrchestratorService
 
     service = OrchestratorService(MagicMock(), MagicMock(), MagicMock(), MagicMock(),
-                                  estrai_executor=MagicMock(), manipola_executor=MagicMock(),
-                                  enrich_executor=MagicMock())
+                                  estrai_executor=MagicMock(spec=CanvasExecutorProtocol),
+                                  manipola_executor=MagicMock(spec=CanvasExecutorProtocol),
+                                  enrich_executor=MagicMock(spec=CanvasExecutorProtocol))
     artifact, captured = service.execute_isolated_upstream(
         "e1", {"project_type": "estrai", "canvas": _estrai_canvas()}, group_id=GROUP, isolated_upstreams={})
     assert artifact.success is False and captured is None

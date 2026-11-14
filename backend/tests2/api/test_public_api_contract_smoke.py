@@ -201,6 +201,11 @@ def test_eseguibili_public_shapes_survive_typed_rows(
         expected_columns_count=3,
     )
     monkeypatch.setattr(eseguibili_db, "list_eseguibili", lambda **_kwargs: [row])
+    # Both reads belong to the DB boundary; keep source_changed computation real.
+    source_rows = MagicMock(return_value=[eseguibili_db.EseguibileSourceCanvasesRow(
+        id=row.id, version_canvas=None, project_canvas=None,
+    )])
+    monkeypatch.setattr(eseguibili_db, "list_source_canvases", source_rows)
     monkeypatch.setattr(router_mod, "visible_resource_ids", lambda *a, **kw: {"exec-1"})
 
     response = _client(router, get_current_user).get("/api/eseguibili")
@@ -209,6 +214,8 @@ def test_eseguibili_public_shapes_survive_typed_rows(
     body = response.json()
     assert body[0]["id"] == "exec-1"
     assert body[0]["can_edit"] is True
+    assert body[0]["source_changed"] is None
+    source_rows.assert_called_once_with(["exec-1"])
 
 
 def test_connections_public_shape_survives_typed_service_models(

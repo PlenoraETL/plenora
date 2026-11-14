@@ -85,6 +85,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RepoRoot 'backend'
+$PythonVersion = (Get-Content -LiteralPath (Join-Path $RepoRoot '.python-version') -Raw).Trim()
 $envFile = Join-Path $BackendDir '.env'
 $DataDir = 'C:\plenora-data'
 $CondaEnv = 'plenora'
@@ -753,7 +754,7 @@ if (-not $tnc.TcpTestSucceeded) { Fail 'Porta 5672 chiusa: RabbitMQ non in ascol
 Ok 'RabbitMQ in ascolto su 5672 (guest/guest, solo localhost)'
 
 # -----------------------------------------------------------------------------
-Step "Ambiente conda '$CondaEnv' (python 3.12 + GDAL 3.13 da conda-forge)"
+Step "Ambiente conda '$CondaEnv' (python $PythonVersion + GDAL 3.13 da conda-forge)"
 # -----------------------------------------------------------------------------
 $condaBat = @(
     "$env:ProgramData\miniforge3\condabin\conda.bat",
@@ -768,11 +769,14 @@ if (-not ($envList | Select-String -Pattern "^\s*$CondaEnv\s")) {
     # libjxl.so.0.11). Su win-64 partiamo senza pin: se gdalinfo fallisce
     # per DLL mancanti, aggiungere "libjxl=0.11.*" qui e annotare.
     & $condaBat create -y -n $CondaEnv -c conda-forge `
-        python=3.12 gdal=3.13.0 proj-data pyogrio=0.13.0 geopandas-base=1.1.4 `
+        "python=$PythonVersion" gdal=3.13.1 proj-data pyogrio=0.13.0 geopandas-base=1.1.4 `
         pyproj=3.7.2 shapely=2.1.2 pandas=3.0.3 numpy=2.5.1 `
         pyarrow=25.0.0 openpyxl=3.1.5 pip
     if ($LASTEXITCODE -ne 0) { Fail 'conda create fallita (annotare output resolver)' }
 }
+& $condaBat run -n $CondaEnv python (Join-Path $RepoRoot 'scripts/check_python_version.py') --runtime-only --version-file (Join-Path $RepoRoot '.python-version')
+if ($LASTEXITCODE -ne 0) { throw 'Python version mismatch: recreate the conda environment before continuing.' }
+
 $gdalVer = & $condaBat run -n $CondaEnv gdalinfo --version
 if ($LASTEXITCODE -ne 0) { Fail "gdalinfo non parte nell'env (DLL? provare pin libjxl)" }
 Ok "Env conda pronto: $gdalVer"

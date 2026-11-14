@@ -1,10 +1,10 @@
 """
 Auth groups admin CRUD router — typed boundary.
 
-NOTE: `from __future__ import annotations` rimosso (vedi users_router.py
-per la motivazione): FastAPI + Pydantic v2 falliscono lo schema
-generation per body parameter Pydantic BaseModel quando le annotation
-sono ForwardRef.
+NOTE: Manteniamo l'assenza di `from __future__ import annotations` per
+il contratto storico di binding dei body FastAPI/Pydantic. Su Python 3.14
+le annotazioni sono differite anche senza PEP 563: import dei router,
+OpenAPI e binding body/query devono essere verificati con lo stack risolto.
 """
 
 from typing import Annotated

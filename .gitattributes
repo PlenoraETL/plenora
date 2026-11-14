@@ -8,3 +8,4 @@
 # so we pin the eol explicitly. Locked source-bound by
 # `tests2/shared/test_docker_validate_script_guard.py`.
 scripts/*.sh text eol=lf
+.python-version text eol=lf

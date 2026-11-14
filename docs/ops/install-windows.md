@@ -42,7 +42,7 @@ sorgente canonico anche per il manuale PDF operativo.
 | Object storage SeaweedFS | servizio `plenora-object-storage` | 4.29 | 8333 (S3, loopback) |
 | Frontend (Caddy) | servizio `plenora-caddy` | latest | **80** (configurabile) |
 | Grafana OSS (opzionale, `-InstallGrafana`) | servizio `plenora-grafana` + plugin Infinity | 13.3.0 / 4.1.6 (pinnati) | 3300 (loopback), pubblicato su `/grafana` |
-| Python + GDAL | env conda `plenora` (Miniforge) | 3.12 / GDAL 3.13 | — |
+| Python + GDAL | env conda `plenora` (Miniforge) | 3.14 / GDAL 3.13 | — |
 | Microsoft ODBC Driver | connettore SQL Server/MSSQL | 18.x x64 | — |
 | XLSX exporter nativo | EXE statico opzionale (fallback Python automatico) | release Plenora | — |
 
@@ -107,7 +107,7 @@ Ti verranno chiesti:
    conferma). E' l'utente con cui farai login nell'applicazione.
 
 Il flusso esegue nell'ordine: utente+DB PostgreSQL → verifica RabbitMQ
-→ env conda (python 3.12 + GDAL 3.13 da conda-forge) → dipendenze pip →
+→ env conda (python 3.14 + GDAL 3.13 da conda-forge) → dipendenze pip →
 acceleratore XLSX (se ZIP e `.sha256` sono presenti in `C:\deploy`) →
 `.env` con secrets random → **hardening broker** (utente RabbitMQ
 dedicato `plenora`, rimozione di `guest`) → ACL sul `.env` → **SeaweedFS**
