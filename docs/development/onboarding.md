@@ -5,7 +5,7 @@ with the root [README](../../README.md) and the operations docs.
 
 ## Prerequisites
 
-- Python 3.12
+- Python 3.14
 - Node.js 20+ and npm 10+
 - PostgreSQL 14+
 - RabbitMQ 3.12+

@@ -106,8 +106,8 @@ services:
 
   fake-rest:
     build:
-      context: ./fake-rest
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: backend/test-e2e-v2/fake-rest/Dockerfile
     image: plenora-test-fake-rest:latest
     container_name: plenora-test-fake-rest
     ports:

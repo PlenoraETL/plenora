@@ -1,3 +1,5 @@
+# PY314 DA VERIFICARE: pytest/plugin, coverage e tool nativi; minimi non provati dalla raccolta.
+# Risolvere insieme a requirements.txt e vincolare al nuovo requirements.lock.
 # Dev / test dependencies — non installate in produzione.
 # Uso: `pip install -r requirements-dev.txt` dopo requirements.txt.
 

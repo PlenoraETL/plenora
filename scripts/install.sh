@@ -59,6 +59,9 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." &>/dev/null && pwd)"
 BACKEND_DIR="${REPO_ROOT}/backend"
+INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR="$(cat "${REPO_ROOT}/.python-version")"
+INSTALLER_PYTHON="python${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}"
+[[ "$INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR" =~ ^3\.[0-9]+$ ]] || { echo "Invalid .python-version" >&2; exit 1; }
 ENV_FILE="${BACKEND_DIR}/.env"
 ENV_EXAMPLE="${BACKEND_DIR}/.env.example"
 
@@ -180,7 +183,7 @@ require_cmd() {
 # of truth; any source-bound test should derive expectations from this
 # array (see backend/tests2/shared/test_install_script_packaging_guard.py).
 INSTALLER_REQUIRED_COMMANDS=(
-    python3.12
+    ${INSTALLER_PYTHON}
     node
     npm
     psql
@@ -190,7 +193,7 @@ INSTALLER_REQUIRED_COMMANDS=(
 
 # Required Python major.minor. Pinned to match all CI lanes
 # (.github/workflows/{ci,ci-cleanroom,ci-functional}.yml).
-INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR="3.12"
+# Version is read from .python-version above.
 
 # Native shared libraries the runtime imports through pip wheels. We do
 # NOT require building from source: psycopg2-binary bundles libpq, and
@@ -207,20 +210,21 @@ step_validate_prereqs() {
 
     local missing=0
 
-    # Python 3.12 specifically (per docs/ops/install-non-docker.md section1).
-    if command -v python3.12 &>/dev/null; then
+    # Python 3.14 specifically (per docs/ops/install-non-docker.md section1).
+    if command -v ${INSTALLER_PYTHON} &>/dev/null; then
         local pyver
-        pyver="$(python3.12 --version 2>&1)"
-        log_ok "python3.12: ${pyver}"
-        # Hard-pin major.minor. python3.12 binary should always report
-        # 3.12.x but we assert it explicitly: a compromised PATH or a
+        pyver="$(${INSTALLER_PYTHON} --version 2>&1)"
+        log_ok "${INSTALLER_PYTHON}: ${pyver}"
+        "${INSTALLER_PYTHON}" "${REPO_ROOT}/scripts/check_python_version.py" --runtime-only --version-file "${REPO_ROOT}/.python-version" || missing=1
+        # Hard-pin major.minor. ${INSTALLER_PYTHON} binary should always report
+        # 3.14.x but we assert it explicitly: a compromised PATH or a
         # symlink could redirect to a different interpreter.
         if [[ "$pyver" != *"Python ${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}."* ]]; then
-            log_err "python3.12 reports an unexpected version: ${pyver} (expected Python ${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}.x)."
+            log_err "${INSTALLER_PYTHON} reports an unexpected version: ${pyver} (expected Python ${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}.x)."
             missing=1
         fi
     else
-        log_err "python3.12 not found - install via apt or pyenv (see docs/ops/install-non-docker.md section1)."
+        log_err "${INSTALLER_PYTHON} not found - install via apt or pyenv (see docs/ops/install-non-docker.md section1)."
         missing=1
     fi
 
@@ -228,7 +232,7 @@ step_validate_prereqs() {
     require_cmd npm "shipped with node" || missing=1
     require_cmd psql "postgresql-client-17 (apt PGDG repo on Ubuntu 24.04)" || missing=1
     # Il broker (RabbitMQ) non richiede un client host: la reachability si
-    # prova via TCP con python3.12 in step_probe_services (no redis-cli).
+    # prova via TCP con ${INSTALLER_PYTHON} in step_probe_services (no redis-cli).
     require_cmd curl "apt install curl" || missing=1
     require_cmd git "apt install git" || missing=1
 
@@ -260,13 +264,13 @@ step_validate_packaging() {
     # the dynamic linker path. Empty here means the runtime CANNOT
     # load the lib even if `apt list --installed` shows the package -
     # this is the signal that matches what the app sees at boot.
-    if command -v python3.12 &>/dev/null; then
+    if command -v ${INSTALLER_PYTHON} &>/dev/null; then
         local entry libname libhint found
         for entry in "${INSTALLER_REQUIRED_SHARED_LIBS[@]}"; do
             libname="${entry%%:*}"
             libhint="${entry#*:}"
             found="$(
-                python3.12 - <<PYEOF 2>/dev/null
+                ${INSTALLER_PYTHON} - <<PYEOF 2>/dev/null
 import ctypes.util
 print(ctypes.util.find_library("${libname}") or "")
 PYEOF
@@ -279,7 +283,7 @@ PYEOF
             fi
         done
     else
-        log_warn "python3.12 missing - shared library probes skipped (see Step 1)."
+        log_warn "${INSTALLER_PYTHON} missing - shared library probes skipped (see Step 1)."
         missing=1
     fi
 
@@ -631,8 +635,8 @@ step_probe_services() {
     else
         # Il broker e' RabbitMQ (Dramatiq): niente redis-cli, niente client
         # host dedicato. Un connect TCP bounded all'host:porta del broker URL
-        # via python3.12 (gia' richiesto) e' sufficiente a fail-fast.
-        if python3.12 - "$BROKER_URL" <<'PYEOF'
+        # via ${INSTALLER_PYTHON} (gia' richiesto) e' sufficiente a fail-fast.
+        if ${INSTALLER_PYTHON} - "$BROKER_URL" <<'PYEOF'
 import socket
 import sys
 from urllib.parse import urlparse
@@ -714,9 +718,9 @@ read_env_var() {
 }
 
 # Generate a URL-safe random token via Python (always available since
-# we required python3.12 in step 1). 48 bytes approx 64 chars.
+# we required ${INSTALLER_PYTHON} in step 1). 48 bytes approx 64 chars.
 generate_secret() {
-    python3.12 -c 'import secrets; print(secrets.token_urlsafe(48))'
+    ${INSTALLER_PYTHON} -c 'import secrets; print(secrets.token_urlsafe(48))'
 }
 
 # Resolve a secret: keep existing if non-empty unless --overwrite-secrets.
@@ -972,7 +976,7 @@ docs/ops/install-non-docker.md (sectionsection7-9):
 
   1. Backend venv:
        cd ${BACKEND_DIR}
-       python3.12 -m venv venv
+       ${INSTALLER_PYTHON} -m venv venv
        ./venv/bin/pip install --require-hashes -r requirements.lock
 
   2. SeaweedFS + systemd units (requires sudo; salta la unit SeaweedFS

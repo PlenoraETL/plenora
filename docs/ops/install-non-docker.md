@@ -29,10 +29,15 @@ The install is green only when all of these are true:
 
 ## 1. Host Packages
 
+Python must match the repository `.python-version` (CPython 3.14 with GIL).
+Provision that interpreter and venv support from a verified distribution first;
+availability of Python 3.14 in Ubuntu 24.04 apt repositories is not assumed.
+Recreate existing backend venvs, then run `python3.14 scripts/check_python_version.py`
+from the repository root. Regenerate the old 3.12 locks before installing.
+
 ```bash
 sudo apt update
 sudo apt install -y \
-  python3.12 python3.12-venv python3.12-dev \
   build-essential libpq-dev \
   postgresql postgresql-client \
   rabbitmq-server \
@@ -44,7 +49,7 @@ sudo apt install -y \
 Verify:
 
 ```bash
-python3.12 --version
+python3.14 --version
 psql --version
 rabbitmqctl version
 gdalinfo --version
@@ -122,7 +127,7 @@ file applicativo seguente.
 
 ```bash
 cd ~/plenora/backend
-python3.12 -m venv venv
+python3.14 -m venv venv
 ./venv/bin/pip install --require-hashes -r requirements-dev.lock
 ```
 

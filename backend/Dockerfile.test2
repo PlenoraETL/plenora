@@ -1,6 +1,6 @@
 # Plenora test2 lane — estende l'immagine backend con le dipendenze dev/test.
 #
-# Prerequisito: l'immagine `plenora-backend:scaffold` deve esistere
+# Prerequisito: l'immagine `plenora-backend:py314` deve esistere
 # (`docker compose build backend`). Il codice NON viene ricopiato: a runtime
 # docker-compose.test2.yml monta ./backend su /app, quindi i test girano sul
 # working tree corrente senza rebuild. Rebuild necessaria solo quando cambiano
@@ -11,7 +11,11 @@
 # python rolling dell'host (CachyOS). NB: i container condividono il kernel
 # dell'host — questa lane isola dalle *librerie* host, non da bug kernel.
 
-FROM plenora-backend:scaffold
+FROM plenora-backend:py314
+
+COPY .python-version /opt/plenora/.python-version
+COPY scripts/check_python_version.py /opt/plenora/check_python_version.py
+RUN python /opt/plenora/check_python_version.py --runtime-only --version-file /opt/plenora/.python-version
 
 USER root
 

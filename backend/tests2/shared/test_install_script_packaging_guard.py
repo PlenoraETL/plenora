@@ -44,7 +44,7 @@ def _assert_contains_all(text: str, markers: tuple[str, ...], message: str) -> N
 
 
 _EXPECTED_REQUIRED_COMMANDS = (
-    "python3.12",
+    "${INSTALLER_PYTHON}",
     "node",
     "npm",
     "psql",
@@ -70,14 +70,9 @@ def test_installer_required_commands_array_is_canonical(install_sh_text: str):
 # 2. Python pin matches CI
 
 
-def test_installer_pins_python_major_minor_to_3_12(install_sh_text: str):
-    assert (
-        'INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR="3.12"' in install_sh_text
-    ), (
-        "Python major.minor pin must remain 3.12 to match the CI lanes "
-        "(.github/workflows/ci-cleanroom.yml etc.). Bumping requires a "
-        "coordinated update of CI workflows and this lock."
-    )
+def test_installer_uses_single_python_version_source(install_sh_text: str):
+    assert 'INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR="$(cat "${REPO_ROOT}/.python-version")"' in install_sh_text
+    assert 'INSTALLER_PYTHON="python${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}"' in install_sh_text
 
 
 # 3. Native shared lib probe mentions gdal

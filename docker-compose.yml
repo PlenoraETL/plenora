@@ -54,7 +54,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    image: plenora-backend:scaffold
+    image: plenora-backend:py314
     env_file:
       - .env.docker
     environment:
@@ -76,7 +76,7 @@ services:
     restart: unless-stopped
 
   worker:
-    image: plenora-backend:scaffold
+    image: plenora-backend:py314
     # Reuses the backend image; rebuild path is `docker compose build
     # backend`. Keeping it here means `docker compose up worker` will
     # also build the backend image on first run.
@@ -121,7 +121,7 @@ services:
     restart: unless-stopped
 
   worker-control:
-    image: plenora-backend:scaffold
+    image: plenora-backend:py314
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -153,7 +153,7 @@ services:
     restart: unless-stopped
 
   beat:
-    image: plenora-backend:scaffold
+    image: plenora-backend:py314
     build:
       context: .
       dockerfile: backend/Dockerfile

@@ -4,11 +4,6 @@
 # dataframe stack are installed from conda-forge to avoid host-local native
 # source builds during installation. Fiona is intentionally not installed.
 #
-# Contract markers for the legacy Docker scaffold tests:
-# FROM python:3.11 AS build
-# COPY --from=build /opt/venv /opt/venv
-# Build deps marker: libpq-dev libgdal-dev build-essential
-# Runtime deps marker: libpq5 libgdal libmagic1
 
 FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS runtime
 
@@ -55,8 +50,11 @@ RUN curl -fsSLo /tmp/micromamba \
     && install -m 0755 /tmp/micromamba /usr/local/bin/micromamba \
     && rm -f /tmp/micromamba
 
+COPY .python-version /opt/plenora/.python-version
+COPY scripts/check_python_version.py /opt/plenora/check_python_version.py
+
 RUN micromamba create -y -n plenora -c conda-forge \
-        python=3.12 \
+        "python=$(cat /opt/plenora/.python-version)" \
         gdal=3.13.1 \
         # GDAL 3.13.1 / pyogrio 0.13 e PyArrow 25 convergono sulla
         # generazione libjxl 0.12 + Brotli 1.2.
@@ -81,7 +79,8 @@ COPY backend/requirements.lock ./requirements.lock
 # pip keeps the conda builds and installs only the missing hashed artifacts.
 RUN pip install --require-hashes -r requirements.lock
 
-RUN python --version \
+RUN python /opt/plenora/check_python_version.py --runtime-only --version-file /opt/plenora/.python-version \
+    && python --version \
     && gdalinfo --version \
     && python -c "import importlib.util as u; print('fiona installed:', u.find_spec('fiona') is not None)" \
     && python -c "import pyogrio; print(f'pyogrio: {pyogrio.__version__}, GDAL via pyogrio: {pyogrio.__gdal_version_string__}')" \

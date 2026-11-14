@@ -7,6 +7,7 @@ BE-GO-READY-INSTALL-011-FIRST-DOCKER-SCAFFOLD.
 from __future__ import annotations
 
 from pathlib import Path
+import runpy
 
 import pytest
 
@@ -35,47 +36,24 @@ def test_dockerfile_exists():
     )
 
 
-def test_dockerfile_is_multi_stage():
-    text = _DOCKERFILE.read_text(encoding="utf-8")
-    # Multi-stage uses a build stage with `AS build` and a
-    # runtime stage that COPYs from it. Both must appear.
-    assert "FROM python:3.11" in text, (
-        "Dockerfile must base on python:3.11 (matches the CI "
-        "and single-machine pinned version)."
-    )
-    assert "AS build" in text, (
-        "Dockerfile must declare a named build stage `AS build` "
-        "so the runtime stage can copy /opt/venv from it. "
-        "Single-stage images would bake build-only deps "
-        "(libpq-dev, libgdal-dev, build-essential) into the "
-        "runtime image and inflate it."
-    )
-    assert "COPY --from=build" in text, (
-        "Dockerfile must copy artifacts from the build stage "
-        "into the runtime stage via `COPY --from=build`. "
-        "Without this the runtime stage has no application code."
-    )
+def _version_contract():
+    return runpy.run_path(str(_REPO_ROOT / "scripts" / "check_python_version.py"))
+
+
+def test_python_configuration_matches_single_source():
+    _version_contract()["check_configuration"](_REPO_ROOT)
+
+
+def test_real_interpreter_matches_single_source():
+    contract = _version_contract()
+    contract["check_runtime"](contract["read_version"](_REPO_ROOT / ".python-version"))
 
 
 def test_dockerfile_installs_required_native_deps():
-    text = _DOCKERFILE.read_text(encoding="utf-8")
-    # Build stage native deps required by the wheels.
-    for pkg in ("libpq-dev", "libgdal-dev", "build-essential"):
-        assert pkg in text, (
-            f"Dockerfile build stage must apt-install {pkg!r} "
-            "(required by psycopg2 fallback compile, pyogrio/"
-            "geopandas GDAL ctypes load, and any source-only "
-            "wheel respectively)."
-        )
-    # Runtime stage native libs (no -dev headers).
-    for pkg in ("libpq5", "libgdal", "libmagic1"):
-        assert pkg in text, (
-            f"Dockerfile runtime stage must apt-install {pkg!r} "
-            "(runtime shared libs for the venv wheels). "
-            "Missing the runtime lib means `import psycopg2` / "
-            "`import pyogrio` will fail at app boot inside the "
-            "container."
-        )
+    text = _version_contract()["active_text"](_DOCKERFILE)
+    for package in ("micromamba create", "gdal=", "pyogrio=", "pyproj=",
+                    "shapely=", "libmagic1", "unixodbc", "msodbcsql18"):
+        assert package in text, f"Missing active native dependency: {package}"
 
 
 def test_dockerfile_runs_as_non_root():
@@ -429,7 +407,8 @@ def test_compose_worker_and_beat_share_backend_image():
     # exactly the three app-tier services (backend, worker, beat).
     # postgres:17-alpine and rabbitmq:4-alpine are infrastructure images
     # and do not use this tag.
-    canonical = "plenora-backend:scaffold"
+    version = (_REPO_ROOT / ".python-version").read_text(encoding="utf-8").strip()
+    canonical = "plenora-backend:py" + version.replace(".", "")
     count = text.count(canonical)
     assert count >= 3, (
         f"Expected the plenora application image {canonical!r} to "

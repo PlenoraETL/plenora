@@ -3,11 +3,15 @@ name: CI Cleanroom
 on:
   pull_request:
     paths:
+      - ".python-version"
+      - "scripts/check_python_version.py"
       - "backend/**"
       - ".github/workflows/ci-cleanroom.yml"
   push:
     branches: [main]
     paths:
+      - ".python-version"
+      - "scripts/check_python_version.py"
       - "backend/**"
       - ".github/workflows/ci-cleanroom.yml"
   workflow_dispatch:
@@ -19,9 +23,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
-          python-version: "3.12"
+          python-version-file: .python-version
           cache: pip
           cache-dependency-path: backend/requirements.lock
+      - name: Check Python version contract
+        run: python scripts/check_python_version.py
       - name: Install backend dependencies
         working-directory: backend
         run: python -m pip install --require-hashes -r requirements.lock
