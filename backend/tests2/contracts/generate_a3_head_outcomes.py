@@ -9,6 +9,11 @@ Procedura usata (dichiarata nel rapporto A3, «Correzione dopo la conferma»):
     cd <scratch>/head/backend && python tests2/contracts/generate_a3_head_outcomes.py <dest>
 
 ``a3_runtime_corpus`` dipende solo da moduli presenti in entrambi gli alberi.
+
+Le impronte usano la serializzazione portabile di ``a3_runtime_corpus._digest``:
+LF e float a 14 cifre significative. La migrazione delle vecchie impronte CRLF
+ha verificato tutti i 1456 esiti contro 3c8609fe prima di tradurre i soli digest;
+colonne, dtype, righe, rifiuti e correzioni dichiarate restano invariati.
 """
 from __future__ import annotations
 

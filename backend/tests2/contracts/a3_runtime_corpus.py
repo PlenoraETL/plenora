@@ -139,11 +139,23 @@ def _node(op: str, config: dict):
 
 
 def _digest(frame) -> str:
+    """Portable fingerprint: LF records and 14 significant digits for floats.
+
+    The historical fixture was written on Windows (implicit CRLF). NumPy's
+    transcendental functions can also differ by an ULP across platform math
+    libraries. Keep column/row order and text exact; normalize only floating
+    scalars, never numbers stored as text. Schema/dtypes are checked separately.
+    The same function serves reference generation and execution comparison.
+    """
     import hashlib
-    try:
-        text = frame.astype(str).to_csv(index=False)
-    except Exception:  # noqa: BLE001 - impronta best-effort di un oggetto qualunque
-        text = repr(frame)
+    import numpy as np
+
+    text_frame = frame.astype(str)
+    for column in range(len(frame.columns)):
+        for row, value in enumerate(frame.iloc[:, column]):
+            if isinstance(value, (float, np.floating)):
+                text_frame.iat[row, column] = format(value, ".14g")
+    text = text_frame.to_csv(index=False, lineterminator="\n")
     return hashlib.sha1(text.encode()).hexdigest()[:12]
 
 

@@ -275,7 +275,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         payload = {"headers": dict(headers), "vite_env": dict(vite_build_env(settings))}
         text = json.dumps(payload, indent=2) + "\n"
     if args.output:
-        args.output.write_text(text, encoding="ascii", newline="\n")
+        from app.core.io.local_filesystem import write_local_bytes
+
+        write_local_bytes(args.output, text.encode("ascii"))
     else:
         sys.stdout.write(text)
     return 0
