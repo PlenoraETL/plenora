@@ -162,6 +162,7 @@
     "scheduler -> orchestrator": 1,
     "scheduler -> results": 2,
     "scheduler -> task_runtime": 1,
+    "security -> io": 1,
     "tickets -> auth": 1,
     "tickets -> files": 1,
     "tickets -> io": 2,

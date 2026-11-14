@@ -98,6 +98,7 @@ La mappa completa degli shim di compatibilita' (Fase 6) e' in
 | `orchestrator -> files` | cleanup fail-closed degli upload runtime rifiutati dal percorso progetto | Intenzionale e lazy: evita file orfani finche' il lifecycle upload non viene portato nel composition root |
 | `eseguibili -> grafana` / `auth -> grafana` | dashboard Grafana degli Eseguibili (11/11/2026): `grafana` e' una FOGLIA (client HTTP, generatore della dashboard, firme di lasciapassare e sessione, sincronizzazione con dati passati dal chiamante) che non importa nessun dominio; le regole e gli endpoint stanno in `eseguibili/dashboard*.py` e `auth/grafana_router.py` (forward_auth) | Intenzionale, aciclico: nessun dominio del ciclo maggiore e' importato da `grafana`, che resta singoletto |
 | `native_pipeline -> io` | workspace privato creato dalla capability filesystem dichiarata, senza accesso diretto fuori dal boundary I/O | Intenzionale, aciclico: `native_pipeline` e' foundation adapter e `io` non importa `native_pipeline` |
+| `security -> io` | la CLI `frontend_headers` scrive l'output tramite il boundary filesystem (`write_local_bytes`), non con scrittura diretta | Intenzionale, aciclico: `io` e' foundation con out-degree 0 e non importa `security` |
 
 ## Stato misurato (baseline 2026-08-04)
 
